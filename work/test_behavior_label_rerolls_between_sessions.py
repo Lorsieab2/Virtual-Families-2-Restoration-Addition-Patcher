@@ -29,31 +29,42 @@ SOURCE = GENERATOR.read_text(encoding="utf-8")
 PERSISTENT_LABEL_OFFSET = "0x1BBA8"
 
 
-def find_function_body(name):
-    """Like function_body, but returns None when there is no definition.
+# Any return type, including multi-token ones. Enumerating the shapes was the
+# bug: `unsigned int`, `unsigned char *`, `VF2DonorBehavior const *` and
+# `__fastcall` all failed to match, so 32 real definitions read as absent.
+# Anchor on the NAME and accept whatever precedes it on that line.
+_DEFINITION = (
+    r'^(?:extern "C" )?[A-Za-z_][\w \*&:]*?\b%s\([^;{]*\)\s*\n?\{(.*?)^\}'
+)
 
-    Only the sweep over every VF2* name may use this: a name harvested from a
-    loose scan can be a forward declaration with no body, which is not a
-    failure. A test that names a specific function must use function_body, so
-    a typo or a rename fails loudly instead of silently checking nothing.
+
+def find_function_body(name):
+    """The body of an emitted C definition, or None if the file has none.
+
+    None means THERE IS NO DEFINITION -- a forward declaration such as
+    `extern "C" void __cdecl VF2RandomBigBurgerLabel(CVillager &);` with the
+    real one elsewhere, or a name that only appears in a comment. It must never
+    mean "there is a definition and this helper could not parse it": callers
+    treat None as nothing-to-check, so an unparseable definition would be
+    silently exempted from every rule in this file. has_definition() exists so
+    the sweep can tell those two cases apart.
     """
-    # MULTI-WORD RETURN TYPES MUST MATCH, or the sweep skips real code.
-    # `[\w:]+` is a SINGLE token, so `unsigned int`, `unsigned char *` and
-    # `VF2DonorBehavior const *` never matched and this returned None for
-    # them. Measured on the generator at the time of writing: 494 emitted
-    # VF2* definitions, 50 of which returned None. The sweep treats None as
-    # "forward declaration, nothing to check", so those 50 were silently
-    # exempt from the ungated-persistent-label check this file exists to
-    # enforce -- a hole that looks exactly like a passing test.
-    match = re.search(
-        r'^(?:extern "C" )?(?:static )?'
-        r'[\w:]+(?:\s+(?:const|unsigned|signed|long|short|char|int|\w+))*'
-        r'(?: __cdecl)?[ *]+\*?%s\([^;{]*\)\s*\n?\{'
-        r'(.*?)^\}' % re.escape(name),
-        SOURCE,
-        re.S | re.M,
-    )
+    match = re.search(_DEFINITION % re.escape(name), SOURCE, re.S | re.M)
     return match.group(1) if match else None
+
+
+def has_definition(name):
+    """Is there a definition line for this name at all, however it is spelled?
+
+    Deliberately cruder than _DEFINITION: it asks whether some line opens a
+    body for this name, without trying to parse the return type. When this is
+    true and find_function_body is None, the helper is at fault, not the code.
+    """
+    return re.search(
+        r'^[A-Za-z_][^\n;]*\b%s\([^;]*$' % re.escape(name),
+        SOURCE,
+        re.M,
+    ) is not None
 
 
 def function_body(name):
@@ -67,12 +78,7 @@ def function_body(name):
     followed by an opening brace with no semicolon in between, which is what
     distinguishes the two.
     """
-    match = re.search(
-        r'^(?:extern "C" )?(?:static )?[\w:]+(?: __cdecl)? \*?%s\([^;{]*\)\s*\n?\{'
-        r'(.*?)^\}' % re.escape(name),
-        SOURCE,
-        re.S | re.M,
-    )
+    match = re.search(_DEFINITION % re.escape(name), SOURCE, re.S | re.M)
     assert match, "emitted C definition %s not found" % name
     body = match.group(1)
     assert len(body.strip()) > 20, (
@@ -143,14 +149,30 @@ class ThePersistentLabelIsOnlyReadBehindTheCacheGate(unittest.TestCase):
         # of those. Testing for the precise shape keeps this test meaningful
         # instead of freezing a list of names that drifts.
         readers = []
+        unreadable = []
         for name in re.findall(r"^static [\w \*&]*?\b(VF2\w+)\(", SOURCE, re.M):
             body = find_function_body(name)
-            if body is None or PERSISTENT_LABEL_OFFSET not in body:
+            if body is None:
+                # A name with no definition is a forward declaration and is
+                # genuinely nothing to check. A name WITH a definition that the
+                # helper could not read is a harness fault, and skipping it
+                # would exempt that function from this rule while the test
+                # stayed green -- which is the defect this suite exists to
+                # catch, in the suite itself.
+                if has_definition(name):
+                    unreadable.append(name)
+                continue
+            if PERSISTENT_LABEL_OFFSET not in body:
                 continue
             compares = re.search(r"\bstrn?cmp\b", body)
             against_a_group = re.search(r"labels\[|kVF2BehaviorLabels_", body)
             if compares and against_a_group:
                 readers.append(name)
+        self.assertEqual(
+            sorted(unreadable), [],
+            "these functions have definitions this test could not parse, so "
+            "they were exempted from the rule below without anyone noticing",
+        )
         self.assertEqual(
             sorted(set(readers) - {"VF2ScanLabelGroup"}),
             [],
