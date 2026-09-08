@@ -34,9 +34,79 @@ PERSISTENT_LABEL_OFFSET = "0x1BBA8"
 # bug: `unsigned int`, `unsigned char *`, `VF2DonorBehavior const *` and
 # `__fastcall` all failed to match, so 32 real definitions read as absent.
 # Anchor on the NAME and accept whatever precedes it on that line.
-_DEFINITION = (
-    r'^(?:extern "C" )?[A-Za-z_][\w \*&:]*?\b%s\([^;{]*\)\s*\n?\{(.*?)^\}'
+#
+# This matches the HEADER only, up to the opening brace. The body is taken by
+# brace matching, because a regex tail anchored on `^\}` cannot end a one-line
+# definition -- and the generator emits those:
+#
+#   static bool __fastcall VF2MobileIslandEventCanFireBody(...) {{ ... }}
+#
+# The match for the first of those ran 4190 characters and swallowed fifteen
+# other functions, so markers from unrelated functions were combined into one
+# "body". That is the same hazard per-definition evaluation exists to prevent.
+_DEFINITION_HEADER = (
+    r'^(?:extern "C" )?[A-Za-z_][\w \*&:]*?\b%s\([^;{]*\)\s*\n?\{'
 )
+
+
+def _body_from(text, open_brace_index):
+    """The text between a function's braces, found by counting them.
+
+    Skips string and character literals so a brace inside one cannot unbalance
+    the count. Returns None for an unterminated body rather than guessing.
+    """
+    depth = 0
+    i = open_brace_index
+    body_start = open_brace_index + (
+        2 if text.startswith('{{', open_brace_index) else 1)
+    n = len(text)
+    while i < n:
+        ch = text[i]
+        # Comments first: a prose apostrophe ("CVillagerManager's native
+        # RTTI") is not a character literal, and reading it as one consumes
+        # the rest of the function. That returned an unterminated body and
+        # silently exempted the function from the contract.
+        if text.startswith('//', i):
+            newline = text.find('\n', i)
+            i = len(text) if newline == -1 else newline
+            continue
+        if text.startswith('/*', i):
+            close = text.find('*/', i + 2)
+            i = len(text) if close == -1 else close + 2
+            continue
+        if ch in '"\'':
+            quote = ch
+            i += 1
+            while i < n:
+                if text[i] == '\\':
+                    i += 2
+                    continue
+                if text[i] == quote:
+                    break
+                i += 1
+        elif ch == '{':
+            # `{{` is an f-string escape for ONE literal brace. Parts of the
+            # generator emit C through f-string templates and parts through raw
+            # strings, so both dialects appear in this file. Counting a doubled
+            # brace twice leaves the depth permanently unbalanced and the body
+            # runs to end of file.
+            if text.startswith('{{', i):
+                i += 2
+                depth += 1
+                continue
+            depth += 1
+        elif ch == '}':
+            if text.startswith('}}', i):
+                depth -= 1
+                if depth == 0:
+                    return text[body_start:i]
+                i += 2
+                continue
+            depth -= 1
+            if depth == 0:
+                return text[body_start:i]
+        i += 1
+    return None
 
 
 def find_function_bodies(name, source=None):
@@ -48,9 +118,13 @@ def find_function_bodies(name, source=None):
     at all. Any rule applied through the single-body helper is therefore
     silently void for that function. The sweep must use this.
     """
-    return [m.group(1) for m in re.finditer(
-        _DEFINITION % re.escape(name),
-        SOURCE if source is None else source, re.S | re.M)]
+    text = SOURCE if source is None else source
+    bodies = []
+    for m in re.finditer(_DEFINITION_HEADER % re.escape(name), text, re.M):
+        body = _body_from(text, m.end() - 1)
+        if body is not None:
+            bodies.append(body)
+    return bodies
 
 
 def find_function_body(name):
@@ -64,8 +138,8 @@ def find_function_body(name):
     silently exempted from every rule in this file. has_definition() exists so
     the sweep can tell those two cases apart.
     """
-    match = re.search(_DEFINITION % re.escape(name), SOURCE, re.S | re.M)
-    return match.group(1) if match else None
+    bodies = find_function_bodies(name)
+    return bodies[0] if bodies else None
 
 
 def has_definition(name, source=None):
@@ -93,9 +167,9 @@ def function_body(name):
     followed by an opening brace with no semicolon in between, which is what
     distinguishes the two.
     """
-    match = re.search(_DEFINITION % re.escape(name), SOURCE, re.S | re.M)
-    assert match, "emitted C definition %s not found" % name
-    body = match.group(1)
+    bodies = find_function_bodies(name)
+    assert bodies, "emitted C definition %s not found" % name
+    body = bodies[0]
     assert len(body.strip()) > 20, (
         "function_body(%s) returned a %d-character body; it probably matched "
         "the wrong thing" % (name, len(body.strip()))
@@ -283,6 +357,58 @@ static int VF2Split(CVillager &villager, int flag)
             "exists in neither of them",
         )
 
+    def test_a_one_line_definition_stops_at_its_own_brace(self):
+        """The generator emits one-line definitions.
+
+            static bool __fastcall VF2MobileIslandEventCanFireBody(...) {{ ... }}
+
+        A body pattern that can only end at a `}` starting a line ran 4190
+        characters past this one and swallowed fifteen other functions, so
+        markers from unrelated functions were combined -- the same hazard
+        per-definition evaluation exists to prevent, arriving by another route.
+        The synthetic fixtures are all multi-line, so none of them could see it.
+        """
+        name = "VF2MobileIslandEventCanFireBody"
+        bodies = find_function_bodies(name)
+        self.assertEqual(len(bodies), 1, "%s should have one definition" % name)
+        self.assertNotIn(
+            "VF2MobileIslandEventGetTitleBody", bodies[0],
+            "the one-line body ran past its own closing brace and swallowed "
+            "the next function",
+        )
+        self.assertIn("CanFire", bodies[0])
+        self.assertLess(
+            len(bodies[0]), 120,
+            "a one-line body should be one line, not %d characters"
+            % len(bodies[0]),
+        )
+
+    def test_a_prose_apostrophe_does_not_swallow_the_body(self):
+        """An apostrophe in a comment is not a character literal.
+
+        `// CVillagerManager's native RTTI` read as an opening char literal
+        consumed the rest of the function, returned an unterminated body, and
+        silently exempted the function from the contract.
+        """
+        for name in ("VF2EnsureDebuggerProvider", "VF2ApplyAIBathroom2Style"):
+            bodies = find_function_bodies(name)
+            self.assertTrue(
+                bodies, "%s came back unreadable; a comment apostrophe or a "
+                        "doubled brace is eating the body" % name)
+
+    def test_no_definition_in_the_generator_is_unreadable(self):
+        """The whole-file health check.
+
+        Every "unreadable" name is a function silently exempt from every rule
+        in this file, so the count must be zero rather than small.
+        """
+        _, unreadable = sweep_violations()
+        self.assertEqual(
+            sorted(unreadable), [],
+            "these definitions cannot be parsed, so they are exempt from the "
+            "label contract without anyone noticing",
+        )
+
     def test_the_repeated_name_case_still_exists_in_the_generator(self):
         # The premise of the two tests above. If the generator ever stops
         # repeating a name they still hold, but the real-world case they model
@@ -303,7 +429,7 @@ static int VF2Split(CVillager &villager, int flag)
             self.assertEqual(
                 len(find_function_bodies(name)),
                 sum(1 for _ in re.finditer(
-                    _DEFINITION % re.escape(name), SOURCE, re.S | re.M)),
+                    _DEFINITION_HEADER % re.escape(name), SOURCE, re.M)),
                 "%s has several definitions but the helper does not return "
                 "them all" % name,
             )
