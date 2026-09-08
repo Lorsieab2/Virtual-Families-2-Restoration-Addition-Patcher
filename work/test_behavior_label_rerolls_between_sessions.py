@@ -44,6 +44,13 @@ PERSISTENT_LABEL_OFFSET = "0x1BBA8"
 # The match for the first of those ran 4190 characters and swallowed fifteen
 # other functions, so markers from unrelated functions were combined into one
 # "body". That is the same hazard per-definition evaluation exists to prevent.
+# The name-capturing form of the definition header. The sweep harvests with
+# this so that "definitions the parser can read" and "definitions the sweep
+# inspects" are the same set by construction.
+_HEADER_NAME = (
+    r'^(?:extern "C" )?[A-Za-z_][\w \*&:]*?\b(VF2\w+)\([^;{]*\)\s*\n?\{'
+)
+
 _DEFINITION_HEADER = (
     r'^(?:extern "C" )?[A-Za-z_][\w \*&:]*?\b%s\([^;{]*\)\s*\n?\{'
 )
@@ -217,8 +224,12 @@ def sweep_violations(source=None):
     text = SOURCE if source is None else source
     readers = []
     unreadable = []
-    for name in sorted(set(
-            re.findall(r"^static [\w \*&]*?\b(VF2\w+)\(", text, re.M))):
+    # THE SAME PATTERN THE PARSER USES, not a narrower one. Harvesting with
+    # `^static ...` while parsing with the full header pattern left 185 of 507
+    # definitions exempt from every rule in this file -- every `extern "C"`,
+    # __cdecl and __fastcall definition, including three that read the
+    # persistent label. Readable by the parser, and never handed to it.
+    for name in sorted(set(re.findall(_HEADER_NAME, text, re.M))):
         bodies = find_function_bodies(name, text)
         if not bodies:
             # No definition is a forward declaration and genuinely nothing to
