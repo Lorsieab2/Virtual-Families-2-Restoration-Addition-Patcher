@@ -3215,11 +3215,23 @@ def refuse_to_drop_overlay_settings(
     # defends it is a MEASUREMENT OF THE ARTIFACT rather than any claim about
     # how the artifact was produced.
     #
-    # work/gate_release_zip.py counts the settings a bundle offers and refuses
-    # it below EXPECTED_SETTING_COUNT (35), then names any setting the
-    # previous release carried and this one dropped. B183 offered 23, so it
+    # work/gate_release_zip.py counts the settings a bundle offers and
+    # quarantines it below EXPECTED_SETTING_COUNT (35). B183 offered 23, so it
     # fails that floor on the numbers alone -- no matter which script built
     # it, and no matter what flags were or were not passed.
+    #
+    # THE FLOOR IS WHERE A B183-SHAPED BUNDLE STOPS, AND THAT IS THE WHOLE
+    # DEFENCE FOR THIS CASE. gate_release_zip.main() returns at the
+    # short_of_expected() quarantine, so lost_settings() -- the check that
+    # NAMES the twelve features B183 dropped -- never runs for an archive
+    # this thin. Verified by execution, not by reading: a 23-setting archive
+    # quarantines with "offers 23 settings; a complete release carries 35"
+    # and lost_settings is never invoked. It guards a different case, an
+    # archive that clears the floor but still drops something its
+    # predecessor carried.
+    #
+    # So the operator sees a COUNT here, not a feature list. Saying otherwise
+    # would send whoever hits this looking for names the run did not produce.
     #
     # NOT the identities file, which is a separate check and proves nothing
     # about provenance: work/export_release_variant_identities.py:129 writes

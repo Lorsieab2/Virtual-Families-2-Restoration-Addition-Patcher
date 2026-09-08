@@ -28574,6 +28574,14 @@ static void VF2SpaHoldLoungerForWalk(CVillager &villager, int handle)
 // against a settled table rather than a half-mutated one. Whether the TAKER
 // is visible to that choice depends on who took it; the body says so at the
 // point the interrupt happens, and that is the only place it is stated.
+//
+// REJECTED, so nobody rederives it: "the taker is visible the ordinary way".
+// That was asserted here unconditionally through #252 and it is FALSE for the
+// chaise caller -- a chaise taker never sets a receiving label, so
+// VF2SpaOccupantIndex cannot see it however long the walker waits. Only a
+// manual drop is visible that way. Stating it without the qualifier reads as
+// a guarantee that the walker will find the lounger occupied, which is
+// exactly the assumption VF2TryLinkMobileChaise documents as NOT holding.
 static void VF2SpaReleaseHoldOnLounger(int handle, CVillager *keep)
 {
     for (int index = 0; index < 30; ++index) {
