@@ -47,12 +47,42 @@ class ThePersistentLabelIsOnlyReadBehindTheCacheGate(unittest.TestCase):
         self.assertIn("static int VF2ScanLabelGroup(", SOURCE)
         self.assertIn("static bool VF2BehaviorLabelStillFromThisSession(", SOURCE)
 
-    def test_the_gate_asks_the_cache_rather_than_reimplementing_it(self):
-        # VF2BehaviorLabelCacheStillActive already compares behaviorId and
-        # behaviorSerial and tolerates a praise re-roll. The gate must delegate
-        # to it, not grow a second, drifting copy of that rule.
+    def test_the_gate_anchors_on_the_villager_it_was_handed(self):
+        """Not on gVF2BehaviorLabelBeforeVillager.
+
+        The first version of this gate called VF2GetCachedBehaviorLabel, which
+        goes through VF2BehaviorLabelCacheStillActive and therefore requires
+        gVF2BehaviorLabelBeforeVillager == slot->villager. That global names the
+        last villager to enter a WRAPPED NATIVE behaviour and is set in exactly
+        two places, so a resolver running outside that window sees somebody
+        else's villager and the lookup is rejected even when the behaviour id
+        and serial match. The caption then re-rolls mid-action --
+        VF2ApplySitDownLabelVariants never primes the guard at all.
+        """
         body = function_body("VF2BehaviorLabelStillFromThisSession")
-        self.assertIn("VF2GetCachedBehaviorLabel(villager, cacheTag", body)
+        self.assertIn("VF2BehaviorLabelSlotIsCurrentFor", body)
+        self.assertNotIn(
+            "gVF2BehaviorLabelBeforeVillager",
+            function_body("VF2BehaviorLabelSlotIsCurrentFor"),
+            "the session predicate depends on the pre-native global again",
+        )
+
+    def test_the_predicate_still_compares_identity_and_serial(self):
+        # It must not become a weaker test than the one it replaced: the whole
+        # point is that a NEW behaviour instance is rejected.
+        body = function_body("VF2BehaviorLabelSlotIsCurrentFor")
+        self.assertIn("slot->villager != &villager", body)
+        self.assertIn("behaviorId != slot->behaviorId", body)
+        self.assertIn("behaviorSerial == slot->behaviorSerial", body)
+
+    def test_the_native_restore_path_keeps_the_global_guard(self):
+        # VF2BehaviorLabelCacheStillActive is load-bearing for the native-label
+        # restore, where the pre-native window IS the right question. The fix
+        # is additive and must not have weakened it.
+        self.assertIn(
+            "if (!slot || gVF2BehaviorLabelBeforeVillager != slot->villager) {",
+            function_body("VF2BehaviorLabelCacheStillActive"),
+        )
 
     def test_only_the_scan_reads_the_persistent_label_field(self):
         """+0x1BBA8 must not be read by any new ad-hoc matcher.
@@ -163,6 +193,109 @@ class TheCacheTagMatchesWhatTheApplierWrote(unittest.TestCase):
             "coffee caches under the group it rolled from, so forcing a single "
             "tag here would miss the slot and re-roll mid-drink",
         )
+
+class InterleavedVillagersKeepTheirOwnLabels(unittest.TestCase):
+    """Executed, not asserted about the source.
+
+    Codex's P1 could not be seen by a source-contract test: nothing about the
+    SHAPE of `VF2GetCachedBehaviorLabel(villager, cacheTag, &id)` reveals that
+    it consults a global which, at that moment, names a different villager.
+    These tests transcribe both predicates from the emitted C and run them
+    against two villagers whose behaviours interleave.
+    """
+
+    class Slot(object):
+        def __init__(self, villager, behavior_id, serial, praise_count=0):
+            self.villager = villager
+            self.behaviorId = behavior_id
+            self.behaviorSerial = serial
+            self.praiseCount = praise_count
+
+    class Villager(object):
+        def __init__(self, behavior_id, serial, praised_id=-1, praise_count=0):
+            self.behaviorId = behavior_id
+            self.behaviorSerial = serial
+            self.praisedBehaviorId = praised_id
+            self.praiseCount = praise_count
+
+    @staticmethod
+    def cache_still_active(slot, villager, before_villager):
+        """VF2BehaviorLabelCacheStillActive, including its global guard."""
+        if slot is None or before_villager is not slot.villager:
+            return False
+        if villager.behaviorId != slot.behaviorId:
+            return False
+        if villager.behaviorSerial == slot.behaviorSerial:
+            return True
+        return (villager.behaviorSerial == slot.behaviorSerial + 1
+                and villager.praisedBehaviorId == villager.behaviorId
+                and villager.praiseCount != slot.praiseCount)
+
+    @staticmethod
+    def slot_is_current_for(villager, slot):
+        """VF2BehaviorLabelSlotIsCurrentFor -- no global."""
+        if slot is None or slot.villager is not villager:
+            return False
+        if villager.behaviorId != slot.behaviorId:
+            return False
+        if villager.behaviorSerial == slot.behaviorSerial:
+            return True
+        return (villager.behaviorSerial == slot.behaviorSerial + 1
+                and villager.praisedBehaviorId == villager.behaviorId
+                and villager.praiseCount != slot.praiseCount)
+
+    def test_the_old_gate_fails_when_another_villager_ran_last(self):
+        """The P1, reproduced.
+
+        Two villagers are mid-activity. Ann's slot matches her behaviour
+        exactly, but Bob was the last to enter a wrapped native behaviour, so
+        the global names Bob. The old gate rejects Ann's own live slot.
+        """
+        ann = self.Villager(behavior_id=0x0B3, serial=7)
+        bob = self.Villager(behavior_id=0x048, serial=2)
+        ann_slot = self.Slot(ann, 0x0B3, 7)
+
+        self.assertFalse(
+            self.cache_still_active(ann_slot, ann, before_villager=bob),
+            "this is the P1: it should fail, which is why the gate moved",
+        )
+        self.assertTrue(
+            self.slot_is_current_for(ann, ann_slot),
+            "the corrected gate must accept Ann's own live slot regardless of "
+            "which villager most recently ran a wrapped native behaviour",
+        )
+
+    def test_a_slot_belonging_to_another_villager_is_still_rejected(self):
+        # Dropping the global must not drop the identity check with it.
+        ann = self.Villager(behavior_id=0x0B3, serial=7)
+        bob = self.Villager(behavior_id=0x0B3, serial=7)
+        self.assertFalse(self.slot_is_current_for(ann, self.Slot(bob, 0x0B3, 7)))
+
+    def test_a_new_behaviour_instance_is_rejected(self):
+        # The whole point of the fix: a finished behaviour must not pin its
+        # label onto the next one.
+        ann = self.Villager(behavior_id=0x0B3, serial=8)
+        self.assertFalse(self.slot_is_current_for(ann, self.Slot(ann, 0x0B3, 7)))
+
+    def test_a_different_behaviour_id_is_rejected(self):
+        ann = self.Villager(behavior_id=0x048, serial=7)
+        self.assertFalse(self.slot_is_current_for(ann, self.Slot(ann, 0x0B3, 7)))
+
+    def test_a_praise_reroll_is_still_the_same_activity(self):
+        # Serial+1 with a praise on this behaviour is a re-roll, not a new
+        # session, and must keep the label.
+        ann = self.Villager(behavior_id=0x0B3, serial=8,
+                            praised_id=0x0B3, praise_count=3)
+        self.assertTrue(self.slot_is_current_for(
+            ann, self.Slot(ann, 0x0B3, 7, praise_count=2)))
+
+    def test_serial_plus_one_without_a_praise_is_a_new_session(self):
+        # The praise allowance must not become a blanket "one serial of slack".
+        ann = self.Villager(behavior_id=0x0B3, serial=8,
+                            praised_id=-1, praise_count=2)
+        self.assertFalse(self.slot_is_current_for(
+            ann, self.Slot(ann, 0x0B3, 7, praise_count=2)))
+
 
 
 if __name__ == "__main__":
