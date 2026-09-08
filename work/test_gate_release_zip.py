@@ -232,27 +232,54 @@ class FeatureRegressionTests(unittest.TestCase):
                     with self.assertRaises(gate.UnreadableRelease):
                         gate.settings_in_archive(path)
 
-    def test_a_refusal_names_the_way_forward(self):
-        """Naming the problem is not enough; name what to do about it.
+    def test_following_the_refusal_actually_reaches_a_passing_state(self):
+        """Do what the message says, and check the directory that results.
 
-        An operator who deliberately retired a setting has to be told how to
-        proceed, and the answer is NOT --allow-missing-predecessor: that flag
-        covers a first release with no predecessor, and a predecessor is
-        exactly what exists in this case. Saying so explicitly stops the
-        obvious wrong move.
+        Asserting on substrings only proves the words are present, not that
+        they lead anywhere. The first version of this message told an
+        operator to move the release offering the retired setting aside --
+        and in a single-predecessor directory that leaves NO predecessor, so
+        the next run refused again for a different reason while the message
+        explicitly said the bootstrap flag would not help. The instructions
+        contradicted themselves and a substring test could not see it.
+
+        So this walks the states: refuse, move as instructed, refuse again
+        for the NEW reason, then pass with the flag the message now names.
         """
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             old = _bundle(root / "VF2-B181-Release.zip", ["alpha", "beta"])
             new = _bundle(root / "VF2-B182-Release.zip", ["alpha"])
+
+            with self.subTest(step="the drop is refused and named"):
+                message = gate.lost_settings(new, [old])
+                self.assertIsNotNone(message)
+                self.assertIn("beta", message)
+
+            # Do exactly what the message prescribes.
+            moved = root / "retired"
+            moved.mkdir()
+            old.rename(moved / old.name)
+
+            with self.subTest(step="nothing is lost once the baseline moves"):
+                self.assertEqual(gate.earlier_releases(new), [])
+                self.assertIsNone(gate.lost_settings(new, []))
+
+            with self.subTest(step="but the floor still applies"):
+                # The release genuinely offers fewer than a complete one, so
+                # a retirement does not become a way to ship a short bundle.
+                self.assertIsNotNone(gate.short_of_expected(new))
+
+    def test_the_refusal_does_not_contradict_itself(self):
+        # The last-baseline case needs the bootstrap flag as a SECOND step.
+        # An earlier version ruled it out entirely, which was wrong.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            old = _bundle(root / "VF2-B181-Release.zip", ["alpha", "beta"])
+            new = _bundle(root / "VF2-B182-Release.zip", ["alpha"])
             message = gate.lost_settings(new, [old])
-            self.assertIsNotNone(message)
-            self.assertIn("beta", message)
-            with self.subTest(part="says what a retirement requires"):
-                self.assertIn("move the release", message.lower())
-            with self.subTest(part="rules out the wrong flag"):
-                self.assertIn("allow-missing-predecessor", message)
-                self.assertIn("NOT help", message)
+            self.assertNotIn("will NOT help", message)
+            self.assertIn("--allow-missing-predecessor", message)
 
     def test_a_well_formed_manifest_still_reads(self):
         # The shape checks must not reject a real release: the guard is only

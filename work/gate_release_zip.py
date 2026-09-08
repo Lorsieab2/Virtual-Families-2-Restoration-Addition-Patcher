@@ -261,9 +261,11 @@ def lost_settings(archive: Path, previous: Path) -> str | None:
         f"{', '.join(names)}, and adds {len(now - before)}:\n  "
         + "\n  ".join(dropped)
         + "\n\nIf these were dropped by accident, rebuild with the missing "
-        "overlays. If a retirement is intended, move the release(s) offering "
-        "them out of this directory first -- --allow-missing-predecessor "
-        "will NOT help here, it covers a first release with no predecessor."
+        "overlays.\n\nIf a retirement is intended, move the release(s) "
+        "offering them out of this directory. Note that if that leaves NO "
+        "predecessor beside this archive, the next run refuses again for "
+        "that reason and needs --allow-missing-predecessor as well: two "
+        "deliberate steps, which is the intent."
     )
 
 
