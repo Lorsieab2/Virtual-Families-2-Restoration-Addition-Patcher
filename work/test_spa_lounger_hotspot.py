@@ -603,6 +603,30 @@ class TheWideningScopeIsExactlyTheTwoSpaLoungers(unittest.TestCase):
                     "shared or plain map changes items the owner did not ask "
                     "about" % name)
 
+    def test_the_loop_iterates_the_tuple_and_nothing_else(self):
+        """Both checks above police what the TUPLE SAYS. Pin what it IS.
+
+        A defect that widens the plain lounger WITHOUT touching the tuple
+        walks past them:
+
+            -    for target in SPA_LOUNGER_WIDENED_FMAPS:
+            +    for target in tuple(SPA_LOUNGER_WIDENED_FMAPS) + (
+            +            "InvisibleLounger.png.fmap",):
+
+        Measured: that gives 11 -> 33 on the plain lounger with both scope
+        tests green. It is the original bug one level up -- the first version
+        trusted the tuple to DEFINE the scope, and these trust the tuple to BE
+        the scope.
+
+        Found by the peer session, whose artifact-level check catches it; this
+        pins it in a clean checkout, where artifact checks skip.
+        """
+        self.assertIn(
+            "    for target in SPA_LOUNGER_WIDENED_FMAPS:", SOURCE,
+            "the widening loop no longer iterates SPA_LOUNGER_WIDENED_FMAPS "
+            "directly, so the scope this suite checks is not the scope the "
+            "generator uses")
+
 
 if __name__ == "__main__":
     unittest.main()
