@@ -204,7 +204,13 @@ class TestTheReadmeDoesNotOverclaimRouting(unittest.TestCase):
         # Reads the same source of truth the sibling docs suite uses, so the
         # prose and the route table cannot drift apart independently.
         docs = (ROOT / "work" / "test_b180_docs.py").read_text(encoding="utf-8")
-        routed = re.search(r"ROUTED = \{(.*?)\}", docs, re.S).group(1)
+        # ANCHORED to line start on purpose. The sibling suite also declares
+        # BEHAVIOR_PATCH_ROUTED, the four items that route only under
+        # VF2_ENABLE_BEHAVIOR_PATCHES=1. An unanchored non-greedy search
+        # matches THAT set first and reads the drop-route claim off the wrong
+        # table -- which reported the four gated items as drop-routed and
+        # SpaLoungerStd as absent, the exact inverse of the truth.
+        routed = re.search(r"^ROUTED = \{(.*?)\}", docs, re.S | re.M).group(1)
         self.assertIn("SpaLoungerStd", routed)
         for absent in ("ExerciseBikeStd", "HomeGymSystemStd", "PingPongTableStd"):
             with self.subTest(absent):
