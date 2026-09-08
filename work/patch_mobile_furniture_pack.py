@@ -33035,6 +33035,45 @@ static bool VF2BehaviorLabelCacheStillActive(VF2BehaviorLabelCacheSlot *slot)
     return false;
 }
 
+// Same "is this behaviour instance still running" test as
+// VF2BehaviorLabelCacheStillActive, but anchored to the villager the caller
+// actually handed us instead of to gVF2BehaviorLabelBeforeVillager.
+//
+// That global names the last villager to enter a WRAPPED NATIVE behaviour, and
+// only two call sites set it. A resolver asking "may this villager keep its
+// label" runs outside that window, so when several patched villagers
+// interleave the global still names somebody else and the lookup is rejected
+// even though the behaviour id and serial match. The caption then re-rolls
+// mid-action. VF2ApplySitDownLabelVariants shows it plainly: it never primes
+// the guard and never calls the wrapper that would.
+//
+// VF2BehaviorLabelCacheStillActive is deliberately left alone. Its guard is the
+// right question for the native-label restore path, which genuinely does care
+// whether we are inside the pre-native window for that villager.
+static bool VF2BehaviorLabelSlotIsCurrentFor(
+    CVillager &villager, VF2BehaviorLabelCacheSlot *slot)
+{
+    if (!slot || slot->villager != &villager) {
+        return false;
+    }
+    unsigned char *data = (unsigned char *)&villager;
+    int behaviorId = *(int *)(data + 0x1BBA0);
+    unsigned int behaviorSerial = *(unsigned int *)(data + 0x1BBA4);
+    int praisedBehaviorId = *(int *)(data + 0x6B48);
+    unsigned int praiseCount = *(unsigned int *)(data + 0x6B4C);
+    if (behaviorId != slot->behaviorId) {
+        return false;
+    }
+    if (behaviorSerial == slot->behaviorSerial) {
+        return true;
+    }
+    // A praise re-rolls the label and bumps the serial by one; that is still
+    // the same activity, so it must not be treated as a new session.
+    return behaviorSerial == slot->behaviorSerial + 1 &&
+        praisedBehaviorId == behaviorId &&
+        praiseCount != slot->praiseCount;
+}
+
 static bool VF2GetCachedBehaviorLabel(CVillager &villager, int cacheTag, int *stringId)
 {
     VF2BehaviorLabelCacheSlot *slot = VF2FindBehaviorLabelCache(villager, cacheTag, false);
@@ -33106,8 +33145,8 @@ static int VF2ScanLabelGroup(CVillager &villager, int const *labels, int count)
 // the matched group would miss the slot and re-roll mid-activity.
 static bool VF2BehaviorLabelStillFromThisSession(CVillager &villager, int cacheTag)
 {
-    int cachedStringId = 0;
-    return VF2GetCachedBehaviorLabel(villager, cacheTag, &cachedStringId);
+    return VF2BehaviorLabelSlotIsCurrentFor(
+        villager, VF2FindBehaviorLabelCache(villager, cacheTag, false));
 }
 
 static int VF2CurrentLabelInGroup(CVillager &villager, int const *labels, int count)
