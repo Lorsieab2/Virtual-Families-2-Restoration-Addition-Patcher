@@ -3211,13 +3211,22 @@ def refuse_to_drop_overlay_settings(
     #                                         no flag either, and drop all
     #                                         five -- the B183 shape exactly
     #
-    # Where the residual IS defended is the release gate, not here.
-    # work/gate_release_zip.py refuses any archive lacking
-    # data/vf2/release-identities-<release>.json, and only
-    # work/export_release_bundle.py writes that file. B180 and B181 have one;
-    # B183 does not, which is why the gate rejects B183 on that check before
-    # it ever reaches a settings comparison. A bundle built by bypassing the
-    # wrapper therefore cannot be published, even though it can be built.
+    # Where the residual IS defended is the release gate, not here, and what
+    # defends it is a MEASUREMENT OF THE ARTIFACT rather than any claim about
+    # how the artifact was produced.
+    #
+    # work/gate_release_zip.py counts the settings a bundle offers and refuses
+    # it below EXPECTED_SETTING_COUNT (35), then names any setting the
+    # previous release carried and this one dropped. B183 offered 23, so it
+    # fails that floor on the numbers alone -- no matter which script built
+    # it, and no matter what flags were or were not passed.
+    #
+    # NOT the identities file, which is a separate check and proves nothing
+    # about provenance: work/export_release_variant_identities.py:129 writes
+    # data/vf2/release-identities-<release>.json too, and the gate's own
+    # error message at gate_release_zip.py:413 tells the reader to run that
+    # standalone writer. Its presence therefore says a required artifact
+    # exists, not that the wrapper produced the bundle.
     #
     # Closing it HERE would mean a release-intent signal the exporter can
     # verify rather than be told, and nothing in the artifact carries one.

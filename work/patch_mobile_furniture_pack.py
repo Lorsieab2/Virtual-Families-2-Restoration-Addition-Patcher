@@ -28570,9 +28570,10 @@ static void VF2SpaHoldLoungerForWalk(CVillager &villager, int handle)
 //
 // ForgetPlans ALONE is what this file does at 34 other interrupt sites. The
 // engine picks a villager with no plans up on its next tick, by which time
-// this function has returned, the entry is gone, and the taker is visible
-// the ordinary way -- so the walker re-chooses against a settled table
-// rather than a half-mutated one.
+// this function has returned and the entry is gone, so the walker re-chooses
+// against a settled table rather than a half-mutated one. Whether the TAKER
+// is visible to that choice depends on who took it; the body says so at the
+// point the interrupt happens, and that is the only place it is stated.
 static void VF2SpaReleaseHoldOnLounger(int handle, CVillager *keep)
 {
     for (int index = 0; index < 30; ++index) {
