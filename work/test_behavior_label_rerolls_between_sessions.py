@@ -422,9 +422,16 @@ static int VF2Split(CVillager &villager, int flag)
         names = sorted(set(re.findall(header, SOURCE, re.M)))
         for name in names:
             for body in find_function_bodies(name):
-                intruders = sorted(set(
-                    other for other in re.findall(header, body, re.M)
-                    if other != name))
+                # NO `other != name` EXCLUSION. The generator defines
+                # VF2MaybeCompleteDisciplineProps twice, so if a body absorbs
+                # the NEXT definition of the same name, the intruding header
+                # carries that same name -- and excluding it reported no
+                # intruder in precisely the case this check exists for. The
+                # body-count assertion below cannot cover it either, because
+                # the header scan finds both opening headers no matter where
+                # the bodies ended. A well-formed C function never contains
+                # another function's definition, its own name included.
+                intruders = sorted(set(re.findall(header, body, re.M)))
                 if intruders:
                     offenders.append((name, len(body), intruders[:3]))
         self.assertEqual(
