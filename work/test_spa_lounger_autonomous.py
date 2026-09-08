@@ -335,18 +335,13 @@ class TestOnlyReceivingIsAutonomous(unittest.TestCase):
     def test_the_displaced_walker_is_not_restarted_synchronously(self):
         """No StartNewBehavior here -- that is the whole fix.
 
-        Five variants of this function failed review, all for one reason:
-        calling StartNewBehavior re-entered the spa route from inside this
-        frame. No bookkeeping could make that safe, because
-        VF2SpaLoungerClaimedByWalker skips the ASKING villager's own entry,
-        so a walker can never be excluded from a lounger by its own claim,
-        whatever that claim holds. Retaining the handle, parking it on a
-        sentinel, and handing it to the taker were each tried and each
-        failed for that one reason.
-
-        The nested call also reused this same slot -- entries are keyed by
-        villager pointer -- so the outer frame's cleanup then destroyed a
-        reservation the nested call had just made.
+        Four attempts to make a synchronous restart safe each failed for a
+        DIFFERENT reason -- the asking-villager skip, the receiving-label
+        liveness check, and the pointer keying that lets a nested hold reuse
+        the same slot. VF2SpaReleaseHoldOnLounger's header comment sets them
+        out one by one and is the single source of truth for that history;
+        this docstring deliberately does not restate it, because three
+        copies of one explanation is how two of them went stale.
 
         ForgetPlans alone is what nearly every other interrupt site in this
         file does. The engine picks a villager with no plans up on its next
