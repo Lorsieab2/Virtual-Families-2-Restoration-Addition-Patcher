@@ -668,9 +668,18 @@ class TheGuardSurvivesIntoTheEmittedArtifact(unittest.TestCase):
                 if not src.is_file():
                     return None, "missing build input %s" % name
                 shutil.copy2(src, temp_root / name)
-            old = patcher.PATCHED
+            old_patched = patcher.PATCHED
+            # THE FLAG-ON BRANCH IS WHAT SHIPS. ENABLE_BEHAVIOR_PATCHES is
+            # fixed at import time and is False under a normal test run, so
+            # emitting without forcing it produces the flag-OFF branch --
+            # measured at 256211 chars against 257838 with it on. The handler
+            # appears in both, so the assertions were not vacuous, but they
+            # were describing a branch the release does not build.
+            old_flag = getattr(patcher, "ENABLE_BEHAVIOR_PATCHES", None)
             try:
                 patcher.PATCHED = temp_root
+                if old_flag is not None:
+                    patcher.ENABLE_BEHAVIOR_PATCHES = True
                 # An exception here is the regression, not a missing
                 # prerequisite, so it is deliberately NOT caught.
                 patcher.patch_spontaneous_behaviors({})
@@ -680,10 +689,30 @@ class TheGuardSurvivesIntoTheEmittedArtifact(unittest.TestCase):
                 # patch_mobile_furniture_behavior_dispatch.
                 patcher.patch_mobile_furniture_behavior_dispatch({})
             finally:
-                patcher.PATCHED = old
+                patcher.PATCHED = old_patched
+                if old_flag is not None:
+                    patcher.ENABLE_BEHAVIOR_PATCHES = old_flag
             sources = sorted(temp_root.glob("*.cpp"))
             if not sources:
-                return None, "the generator emitted no .cpp at all"
+                # NOT a skip. Skipping is for a missing PREREQUISITE; an
+                # emitter that runs and writes nothing is the regression, and
+                # returning a skip here left the suite green while the check
+                # that would have caught it never ran.
+                raise AssertionError(
+                    "the emitters ran but produced no .cpp at all")
+            # Hand the sources to the persistent objs directory when it
+            # exists, so test_generated_cpp_compiles.py -- which owns the
+            # compile question -- is compiling this same emission rather than
+            # whatever an older run left behind. RESIDUAL, stated plainly:
+            # pattern-matching text cannot prove the C++ is syntactically
+            # valid or that the build includes it; only that compile does.
+            objs = patcher.ROOT / "work" / cls.OBJS
+            if objs.is_dir():
+                for src in sources:
+                    try:
+                        shutil.copy2(src, objs / src.name)
+                    except OSError:
+                        pass
             return ("\n".join(p.read_text(encoding="utf-8", errors="replace")
                               for p in sources), len(sources))
 
@@ -696,6 +725,9 @@ class TheGuardSurvivesIntoTheEmittedArtifact(unittest.TestCase):
     def setUp(self):
         result = self._generate()
         if result is None or result[0] is None:
+            # Only a genuinely absent BUILD INPUT is a skip. _generate raises
+            # for an emission that produced nothing, so that path cannot be
+            # mistaken for a missing prerequisite.
             reason = result[1] if result else "generation failed"
             self.skipTest(
                 "cannot emit the C++ in this checkout: %s" % reason)
