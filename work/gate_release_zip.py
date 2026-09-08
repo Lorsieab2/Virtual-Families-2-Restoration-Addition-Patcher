@@ -264,11 +264,20 @@ def lost_settings(archive: Path, previous: Path) -> str | None:
         return None
     # Name the way forward as well as the problem. An operator who MEANT to
     # retire a setting should not have to read this source to find out what
-    # to do, and the answer is not --allow-missing-predecessor: that flag is
-    # for a first release with no predecessor at all, and a predecessor is
-    # exactly what exists here. Retiring something deliberately means moving
-    # the archive that still offers it aside, which is an explicit act
-    # somebody performs and can be undone, rather than a silent default.
+    # to do.
+    #
+    # SUPERSEDED, recorded so it is not restored: this comment used to say the
+    # answer was NOT --allow-missing-predecessor, on the grounds that the flag
+    # is for a first release and a predecessor is exactly what exists here.
+    # That reasoning is wrong for the single-predecessor case. Moving the only
+    # baseline aside leaves none, so the next run refuses for that reason and
+    # the flag is precisely what clears it. The workflow is two deliberate
+    # steps -- move the archive, then pass the flag -- and both the message
+    # below and the flag's own help now say so.
+    #
+    # What has not changed is why it is deliberate: retiring something means an
+    # explicit act somebody performs and can undo, rather than a silent
+    # default. Two steps is the point, not an obstacle.
     return (
         f"{archive.name} drops {len(dropped)} setting(s) present in "
         f"{', '.join(names)}, and adds {len(now - before)}:\n  "

@@ -331,17 +331,57 @@ class FeatureRegressionTests(unittest.TestCase):
                 self.assertIn("retired on purpose", floor)
 
             with self.subTest(step="following THAT instruction passes"):
-                # Do what the floor message says: lower the count in the same
-                # commit that retires the setting. A retirement must have a
-                # way through, or the instructions are a dead end.
+                # Apply the value the message PRESCRIBES, not one computed
+                # here. Recomputing it independently was the flaw Codex
+                # found: a refusal telling the operator to lower the count
+                # to its existing 35 would leave this green while the
+                # workflow stayed a dead end.
+                prescribed = re.search(
+                    r"lower EXPECTED_SETTING_COUNT in \S+ to (\d+)", floor)
+                self.assertIsNotNone(
+                    prescribed,
+                    "the floor refusal does not name a target value, so an "
+                    "operator cannot tell what to set the count to",
+                )
                 original = gate.EXPECTED_SETTING_COUNT
                 try:
-                    gate.EXPECTED_SETTING_COUNT = len(
-                        gate.settings_in_archive(fresh))
-                    self.assertIsNone(gate.short_of_expected(fresh))
+                    gate.EXPECTED_SETTING_COUNT = int(prescribed.group(1))
+                    self.assertIsNone(
+                        gate.short_of_expected(fresh),
+                        "the value the refusal prescribes does not actually "
+                        "clear the floor, so following it is a dead end",
+                    )
                     self.assertIsNone(gate.lost_settings(fresh, []))
                 finally:
                     gate.EXPECTED_SETTING_COUNT = original
+
+    def test_no_comment_still_denies_the_retirement_override(self):
+        """Comments regress silently, and this one already did.
+
+        The rationale above lost_settings() said the answer was NOT
+        --allow-missing-predecessor, while the message it introduced sent
+        the operator to exactly that flag. Restoring that sentence passed
+        every other test in this file, because nothing reads comments.
+
+        The superseded claim is recorded in place rather than deleted, so
+        this asserts the DENIAL is absent rather than that some particular
+        wording is present.
+        """
+        source = Path(gate.__file__).read_text(encoding="utf-8")
+        comments = "\n".join(
+            line for line in source.split("\n") if line.lstrip().startswith("#"))
+        collapsed = " ".join(comments.split()).lower()
+        for phrase in (
+            "the answer is not --allow-missing-predecessor",
+            "--allow-missing-predecessor: that flag is for a first release "
+            "with no predecessor at all",
+        ):
+            with self.subTest(phrase=phrase[:44]):
+                self.assertNotIn(
+                    phrase, collapsed,
+                    "a comment denies the override that the refusal message "
+                    "and the flag help both prescribe",
+                )
 
     def test_every_mention_of_the_flag_permits_the_retirement_case(self):
         """The CLI must not contradict its own refusal.
