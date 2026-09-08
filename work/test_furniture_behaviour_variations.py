@@ -57,7 +57,7 @@ def retargeted_symbols():
 
 def donor_table():
     m = re.search(
-        r"kVF2GymDonorBehaviors\[\]\)\(CVillager &\) = \{(.*?)\};",
+        r"VF2DonorBehavior const donors\[\] = \{(.*?)\};",
         SOURCE, re.S)
     return m.group(1) if m else ""
 
@@ -71,7 +71,12 @@ def handler_body(name):
 class GymAndYogaOfferTheirWholeSet(unittest.TestCase):
     def test_the_donor_table_exists_and_is_not_a_single_entry(self):
         table = donor_table()
-        self.assertTrue(table, "kVF2GymDonorBehaviors is gone")
+        self.assertTrue(
+            table,
+            "the gym donor table is gone; it lives in VF2GymDonorBehaviors(), "
+            "which CBehavior befriends -- a file-scope initialiser cannot "
+            "reach the private WorkingOut/QuickWorkout members",
+        )
         entries = [ln.strip().rstrip(",") for ln in table.splitlines()
                    if ln.strip().startswith("CBehavior::")]
         self.assertGreater(
@@ -133,13 +138,13 @@ class GymAndYogaOfferTheirWholeSet(unittest.TestCase):
         body = handler_body("VF2HomeGymWorkout")
         self.assertTrue(body, "VF2HomeGymWorkout is gone")
         self.assertIn("VF2RunOwnFurnitureActionVaried", body)
-        self.assertIn("kVF2GymDonorBehaviors", body)
+        self.assertIn("VF2GymDonorBehaviors", body)
 
     def test_the_yoga_handler_uses_the_varied_runner(self):
         body = handler_body("VF2YogaEquipmentWorkout")
         self.assertTrue(body, "VF2YogaEquipmentWorkout is gone")
         self.assertIn("VF2RunOwnFurnitureActionVaried", body)
-        self.assertIn("kVF2GymDonorBehaviors", body)
+        self.assertIn("VF2GymDonorBehaviors", body)
 
     def test_the_varied_runner_bounds_the_engine_random(self):
         m = re.search(r"static void VF2RunOwnFurnitureActionVaried\((.*?)\n\}",
