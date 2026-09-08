@@ -1962,29 +1962,29 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                 self.assertIn(
                     "ldwGameState::GetRandom(3) + 0x6A", picnic_helper
                 )
-                # #238 (e8beb83) replaced the marker read with the
-                # orientation field, and this assertion was left behind
-                # asserting the code it deleted -- so main shipped with a
-                # failing test. Pinned to the CORRECT behaviour now.
+                # The orientation comes from info.orientation ALONE.
                 #
-                # The marker was read from (unsigned char *)&info + 0x14,
-                # which is padding[1] of sFurnitureInfo2; +0x14 belongs to
-                # the PLACEMENT RECORD, not to this struct. Because the
-                # marker had to equal one of four specific values for the
-                # northwest arm to be taken, uninitialised padding almost
-                # never matched and villagers faced one way regardless of
-                # how the furniture was placed.
-                self.assertNotIn(
-                    "marker == 0x13 || marker == 0x14", picnic_helper,
-                    "the picnic table is reading orientation out of "
-                    "sFurnitureInfo2 padding again",
-                )
-                self.assertNotIn("marker == 0x53 || marker == 0x54", picnic_helper)
+                # This used to require `marker == 0x13 || marker == 0x14` (and
+                # the 0x53/0x54 pair), where `marker` was read from
+                # (unsigned char *)&info + 0x14 -- padding[1] of
+                # sFurnitureInfo2, not orientation. The struct is +0x00
+                # unknown0, +0x04 orientation, +0x08 point.x, +0x0C point.y,
+                # +0x10..0x1C padding[4]; +0x14 is the PLACEMENT RECORD's world
+                # position, a different structure entirely.
+                #
+                # Because the marker had to equal one of four specific values
+                # for the northwest arm to be taken, uninitialised padding
+                # almost never matched, so that arm was effectively unreachable
+                # and villagers faced the same way however the furniture was
+                # placed. Asserting the old expression here would be asserting
+                # the bug -- and it contradicts the assertNotIn("+ 0x14") that
+                # this same file already makes about the helper tail.
                 self.assertIn(
-                    'info.orientation == 1 ? "Sit In Chair NW" : "Sit In Chair NE"',
+                    'info.orientation == 1 ? "Sit In Chair NW" '
+                    ': "Sit In Chair NE"',
                     picnic_helper,
-                    "orientation must come from info.orientation alone",
                 )
+                self.assertNotIn("marker ==", picnic_helper)
                 self.assertIn("plans->PlanToDecHunger(40);", picnic_helper)
                 self.assertIn("plans->PlanToIncPoo(6);", picnic_helper)
                 self.assertNotIn("0x1B4", picnic_helper)

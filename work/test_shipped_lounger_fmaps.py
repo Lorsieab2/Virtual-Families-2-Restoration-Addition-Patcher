@@ -23,6 +23,8 @@ position or changing behaviour the moment it sat down.
 Skips when no finished build is present, so a clean checkout is not red.
 """
 import hashlib
+import os
+import re
 import struct
 import unittest
 from collections import Counter
@@ -76,6 +78,49 @@ def _cells(path):
     )
 
 
+def _release_glob():
+    """Which release's matrix output to verify.
+
+    This was pinned to "VF2-B180-matrix-*". That folder is no longer produced,
+    so every check in this file skipped -- silently, and for every release
+    after B180. The suite reported "5 skipped" and read as green while
+    verifying nothing at all, which is the failure this file exists to prevent:
+    a check that cannot fail is not evidence.
+
+    VF2_VERIFY_RELEASE names the release explicitly. Otherwise the NEWEST
+    matrix output present is used, so the checks follow the current release
+    instead of a frozen one.
+    """
+    named = os.environ.get("VF2_VERIFY_RELEASE")
+    if named:
+        return "VF2-%s-matrix-*" % named
+    releases = sorted(
+        {
+            m.group(1)
+            for d in OUTPUTS.glob("VF2-B*-matrix-*")
+            for m in [re.match(r"VF2-(B\d+)-matrix-", d.name)]
+            if m
+        },
+        key=lambda name: int(name[1:]),
+    )
+    if not releases:
+        return None
+    return "VF2-%s-matrix-*" % releases[-1]
+
+
+# The spa-lounger hotspot widening merged in #239, after the B181 matrix was
+# built. A build from B181 or earlier cannot carry it, and demanding it there
+# would be asserting a fix onto a release that predates it.
+WIDENING_FIRST_RELEASE = 182
+
+
+def _release_has_widening(build_name):
+    m = re.match(r"VF2-B(\d+)-matrix-", build_name)
+    if not m:
+        return False
+    return int(m.group(1)) >= WIDENING_FIRST_RELEASE
+
+
 def _finished_builds():
     """Variant folders that actually linked, for the current release only.
 
@@ -83,7 +128,10 @@ def _finished_builds():
     rebuilding it, so an unlinked folder still holds the PREVIOUS release's
     maps -- and would report B179's defect against B180.
     """
-    for d in sorted(OUTPUTS.glob("VF2-B180-matrix-*")):
+    pattern = _release_glob()
+    if pattern is None:
+        return
+    for d in sorted(OUTPUTS.glob(pattern)):
         if d.name.endswith("-logs"):
             continue
         if list(d.glob("*.exe")) and (d / "Assets").is_dir():
@@ -181,6 +229,13 @@ class TestShippedLoungerMapsAreDesktopSafe(unittest.TestCase):
                             "cell %d became %#x rather than the object value "
                             "%#x" % (index, now, obj),
                         )
+                    # The widening merged after B181 was built, so asserting it
+                    # against B181 or earlier would assert a property onto a
+                    # release that predates the fix. Every OTHER check in this
+                    # method still applies to those builds: no mobile markers,
+                    # no untranslated anchor, no overwritten cell.
+                    if not _release_has_widening(build.name):
+                        continue
                     self.assertGreater(
                         sum(1 for v in shipped if v == obj),
                         sum(1 for v in expected if v == obj),
@@ -224,8 +279,9 @@ class TestShippedLoungerMapsAreDesktopSafe(unittest.TestCase):
                     )
                 # And the two groups MUST differ, or the widening never
                 # reached this build and every check above passed on
-                # unmodified bytes.
-                if widened and plain:
+                # unmodified bytes. Only from the release that carries the
+                # widening: before it, byte-identical is the CORRECT result.
+                if widened and plain and _release_has_widening(build.name):
                     self.assertNotEqual(
                         set(widened.values()), set(plain.values()),
                         "the spa loungers are byte-identical to the plain "
