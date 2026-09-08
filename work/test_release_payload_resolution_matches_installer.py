@@ -63,9 +63,29 @@ class ReleaseVerifierMatchesInstaller(unittest.TestCase):
         self.assertIn('target_key = record.get("file_path")', SOURCE)
         self.assertIn('record.get("output_file_path") or target_key', SOURCE)
 
-    def test_disabled_redirected_records_are_not_in_the_default_plan(self):
-        self.assertIn("enabled_settings", SOURCE)
-        self.assertIn("set(requires).issubset(enabled_settings)", SOURCE)
+    def test_records_resolve_against_every_declared_setting(self):
+        """Presence, not defaults.
+
+        This asserted `set(requires).issubset(enabled_settings)` -- the
+        resolver filtering to DEFAULT-ENABLED settings. That answered the wrong
+        question: "is this installed in a default install" reported under the
+        "is this installed at all" heading. Two of the three lounger maps
+        require invisible_furniture_visible_graphics, which is default: False,
+        so a bundle carrying them with correct anchors was quarantined as
+        missing them. B181 fails identically.
+
+        The string survived in a comment after the fix, so this test kept
+        passing while asserting the behaviour that had been removed -- a
+        substring check standing in for the code it describes.
+        """
+        self.assertIn("declared_settings", SOURCE)
+        self.assertIn("set(requires).issubset(declared_settings)", SOURCE)
+        self.assertNotIn(
+            "if not isinstance(requires, list) or not set(requires).issubset(enabled_settings):",
+            SOURCE,
+            "the resolver is filtering to default-enabled settings again, "
+            "which reports a correct bundle as missing files it carries",
+        )
 
     def test_windows_drive_paths_are_rejected_even_on_posix(self):
         with self.assertRaises(ValueError):

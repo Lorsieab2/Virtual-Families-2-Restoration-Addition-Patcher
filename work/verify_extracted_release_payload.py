@@ -59,6 +59,29 @@ def _setting_is_ready(manifest, setting_id, row):
     return metadata.get("runtime_ready", True) is not False and metadata.get("linked", True) is not False
 
 
+def _declared_settings(manifest):
+    """Every setting the manifest declares, whatever its default.
+
+    _default_enabled_settings answers "what does a default install turn on".
+    That is the wrong question for a presence check: a file whose setting
+    defaults to off is still installed by the manifest when the player selects
+    it, and is still shipped in the bundle.
+    """
+    settings = manifest.get("settings")
+    ids = set()
+    if isinstance(settings, list):
+        for entry in settings:
+            if isinstance(entry, dict):
+                value = entry.get("id") or entry.get("name")
+                if value:
+                    ids.add(value)
+            elif isinstance(entry, str):
+                ids.add(entry)
+    elif isinstance(settings, dict):
+        ids.update(settings)
+    return ids
+
+
 def _default_enabled_settings(manifest):
     raw_settings = manifest.get("settings", [])
     if isinstance(raw_settings, dict):
@@ -171,6 +194,19 @@ DESKTOP_ANCHOR = 0x00009800
 
 # B180 adds the two Spa Loungers; B179 shipped neither, so their presence is
 # itself part of what this release must deliver.
+# The two the widener dilates. The plain Invisible Lounger is not one of them
+# and must keep the donor's unwidened footprint.
+# The EObject value, and the drop-target counts each lounger must ship. The
+# two spa maps are dilated into the donor's ring; the plain one is not.
+OBJECT_CELL = 0x2000A800
+WIDENED_DROP_CELLS = 33
+PLAIN_DROP_CELLS = 11
+
+WIDENED_LOUNGER_MAPS = (
+    "InvisibleSpaLounger.png.fmap",
+    "SpaLoungerStd.png.fmap",
+)
+
 LOUNGER_MAPS = (
     "InvisibleSpaLounger.png.fmap",
     "InvisibleLounger.png.fmap",
@@ -249,12 +285,31 @@ def main():
         # reported as "not installed" by a resolver that only reads
         # asset_patches -- a false alarm on a correct bundle, which is the
         # same class of mistake as the by-name check this replaced.
-        enabled_settings = _default_enabled_settings(manifest)
+        # RESOLVE AGAINST EVERY DECLARED SETTING, NOT ONLY THE DEFAULTS.
+        #
+        # "installed by the manifest" is a question about PRESENCE -- does the
+        # bundle carry a record that puts this file on disk when its setting
+        # is selected. Filtering to default-enabled settings answers a
+        # different question, "is it installed in a default install", and then
+        # reports the answer under the presence heading.
+        #
+        # Two of the three lounger maps require
+        # invisible_furniture_visible_graphics, which is default: False. So a
+        # correct bundle -- files present, anchors translated, geometry
+        # carried -- was quarantined with "is not installed by the manifest".
+        # Both B181 and B184 fail this way, and B181 is a release the owner
+        # has been playing.
+        #
+        # The filter was added to stop a record whose setting is absent from
+        # the bundle being counted, which is a real concern; declared_settings
+        # keeps that, since a record requiring a setting the manifest never
+        # declares is still skipped.
+        declared_settings = _declared_settings(manifest)
         installed = {}
         for key in ("asset_patches", "post_asset_patches"):
             for record in manifest.get(key, []):
                 requires = _record_requires(record)
-                if not isinstance(requires, list) or not set(requires).issubset(enabled_settings):
+                if not isinstance(requires, list) or not set(requires).issubset(declared_settings):
                     continue
                 target_key = record.get("file_path")
                 if key == "asset_patches":
@@ -324,14 +379,78 @@ def main():
                 f"Assets/{name}: payload digest {actual[:12]} does not match "
                 f"the manifest's declared {declared[:12]}"
             )
-    if len(lounger_digests) == len(LOUNGER_MAPS):
-        distinct = set(lounger_digests.values())
-        if len(distinct) != 1:
+    # THE TWO SPA LOUNGERS SHIP A WIDER DROP TARGET THAN THE PLAIN ONE.
+    #
+    # This required all three to be byte-identical, which held until the spa
+    # hotspot widening: the owner reported the spa loungers were very hard to
+    # drop a villager onto, so their maps -- and only theirs -- are dilated
+    # into the donor's ring. The plain Invisible Lounger is deliberately left
+    # alone, so identical digests are now the FAILURE rather than the
+    # requirement.
+    #
+    # What still has to hold is that the two spa maps agree with EACH OTHER
+    # and differ from the plain one. Both get the same treatment, so a
+    # disagreement between them means one missed the widening.
+    spa_digests = {n: d for n, d in lounger_digests.items()
+                   if n in WIDENED_LOUNGER_MAPS}
+    plain_digests = {n: d for n, d in lounger_digests.items()
+                     if n not in WIDENED_LOUNGER_MAPS}
+    if (len(spa_digests) == len(WIDENED_LOUNGER_MAPS)
+            and len(set(spa_digests.values())) != 1):
+        problems.append(
+            f"the spa loungers install different maps, so one missed the "
+            f"hotspot widening: {spa_digests}"
+        )
+    if (spa_digests and plain_digests
+            and set(spa_digests.values()) == set(plain_digests.values())):
+        problems.append(
+            "the spa loungers are byte-identical to the plain lounger, so "
+            "the hotspot widening did not reach this build"
+        )
+    # AND DECODE THE GEOMETRY. Digests alone cannot tell a 33-cell widening
+    # from a 13-cell one: the empty-only rule that shipped before #258
+    # produces spa maps that match EACH OTHER and DIFFER from the plain map,
+    # satisfying both conditions above while the intended widening is absent.
+    # Only counting the drop cells separates them.
+    for name in WIDENED_LOUNGER_MAPS:
+        resolved = maps.get(name)
+        if resolved is None or not resolved.is_file():
+            continue
+        drop = cells(resolved).get(OBJECT_CELL, 0)
+        # EQUALITY, NOT A LOWER BOUND. `drop < 33` catches an incomplete
+        # widening and admits an over-widened one, which is the compounding
+        # defect: seeding the dilation from the widened output instead of the
+        # donor gives 38, and a second pass over that gives 62, then 92, 125,
+        # 160 into a tracked asset directory. Both of those are numbers this
+        # project actually produced today. The ring is deterministic, so the
+        # exact figure is knowable and anything else is wrong.
+        if drop != WIDENED_DROP_CELLS:
             problems.append(
-                f"loungers install different maps: {lounger_digests}"
+                f"Assets/{name}: {drop} drop-target cells, expected exactly "
+                f"{WIDENED_DROP_CELLS}. Fewer means the widening is "
+                f"incomplete (the empty-only rule produces 13 and still "
+                f"passes every digest check); more means it compounded, "
+                f"which happens when the dilation is seeded from its own "
+                f"output rather than from the donor"
             )
-        else:
-            print(f"                   all three share {distinct.pop()[:12]}")
+    for name in LOUNGER_MAPS:
+        if name in WIDENED_LOUNGER_MAPS:
+            continue
+        resolved = maps.get(name)
+        if resolved is None or not resolved.is_file():
+            continue
+        drop = cells(resolved).get(OBJECT_CELL, 0)
+        if drop != PLAIN_DROP_CELLS:
+            problems.append(
+                f"Assets/{name}: {drop} drop-target cells, expected "
+                f"{PLAIN_DROP_CELLS}; the plain lounger must keep the donor's "
+                f"footprint -- the owner asked for the two spa loungers only"
+            )
+    if (spa_digests and plain_digests
+            and set(spa_digests.values()) != set(plain_digests.values())):
+        print("                   spa loungers share %s, plain lounger %s"
+              % (sorted(set(spa_digests.values()))[0][:12],
+                 sorted(set(plain_digests.values()))[0][:12]))
 
     # Labels: the removed one must appear in no executable; the added ones must
     # appear in the behaviour-carrying builds. Every variant ships in one ZIP,

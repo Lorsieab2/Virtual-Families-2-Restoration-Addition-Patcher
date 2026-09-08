@@ -1,0 +1,343 @@
+{
+  "note": "Compiled identity of every executable variant, read from the matrix build outputs rather than from the bundle that is being verified. Feed to verify_offline_bundle_zip.py --identities.",
+  "release": "B184",
+  "matrix_prefix": "VF2-B184-matrix-20260907",
+  "variants": [
+    {
+      "variant": "behavior_patches",
+      "requires": [
+        "behavior_patches",
+        "core_executable"
+      ],
+      "sha256": "97b9dfc072fd3d2adda9b9c43b991bd50d93afa773d97652683b2380022d52e9",
+      "size": 1799680
+    },
+    {
+      "variant": "behavior_patches_mobile_renovations",
+      "requires": [
+        "behavior_patches",
+        "core_executable",
+        "mobile_renovations"
+      ],
+      "sha256": "fa24755846d02e6c69177a5fb082dd8e62dfa91bd1fc8be66a03067afc97a145",
+      "size": 1813504
+    },
+    {
+      "variant": "cheat_upgrades",
+      "requires": [
+        "cheat_upgrades",
+        "core_executable"
+      ],
+      "sha256": "4cf31d1c22eb372fec5272740c17c1d041b31e41836b6c57c90d11f3ac2aaf21",
+      "size": 1757184
+    },
+    {
+      "variant": "cheat_upgrades_behavior_patches",
+      "requires": [
+        "behavior_patches",
+        "cheat_upgrades",
+        "core_executable"
+      ],
+      "sha256": "6e7e57d0caddd87b2d7a819ee602a0d96a051f424f5cfcafc04e8ada0d280585",
+      "size": 1800704
+    },
+    {
+      "variant": "cheat_upgrades_behavior_patches_mobile_renovations",
+      "requires": [
+        "behavior_patches",
+        "cheat_upgrades",
+        "core_executable",
+        "mobile_renovations"
+      ],
+      "sha256": "9fda2dae0725fe8b44cc072be4ff3b653baceba2153684749ee4efbfdb99e6be",
+      "size": 1814528
+    },
+    {
+      "variant": "cheat_upgrades_holiday_ornaments",
+      "requires": [
+        "cheat_upgrades",
+        "core_executable",
+        "holiday_ornaments_collection"
+      ],
+      "sha256": "77f700da45ae51557cadb9e81fd15186486a5f9a41d7f0d1bae733a2d2552f2b",
+      "size": 1759744
+    },
+    {
+      "variant": "cheat_upgrades_holiday_ornaments_behavior_patches",
+      "requires": [
+        "behavior_patches",
+        "cheat_upgrades",
+        "core_executable",
+        "holiday_ornaments_collection"
+      ],
+      "sha256": "25c49c227562213e7cf57fabb7f9b5d426651818a764f5bb93960f08c548c7fa",
+      "size": 1803264
+    },
+    {
+      "variant": "cheat_upgrades_holiday_ornaments_behavior_patches_mobile_renovations",
+      "requires": [
+        "behavior_patches",
+        "cheat_upgrades",
+        "core_executable",
+        "holiday_ornaments_collection",
+        "mobile_renovations"
+      ],
+      "sha256": "68f11f12e41fbcda40d56e2bdc3819a1a1d77f6964cd171e3e614a2d6d65ad79",
+      "size": 1817600
+    },
+    {
+      "variant": "cheat_upgrades_holiday_ornaments_mobile_renovations",
+      "requires": [
+        "cheat_upgrades",
+        "core_executable",
+        "holiday_ornaments_collection",
+        "mobile_renovations"
+      ],
+      "sha256": "965c3eb01c597b6b1ae9b4dcfa50a4bbc3fd996895405ade861eb78f79f91555",
+      "size": 1774080
+    },
+    {
+      "variant": "cheat_upgrades_mobile_renovations",
+      "requires": [
+        "cheat_upgrades",
+        "core_executable",
+        "mobile_renovations"
+      ],
+      "sha256": "fd27ab079e5697378c6b876c60115c29237edbfc2b72a96fb2ea8e2a5a31e12c",
+      "size": 1771520
+    },
+    {
+      "variant": "core",
+      "requires": [
+        "core_executable"
+      ],
+      "sha256": "7a97e92e61d4206107d36aab83f19fd90c708313f797a9ce46f6fbf5df69727f",
+      "size": 1755648
+    },
+    {
+      "variant": "final_all_enabled",
+      "requires": [
+        "behavior_patches",
+        "cheat_upgrades",
+        "core_executable",
+        "holiday_ornaments_collection",
+        "island_events",
+        "mobile_renovations"
+      ],
+      "sha256": "6ed3faa54b4c323d3a28dce9310c761d18c611c954f40e004b74fed049a780d6",
+      "size": 1847296
+    },
+    {
+      "variant": "holiday_ornaments",
+      "requires": [
+        "core_executable",
+        "holiday_ornaments_collection"
+      ],
+      "sha256": "e34044e9b3aee81e36d5f858f5e982c17a0639c58cf45c2bf157cf524c44e50b",
+      "size": 1758720
+    },
+    {
+      "variant": "holiday_ornaments_behavior_patches",
+      "requires": [
+        "behavior_patches",
+        "core_executable",
+        "holiday_ornaments_collection"
+      ],
+      "sha256": "56c1b3ad65bee60618e55086c601e6d8cd5d5539631a3e5bb199cc06a6cd606b",
+      "size": 1802240
+    },
+    {
+      "variant": "holiday_ornaments_behavior_patches_mobile_renovations",
+      "requires": [
+        "behavior_patches",
+        "core_executable",
+        "holiday_ornaments_collection",
+        "mobile_renovations"
+      ],
+      "sha256": "b215dc35940573a9f3c0bacb15893522b1428a95ac31883f9321e51dff7cf668",
+      "size": 1816576
+    },
+    {
+      "variant": "holiday_ornaments_mobile_renovations",
+      "requires": [
+        "core_executable",
+        "holiday_ornaments_collection",
+        "mobile_renovations"
+      ],
+      "sha256": "7c35ccea653775f827e67e3d020fba44b2421a1568cec997c4d4141afaacdfb3",
+      "size": 1772544
+    },
+    {
+      "variant": "island_events",
+      "requires": [
+        "core_executable",
+        "island_events"
+      ],
+      "sha256": "2d7bb7e9a18f84b1729fc9c3ec97e2508211f20dec8ecc868b36df001817c94b",
+      "size": 1785344
+    },
+    {
+      "variant": "island_events_behavior_patches",
+      "requires": [
+        "behavior_patches",
+        "core_executable",
+        "island_events"
+      ],
+      "sha256": "b81e9437acb8e1ff72a4229f2ad3a0a076f14f022702145461ffde1fc8a109c4",
+      "size": 1829888
+    },
+    {
+      "variant": "island_events_behavior_patches_mobile_renovations",
+      "requires": [
+        "behavior_patches",
+        "core_executable",
+        "island_events",
+        "mobile_renovations"
+      ],
+      "sha256": "129c9a2aa1e0aeec068dfc18620f7f5f1c73f56dc16129b29ae9c0264e15632f",
+      "size": 1843712
+    },
+    {
+      "variant": "island_events_cheat_upgrades",
+      "requires": [
+        "cheat_upgrades",
+        "core_executable",
+        "island_events"
+      ],
+      "sha256": "4f3a7e3d60387932fda3aca866e1e4b7eefc1429f19216f3635f4f8a8b31b82e",
+      "size": 1786880
+    },
+    {
+      "variant": "island_events_cheat_upgrades_behavior_patches",
+      "requires": [
+        "behavior_patches",
+        "cheat_upgrades",
+        "core_executable",
+        "island_events"
+      ],
+      "sha256": "d6c091b5688b83c3441c002706e9f2f44b48d91c028cf04b2f5bdf23ba2d247f",
+      "size": 1830400
+    },
+    {
+      "variant": "island_events_cheat_upgrades_behavior_patches_mobile_renovations",
+      "requires": [
+        "behavior_patches",
+        "cheat_upgrades",
+        "core_executable",
+        "island_events",
+        "mobile_renovations"
+      ],
+      "sha256": "ec21ebe52f642dcd9b59cfbafbb8d54506eb47dcdd9941ad269b4e5ee6bdb5db",
+      "size": 1844224
+    },
+    {
+      "variant": "island_events_cheat_upgrades_holiday_ornaments",
+      "requires": [
+        "cheat_upgrades",
+        "core_executable",
+        "holiday_ornaments_collection",
+        "island_events"
+      ],
+      "sha256": "95d93c28270ad366403bf1b634c7e06cad173a2e58a7cf64d9cc3b9a195bbe58",
+      "size": 1789952
+    },
+    {
+      "variant": "island_events_cheat_upgrades_holiday_ornaments_behavior_patches",
+      "requires": [
+        "behavior_patches",
+        "cheat_upgrades",
+        "core_executable",
+        "holiday_ornaments_collection",
+        "island_events"
+      ],
+      "sha256": "e9d9fddd5d29f2177deffd3f34e0403cff718d69bdaf17cce1d68eaa0fb4e0a3",
+      "size": 1832960
+    },
+    {
+      "variant": "island_events_cheat_upgrades_holiday_ornaments_mobile_renovations",
+      "requires": [
+        "cheat_upgrades",
+        "core_executable",
+        "holiday_ornaments_collection",
+        "island_events",
+        "mobile_renovations"
+      ],
+      "sha256": "5b10adce98f9eece73abf5c7fa75999a9c243bf399ad80744bbf449f38070cce",
+      "size": 1803776
+    },
+    {
+      "variant": "island_events_cheat_upgrades_mobile_renovations",
+      "requires": [
+        "cheat_upgrades",
+        "core_executable",
+        "island_events",
+        "mobile_renovations"
+      ],
+      "sha256": "26e21293d1a3f25f01ae0ac76a006e0ffce74039a922d6707af251cfe150049c",
+      "size": 1801216
+    },
+    {
+      "variant": "island_events_holiday_ornaments",
+      "requires": [
+        "core_executable",
+        "holiday_ornaments_collection",
+        "island_events"
+      ],
+      "sha256": "d5d9943a7136c1b532e99b09673ecd7bacbefe587343c12c40c3905722c04ae9",
+      "size": 1787904
+    },
+    {
+      "variant": "island_events_holiday_ornaments_behavior_patches",
+      "requires": [
+        "behavior_patches",
+        "core_executable",
+        "holiday_ornaments_collection",
+        "island_events"
+      ],
+      "sha256": "51155c62a6e20982304a2754a9c51cdc675259015e6a609b6173bce33ee99114",
+      "size": 1832448
+    },
+    {
+      "variant": "island_events_holiday_ornaments_behavior_patches_mobile_renovations",
+      "requires": [
+        "behavior_patches",
+        "core_executable",
+        "holiday_ornaments_collection",
+        "island_events",
+        "mobile_renovations"
+      ],
+      "sha256": "3919a570977ae9167d65fe2ea684fd87027379770786347d34b56b6bb4f2a308",
+      "size": 1846784
+    },
+    {
+      "variant": "island_events_holiday_ornaments_mobile_renovations",
+      "requires": [
+        "core_executable",
+        "holiday_ornaments_collection",
+        "island_events",
+        "mobile_renovations"
+      ],
+      "sha256": "e3b00e7daf33de87b618e66044078a25f4b510eaee4bb268f815fcbc4690ddc9",
+      "size": 1802240
+    },
+    {
+      "variant": "island_events_mobile_renovations",
+      "requires": [
+        "core_executable",
+        "island_events",
+        "mobile_renovations"
+      ],
+      "sha256": "bed66d8122348f40e7fc6c470c558ad6ee771fe903a607e002d8e4f0946fb65a",
+      "size": 1800192
+    },
+    {
+      "variant": "mobile_renovations",
+      "requires": [
+        "core_executable",
+        "mobile_renovations"
+      ],
+      "sha256": "62140c34b12289dfb8dee8fa60d3768af972de6cc05d08f16fd5d6816b727eaf",
+      "size": 1769984
+    }
+  ]
+}
