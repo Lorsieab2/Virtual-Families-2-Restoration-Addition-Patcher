@@ -612,5 +612,85 @@ class TestTheDeclarationPrecedesItsUse(unittest.TestCase):
         )
 
 
+class TheGuardSurvivesIntoTheEmittedArtifact(unittest.TestCase):
+    """Every other check in this file reads the GENERATOR, not its output.
+
+    That is the weakness Codex named on #253: a source-contract test still
+    passes if the block stops being emitted, if a stale generated file is
+    compiled, or if the emission is gated behind a flag that is off. The
+    generator saying the right thing and the build shipping it are two
+    different claims.
+
+    This one regenerates under VF2_ENABLE_BEHAVIOR_PATCHES=1 and reads the
+    .cpp the compiler is handed. It skips only when the generated sources are
+    genuinely absent -- never on an exception from the generator itself,
+    because a generator that crashes is the regression, not a missing
+    prerequisite.
+    """
+
+    OBJS = "patched_mobile_furniture_pack_objs"
+
+    @classmethod
+    def _emitted(cls):
+        """Every emitted .cpp, joined.
+
+        Deliberately NOT a hardcoded filename. The release handler currently
+        lands in vf2_mobile_furniture_behaviors.cpp, but which file a function
+        is emitted into is an implementation detail of the generator's
+        layout -- naming one would make this test fail on a harmless
+        reorganisation while still passing if the code vanished from the file
+        it was moved out of.
+        """
+        objs = patcher.ROOT / "work" / cls.OBJS
+        sources = sorted(objs.glob("*.cpp")) if objs.is_dir() else []
+        if not sources:
+            return None
+        return "\n".join(p.read_text(encoding="utf-8", errors="replace")
+                         for p in sources)
+
+    def setUp(self):
+        text = self._emitted()
+        if text is None:
+            self.skipTest(
+                "work/%s holds no generated .cpp in this checkout; run the "
+                "generator with VF2_ENABLE_BEHAVIOR_PATCHES=1 first"
+                % self.OBJS)
+        self.emitted = text
+
+    def test_the_reservation_release_is_in_the_shipped_source(self):
+        self.assertIn(
+            "VF2SpaReleaseHoldOnLounger", self.emitted,
+            "the release handler never reached the emitted C++, so every "
+            "source-contract check in this file is describing code the build "
+            "does not compile")
+
+    def test_the_walker_skip_is_in_the_shipped_source(self):
+        """A villager must never be excluded by its own claim."""
+        self.assertIn(
+            "walker == keep", self.emitted,
+            "the self-claim skip is absent from the emitted C++")
+
+    def test_no_synchronous_restart_reached_the_artifact(self):
+        """The restart was removed for a family of defects; if it comes back
+        in the emitted source, it comes back in the game.
+
+        COMMENTS ARE STRIPPED FIRST. The handler's own comment explains at
+        length why StartNewBehavior was removed, so a raw substring search
+        matches that prose and fails on correct code -- which it did on the
+        first draft of this test. Measuring code means measuring code.
+        """
+        body = self.emitted
+        start = body.find("VF2SpaReleaseHoldOnLounger(int handle")
+        self.assertGreater(
+            start, -1, "the release handler's definition is not in the "
+            "emitted C++")
+        end = body.find("\n}", start)
+        code = re.sub(r"//[^\n]*", "", body[start:end])
+        self.assertNotIn(
+            "StartNewBehavior", code,
+            "a synchronous restart is back inside the release handler in the "
+            "emitted C++")
+
+
 if __name__ == "__main__":
     unittest.main()
