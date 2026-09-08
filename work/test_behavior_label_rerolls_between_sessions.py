@@ -396,6 +396,38 @@ static int VF2Split(CVillager &villager, int flag)
                 bodies, "%s came back unreadable; a comment apostrophe or a "
                         "doubled brace is eating the body" % name)
 
+    def test_no_body_contains_another_function_definition(self):
+        """The strong form of the parse check.
+
+        "Unreadable" only catches bodies that never terminated. A body that
+        terminates in the WRONG PLACE is worse, because nothing reports it and
+        every rule is then evaluated against the wrong text -- which is exactly
+        what the one-line-definition bug did, producing a well-formed
+        4190-character body containing fifteen other functions.
+        """
+        header = (r'^(?:extern "C" )?[A-Za-z_][\w \*&:]*?'
+                  r'\b(VF2\w+)\([^;{]*\)\s*\n?\{')
+        offenders = []
+        names = sorted(set(re.findall(header, SOURCE, re.M)))
+        for name in names:
+            for body in find_function_bodies(name):
+                intruders = sorted(set(
+                    other for other in re.findall(header, body, re.M)
+                    if other != name))
+                if intruders:
+                    offenders.append((name, len(body), intruders[:3]))
+        self.assertEqual(
+            offenders, [],
+            "these bodies run past their own closing brace and absorb other "
+            "functions, so markers from unrelated code are attributed to them",
+        )
+        # The premise: this is only meaningful if it actually parsed the file.
+        self.assertGreater(
+            len(names), 400,
+            "only %d definitions were found; the header pattern has stopped "
+            "matching most of the generator" % len(names),
+        )
+
     def test_no_definition_in_the_generator_is_unreadable(self):
         """The whole-file health check.
 
