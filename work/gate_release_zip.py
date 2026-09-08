@@ -330,9 +330,12 @@ def main() -> int:
         "--allow-missing-predecessor",
         action="store_true",
         help=(
-            "Publish without comparing against a previous release. Only for "
-            "a genuine first release: a missing predecessor is otherwise a "
-            "retained-archive problem, not a reason to skip the check."
+            "Publish without comparing against a previous release. For a "
+            "genuine first release, or after deliberately moving aside the "
+            "last archive that offered a retired setting -- the two cases "
+            "where no predecessor is the intended state. Otherwise a "
+            "missing predecessor is a retained-archive problem, not a "
+            "reason to skip the check."
         ),
     )
     parser.add_argument("--release", required=True, help="Release name, e.g. B175")
@@ -479,8 +482,10 @@ def main() -> int:
                 f"no predecessor release found beside {archive.name}, so the "
                 "feature-regression check could not run. Retain the previous "
                 "release ZIP next to this one, or pass "
-                "--allow-missing-predecessor if this really is the first "
-                "release.",
+                "--allow-missing-predecessor if no predecessor is the "
+                "intended state -- a genuine first release, or a deliberate "
+                "retirement whose last remaining baseline you have just "
+                "moved aside.",
             )
         print("no predecessor, and the bootstrap override was given")
     else:
