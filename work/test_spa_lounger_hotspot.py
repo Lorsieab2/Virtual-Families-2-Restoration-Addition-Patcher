@@ -341,9 +341,14 @@ class TheDonorLookupResolves(unittest.TestCase):
         start = source.index("def widen_spa_lounger_hotspot(")
         body = source[start:source.index("\n    def ", start + 1)]
         self.assertIn(
-            "donor_path = find_fmap_source(donor)", body,
-            "the widener must resolve the donor through find_fmap_source, "
-            "which is the same file copy_donor_fmap built the borrower from",
+            "donor_path = desktop_safe_fmap_source(donor) or find_fmap_source(donor)",
+            body,
+            "the widener must resolve the DESKTOP-SAFE map: in a "
+            "payload-backed build find_fmap_source returns the raw mobile "
+            "map, whose dominant nonzero value is metadata 0x01B00000 at 111 "
+            "cells rather than the EObject value at 11, so the dominant-value "
+            "heuristic would expand metadata and leave the drop target "
+            "untouched",
         )
         self.assertNotIn(
             "donor_path = assets / donor", body,
