@@ -25906,6 +25906,16 @@ enum ELike { eLikeDummy = 0 };
 enum EBodyPosition {
     eBodyPositionStanding = 0,
     eBodyPositionUmbrella = 0x0D,
+    // The two seated poses the Exercise Bike rides in, one per furniture
+    // orientation. Values DECODED from work/desktop_obj_files/AnimManager.obj's
+    // enum records rather than guessed:
+    //     eBodyPosition_Upright   0x00  <- equals eBodyPositionStanding above,
+    //                                      which is what validates the decode
+    //     eBodyPosition_Sitting   0x02
+    //     eBodyPosition_SittingNE 0x11
+    //     eBodyPosition_SittingNW 0x12
+    eBodyPositionSittingNE = 0x11,
+    eBodyPositionSittingNW = 0x12,
     eBodyPositionChaise = 0x17
 };
 enum EDirection { eDirectionUmbrella = 3 };
@@ -32036,7 +32046,18 @@ public:
 };
 enum ESpeed { eSpeedNormal = 0xC8 };
 enum EPriority { ePriorityNormal = 0 };
-enum EBodyPosition { eBodyPositionRestingHammock = 9 };
+enum EBodyPosition {
+    eBodyPositionRestingHammock = 9,
+    // The Exercise Bike's seated poses, declared HERE because this is
+    // the unit the bike wrapper is emitted into. Declaring them in the
+    // behaviours unit and using them from this one is what made an
+    // earlier attempt fail to compile under
+    // VF2_ENABLE_BEHAVIOR_PATCHES=1 while passing with the flag off.
+    // Values decoded from AnimManager.obj; Upright 0x00 matches the
+    // standing constant the other unit already declares.
+    eBodyPositionSittingNE = 0x11,
+    eBodyPositionSittingNW = 0x12
+};
 enum EHeadDirection { eHeadDirectionNE = 1, eHeadDirectionNW = 7 };
 
 struct ldwPoint {
@@ -33174,6 +33195,64 @@ static void VF2EndAddedFurnitureVenue(CVillager &villager)
     }
 }
 
+// Ride the Exercise Bike seated, without replacing the treadmill behaviour.
+//
+// WorkoutTreadmill enqueues THREE PlanToPlayAnim + PlanToWait cycles, each wait
+// carrying a standing body position (decoded from Behavior.obj: waits at
+// +0x16D, +0x1A6 and +0x1DF). Appending a pose after the donor therefore left
+// the villager jogging upright for the whole workout with one seated frame at
+// the end -- the first version of this change did exactly that.
+//
+// So the donor's own PlanToWait callsites are retargeted here, the same way its
+// PlanToGo already is. The wrapper substitutes the seated pose for the standing
+// one while PRESERVING THE DURATION the donor chose, so the workout keeps its
+// length and its animations and only the body position changes.
+//
+// The substitution is scoped to one villager's plans and to a window opened
+// only when an Exercise Bike was actually resolved, so a stock treadmill user
+// is untouched.
+static CVillagerPlans *gVF2BikeSeatedPlans = 0;
+static bool gVF2BikeSeatedActive = false;
+static int gVF2BikeSeatedPose = 0;
+
+static void VF2BeginBikeSeated(CVillager &villager, int pose)
+{
+    gVF2BikeSeatedPlans = reinterpret_cast<CVillagerPlans *>(&villager);
+    gVF2BikeSeatedPose = pose;
+    gVF2BikeSeatedActive = true;
+}
+
+static void VF2EndBikeSeated(CVillager &villager)
+{
+    if (gVF2BikeSeatedPlans == reinterpret_cast<CVillagerPlans *>(&villager)) {
+        gVF2BikeSeatedPlans = 0;
+        gVF2BikeSeatedActive = false;
+    }
+}
+
+static void __cdecl VF2PlanToWaitSeatedOnBikeImpl(
+    CVillagerPlans *plans, int duration, EBodyPosition position)
+{
+    if (gVF2BikeSeatedActive && gVF2BikeSeatedPlans == plans) {
+        // Duration untouched: only the pose is substituted, so the workout
+        // keeps the length the donor chose.
+        position = (EBodyPosition)gVF2BikeSeatedPose;
+    }
+    plans->PlanToWait(duration, position);
+}
+
+extern "C" __declspec(naked) void VF2PlanToWaitSeatedOnBike()
+{
+    __asm {
+        push dword ptr [esp+8]
+        push dword ptr [esp+8]
+        push ecx
+        call VF2PlanToWaitSeatedOnBikeImpl
+        add esp, 12
+        ret 8
+    }
+}
+
 static void __cdecl VF2PlanToGoAtAddedFurnitureImpl(
     CVillagerPlans *plans, ldwPoint point, ESpeed speed, EPriority priority)
 {
@@ -33358,22 +33437,78 @@ static void (__cdecl *const kVF2GymDonorBehaviors[])(CVillager &) = {
 
 #define VF2_DONOR_COUNT(a) ((int)(sizeof(a) / sizeof((a)[0])))
 
+// Open the seated window ONLY for a real Exercise Bike.
+//
+// FindFurniture(0x04) resolves the SHARED bike/treadmill object, so asking it
+// alone would seat a villager on a stock treadmill -- and with both placed,
+// take the orientation from the wrong record. So the placement array is walked
+// for the bike's own item id, exactly as VF2FindAddedFurnitureVenue does, and
+// the orientation comes from the record that matched.
+//
+// Returns false when no bike is placed, which is the same fallback
+// VF2RunOwnFurnitureAction takes: the donor runs unchanged and nothing is
+// seated.
+static bool VF2OpenBikeSeatedWindow(CVillager &villager, int itemId, int object)
+{
+    // USE THE PLACEMENT THE ACTION WILL ACTUALLY ROUTE TO.
+    //
+    // Taking the first record with a matching item id is wrong when two bikes
+    // are placed with different orientations: VF2FindAddedFurnitureVenue picks
+    // the NEAREST one for the route, so the villager could cycle to one bike
+    // and be posed for the other. Resolving the venue here, by the same
+    // nearest-match rule, means the pose belongs to the bike the villager
+    // rides.
+    ldwPoint venue = {};
+    if (!VF2FindAddedFurnitureVenue(villager, itemId, object, venue)) return false;
+
+    // Then name that exact placement by position and read ITS orientation
+    // from +0x10, rather than rescanning by item id alone.
+    unsigned char *manager = reinterpret_cast<unsigned char *>(&FurnitureManager);
+    int count = *reinterpret_cast<int *>(manager + 0x1004);
+    if (count < 0 || count > 0x200) return false;
+    for (int slot = 0; slot < count; ++slot) {
+        unsigned char *record = manager + 0x1008 + slot * 0x40;
+        if ((*reinterpret_cast<unsigned int *>(record + 0x0C) & 1) == 0) continue;
+        if (*reinterpret_cast<int *>(record) != itemId) continue;
+        sFurnitureInfo2 info = {};
+        if (!FurnitureManager.FindFurniture(
+                (CContentMap::EObject)object,
+                *reinterpret_cast<ldwPoint *>(record + 0x14),
+                info, true, 0, false)) {
+            continue;
+        }
+        if (info.point.x != venue.x || info.point.y != venue.y) continue;
+        int orientation = *reinterpret_cast<int *>(record + 0x10);
+        VF2BeginBikeSeated(
+            villager,
+            orientation == 1 ? eBodyPositionSittingNW : eBodyPositionSittingNE);
+        return true;
+    }
+    return false;
+}
+
 extern "C" void __cdecl VF2ExerciseBikeWalk(CVillager &villager)
 {
+    bool const seated =
+        VF2OpenBikeSeatedWindow(villager, __VF2_EXERCISE_BIKE_ITEM_ID__, 0x04);
     VF2RunOwnFurnitureAction(
         villager, CBehavior::WorkoutTreadmill,
         __VF2_EXERCISE_BIKE_ITEM_ID__, 0x04,
         kVF2BehaviorLabels_exercise_bike_walk,
         VF2_LABEL_COUNT(kVF2BehaviorLabels_exercise_bike_walk));
+    if (seated) VF2EndBikeSeated(villager);
 }
 
 extern "C" void __cdecl VF2ExerciseBikeRun(CVillager &villager)
 {
+    bool const seated =
+        VF2OpenBikeSeatedWindow(villager, __VF2_EXERCISE_BIKE_ITEM_ID__, 0x04);
     VF2RunOwnFurnitureAction(
         villager, CBehavior::RunningOnTreadmill,
         __VF2_EXERCISE_BIKE_ITEM_ID__, 0x04,
         kVF2BehaviorLabels_exercise_bike_run,
         VF2_LABEL_COUNT(kVF2BehaviorLabels_exercise_bike_run));
+    if (seated) VF2EndBikeSeated(villager);
 }
 
 // The Home Gym System. Its donor, the Yoga Equipment, is scenery in the base
@@ -34570,6 +34705,13 @@ def patch_added_furniture_venue_callsites(manifest):
 
     point_helper = obj.append_undefined_symbol("_VF2PlanToGoAtAddedFurniture")
     object_helper = obj.append_undefined_symbol("_VF2PlanToGoObjectAtAddedFurniture")
+    # The Exercise Bike rides seated. WorkoutTreadmill enqueues three
+    # PlanToPlayAnim + PlanToWait cycles and each wait carries a STANDING body
+    # position, so a pose appended after the donor leaves the villager jogging
+    # upright for the whole workout. Retargeting the waits substitutes the
+    # seated pose while preserving the donor's own durations and animations.
+    wait_plan = "?PlanToWait@CVillagerPlans@@QAEXHW4EBodyPosition@@@Z"
+    seated_helper = obj.append_undefined_symbol("_VF2PlanToWaitSeatedOnBike")
     patched = []
 
     for donor, target, helper, label in (
@@ -34578,11 +34720,35 @@ def patch_added_furniture_venue_callsites(manifest):
         ("?WorkoutTreadmill@CBehavior@@CAXAAVCVillager@@@Z", object_plan, object_helper, "WorkoutTreadmill object PlanToGo"),
         ("?RunningOnTreadmill@CBehavior@@CAXAAVCVillager@@@Z", object_plan, object_helper, "RunningOnTreadmill object PlanToGo"),
         ("?PlayingPooltable@CBehavior@@CAXAAVCVillager@@@Z", object_plan, object_helper, "PlayingPooltable object PlanToGo"),
+        ("?WorkoutTreadmill@CBehavior@@CAXAAVCVillager@@@Z", wait_plan, seated_helper, "WorkoutTreadmill seated PlanToWait"),
+        # VF2ExerciseBikeRun borrows RunningOnTreadmill, which has its OWN six
+        # two-argument PlanToWait calls. Retargeting only WorkoutTreadmill left
+        # the high-intensity cycling action fully upright while the walking one
+        # sat down -- the fix half-applied, and invisible to any check that
+        # looked at one donor.
+        ("?RunningOnTreadmill@CBehavior@@CAXAAVCVillager@@@Z", wait_plan, seated_helper, "RunningOnTreadmill seated PlanToWait"),
     ):
         _, sec, rows = function_relocations(donor)
         matches = [row for row in rows if obj.symbol_by_index[row[1]].name == target and row[2] == IMAGE_REL_I386_REL32]
         is_pool = donor == "?PlayingPooltable@CBehavior@@CAXAAVCVillager@@@Z"
-        if not matches or (not is_pool and len(matches) != 1):
+        # The treadmill's seated retarget covers ALL SIX of its wait cycles,
+        # decoded from Behavior.obj at +0xBD, +0xF6, +0x12F, +0x16D, +0x1A6 and
+        # +0x1DF -- every one the two-argument PlanToWait overload. Retargeting
+        # a subset would leave part of the workout standing, so the exact count
+        # is required rather than "at least one".
+        #
+        # An earlier version of this pinned THREE, because the decode that
+        # produced it had truncated its own output. The generator refused to
+        # run rather than silently retargeting half the cycles, which is why
+        # the count is asserted instead of taken as a lower bound.
+        is_seated_wait = target == wait_plan
+        if is_seated_wait:
+            if len(matches) != 6:
+                raise RuntimeError(
+                    f"{label} expected six REL32 wait relocations, found "
+                    f"{len(matches)}"
+                )
+        elif not matches or (not is_pool and len(matches) != 1):
             raise RuntimeError(f"{label} expected one (or all pool-table) REL32 relocations, found {len(matches)}")
         for match in matches:
             obj.retarget_relocation(sec.index, match[0], helper, IMAGE_REL_I386_REL32)
