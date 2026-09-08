@@ -650,6 +650,14 @@ class TheWideningIsMeasuredOnTheMapItWrites(unittest.TestCase):
     DONOR_SEEDED_RING = 33
     BORROWER_EXTRA_OBJECT_CELLS = 2
 
+    def setUp(self):
+        # THE ONLY LEGITIMATE SKIP IN THIS CLASS. Everything else these tests
+        # need is created in the temp directory, so a missing donor is the
+        # sole genuine prerequisite -- and it is checked HERE, before the
+        # generator runs, rather than inferred from an exception afterwards.
+        if not DONOR.is_file():
+            self.skipTest("donor fmap not present in this checkout")
+
     def _load(self, tag):
         import importlib.util
         spec = importlib.util.spec_from_file_location(tag, GENERATOR)
@@ -714,12 +722,22 @@ class TheWideningIsMeasuredOnTheMapItWrites(unittest.TestCase):
         # FMAP_SOURCE_DIRS is consulted first by find_fmap_source, so this
         # feeds the production path the footprint-bearing donor.
         gen.FMAP_SOURCE_DIRS = (donors,) + tuple(gen.FMAP_SOURCE_DIRS)
+        # PREREQUISITES ARE CHECKED BEFORE THE CALL, AND THE CALL IS NOT
+        # WRAPPED. A blanket "except Exception -> skipTest" around
+        # sync_behavior_assets turns a generator regression into a green run:
+        # measured by raising inside the widener, the suite reported
+        # "16 passed, 5 skipped" and verified no map at all. A skip is not a
+        # pass, and an exception from the production path is the failure
+        # these tests exist to surface.
+        #
+        # The one genuine prerequisite is the donor, which setUp already
+        # requires. Anything else that raises here is a real defect.
         manifest = {"items": []}
         try:
             gen.sync_behavior_assets(manifest)
-        except Exception as exc:  # pragma: no cover - environment dependent
+        except Exception:
             holder.cleanup()
-            self.skipTest("sync_behavior_assets needs build inputs: %s" % exc)
+            raise
         return gen, holder, assets, seeded, manifest, donors / DONOR.name
 
     def test_it_claims_the_footprint_and_leaves_the_anchor_alone(self):
