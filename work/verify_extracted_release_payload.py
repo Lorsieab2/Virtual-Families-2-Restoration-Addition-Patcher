@@ -196,6 +196,12 @@ DESKTOP_ANCHOR = 0x00009800
 # itself part of what this release must deliver.
 # The two the widener dilates. The plain Invisible Lounger is not one of them
 # and must keep the donor's unwidened footprint.
+# The EObject value, and the drop-target counts each lounger must ship. The
+# two spa maps are dilated into the donor's ring; the plain one is not.
+OBJECT_CELL = 0x2000A800
+WIDENED_DROP_CELLS = 33
+PLAIN_DROP_CELLS = 11
+
 WIDENED_LOUNGER_MAPS = (
     "InvisibleSpaLounger.png.fmap",
     "SpaLoungerStd.png.fmap",
@@ -401,7 +407,38 @@ def main():
             "the spa loungers are byte-identical to the plain lounger, so "
             "the hotspot widening did not reach this build"
         )
-    elif spa_digests and plain_digests:
+    # AND DECODE THE GEOMETRY. Digests alone cannot tell a 33-cell widening
+    # from a 13-cell one: the empty-only rule that shipped before #258
+    # produces spa maps that match EACH OTHER and DIFFER from the plain map,
+    # satisfying both conditions above while the intended widening is absent.
+    # Only counting the drop cells separates them.
+    for name in WIDENED_LOUNGER_MAPS:
+        resolved = maps.get(name)
+        if resolved is None or not resolved.is_file():
+            continue
+        drop = cells(resolved).get(OBJECT_CELL, 0)
+        if drop < WIDENED_DROP_CELLS:
+            problems.append(
+                f"Assets/{name}: {drop} drop-target cells, expected "
+                f"{WIDENED_DROP_CELLS}; the hotspot widening is incomplete "
+                f"(the empty-only rule produces 13 and still passes every "
+                f"digest check)"
+            )
+    for name in LOUNGER_MAPS:
+        if name in WIDENED_LOUNGER_MAPS:
+            continue
+        resolved = maps.get(name)
+        if resolved is None or not resolved.is_file():
+            continue
+        drop = cells(resolved).get(OBJECT_CELL, 0)
+        if drop != PLAIN_DROP_CELLS:
+            problems.append(
+                f"Assets/{name}: {drop} drop-target cells, expected "
+                f"{PLAIN_DROP_CELLS}; the plain lounger must keep the donor's "
+                f"footprint -- the owner asked for the two spa loungers only"
+            )
+    if (spa_digests and plain_digests
+            and set(spa_digests.values()) != set(plain_digests.values())):
         print("                   spa loungers share %s, plain lounger %s"
               % (sorted(set(spa_digests.values()))[0][:12],
                  sorted(set(plain_digests.values()))[0][:12]))
