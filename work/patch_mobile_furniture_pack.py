@@ -24800,8 +24800,32 @@ def sync_behavior_assets(manifest):
         if not donor:
             return
         path = assets / target
-        donor_path = assets / donor
-        if not path.is_file() or not donor_path.is_file():
+        # THE DONOR IS READ FROM ITS SOURCE, NOT FROM Assets/.
+        #
+        # Assets/<donor> is not the donor's map. The build installs an EMPTY
+        # map under the donor's own name -- B181 ships Chaise_brown.png.fmap
+        # with no object cells at all -- so reading it here found zero object
+        # cells, hit `if not counts: return`, and silently widened nothing.
+        # The spa loungers shipped at the donor's 11 cells and the owner's
+        # "the hotspot is very small" report was never actually addressed.
+        #
+        # THE DESKTOP-SAFE MAP, not the raw source. copy_donor_fmap MERGES
+        # the two -- raw geometry plus the safe map's translated cells -- so
+        # the raw file alone is the wrong basis for choosing what to dilate.
+        # In a payload-backed build find_fmap_source returns the raw mobile
+        # map, whose dominant nonzero value is unsupported metadata
+        # 0x01B00000 at 111 cells, NOT the EObject value 0x2000A800 at 11.
+        # The dominant-value heuristic below would then expand metadata and
+        # leave the actual drop target untouched -- widening nothing a
+        # villager can be dropped on. The desktop-safe map's dominant value
+        # IS the EObject value, which is what the heuristic needs.
+        #
+        # It is also STABLE across builds, which is what keeps this
+        # idempotent: dilating from the target's own cells compounds on every
+        # rerun -- measured on this map, 11 -> 33 -> 62 -> 92 -> 125 -- while
+        # a fixed donor always yields the same cell set however often it runs.
+        donor_path = desktop_safe_fmap_source(donor) or find_fmap_source(donor)
+        if not path.is_file() or donor_path is None or not donor_path.is_file():
             return
         source = bytearray(donor_path.read_bytes())
         data = bytearray(path.read_bytes())

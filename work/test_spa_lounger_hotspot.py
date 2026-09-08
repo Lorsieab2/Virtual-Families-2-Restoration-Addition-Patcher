@@ -323,6 +323,39 @@ class TheDonorLookupResolves(unittest.TestCase):
                     % target)
                 self.assertTrue(donor.endswith(".fmap"))
 
+    def test_the_donor_is_read_from_its_source_not_from_the_output(self):
+        """Assets/<donor> is NOT the donor's map, and reading it widens nothing.
+
+        The build installs an EMPTY map under the donor's own name -- B181
+        ships Chaise_brown.png.fmap with no object cells at all -- so a widener
+        that opened `assets / donor` found zero object cells, hit
+        `if not counts: return`, and silently did nothing. The spa loungers
+        shipped at the donor's original eleven cells and the reported
+        "the hotspot is very small" was never addressed.
+
+        Every check in this file passed throughout, because they read the
+        generator's text rather than the map the widener actually opens. This
+        one names the call instead.
+        """
+        source = GENERATOR.read_text(encoding="utf-8")
+        start = source.index("def widen_spa_lounger_hotspot(")
+        body = source[start:source.index("\n    def ", start + 1)]
+        self.assertIn(
+            "donor_path = desktop_safe_fmap_source(donor) or find_fmap_source(donor)",
+            body,
+            "the widener must resolve the DESKTOP-SAFE map: in a "
+            "payload-backed build find_fmap_source returns the raw mobile "
+            "map, whose dominant nonzero value is metadata 0x01B00000 at 111 "
+            "cells rather than the EObject value at 11, so the dominant-value "
+            "heuristic would expand metadata and leave the drop target "
+            "untouched",
+        )
+        self.assertNotIn(
+            "donor_path = assets / donor", body,
+            "Assets/<donor> is the installed empty map, not the donor's "
+            "geometry; dilating from it adds nothing",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
