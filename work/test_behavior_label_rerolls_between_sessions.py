@@ -18,6 +18,7 @@ contract tests because the emitted C cannot be executed here -- the same
 technique the widening-scope and installer-resolution suites use.
 """
 
+import collections
 import pathlib
 import re
 import unittest
@@ -36,6 +37,19 @@ PERSISTENT_LABEL_OFFSET = "0x1BBA8"
 _DEFINITION = (
     r'^(?:extern "C" )?[A-Za-z_][\w \*&:]*?\b%s\([^;{]*\)\s*\n?\{(.*?)^\}'
 )
+
+
+def find_function_bodies(name):
+    """EVERY body defined under this name, in file order.
+
+    A name-only re.search returns the first match and stops, so a name with two
+    definitions -- the generator has one, VF2MaybeCompleteDisciplineProps -- is
+    inspected twice at the same body while its second definition is never read
+    at all. Any rule applied through the single-body helper is therefore
+    silently void for that function. The sweep must use this.
+    """
+    return [m.group(1) for m in
+            re.finditer(_DEFINITION % re.escape(name), SOURCE, re.S | re.M)]
 
 
 def find_function_body(name):
@@ -150,9 +164,12 @@ class ThePersistentLabelIsOnlyReadBehindTheCacheGate(unittest.TestCase):
         # instead of freezing a list of names that drifts.
         readers = []
         unreadable = []
-        for name in re.findall(r"^static [\w \*&]*?\b(VF2\w+)\(", SOURCE, re.M):
-            body = find_function_body(name)
-            if body is None:
+        # De-duplicated: a repeated name is inspected once PER DEFINITION by
+        # find_function_bodies, not once per mention.
+        for name in sorted(set(
+                re.findall(r"^static [\w \*&]*?\b(VF2\w+)\(", SOURCE, re.M))):
+            bodies = find_function_bodies(name)
+            if not bodies:
                 # A name with no definition is a forward declaration and is
                 # genuinely nothing to check. A name WITH a definition that the
                 # helper could not read is a harness fault, and skipping it
@@ -162,6 +179,7 @@ class ThePersistentLabelIsOnlyReadBehindTheCacheGate(unittest.TestCase):
                 if has_definition(name):
                     unreadable.append(name)
                 continue
+            body = "\n".join(bodies)
             if PERSISTENT_LABEL_OFFSET not in body:
                 continue
             compares = re.search(r"\bstrn?cmp\b", body)
@@ -180,6 +198,37 @@ class ThePersistentLabelIsOnlyReadBehindTheCacheGate(unittest.TestCase):
             "going through the cache gate; a leftover label from a finished "
             "behaviour will be mistaken for the current one and the group "
             "will stop re-rolling" % PERSISTENT_LABEL_OFFSET,
+        )
+
+    def test_a_repeated_name_is_checked_at_every_definition(self):
+        """A name-only search stops at the first body.
+
+        The generator has one name with two definitions. If the sweep resolves
+        a name to a single body, the second definition is exempt from every
+        rule in this file while the suite stays green -- readable, and still
+        never read.
+        """
+        repeated = sorted(
+            name for name, count in collections.Counter(
+                re.findall(
+                    r'^(?:extern "C" )?[A-Za-z_][\w \*&:]*?\b(VF2\w+)'
+                    r'\([^;{]*\)\s*\n?\{',
+                    SOURCE, re.M)).items()
+            if count > 1)
+        for name in repeated:
+            self.assertEqual(
+                len(find_function_bodies(name)),
+                sum(1 for _ in re.finditer(
+                    _DEFINITION % re.escape(name), SOURCE, re.S | re.M)),
+                "%s has several definitions but the helper does not return "
+                "them all" % name,
+            )
+        # The premise: if the generator ever stops repeating a name, this test
+        # is checking nothing and should say so rather than pass vacuously.
+        self.assertTrue(
+            repeated,
+            "no name has two definitions any more; this test no longer "
+            "exercises the repeated-name case and should be re-aimed",
         )
 
     def test_every_scan_call_site_is_gated(self):
