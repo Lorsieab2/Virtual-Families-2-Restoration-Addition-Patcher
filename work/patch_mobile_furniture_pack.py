@@ -28390,10 +28390,177 @@ static bool VF2WeatherAllowsOutdoorFurniture()
     return static_cast<unsigned int>(Weather.currentType) < 2;
 }
 
+// Forward declaration only. The definition stays with the other spa label
+// helpers further down; it is declared here because the reservation block
+// below has to be emitted above VF2TryLinkMobileChaise, which is itself
+// above that definition.
+static int VF2SpaReceivingIndex(CVillager &villager);
+
+// Which lounger each villager is CURRENTLY WALKING TO, by placement handle.
+//
+// VF2SpaOccupantIndex can only see a villager who is already STANDING on a
+// lounger, because it asks which furniture slot is under their feet. Between
+// choosing a lounger and arriving at it a recipient is invisible to it, so a
+// second adult evaluated in that window would pick the same lounger even when
+// another was free.
+//
+// The route used to get this for free: LinkPeepToFurniture reserved a peep
+// slot as a side effect. That call was removed because its reservation could
+// not be released when it landed on the wrong item (see the receiving handler),
+// so the in-flight part of it is kept explicitly here.
+//
+// Sized for the thirty villagers VF2SpaVillagerByIndex can address. Unlike
+// gVF2MobileExternalWeights this cannot leak a slot: an entry only counts while
+// its villager still carries a receiving label, so a villager who dies, is
+// interrupted, or finishes the treatment stops matching and the slot is reused.
+struct VF2SpaWalkReservation {
+    CVillager *villager;
+    int handle;
+};
+static VF2SpaWalkReservation gVF2SpaWalkReservations[30] = {};
+
+// True when some OTHER villager is already walking to this placement.
+static bool VF2SpaLoungerClaimedByWalker(CVillager &asking, int handle)
+{
+    for (int index = 0; index < 30; ++index) {
+        VF2SpaWalkReservation const &held = gVF2SpaWalkReservations[index];
+        if (!held.villager || held.villager == &asking) continue;
+        if (held.handle != handle) continue;
+        // Only a villager still labelled as receiving is really en route.
+        // Anything else -- interrupted, finished, or a reused villager
+        // record -- leaves a stale entry that must not block the lounger.
+        if (VF2SpaReceivingIndex(*held.villager) < 0) continue;
+        return true;
+    }
+    return false;
+}
+
+static void VF2SpaHoldLoungerForWalk(CVillager &villager, int handle)
+{
+    VF2SpaWalkReservation *spare = 0;
+    for (int index = 0; index < 30; ++index) {
+        VF2SpaWalkReservation &held = gVF2SpaWalkReservations[index];
+        if (held.villager == &villager) { held.handle = handle; return; }
+        if (!spare && (!held.villager || VF2SpaReceivingIndex(*held.villager) < 0)) {
+            spare = &held;
+        }
+    }
+    // No free or stale slot: every villager the walk can address is already
+    // en route to a lounger, so there is nothing to record and nothing this
+    // reservation would protect.
+    if (!spare) return;
+    spare->villager = &villager;
+    spare->handle = handle;
+}
+
+// Drop whatever this villager was walking to.
+//
+// A receiving LABEL is not proof that a particular walk is still live. A
+// villager walking to lounger A who is then dropped onto lounger B gets a
+// fresh receiving label from the manual route, so the "still labelled as
+// receiving" test in VF2SpaLoungerClaimedByWalker would go on believing the
+// walk to A is active and hold A for the whole treatment at B, making other
+// adults skip a lounger that is actually free. The routes that restart or
+// end a receiving action call this so a hold cannot outlive its walk.
+// Turn any OTHER villager away from one placement.
+//
+// Used when a player drop lands a villager on a lounger somebody else was
+// walking to: the drop wins, so the walker has to be turned away. `keep` is
+// the villager whose claim survives.
+//
+// Clearing the bookkeeping is NOT enough on its own, and an earlier version
+// that did only that was wrong: the walker's PlanToGo and treatment sequence
+// were already queued by StartNewBehavior, so it would still have arrived and
+// sat down on top of the dropped villager. The plans have to be dropped too.
+//
+// ForgetPlans(villager, false) then StartNewBehavior is how this file
+// interrupts a villager elsewhere, so the walker re-evaluates from where it
+// stands -- which may well be this same route, choosing a different lounger,
+// since its claim here is gone by then.
+static void VF2SpaReleaseHoldOnLounger(int handle, CVillager *keep)
+{
+    for (int index = 0; index < 30; ++index) {
+        if (gVF2SpaWalkReservations[index].handle != handle) continue;
+        CVillager *walker = gVF2SpaWalkReservations[index].villager;
+        if (!walker || walker == keep) continue;
+
+        // Cleared BEFORE the walker re-evaluates, so it cannot see its own
+        // stale claim and rule this lounger out for the wrong reason.
+        gVF2SpaWalkReservations[index].villager = 0;
+        gVF2SpaWalkReservations[index].handle = 0;
+
+        // Only a villager still en route to a treatment is interrupted. One
+        // that already finished, or was interrupted by something else, has
+        // plans of its own that are none of this function's business.
+        if (VF2SpaReceivingIndex(*walker) < 0) continue;
+        CVillagerPlans *walkerPlans =
+            reinterpret_cast<CVillagerPlans *>(walker);
+        walkerPlans->ForgetPlans(*walker, false);
+        walkerPlans->StartNewBehavior(*walker);
+    }
+}
+
+static void VF2SpaReleaseLoungerHold(CVillager &villager)
+{
+    for (int index = 0; index < 30; ++index) {
+        if (gVF2SpaWalkReservations[index].villager != &villager) continue;
+        gVF2SpaWalkReservations[index].villager = 0;
+        gVF2SpaWalkReservations[index].handle = 0;
+    }
+}
+
 static bool VF2TryLinkMobileChaise(CVillager &villager, sFurnitureInfo2 &info)
 {
-    return FurnitureManager.LinkPeepToFurniture(
-        CContentMap::eObjectChaise, &villager, info, true, 0, false);
+    // KEEP the link, then EVICT -- never reject.
+    //
+    // A spa recipient's walk hold is invisible to LinkPeepToFurniture, so this
+    // call can reserve a lounger someone is already walking to. Two things
+    // that look like fixes are not:
+    //
+    //   - rejecting the link afterwards is worse than the collision. The peep
+    //     slot is already taken, there is no unlink, and the caller then runs
+    //     the unfurnitured behaviour -- so the lounger sits reserved and EMPTY
+    //     for the whole of it. Accepting costs GetRandom(20) + 20 with a
+    //     normal release at the end. Measured, not argued.
+    //   - making held loungers unavailable before the lookup would mean
+    //     clearing the occupancy bit at record +0x0C, which unplaces the
+    //     furniture outright.
+    //
+    // And the spa route does NOT absorb this on its own. VF2FindFreeSpaLoungerSlot
+    // skips held loungers, but only a spa caller consults it; a villager
+    // looking for somewhere to read never does. An earlier comment here
+    // claimed otherwise and was simply wrong.
+    //
+    // So keep the reservation and turn the WALKER away instead, with the
+    // handle the link just returned -- exactly what the manual drop path does
+    // when a player takes a lounger out from under a walker. The walker's
+    // claim is dropped and its queued plans are cancelled, so it re-evaluates
+    // rather than arriving to sit on top of the villager who linked here.
+    if (!FurnitureManager.LinkPeepToFurniture(
+            CContentMap::eObjectChaise, &villager, info, true, 0, false)) {
+        return false;
+    }
+    VF2SpaReleaseHoldOnLounger(info.unknown0, &villager);
+
+    // NO CLAIM RECORDED FOR THIS VILLAGER, deliberately, and the residual is
+    // stated rather than hidden: a spa recipient chosen while this chaise
+    // action is running can still be sent to the same lounger, because
+    // VF2SpaOccupantIndex needs a spa receiving label this villager does not
+    // carry and the spa finder does not read the engine's peep-slot state.
+    //
+    // A claim was tried and REVERTED. It has no sound expiry available here.
+    // Keyed on the villager's current furniture slot, a villager standing on
+    // bare floor reports -1, which is indistinguishable from "still walking"
+    // -- so the claim outlived the action and suppressed autonomous spa
+    // treatments INDEFINITELY whenever a household has one lounger. That is
+    // strictly worse than the overlap: a reading villager occupies the
+    // lounger for GetRandom(20) + 20 and releases it normally, against
+    // permanently losing the feature.
+    //
+    // Closing this properly needs the peep-slot fields of the placement
+    // record, which are not decoded anywhere in this repository. Until they
+    // are, the transient overlap is the cheaper failure.
+    return true;
 }
 
 static void VF2PlanLinkedChaiseAction(
@@ -28733,6 +28900,10 @@ static bool VF2HandleMobileInvisibleSpaLounger(CVillager &villager)
         // duration.  This is the giver's active treatment interval.
         plans->PlanToWork(ldwGameState::GetRandom(11) + 55);
         plans->StartNewBehavior(villager);
+
+        // A giver occupies no lounger of their own, so a walk they had
+        // started is over and must not keep holding its destination.
+        VF2SpaReleaseLoungerHold(villager);
         return true;
     }
 
@@ -28745,6 +28916,19 @@ static bool VF2HandleMobileInvisibleSpaLounger(CVillager &villager)
             false)) {
         return false;
     }
+
+    // This is a PLAYER DROP, so it wins. An autonomous recipient may already
+    // be walking to this lounger -- VF2SpaOccupantIndex cannot see them, and
+    // the link above cannot see the custom hold either -- but refusing the
+    // drop is the wrong resolution: the player put this villager here, and
+    // the engine has already reserved the slot with no way to give it back.
+    //
+    // Break the tie the other way instead. The walker's claim on this
+    // placement is released, so it stops blocking other selections, and the
+    // walker is left to re-evaluate the way any other interrupted behaviour
+    // does. Only the claim on THIS lounger goes; a walker heading elsewhere
+    // keeps theirs.
+    VF2SpaReleaseHoldOnLounger(receiveInfo.unknown0, &villager);
     plans->ForgetPlans(villager, false);
     VF2SetActionLabel(
         villager,
@@ -28753,6 +28937,11 @@ static bool VF2HandleMobileInvisibleSpaLounger(CVillager &villager)
         VF2SpaTreatmentPoint(receiveInfo.point), eSpeedNormal, ePriorityNormal);
     VF2PlanSpaTreatment(plans, villager, receiveInfo);
     plans->StartNewBehavior(villager);
+
+    // This villager may already have been walking to a DIFFERENT lounger, and
+    // the fresh receiving label above would otherwise keep that older hold
+    // looking live. Retarget onto the one actually linked here.
+    VF2SpaHoldLoungerForWalk(villager, receiveInfo.unknown0);
     return true;
 }
 
@@ -28793,9 +28982,48 @@ static int VF2FindFreeSpaLoungerSlot(CVillager &villager)
         // Free means nobody is already receiving on THIS lounger. A taken one
         // is the giving half's business, and that stays a manual drop.
         if (VF2SpaOccupantIndex(villager, slot, 0)) continue;
+        // Standing on it is not the only way a lounger is taken; someone may
+        // be walking to it, which VF2SpaOccupantIndex cannot see.
+        if (VF2SpaLoungerClaimedByWalker(
+                villager, *reinterpret_cast<int *>(record + 0x04))) {
+            continue;
+        }
         return slot;
     }
     return -1;
+}
+
+// Is the placement the link just reserved actually a spa lounger?
+//
+// Identified by its PLACEMENT HANDLE, never by hit-testing info.point.
+// info.point is the WALK-TO ANCHOR -- the placement position plus the fmap's
+// hotspot offset -- so asking which furniture contains it means asking which
+// item the villager is standing INSIDE, and for anything they stand beside
+// the answer is -1. That mistake once left a villager at the Ping-Pong Table
+// labelled "Playing pool".
+//
+// AddToWorld stamps every placement with a unique handle at record[+0x04] and
+// FindFurniture hands that field straight back as info.unknown0, so the record
+// it matched can be named exactly. Two chaises of the same type are
+// indistinguishable by position and distinguishable by handle, which is the
+// whole point: a spa lounger and an ordinary chaise are both eObjectChaise.
+//
+// 0x200 is the array's real capacity, from AddToWorld's own
+// `cmp [edi+0x1004], 0x200 / jge` guard, not a guess.
+static bool VF2SpaLoungerHasHandle(int handle)
+{
+    unsigned char *manager = reinterpret_cast<unsigned char *>(&FurnitureManager);
+    int count = *reinterpret_cast<int *>(manager + 0x1004);
+    if (count < 0 || count > 0x200) return false;
+    for (int slot = 0; slot < count; ++slot) {
+        unsigned char *record = manager + 0x1008 + slot * 0x40;
+        if ((*reinterpret_cast<unsigned int *>(record + 0x0C) & 1) == 0) continue;
+        if (*reinterpret_cast<int *>(record + 0x04) != handle) continue;
+        int itemId = *reinterpret_cast<int *>(record);
+        return itemId == __VF2_INVISIBLE_SPA_LOUNGER_ITEM_ID__ ||
+               itemId == __VF2_SPA_LOUNGER_ITEM_ID__;
+    }
+    return false;
 }
 
 static bool VF2HandleMobileSpaLoungerReceiving(CVillager &villager)
@@ -28807,11 +29035,70 @@ static bool VF2HandleMobileSpaLoungerReceiving(CVillager &villager)
     int const loungerSlot = VF2FindFreeSpaLoungerSlot(villager);
     if (loungerSlot < 0) return false;
 
+    // NO SPECULATIVE LINK. Earlier revisions called LinkPeepToFurniture and
+    // then rejected the result when it was not a spa lounger. Every variant of
+    // that leaks, and the leak cannot be designed away by probing first:
+    //
+    //   - LinkPeepToFurniture always searches from villager.FeetPos() and
+    //     RESERVES a peep slot as a side effect, and this engine exposes no
+    //     unlink call, so a rejection after the call holds an ordinary chaise
+    //     against a villager who then goes off and does something else.
+    //   - a probe anchored at the villager's feet cannot fix it, because
+    //     FindFurniture ignores peep-slot availability while the link does
+    //     not: a FULL nearer chaise makes the probe refuse a treatment the
+    //     link would have granted.
+    //   - and a probe anchored at the lounger cannot fix it either, because it
+    //     then answers a question the link never asked. The link still starts
+    //     from the villager's feet and can still reserve a nearer ordinary
+    //     chaise, which the post-link check rejects and leaks.
+    //
+    // A preflight can only avoid the leak by predicting the link exactly, and
+    // nothing here can do that. So the link is not called at all.
+    //
+    // It is not needed. The treatment uses only the anchor point, the
+    // orientation and the placement handle, and all three live in the
+    // placement record this slot already names: +0x14/+0x18 world position,
+    // +0x10 orientation, +0x04 the unique handle AddToWorld stamps. Reading
+    // them reserves nothing, so there is nothing to release and nothing to
+    // leak. This is what VF2FindAddedFurnitureVenue does, and why: "Do not
+    // call LinkPeepToFurniture speculatively: a shared-object stock placement
+    // could be reserved and there is no unlink API to undo it."
+    unsigned char *spaManager = reinterpret_cast<unsigned char *>(&FurnitureManager);
+    unsigned char *spaRecord = spaManager + 0x1008 + loungerSlot * 0x40;
+    if ((*reinterpret_cast<unsigned int *>(spaRecord + 0x0C) & 1) == 0) return false;
+
+    // The record's own +0x14/+0x18 are the WORLD POSITION, which is not where
+    // a villager stands to use the item. FindFurniture computes the walk-to
+    // anchor by adding the furniture map's hotspot offset:
+    //
+    //     +0x110  sub  esi, [eax]        ; hotspot x
+    //     +0x121  mov  ecx, [ebx + 0x14] ; record x
+    //     +0x127  add  ecx, esi          ; x + hotspot -> info.point.x
+    //
+    // (disassembly recorded in work/test_prop_image_descriptors.py). So the
+    // raw record coordinates would walk the villager INTO the footprint by
+    // however much that map's hotspot is offset, and VF2SpaTreatmentPoint
+    // would then subtract another four pixels from an already wrong point.
+    //
+    // FindFurniture is the read-only lookup and reserves nothing, so it is
+    // safe to ask here. Anchoring it at the record's own position means it
+    // resolves this placement rather than whatever is nearest the villager,
+    // and the handle check below confirms that it did.
+    ldwPoint loungerPlacement = {
+        *reinterpret_cast<int *>(spaRecord + 0x14),
+        *reinterpret_cast<int *>(spaRecord + 0x18)};
     sFurnitureInfo2 info = {};
-    if (!FurnitureManager.LinkPeepToFurniture(
-            CContentMap::eObjectChaise, &villager, info, true, 0, false)) {
+    if (!FurnitureManager.FindFurniture(
+            CContentMap::eObjectChaise, loungerPlacement, info, true, 0, 0)) {
         return false;
     }
+
+    // Confirm the lookup landed on THIS placement, by the unique handle
+    // AddToWorld stamps at +0x04, rather than on some other chaise that
+    // happened to be nearer to the same point. Nothing has been reserved, so
+    // returning here costs nothing.
+    if (*reinterpret_cast<int *>(spaRecord + 0x04) != info.unknown0) return false;
+    if (!VF2SpaLoungerHasHandle(info.unknown0)) return false;
 
     CVillagerPlans *plans = reinterpret_cast<CVillagerPlans *>(&villager);
     plans->ForgetPlans(villager, false);
@@ -28822,6 +29109,12 @@ static bool VF2HandleMobileSpaLoungerReceiving(CVillager &villager)
         VF2SpaTreatmentPoint(info.point), eSpeedNormal, ePriorityNormal);
     VF2PlanSpaTreatment(plans, villager, info);
     plans->StartNewBehavior(villager);
+
+    // Recorded only now that the walk is committed and the label is set, so a
+    // route that returned early above never holds a lounger. Nothing needs to
+    // release this: the entry stops counting as soon as the villager no longer
+    // carries a receiving label.
+    VF2SpaHoldLoungerForWalk(villager, info.unknown0);
     return true;
 }
 
