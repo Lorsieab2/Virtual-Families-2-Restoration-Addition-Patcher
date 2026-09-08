@@ -249,10 +249,21 @@ def lost_settings(archive: Path, previous: Path) -> str | None:
     dropped = sorted(before - now)
     if not dropped:
         return None
+    # Name the way forward as well as the problem. An operator who MEANT to
+    # retire a setting should not have to read this source to find out what
+    # to do, and the answer is not --allow-missing-predecessor: that flag is
+    # for a first release with no predecessor at all, and a predecessor is
+    # exactly what exists here. Retiring something deliberately means moving
+    # the archive that still offers it aside, which is an explicit act
+    # somebody performs and can be undone, rather than a silent default.
     return (
         f"{archive.name} drops {len(dropped)} setting(s) present in "
         f"{', '.join(names)}, and adds {len(now - before)}:\n  "
         + "\n  ".join(dropped)
+        + "\n\nIf these were dropped by accident, rebuild with the missing "
+        "overlays. If a retirement is intended, move the release(s) offering "
+        "them out of this directory first -- --allow-missing-predecessor "
+        "will NOT help here, it covers a first release with no predecessor."
     )
 
 

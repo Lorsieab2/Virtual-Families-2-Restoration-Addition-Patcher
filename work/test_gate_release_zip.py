@@ -232,6 +232,28 @@ class FeatureRegressionTests(unittest.TestCase):
                     with self.assertRaises(gate.UnreadableRelease):
                         gate.settings_in_archive(path)
 
+    def test_a_refusal_names_the_way_forward(self):
+        """Naming the problem is not enough; name what to do about it.
+
+        An operator who deliberately retired a setting has to be told how to
+        proceed, and the answer is NOT --allow-missing-predecessor: that flag
+        covers a first release with no predecessor, and a predecessor is
+        exactly what exists in this case. Saying so explicitly stops the
+        obvious wrong move.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            old = _bundle(root / "VF2-B181-Release.zip", ["alpha", "beta"])
+            new = _bundle(root / "VF2-B182-Release.zip", ["alpha"])
+            message = gate.lost_settings(new, [old])
+            self.assertIsNotNone(message)
+            self.assertIn("beta", message)
+            with self.subTest(part="says what a retirement requires"):
+                self.assertIn("move the release", message.lower())
+            with self.subTest(part="rules out the wrong flag"):
+                self.assertIn("allow-missing-predecessor", message)
+                self.assertIn("NOT help", message)
+
     def test_a_well_formed_manifest_still_reads(self):
         # The shape checks must not reject a real release: the guard is only
         # worth having if it still lets the thing it guards through.
