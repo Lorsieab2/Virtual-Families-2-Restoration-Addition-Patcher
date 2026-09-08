@@ -321,8 +321,27 @@ class FeatureRegressionTests(unittest.TestCase):
                 body = source.split("def main(")[1]
                 self.assertIn("if not args.allow_missing_predecessor:", body)
 
-            with self.subTest(step="the floor still refuses a short bundle"):
-                self.assertIsNotNone(gate.short_of_expected(fresh))
+            with self.subTest(step="the floor refuses, and says why"):
+                # Reached BEFORE lost_settings() in main(), so it has to name
+                # the retirement route itself or the guidance above is
+                # unreachable for a real retirement.
+                floor = gate.short_of_expected(fresh)
+                self.assertIsNotNone(floor)
+                self.assertIn("EXPECTED_SETTING_COUNT", floor)
+                self.assertIn("retired on purpose", floor)
+
+            with self.subTest(step="following THAT instruction passes"):
+                # Do what the floor message says: lower the count in the same
+                # commit that retires the setting. A retirement must have a
+                # way through, or the instructions are a dead end.
+                original = gate.EXPECTED_SETTING_COUNT
+                try:
+                    gate.EXPECTED_SETTING_COUNT = len(
+                        gate.settings_in_archive(fresh))
+                    self.assertIsNone(gate.short_of_expected(fresh))
+                    self.assertIsNone(gate.lost_settings(fresh, []))
+                finally:
+                    gate.EXPECTED_SETTING_COUNT = original
 
     def test_every_mention_of_the_flag_permits_the_retirement_case(self):
         """The CLI must not contradict its own refusal.

@@ -210,10 +210,23 @@ def short_of_expected(archive: Path) -> str | None:
     offered = settings_in_archive(archive)
     if len(offered) >= EXPECTED_SETTING_COUNT:
         return None
+    # Two causes, and the message must not assert the wrong one. The B183
+    # shape -- an export that ran without the per-feature overlay arguments
+    # and silently dropped what it could not resolve -- is why this floor
+    # exists. But a DELIBERATE retirement lands here too, and it reaches this
+    # check before lost_settings() ever runs, so the retirement instructions
+    # further down are unreachable unless this message names the route as
+    # well. Lowering the floor is a source edit somebody makes on purpose,
+    # which is the intended shape: retiring a feature is a decision, not
+    # something a build can do on its own.
     return (
         f"{archive.name} offers {len(offered)} settings; a complete release "
-        f"carries {EXPECTED_SETTING_COUNT}. Twelve were missing from B183 "
-        f"because the export ran without the per-feature overlay arguments."
+        f"carries {EXPECTED_SETTING_COUNT}.\n\nIf this is an accident, the "
+        f"export ran without the per-feature overlay arguments -- that is "
+        f"how twelve went missing from B183 -- so rebuild with them.\n\n"
+        f"If a setting was retired on purpose, lower EXPECTED_SETTING_COUNT "
+        f"in {Path(__file__).name} to {len(offered)} in the same commit that "
+        f"retires it, so the floor keeps describing a complete release."
     )
 
 
