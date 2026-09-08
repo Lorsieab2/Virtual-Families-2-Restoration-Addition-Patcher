@@ -28462,18 +28462,41 @@ static void VF2SpaHoldLoungerForWalk(CVillager &villager, int handle)
 // walk to A is active and hold A for the whole treatment at B, making other
 // adults skip a lounger that is actually free. The routes that restart or
 // end a receiving action call this so a hold cannot outlive its walk.
-// Drop any OTHER villager's claim on one placement.
+// Turn any OTHER villager away from one placement.
 //
 // Used when a player drop lands a villager on a lounger somebody else was
-// walking to: the drop wins, so the stale claim must not go on blocking that
-// lounger for everyone else. `keep` is the villager whose claim survives.
+// walking to: the drop wins, so the walker has to be turned away. `keep` is
+// the villager whose claim survives.
+//
+// Clearing the bookkeeping is NOT enough on its own, and an earlier version
+// that did only that was wrong: the walker's PlanToGo and treatment sequence
+// were already queued by StartNewBehavior, so it would still have arrived and
+// sat down on top of the dropped villager. The plans have to be dropped too.
+//
+// ForgetPlans(villager, false) then StartNewBehavior is how this file
+// interrupts a villager elsewhere, so the walker re-evaluates from where it
+// stands -- which may well be this same route, choosing a different lounger,
+// since its claim here is gone by then.
 static void VF2SpaReleaseHoldOnLounger(int handle, CVillager *keep)
 {
     for (int index = 0; index < 30; ++index) {
         if (gVF2SpaWalkReservations[index].handle != handle) continue;
-        if (gVF2SpaWalkReservations[index].villager == keep) continue;
+        CVillager *walker = gVF2SpaWalkReservations[index].villager;
+        if (!walker || walker == keep) continue;
+
+        // Cleared BEFORE the walker re-evaluates, so it cannot see its own
+        // stale claim and rule this lounger out for the wrong reason.
         gVF2SpaWalkReservations[index].villager = 0;
         gVF2SpaWalkReservations[index].handle = 0;
+
+        // Only a villager still en route to a treatment is interrupted. One
+        // that already finished, or was interrupted by something else, has
+        // plans of its own that are none of this function's business.
+        if (VF2SpaReceivingIndex(*walker) < 0) continue;
+        CVillagerPlans *walkerPlans =
+            reinterpret_cast<CVillagerPlans *>(walker);
+        walkerPlans->ForgetPlans(*walker, false);
+        walkerPlans->StartNewBehavior(*walker);
     }
 }
 

@@ -245,7 +245,52 @@ class TestOnlyReceivingIsAutonomous(unittest.TestCase):
         start = source.index("static void VF2SpaReleaseHoldOnLounger(")
         body = source[start:source.index("\n}\n", start)]
         self.assertIn(".handle != handle) continue;", body)
-        self.assertIn(".villager == keep) continue;", body)
+        self.assertIn("walker == keep) continue;", body)
+
+    def test_the_displaced_walker_is_actually_turned_away(self):
+        """Clearing the bookkeeping does not stop a villager walking.
+
+        The walker's PlanToGo and treatment sequence were queued by
+        StartNewBehavior before the drop happened, so zeroing two fields
+        leaves them arriving anyway and sitting down on top of the dropped
+        villager. An earlier version did exactly that while its comment
+        claimed the walker would re-evaluate.
+        """
+        source = _source()
+        start = source.index("static void VF2SpaReleaseHoldOnLounger(")
+        body = source[start:source.index("\n}\n", start)]
+        self.assertIn(
+            "ForgetPlans(*walker, false)", body,
+            "the walker keeps its queued plans and still arrives",
+        )
+        self.assertIn("StartNewBehavior(*walker)", body)
+
+    def test_the_claim_is_cleared_before_the_walker_re_evaluates(self):
+        # Re-evaluation may well come straight back to this route. If the
+        # stale claim were still there the walker would rule out the lounger
+        # it is itself holding.
+        source = _source()
+        start = source.index("static void VF2SpaReleaseHoldOnLounger(")
+        body = source[start:source.index("\n}\n", start)]
+        cleared = body.index(".handle = 0;")
+        restarted = body.index("StartNewBehavior(*walker)")
+        self.assertLess(
+            cleared, restarted,
+            "the walker re-evaluates while still holding its own claim",
+        )
+
+    def test_only_a_villager_still_receiving_is_interrupted(self):
+        # One that finished, or was already interrupted by something else,
+        # has plans of its own that this must not throw away.
+        source = _source()
+        start = source.index("static void VF2SpaReleaseHoldOnLounger(")
+        body = source[start:source.index("\n}\n", start)]
+        guard = body.index("VF2SpaReceivingIndex(*walker) < 0")
+        forget = body.index("ForgetPlans(*walker, false)")
+        self.assertLess(
+            guard, forget,
+            "an unrelated behaviour would be cancelled",
+        )
 
     def test_an_interrupted_walk_does_not_keep_holding_its_lounger(self):
         """The same-label interruption case, not just the predicate.
