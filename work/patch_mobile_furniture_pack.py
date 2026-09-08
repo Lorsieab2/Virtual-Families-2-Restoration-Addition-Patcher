@@ -28416,16 +28416,58 @@ static int VF2SpaReceivingIndex(CVillager &villager);
 struct VF2SpaWalkReservation {
     CVillager *villager;
     int handle;
+    // A spa recipient's claim expires with its receiving label. A chaise
+    // linker never carries that label, so its claim needs its own expiry --
+    // the engine's peep link, which VF2FurnitureSlotUnderVillager can see
+    // once the villager arrives, and which the behaviour releases when it
+    // finishes.
+    bool chaise;
 };
 static VF2SpaWalkReservation gVF2SpaWalkReservations[30] = {};
 
 // True when some OTHER villager is already walking to this placement.
+// Which placement slot carries this handle, or -1.
+static int VF2SpaSlotForHandle(int handle)
+{
+    unsigned char *manager = reinterpret_cast<unsigned char *>(&FurnitureManager);
+    int count = *reinterpret_cast<int *>(manager + 0x1004);
+    if (count < 0 || count > 0x200) return -1;
+    for (int slot = 0; slot < count; ++slot) {
+        unsigned char *record = manager + 0x1008 + slot * 0x40;
+        if ((*reinterpret_cast<unsigned int *>(record + 0x0C) & 1) == 0) continue;
+        if (*reinterpret_cast<int *>(record + 0x04) == handle) return slot;
+    }
+    return -1;
+}
+
 static bool VF2SpaLoungerClaimedByWalker(CVillager &asking, int handle)
 {
+    int const slotOfHandle = VF2SpaSlotForHandle(handle);
     for (int index = 0; index < 30; ++index) {
         VF2SpaWalkReservation const &held = gVF2SpaWalkReservations[index];
         if (!held.villager || held.villager == &asking) continue;
         if (held.handle != handle) continue;
+        if (held.chaise) {
+            // A chaise linker holds the placement while it walks there and
+            // while it uses it. It carries no spa label, so the receiving
+            // test below would read its claim as stale and hand the lounger
+            // to a spa recipient on top of it -- the post-eviction window.
+            //
+            // EXPIRY, because a claim that cannot expire is the same leak
+            // this route was rebuilt to avoid. The engine's own link is the
+            // authority: while the villager is linked to a chaise it is
+            // either standing on one or walking to one, and
+            // VF2FurnitureSlotUnderVillager reports the slot beneath it once
+            // it arrives. So the claim stands while the villager is ON this
+            // placement, or while it is still en route -- which is exactly
+            // the window in which the engine has not yet released the peep
+            // slot. A villager that has moved on is under some other slot,
+            // or none, and its claim lapses here without anything having to
+            // clean up after it.
+            int const under = VF2FurnitureSlotUnderVillager(*held.villager);
+            if (under >= 0 && under != slotOfHandle) continue;
+            return true;
+        }
         // Only a villager still labelled as receiving is really en route.
         // Anything else -- interrupted, finished, or a reused villager
         // record -- leaves a stale entry that must not block the lounger.
@@ -28435,12 +28477,16 @@ static bool VF2SpaLoungerClaimedByWalker(CVillager &asking, int handle)
     return false;
 }
 
-static void VF2SpaHoldLoungerForWalk(CVillager &villager, int handle)
+static void VF2SpaHoldLoungerForWalk(CVillager &villager, int handle, bool chaise)
 {
     VF2SpaWalkReservation *spare = 0;
     for (int index = 0; index < 30; ++index) {
         VF2SpaWalkReservation &held = gVF2SpaWalkReservations[index];
-        if (held.villager == &villager) { held.handle = handle; return; }
+        if (held.villager == &villager) {
+            held.handle = handle;
+            held.chaise = chaise;
+            return;
+        }
         if (!spare && (!held.villager || VF2SpaReceivingIndex(*held.villager) < 0)) {
             spare = &held;
         }
@@ -28451,6 +28497,7 @@ static void VF2SpaHoldLoungerForWalk(CVillager &villager, int handle)
     if (!spare) return;
     spare->villager = &villager;
     spare->handle = handle;
+    spare->chaise = chaise;
 }
 
 // Drop whatever this villager was walking to.
@@ -28541,6 +28588,13 @@ static bool VF2TryLinkMobileChaise(CVillager &villager, sFurnitureInfo2 &info)
         return false;
     }
     VF2SpaReleaseHoldOnLounger(info.unknown0, &villager);
+
+    // Record this villager's own claim. Evicting the previous walker is only
+    // half of it: until the chaise action finishes, a spa recipient selected
+    // afterwards would find the placement free -- VF2SpaOccupantIndex needs a
+    // spa receiving label this villager does not have, and the spa finder
+    // does not read the engine's peep-slot state -- and walk onto it.
+    VF2SpaHoldLoungerForWalk(villager, info.unknown0, true);
     return true;
 }
 
@@ -28922,7 +28976,7 @@ static bool VF2HandleMobileInvisibleSpaLounger(CVillager &villager)
     // This villager may already have been walking to a DIFFERENT lounger, and
     // the fresh receiving label above would otherwise keep that older hold
     // looking live. Retarget onto the one actually linked here.
-    VF2SpaHoldLoungerForWalk(villager, receiveInfo.unknown0);
+    VF2SpaHoldLoungerForWalk(villager, receiveInfo.unknown0, false);
     return true;
 }
 
@@ -29095,7 +29149,7 @@ static bool VF2HandleMobileSpaLoungerReceiving(CVillager &villager)
     // route that returned early above never holds a lounger. Nothing needs to
     // release this: the entry stops counting as soon as the villager no longer
     // carries a receiving label.
-    VF2SpaHoldLoungerForWalk(villager, info.unknown0);
+    VF2SpaHoldLoungerForWalk(villager, info.unknown0, false);
     return true;
 }
 
