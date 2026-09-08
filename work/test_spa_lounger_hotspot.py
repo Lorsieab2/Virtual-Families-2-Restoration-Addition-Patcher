@@ -521,5 +521,56 @@ def _cells_of(data):
     return list(struct.unpack_from("<%dI" % (width * height), data, 32))
 
 
+class TheWideningScopeIsExactlyTheTwoSpaLoungers(unittest.TestCase):
+    """The tuple names the scope, so no check that iterates it can police it.
+
+    Every other check here -- and in test_shipped_lounger_fmaps -- decides what
+    to inspect by reading SPA_LOUNGER_WIDENED_FMAPS. A tuple with an extra
+    entry is therefore correct by construction: adding
+    "InvisibleLounger.png.fmap" widens the PLAIN lounger from 11 cells to 33
+    and the whole suite still passes.
+
+    That is not a hypothetical tidy-up. The owner asked for the two SPA
+    loungers and only those, so a wrong scope ships a change to an item nobody
+    asked about -- and the plain Invisible Lounger is not covered by
+    test_no_ordinary_chaise_is_widened either, because it is not a chaise, it
+    is a third borrower of the chaise's map.
+
+    So the expected membership is written out here, independent of the tuple.
+    """
+
+    EXPECTED = ("SpaLoungerStd.png.fmap", "InvisibleSpaLounger.png.fmap")
+    MUST_NOT_BE_WIDENED = (
+        "InvisibleLounger.png.fmap",
+        "Chaise_brown.png.fmap",
+        "Chaise_blue.png.fmap",
+        "Chaise_green.png.fmap",
+        "Chaise_red.png.fmap",
+    )
+
+    def _tuple_entries(self):
+        m = re.search(r"SPA_LOUNGER_WIDENED_FMAPS = \((.*?)\)", SOURCE, re.S)
+        self.assertIsNotNone(m, "SPA_LOUNGER_WIDENED_FMAPS is gone")
+        return set(re.findall(r'"([^"]+\.fmap)"', m.group(1)))
+
+    def test_it_names_exactly_the_two_spa_loungers(self):
+        self.assertEqual(
+            self._tuple_entries(), set(self.EXPECTED),
+            "the widening scope changed; the owner asked for the two spa "
+            "loungers and only those, and every other check in this suite "
+            "reads this tuple to decide what to inspect, so a wrong scope is "
+            "invisible to them")
+
+    def test_no_shared_or_plain_map_is_in_scope(self):
+        entries = self._tuple_entries()
+        for name in self.MUST_NOT_BE_WIDENED:
+            with self.subTest(fmap=name):
+                self.assertNotIn(
+                    name, entries,
+                    "%s must keep the donor's unwidened footprint; widening a "
+                    "shared or plain map changes items the owner did not ask "
+                    "about" % name)
+
+
 if __name__ == "__main__":
     unittest.main()
