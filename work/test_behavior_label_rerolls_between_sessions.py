@@ -179,13 +179,18 @@ class ThePersistentLabelIsOnlyReadBehindTheCacheGate(unittest.TestCase):
                 if has_definition(name):
                     unreadable.append(name)
                 continue
-            body = "\n".join(bodies)
-            if PERSISTENT_LABEL_OFFSET not in body:
-                continue
-            compares = re.search(r"\bstrn?cmp\b", body)
-            against_a_group = re.search(r"labels\[|kVF2BehaviorLabels_", body)
-            if compares and against_a_group:
-                readers.append(name)
+            # Per DEFINITION, never over the joined text. Joining lets one
+            # definition's read of the label field pair with another
+            # definition's group comparison and report a violation that exists
+            # in neither -- a false positive traded for the false negative.
+            for body in bodies:
+                if PERSISTENT_LABEL_OFFSET not in body:
+                    continue
+                compares = re.search(r"\bstrn?cmp\b", body)
+                against_a_group = re.search(r"labels\[|kVF2BehaviorLabels_", body)
+                if compares and against_a_group:
+                    readers.append(name)
+                    break
         self.assertEqual(
             sorted(unreadable), [],
             "these functions have definitions this test could not parse, so "
@@ -229,6 +234,43 @@ class ThePersistentLabelIsOnlyReadBehindTheCacheGate(unittest.TestCase):
             repeated,
             "no name has two definitions any more; this test no longer "
             "exercises the repeated-name case and should be re-aimed",
+        )
+
+    def test_markers_split_across_two_definitions_are_not_a_violation(self):
+        """The contract is per-definition, so it must be evaluated that way.
+
+        One body may legitimately read the persistent label without comparing a
+        label group, while a different body compares a group without reading
+        the field. Searching the two joined together finds both markers and
+        reports a violation that exists in neither.
+        """
+        reads_only = """
+            char *behaviorLabel = ((char *)&villager) + 0x1BBA8;
+            behaviorLabel[0] = 0;
+        """
+        compares_only = """
+            if (strncmp(other, kVF2BehaviorLabels_home_gym_text, 0x27) == 0) {
+                return 1;
+            }
+        """
+
+        def violates(body):
+            if PERSISTENT_LABEL_OFFSET not in body:
+                return False
+            return bool(re.search(r"\bstrn?cmp\b", body)
+                        and re.search(r"labels\[|kVF2BehaviorLabels_", body))
+
+        self.assertFalse(violates(reads_only))
+        self.assertFalse(violates(compares_only))
+        self.assertFalse(
+            any(violates(b) for b in (reads_only, compares_only)),
+            "evaluated per definition, neither body violates the contract",
+        )
+        # And the join is exactly what would get this wrong.
+        self.assertTrue(
+            violates(reads_only + compares_only),
+            "if this is False the demonstration no longer shows the hazard "
+            "and this test should be re-aimed",
         )
 
     def test_every_scan_call_site_is_gated(self):
