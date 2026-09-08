@@ -303,31 +303,60 @@ class TestOnlyReceivingIsAutonomous(unittest.TestCase):
         )
         self.assertIn("StartNewBehavior(*walker)", body)
 
-    def test_the_claim_is_held_across_the_walkers_restart(self):
-        """Clearing first lets the walker take the lounger straight back.
+    def test_the_entry_is_parked_before_the_walkers_restart(self):
+        """Retaining the handle across the restart excludes nothing.
 
-        StartNewBehavior runs SYNCHRONOUSLY, so the displaced walker's
-        re-evaluation can return to this very route. With the entry already
-        cleared, VF2FindFreeSpaLoungerSlot sees the handle as free and
-        queues the walker back onto the lounger it was just displaced from,
-        preserving the overlap the eviction exists to prevent. Nothing else
-        makes the taker visible at that instant: a chaise linker never
-        carries a receiving label, and the manual-drop caller has not set
-        the new occupant's label yet.
+        The previous version kept the entry pointed at the lounger so the
+        finder would skip it. It does not: VF2SpaLoungerClaimedByWalker
+        skips every entry whose villager IS the asking villager, and the
+        restarted walker is exactly that villager -- so it saw its own
+        claim skipped and could take the lounger straight back.
 
-        So the entry is cleared LAST, holding the placement excluded for
-        exactly the window in which the walker re-chooses.
+        Parking the HANDLE instead makes the entry match no lounger, while
+        the slot stays owned by that villager so a reentrant
+        VF2SpaHoldLoungerForWalk reuses it rather than allocating a second.
+        """
+        source = _source()
+        start = source.index("static void VF2SpaReleaseHoldOnLounger(")
+        body = source[start:source.index("\n}\n", start)]
+        park = body.index("handle = VF2_SPA_NO_HANDLE")
+        restart = body.index("StartNewBehavior(*walker)")
+        self.assertLess(
+            park, restart,
+            "the entry must be parked before the walker re-evaluates, or it "
+            "can reclaim the lounger it was displaced from",
+        )
+
+    def test_a_reservation_made_during_the_restart_survives(self):
+        """The restart can create a NEW walk in the same slot.
+
+        Entries are keyed by villager pointer, so if the restarted walker
+        picks a different lounger the nested VF2SpaHoldLoungerForWalk finds
+        this same entry and writes the new handle into it. Zeroing
+        unconditionally afterwards destroyed that fresh reservation and left
+        the new walk unprotected -- worse than the overlap being prevented.
         """
         source = _source()
         start = source.index("static void VF2SpaReleaseHoldOnLounger(")
         body = source[start:source.index("\n}\n", start)]
         restart = body.index("StartNewBehavior(*walker)")
-        cleared = body.index(".handle = 0;")
-        self.assertLess(
-            restart, cleared,
-            "the entry is cleared before the walker re-evaluates, so it can "
-            "immediately reclaim the lounger it was displaced from",
+        after = body[restart:]
+        self.assertIn(
+            "handle == VF2_SPA_NO_HANDLE", after,
+            "the entry is released without checking whether the restart "
+            "claimed a different lounger with it",
         )
+        self.assertNotIn(
+            "gVF2SpaWalkReservations[index].handle = 0;", after,
+            "an unconditional clear after the restart destroys a reservation "
+            "the restart may have just created",
+        )
+
+    def test_the_parked_handle_matches_no_real_placement(self):
+        # AddToWorld stamps real handles; a parked entry must match nothing,
+        # or it would exclude a lounger it does not own.
+        source = _source()
+        self.assertIn("#define VF2_SPA_NO_HANDLE 0", source)
 
     def test_the_claim_is_not_handed_to_the_taker(self):
         # Reassigning the entry to `keep` looks equivalent and is not: one of
@@ -355,9 +384,9 @@ class TestOnlyReceivingIsAutonomous(unittest.TestCase):
             guard, forget,
             "an unrelated behaviour would be cancelled",
         )
-        # And the stale entry is still released even when the walker is not
+        # And a still-parked entry is released even when the walker was not
         # interrupted, so a finished villager stops holding its lounger.
-        self.assertIn(".handle = 0;", body[forget:])
+        self.assertIn("villager = 0;", body[forget:])
 
     def test_an_interrupted_walk_does_not_keep_holding_its_lounger(self):
         """The same-label interruption case, not just the predicate.

@@ -28501,6 +28501,13 @@ static void VF2SpaHoldLoungerForWalk(CVillager &villager, int handle)
 // interrupts a villager elsewhere, so the walker re-evaluates from where it
 // stands -- which may well be this same route, choosing a different lounger,
 // since its claim here is gone by then.
+// A handle no walker may claim. AddToWorld stamps real placement handles, and
+// nothing in the array is ever zero for an occupied record, so zero is free to
+// mean "this entry is parked". Parked entries hold their slot -- so a
+// reentrant VF2SpaHoldLoungerForWalk still finds and reuses it -- while
+// matching no lounger, so they exclude nothing they should not.
+#define VF2_SPA_NO_HANDLE 0
+
 static void VF2SpaReleaseHoldOnLounger(int handle, CVillager *keep)
 {
     for (int index = 0; index < 30; ++index) {
@@ -28508,10 +28515,24 @@ static void VF2SpaReleaseHoldOnLounger(int handle, CVillager *keep)
         CVillager *walker = gVF2SpaWalkReservations[index].villager;
         if (!walker || walker == keep) continue;
 
+        // PARKED BEFORE THE RESTART, not cleared after it.
+        //
+        // Keeping the entry pointed at this lounger across the restart does
+        // not exclude anything: VF2SpaLoungerClaimedByWalker skips every
+        // entry whose villager IS the asking villager, and the restarted
+        // walker is exactly that villager. It would see its own claim
+        // skipped and take the lounger straight back.
+        //
+        // Parking the handle instead makes the entry match no lounger, so
+        // the walker cannot re-select this one through its own claim -- and
+        // the slot is still owned by this villager, so a reentrant
+        // VF2SpaHoldLoungerForWalk during the restart REUSES it rather than
+        // allocating a second entry for the same villager.
+        gVF2SpaWalkReservations[index].handle = VF2_SPA_NO_HANDLE;
+
         // Only a villager still en route to a treatment is interrupted. One
         // that already finished, or was interrupted by something else, has
-        // plans of its own that are none of this function's business -- but
-        // its stale entry is still released below.
+        // plans of its own that are none of this function's business.
         if (VF2SpaReceivingIndex(*walker) >= 0) {
             CVillagerPlans *walkerPlans =
                 reinterpret_cast<CVillagerPlans *>(walker);
@@ -28519,24 +28540,23 @@ static void VF2SpaReleaseHoldOnLounger(int handle, CVillager *keep)
             walkerPlans->StartNewBehavior(*walker);
         }
 
-        // CLEARED LAST, and the order is the whole point.
+        // RELEASED ONLY IF THE RESTART DID NOT CLAIM SOMETHING ELSE.
         //
-        // StartNewBehavior above runs SYNCHRONOUSLY, and the displaced
-        // walker's re-evaluation can come straight back to this route. With
-        // the entry already cleared, VF2FindFreeSpaLoungerSlot would see the
-        // handle as free and queue the walker back onto the very lounger it
-        // was displaced from -- preserving the overlap this eviction exists
-        // to prevent. Nothing else makes the taker visible at that instant: a
-        // chaise linker never carries a receiving label, and the manual-drop
-        // caller has not set the new occupant's label yet.
+        // The restart above runs SYNCHRONOUSLY and may re-enter the spa
+        // route. If it picked another lounger, the nested
+        // VF2SpaHoldLoungerForWalk found this villager's entry -- entries are
+        // keyed by villager pointer -- and wrote the new handle into it.
+        // Zeroing unconditionally here would destroy that fresh reservation
+        // and leave the new walk unprotected, which is worse than the overlap
+        // this function exists to prevent.
         //
-        // Holding the entry across the restart excludes the placement for
-        // exactly that window, so the walker picks a different lounger or
-        // none. Reassigning it to the taker would look equivalent and is not:
-        // one of the two callers is the chaise linker, whose claim would then
-        // never expire -- the mechanism reverted in the previous commit.
-        gVF2SpaWalkReservations[index].villager = 0;
-        gVF2SpaWalkReservations[index].handle = 0;
+        // A handle other than the parked value means exactly that: the
+        // restart claimed a lounger, and the entry now belongs to that walk.
+        // Leave it alone. Only a still-parked entry is genuinely finished
+        // with, and only that one is released.
+        if (gVF2SpaWalkReservations[index].handle == VF2_SPA_NO_HANDLE) {
+            gVF2SpaWalkReservations[index].villager = 0;
+        }
     }
 }
 
