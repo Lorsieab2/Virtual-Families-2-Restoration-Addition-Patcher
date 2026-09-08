@@ -10,6 +10,7 @@ from __future__ import annotations
 import contextlib
 import io
 import sys
+import re
 import tempfile
 import unittest
 from pathlib import Path
@@ -231,6 +232,174 @@ class FeatureRegressionTests(unittest.TestCase):
                 with self.subTest(shape=label):
                     with self.assertRaises(gate.UnreadableRelease):
                         gate.settings_in_archive(path)
+
+    def _archives_the_message_says_to_move(self, message, candidates, lost):
+        """Work out WHICH archives the refusal is telling us to move.
+
+        Not just that it says "move" -- Codex's point was that "move the
+        release(s) NOT offering them" matches a naive regex while telling
+        the operator to do the opposite of the right thing. So resolve the
+        instruction against the actual archives: the ones it names are the
+        ones offering the settings reported lost, and the test then moves
+        exactly those.
+        """
+        collapsed = " ".join(message.split()).lower()
+        instruction = re.search(
+            r"move the release\(s\)\s*(?P<qualifier>[a-z ]*?)offering them"
+            r"\s*out of this directory",
+            collapsed,
+        )
+        if instruction is None:
+            return None
+        # A qualifier such as "not " inverts the meaning; only an empty one
+        # (or a harmless "still ") means "the archives that offer them".
+        qualifier = instruction.group("qualifier").strip()
+        if qualifier not in ("", "still"):
+            return None
+        return [
+            archive for archive in candidates
+            if lost & gate.settings_in_archive(archive)
+        ]
+
+    def test_the_test_follows_the_message_rather_than_its_author(self):
+        """Every action below is DERIVED from the refusal, not hard-coded.
+
+        Two rounds of review shaped this. First, deleting the guidance
+        outright left the suite green at 36 passed, so the test was pinned
+        to the message. Then the pin was still too weak: it only checked
+        that a "move ..." sentence existed, so rewording it to "move the
+        release(s) NOT offering them" would have kept passing while
+        instructing the operator to keep the offending baseline.
+
+        Now the message selects the archive. If it names the wrong one, or
+        names none, there is nothing to move and the test fails.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            old = _bundle(root / "VF2-B181-Release.zip", ["alpha", "beta"])
+            fresh = _bundle(root / "VF2-B182-Release.zip", ["alpha"])
+
+            message = gate.lost_settings(fresh, [old])
+            self.assertIsNotNone(message)
+            self.assertIn("beta", message)
+
+            lost = (gate.settings_in_archive(old)
+                    - gate.settings_in_archive(fresh))
+            to_move = self._archives_the_message_says_to_move(
+                message, [old, fresh], lost)
+            self.assertIsNotNone(
+                to_move,
+                "the refusal does not tell the operator to move the archives "
+                "OFFERING the dropped settings, so following it would not "
+                "reach a publishable state",
+            )
+            self.assertEqual(
+                to_move, [old],
+                "the instruction resolves to the wrong archive; moving that "
+                "would leave the offending baseline in place",
+            )
+
+            # It must also warn that this can leave no predecessor, and name
+            # the flag for that case rather than ruling it out.
+            collapsed = " ".join(message.split()).lower()
+            self.assertIn("no predecessor", collapsed)
+            self.assertIn("--allow-missing-predecessor", message)
+            self.assertNotIn("will not help", collapsed)
+
+            # NOW do exactly what it resolved to.
+            retired = root / "retired"
+            retired.mkdir()
+            for archive in to_move:
+                archive.rename(retired / archive.name)
+
+            with self.subTest(step="the drop is no longer reported"):
+                self.assertEqual(gate.earlier_releases(fresh), [])
+                self.assertIsNone(gate.lost_settings(fresh, []))
+
+            with self.subTest(step="the predicted second refusal is real"):
+                source = Path(gate.__file__).read_text(encoding="utf-8")
+                body = source.split("def main(")[1]
+                self.assertIn("if not args.allow_missing_predecessor:", body)
+
+            with self.subTest(step="the floor refuses, and says why"):
+                # Reached BEFORE lost_settings() in main(), so it has to name
+                # the retirement route itself or the guidance above is
+                # unreachable for a real retirement.
+                floor = gate.short_of_expected(fresh)
+                self.assertIsNotNone(floor)
+                self.assertIn("EXPECTED_SETTING_COUNT", floor)
+                self.assertIn("retired on purpose", floor)
+
+            with self.subTest(step="following THAT instruction passes"):
+                # Apply the value the message PRESCRIBES, not one computed
+                # here. Recomputing it independently was the flaw Codex
+                # found: a refusal telling the operator to lower the count
+                # to its existing 35 would leave this green while the
+                # workflow stayed a dead end.
+                prescribed = re.search(
+                    r"lower EXPECTED_SETTING_COUNT in \S+ to (\d+)", floor)
+                self.assertIsNotNone(
+                    prescribed,
+                    "the floor refusal does not name a target value, so an "
+                    "operator cannot tell what to set the count to",
+                )
+                original = gate.EXPECTED_SETTING_COUNT
+                try:
+                    gate.EXPECTED_SETTING_COUNT = int(prescribed.group(1))
+                    self.assertIsNone(
+                        gate.short_of_expected(fresh),
+                        "the value the refusal prescribes does not actually "
+                        "clear the floor, so following it is a dead end",
+                    )
+                    self.assertIsNone(gate.lost_settings(fresh, []))
+                finally:
+                    gate.EXPECTED_SETTING_COUNT = original
+
+    def test_no_comment_still_denies_the_retirement_override(self):
+        """Comments regress silently, and this one already did.
+
+        The rationale above lost_settings() said the answer was NOT
+        --allow-missing-predecessor, while the message it introduced sent
+        the operator to exactly that flag. Restoring that sentence passed
+        every other test in this file, because nothing reads comments.
+
+        The superseded claim is recorded in place rather than deleted, so
+        this asserts the DENIAL is absent rather than that some particular
+        wording is present.
+        """
+        source = Path(gate.__file__).read_text(encoding="utf-8")
+        comments = "\n".join(
+            line for line in source.split("\n") if line.lstrip().startswith("#"))
+        collapsed = " ".join(comments.split()).lower()
+        for phrase in (
+            "the answer is not --allow-missing-predecessor",
+            "--allow-missing-predecessor: that flag is for a first release "
+            "with no predecessor at all",
+        ):
+            with self.subTest(phrase=phrase[:44]):
+                self.assertNotIn(
+                    phrase, collapsed,
+                    "a comment denies the override that the refusal message "
+                    "and the flag help both prescribe",
+                )
+
+    def test_every_mention_of_the_flag_permits_the_retirement_case(self):
+        """The CLI must not contradict its own refusal.
+
+        The lost-settings message sends an operator to
+        --allow-missing-predecessor after a retirement, while the flag help
+        and the missing-predecessor refusal both said it was for a first
+        release only. Following one meant disobeying another.
+        """
+        source = Path(gate.__file__).read_text(encoding="utf-8")
+        for phrase in ("Only for \"\n            \"a genuine first release",
+                       "if this really is the first "):
+            with self.subTest(phrase=phrase.strip()[:40]):
+                self.assertNotIn(
+                    phrase, source,
+                    "this wording excludes the deliberate-retirement case "
+                    "that the lost-settings refusal sends operators to",
+                )
 
     def test_a_well_formed_manifest_still_reads(self):
         # The shape checks must not reject a real release: the guard is only

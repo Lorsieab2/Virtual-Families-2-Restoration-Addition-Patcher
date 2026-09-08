@@ -210,10 +210,23 @@ def short_of_expected(archive: Path) -> str | None:
     offered = settings_in_archive(archive)
     if len(offered) >= EXPECTED_SETTING_COUNT:
         return None
+    # Two causes, and the message must not assert the wrong one. The B183
+    # shape -- an export that ran without the per-feature overlay arguments
+    # and silently dropped what it could not resolve -- is why this floor
+    # exists. But a DELIBERATE retirement lands here too, and it reaches this
+    # check before lost_settings() ever runs, so the retirement instructions
+    # further down are unreachable unless this message names the route as
+    # well. Lowering the floor is a source edit somebody makes on purpose,
+    # which is the intended shape: retiring a feature is a decision, not
+    # something a build can do on its own.
     return (
         f"{archive.name} offers {len(offered)} settings; a complete release "
-        f"carries {EXPECTED_SETTING_COUNT}. Twelve were missing from B183 "
-        f"because the export ran without the per-feature overlay arguments."
+        f"carries {EXPECTED_SETTING_COUNT}.\n\nIf this is an accident, the "
+        f"export ran without the per-feature overlay arguments -- that is "
+        f"how twelve went missing from B183 -- so rebuild with them.\n\n"
+        f"If a setting was retired on purpose, lower EXPECTED_SETTING_COUNT "
+        f"in {Path(__file__).name} to {len(offered)} in the same commit that "
+        f"retires it, so the floor keeps describing a complete release."
     )
 
 
@@ -249,10 +262,32 @@ def lost_settings(archive: Path, previous: Path) -> str | None:
     dropped = sorted(before - now)
     if not dropped:
         return None
+    # Name the way forward as well as the problem. An operator who MEANT to
+    # retire a setting should not have to read this source to find out what
+    # to do.
+    #
+    # SUPERSEDED, recorded so it is not restored: this comment used to say the
+    # answer was NOT --allow-missing-predecessor, on the grounds that the flag
+    # is for a first release and a predecessor is exactly what exists here.
+    # That reasoning is wrong for the single-predecessor case. Moving the only
+    # baseline aside leaves none, so the next run refuses for that reason and
+    # the flag is precisely what clears it. The workflow is two deliberate
+    # steps -- move the archive, then pass the flag -- and both the message
+    # below and the flag's own help now say so.
+    #
+    # What has not changed is why it is deliberate: retiring something means an
+    # explicit act somebody performs and can undo, rather than a silent
+    # default. Two steps is the point, not an obstacle.
     return (
         f"{archive.name} drops {len(dropped)} setting(s) present in "
         f"{', '.join(names)}, and adds {len(now - before)}:\n  "
         + "\n  ".join(dropped)
+        + "\n\nIf these were dropped by accident, rebuild with the missing "
+        "overlays.\n\nIf a retirement is intended, move the release(s) "
+        "offering them out of this directory. Note that if that leaves NO "
+        "predecessor beside this archive, the next run refuses again for "
+        "that reason and needs --allow-missing-predecessor as well: two "
+        "deliberate steps, which is the intent."
     )
 
 
@@ -317,9 +352,12 @@ def main() -> int:
         "--allow-missing-predecessor",
         action="store_true",
         help=(
-            "Publish without comparing against a previous release. Only for "
-            "a genuine first release: a missing predecessor is otherwise a "
-            "retained-archive problem, not a reason to skip the check."
+            "Publish without comparing against a previous release. For a "
+            "genuine first release, or after deliberately moving aside the "
+            "last archive that offered a retired setting -- the two cases "
+            "where no predecessor is the intended state. Otherwise a "
+            "missing predecessor is a retained-archive problem, not a "
+            "reason to skip the check."
         ),
     )
     parser.add_argument("--release", required=True, help="Release name, e.g. B175")
@@ -466,8 +504,10 @@ def main() -> int:
                 f"no predecessor release found beside {archive.name}, so the "
                 "feature-regression check could not run. Retain the previous "
                 "release ZIP next to this one, or pass "
-                "--allow-missing-predecessor if this really is the first "
-                "release.",
+                "--allow-missing-predecessor if no predecessor is the "
+                "intended state -- a genuine first release, or a deliberate "
+                "retirement whose last remaining baseline you have just "
+                "moved aside.",
             )
         print("no predecessor, and the bootstrap override was given")
     else:
