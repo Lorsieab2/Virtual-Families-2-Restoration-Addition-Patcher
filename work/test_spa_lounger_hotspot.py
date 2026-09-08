@@ -563,9 +563,27 @@ class TheWideningScopeIsExactlyTheTwoSpaLoungers(unittest.TestCase):
     )
 
     def _tuple_entries(self):
-        m = re.search(r"SPA_LOUNGER_WIDENED_FMAPS = \((.*?)\)", SOURCE, re.S)
-        self.assertIsNotNone(m, "SPA_LOUNGER_WIDENED_FMAPS is gone")
-        return set(re.findall(r'"([^"]+\.fmap)"', m.group(1)))
+        """The EVALUATED value, not the first parenthesised literal.
+
+        A regex over the source reads only the initial tuple, so
+        `SPA_LOUNGER_WIDENED_FMAPS = (...) + ("InvisibleLounger.png.fmap",)`
+        or a later `+=` widens the plain lounger while this check still sees
+        the original two names and passes. Measured: the concatenation form
+        gave 20 passed. Importing the module asks what the generator will
+        actually use.
+        """
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("gen_scope", GENERATOR)
+        module = importlib.util.module_from_spec(spec)
+        try:
+            spec.loader.exec_module(module)
+        except SystemExit:
+            pass
+        except ImportError as exc:
+            self.skipTest("generator dependency missing here: %s" % exc)
+        entries = getattr(module, "SPA_LOUNGER_WIDENED_FMAPS", None)
+        self.assertIsNotNone(entries, "SPA_LOUNGER_WIDENED_FMAPS is gone")
+        return set(entries)
 
     def test_it_names_exactly_the_two_spa_loungers(self):
         self.assertEqual(
