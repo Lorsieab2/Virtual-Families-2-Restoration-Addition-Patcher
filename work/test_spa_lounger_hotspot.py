@@ -720,10 +720,11 @@ class TheWideningIsMeasuredOnTheMapItWrites(unittest.TestCase):
         except Exception as exc:  # pragma: no cover - environment dependent
             holder.cleanup()
             self.skipTest("sync_behavior_assets needs build inputs: %s" % exc)
-        return gen, holder, assets, seeded, manifest
+        return gen, holder, assets, seeded, manifest, donors / DONOR.name
 
     def test_it_claims_the_footprint_and_leaves_the_anchor_alone(self):
-        gen, holder, assets, seeded, _ = self._run("_gen_bytes_under_test")
+        gen, holder, assets, seeded, _m, _d = self._run(
+            "_gen_bytes_under_test")
         try:
             for target in gen.SPA_LOUNGER_WIDENED_FMAPS:
                 with self.subTest(target=target):
@@ -776,10 +777,68 @@ class TheWideningIsMeasuredOnTheMapItWrites(unittest.TestCase):
         finally:
             holder.cleanup()
 
+
+    def test_the_plain_lounger_is_never_widened(self):
+        """InvisibleLounger must come out of a build at the donor's count.
+
+        The owner named the two SPA loungers and only those. The plain
+        InvisibleLounger borrows the same donor, so a widener that grows it
+        would change an item nobody asked to change -- and the suite could not
+        see it happen. Adding InvisibleLounger.png.fmap to
+        SPA_LOUNGER_WIDENED_FMAPS takes it from 11 cells to 33 and every other
+        check in this file still passes, including the two behavioural ones
+        above: they only ever look at the targets the tuple names, so a tuple
+        with an extra entry is measured as correct by construction.
+
+        test_no_ordinary_chaise_is_widened guards Chaise_brown and
+        Chaise_blue by name, which does not cover this: the plain lounger is
+        not a chaise, it is a third borrower of the chaise's map.
+
+        So this measures the file the build wrote rather than the tuple that
+        chose it. It is the same reason the behavioural checks exist -- a name
+        list can be wrong, bytes on disk cannot.
+        """
+        gen, holder, assets, _seeded, manifest, staged_donor = self._run(
+            "_gen_scope_under_test")
+        try:
+            plain = assets / "InvisibleLounger.png.fmap"
+            if not plain.is_file():
+                self.skipTest("the plain lounger is not built in this "
+                              "checkout, so there is nothing to measure")
+
+            # Compared against the STAGED donor, not the tracked one on
+            # disk. _stage() adds object cells to the donor so the two
+            # candidate dilation seeds are distinguishable, and the plain
+            # lounger inherits those through copy_donor_fmap. Measuring
+            # against the tracked donor reports 13 vs 11 and fails on correct
+            # code -- the borrower was never widened, it was copied from a
+            # donor that already had 13.
+            expected = self._counts(staged_donor)[self.OBJECT]
+            counted = self._counts(plain)
+            self.assertEqual(
+                counted.get(self.OBJECT, 0), expected,
+                "the plain InvisibleLounger left the build with %d drop "
+                "cells where its donor has %d, so it was widened; only the "
+                "two spa loungers were approved for that"
+                % (counted.get(self.OBJECT, 0), expected))
+
+            # And the reverse: silence here must mean "not widened", not
+            # "not built". A build that never writes the file would satisfy
+            # the count check above by skipping, so the record is checked too.
+            record = manifest.get("behavior_assets", {}).get(
+                "spa_lounger_widened_hotspots") or []
+            widened = [row.get("target") for row in record]
+            self.assertNotIn(
+                "InvisibleLounger.png.fmap", widened,
+                "the widener recorded the plain lounger as a target: %s"
+                % widened)
+        finally:
+            holder.cleanup()
+
     def test_the_record_reports_what_came_from_the_footprint(self):
         """A build that claimed nothing must be distinguishable from one that
         did, without re-reading every map."""
-        gen, holder, _assets, _seeded, manifest = self._run(
+        gen, holder, _assets, _seeded, manifest, _d = self._run(
             "_gen_record_under_test")
         try:
             record = manifest.get("behavior_assets", {}).get(
