@@ -36,6 +36,10 @@ OUTPUTS = ROOT / "outputs"
 DESKTOP_ANCHOR = 0x00009800
 MOBILE_ANCHOR = 0x01B09800
 
+# The EObject value: the cells a villager can actually be dropped onto, and the
+# only value the widening may introduce.
+OBJECT_CELL = 0x2000A800
+
 # The desktop-safe map for the donor these all borrow. Comparing against the
 # real thing beats inventing a numeric threshold: a first attempt treated
 # anything >= 0x01000000 as a mobile marker and flagged 0x2000A800, which is a
@@ -353,23 +357,47 @@ class TestShippedLoungerMapsAreDesktopSafe(unittest.TestCase):
                     if (_release_has_widening(build.name)
                             and RAW_FMAP_DONOR.is_file()):
                         raw_all = _cell_list(RAW_FMAP_DONOR)
-                        if len(raw_all) == len(shipped_all):
-                            kept = sum(
-                                1 for raw, safe, now in zip(
-                                    raw_all, safe_all, shipped_all)
-                                if raw and not safe and now
-                            )
-                            carried = sum(
-                                1 for raw, safe in zip(raw_all, safe_all)
-                                if raw and not safe
-                            )
-                            self.assertEqual(
-                                kept, carried,
-                                "%d of %d donor geometry cells did not reach "
-                                "the borrower; the sparse desktop-safe map "
-                                "alone leaves it with almost no collision "
-                                "area" % (carried - kept, carried),
-                            )
+                        # A SIZE MISMATCH IS THE FAILURE, NOT A REASON TO SKIP.
+                        #
+                        # borrowed_fmap_bytes returns None when the two grids
+                        # disagree, and the caller answers that by copying the
+                        # sparse desktop-safe map verbatim -- which is exactly
+                        # the fallback regression this assertion exists to
+                        # catch. Skipping on mismatch would let it through.
+                        self.assertEqual(
+                            len(raw_all), len(shipped_all),
+                            "the raw donor and the shipped map disagree about "
+                            "grid size, which is the condition that makes the "
+                            "build fall back to the sparse map",
+                        )
+                        # COMPARE THE VALUE, NOT MERE OCCUPANCY.
+                        #
+                        # "still nonzero" is satisfied by any arbitrary
+                        # replacement, so a map whose geometry values were
+                        # corrupted -- every raw-only cell rewritten to 1 --
+                        # would pass. The merge contract is that those cells
+                        # are carried UNCHANGED, so that is what is asserted.
+                        # The object value is permitted because a widened cell
+                        # legitimately replaces a donor cell there.
+                        lost = []
+                        for index, (raw, safe, now) in enumerate(
+                            zip(raw_all, safe_all, shipped_all)
+                        ):
+                            if not raw or safe:
+                                continue
+                            if now == raw or now == OBJECT_CELL:
+                                continue
+                            lost.append((index, raw, now))
+                        carried = sum(
+                            1 for r, s in zip(raw_all, safe_all) if r and not s
+                        )
+                        self.assertEqual(
+                            lost, [],
+                            "%d of %d donor geometry cells did not reach the "
+                            "borrower unchanged; the sparse desktop-safe map "
+                            "alone leaves it with almost no collision area"
+                            % (len(lost), carried),
+                        )
                     if name not in WIDENED_LOUNGERS:
                         continue
                     shipped = _cells(path)
