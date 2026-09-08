@@ -33448,8 +33448,21 @@ static void (__cdecl *const kVF2GymDonorBehaviors[])(CVillager &) = {
 // Returns false when no bike is placed, which is the same fallback
 // VF2RunOwnFurnitureAction takes: the donor runs unchanged and nothing is
 // seated.
-static bool VF2OpenBikeSeatedWindow(CVillager &villager, int itemId)
+static bool VF2OpenBikeSeatedWindow(CVillager &villager, int itemId, int object)
 {
+    // USE THE PLACEMENT THE ACTION WILL ACTUALLY ROUTE TO.
+    //
+    // Taking the first record with a matching item id is wrong when two bikes
+    // are placed with different orientations: VF2FindAddedFurnitureVenue picks
+    // the NEAREST one for the route, so the villager could cycle to one bike
+    // and be posed for the other. Resolving the venue here, by the same
+    // nearest-match rule, means the pose belongs to the bike the villager
+    // rides.
+    ldwPoint venue = {};
+    if (!VF2FindAddedFurnitureVenue(villager, itemId, object, venue)) return false;
+
+    // Then name that exact placement by position and read ITS orientation
+    // from +0x10, rather than rescanning by item id alone.
     unsigned char *manager = reinterpret_cast<unsigned char *>(&FurnitureManager);
     int count = *reinterpret_cast<int *>(manager + 0x1004);
     if (count < 0 || count > 0x200) return false;
@@ -33457,8 +33470,14 @@ static bool VF2OpenBikeSeatedWindow(CVillager &villager, int itemId)
         unsigned char *record = manager + 0x1008 + slot * 0x40;
         if ((*reinterpret_cast<unsigned int *>(record + 0x0C) & 1) == 0) continue;
         if (*reinterpret_cast<int *>(record) != itemId) continue;
-        // Orientation from the PLACEMENT RECORD at +0x10, not from
-        // sFurnitureInfo2 padding and not from info.point.
+        sFurnitureInfo2 info = {};
+        if (!FurnitureManager.FindFurniture(
+                (CContentMap::EObject)object,
+                *reinterpret_cast<ldwPoint *>(record + 0x14),
+                info, true, 0, false)) {
+            continue;
+        }
+        if (info.point.x != venue.x || info.point.y != venue.y) continue;
         int orientation = *reinterpret_cast<int *>(record + 0x10);
         VF2BeginBikeSeated(
             villager,
@@ -33471,7 +33490,7 @@ static bool VF2OpenBikeSeatedWindow(CVillager &villager, int itemId)
 extern "C" void __cdecl VF2ExerciseBikeWalk(CVillager &villager)
 {
     bool const seated =
-        VF2OpenBikeSeatedWindow(villager, __VF2_EXERCISE_BIKE_ITEM_ID__);
+        VF2OpenBikeSeatedWindow(villager, __VF2_EXERCISE_BIKE_ITEM_ID__, 0x04);
     VF2RunOwnFurnitureAction(
         villager, CBehavior::WorkoutTreadmill,
         __VF2_EXERCISE_BIKE_ITEM_ID__, 0x04,
@@ -33483,7 +33502,7 @@ extern "C" void __cdecl VF2ExerciseBikeWalk(CVillager &villager)
 extern "C" void __cdecl VF2ExerciseBikeRun(CVillager &villager)
 {
     bool const seated =
-        VF2OpenBikeSeatedWindow(villager, __VF2_EXERCISE_BIKE_ITEM_ID__);
+        VF2OpenBikeSeatedWindow(villager, __VF2_EXERCISE_BIKE_ITEM_ID__, 0x04);
     VF2RunOwnFurnitureAction(
         villager, CBehavior::RunningOnTreadmill,
         __VF2_EXERCISE_BIKE_ITEM_ID__, 0x04,
@@ -34702,6 +34721,12 @@ def patch_added_furniture_venue_callsites(manifest):
         ("?RunningOnTreadmill@CBehavior@@CAXAAVCVillager@@@Z", object_plan, object_helper, "RunningOnTreadmill object PlanToGo"),
         ("?PlayingPooltable@CBehavior@@CAXAAVCVillager@@@Z", object_plan, object_helper, "PlayingPooltable object PlanToGo"),
         ("?WorkoutTreadmill@CBehavior@@CAXAAVCVillager@@@Z", wait_plan, seated_helper, "WorkoutTreadmill seated PlanToWait"),
+        # VF2ExerciseBikeRun borrows RunningOnTreadmill, which has its OWN six
+        # two-argument PlanToWait calls. Retargeting only WorkoutTreadmill left
+        # the high-intensity cycling action fully upright while the walking one
+        # sat down -- the fix half-applied, and invisible to any check that
+        # looked at one donor.
+        ("?RunningOnTreadmill@CBehavior@@CAXAAVCVillager@@@Z", wait_plan, seated_helper, "RunningOnTreadmill seated PlanToWait"),
     ):
         _, sec, rows = function_relocations(donor)
         matches = [row for row in rows if obj.symbol_by_index[row[1]].name == target and row[2] == IMAGE_REL_I386_REL32]
