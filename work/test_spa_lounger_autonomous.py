@@ -782,12 +782,28 @@ class TheGuardSurvivesIntoTheEmittedArtifact(unittest.TestCase):
         Skips only when there is no toolchain, which is a genuinely absent
         prerequisite rather than a defect.
         """
+        # THE CONTRACT MUST EXIST. `getattr(..., ())` would search no paths
+        # if VCVARS_CANDIDATES were renamed or made private, report "no
+        # toolchain", and SKIP -- so an invalid emission would ship with the
+        # suite green. A missing toolchain is a real prerequisite and skips; a
+        # missing contract is a harness fault and fails.
+        self.assertTrue(
+            hasattr(compiles, "VCVARS_CANDIDATES"),
+            "test_generated_cpp_compiles no longer exposes VCVARS_CANDIDATES, "
+            "so this compile check would silently skip instead of failing")
+        candidates = tuple(compiles.VCVARS_CANDIDATES)
+        self.assertTrue(
+            candidates,
+            "VCVARS_CANDIDATES is empty, so no toolchain could ever be found "
+            "and this check would skip on every machine")
         vcvars = None
-        for candidate in getattr(compiles, "VCVARS_CANDIDATES", ()):
+        for candidate in candidates:
             if pathlib.Path(candidate).is_file():
                 vcvars = candidate
                 break
         if vcvars is None:
+            # The one legitimate skip: the contract is intact, the machine
+            # simply has no compiler.
             self.skipTest("no Visual Studio toolchain on this machine")
         self.assertTrue(self.units, "no emitted units to compile")
         with tempfile.TemporaryDirectory() as tmp:
