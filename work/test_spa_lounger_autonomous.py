@@ -8,12 +8,14 @@ at an empty chair. Receiving has no such requirement -- one adult, one free
 lounger -- so that half, and only that half, is offered autonomously.
 """
 import re
+import subprocess
 import pathlib
 import tempfile
 import shutil
 import unittest
 
 import patch_mobile_furniture_pack as patcher
+import test_generated_cpp_compiles as compiles
 
 
 def _source():
@@ -666,7 +668,7 @@ class TheGuardSurvivesIntoTheEmittedArtifact(unittest.TestCase):
                          "theMainScene.obj"):
                 src = patcher.SRC_OBJS / name
                 if not src.is_file():
-                    return None, "missing build input %s" % name
+                    return None, "missing build input %s" % name, None
                 shutil.copy2(src, temp_root / name)
             old_patched = patcher.PATCHED
             # THE FLAG-ON BRANCH IS WHAT SHIPS. ENABLE_BEHAVIOR_PATCHES is
@@ -700,21 +702,20 @@ class TheGuardSurvivesIntoTheEmittedArtifact(unittest.TestCase):
                 # that would have caught it never ran.
                 raise AssertionError(
                     "the emitters ran but produced no .cpp at all")
-            # Hand the sources to the persistent objs directory when it
-            # exists, so test_generated_cpp_compiles.py -- which owns the
-            # compile question -- is compiling this same emission rather than
-            # whatever an older run left behind. RESIDUAL, stated plainly:
-            # pattern-matching text cannot prove the C++ is syntactically
-            # valid or that the build includes it; only that compile does.
-            objs = patcher.ROOT / "work" / cls.OBJS
-            if objs.is_dir():
-                for src in sources:
-                    try:
-                        shutil.copy2(src, objs / src.name)
-                    except OSError:
-                        pass
-            return ("\n".join(p.read_text(encoding="utf-8", errors="replace")
-                              for p in sources), len(sources))
+            # NOT copied into work/patched_mobile_furniture_pack_objs. Under
+            # `unittest discover` modules run in FILENAME order, so
+            # test_generated_cpp_compiles.py runs BEFORE this file -- the
+            # copies would arrive after it had already compiled stale sources
+            # or skipped, and a syntactically invalid emission would still
+            # leave the suite green. Writing into that directory is also how
+            # three unrelated stale .cpp files came to be sitting in it.
+            #
+            # The compile question is answered HERE instead, by
+            # test_the_emission_compiles below.
+            texts = [p.read_text(encoding="utf-8", errors="replace")
+                     for p in sources]
+            names = [p.name for p in sources]
+            return ("\n".join(texts), len(sources), list(zip(names, texts)))
 
     @staticmethod
     def _strip_comments(text):
@@ -731,7 +732,8 @@ class TheGuardSurvivesIntoTheEmittedArtifact(unittest.TestCase):
             reason = result[1] if result else "generation failed"
             self.skipTest(
                 "cannot emit the C++ in this checkout: %s" % reason)
-        text, count = result
+        text, count = result[0], result[1]
+        self.units = result[2] if len(result) > 2 else []
         self.emitted = text
         # Every assertion below runs against comment-stripped code, so a
         # commented-out guard cannot satisfy a substring search.
@@ -767,6 +769,41 @@ class TheGuardSurvivesIntoTheEmittedArtifact(unittest.TestCase):
                 hasattr(patcher, name),
                 "%s no longer exists, so this class is no longer driving the "
                 "pass that emits the handler it checks" % name)
+
+    def test_the_emission_compiles(self):
+        """Hand the flag-on sources to the compiler, here.
+
+        Pattern-matching text cannot see syntactically invalid C++. Deferring
+        that to test_generated_cpp_compiles.py does not work: under
+        `unittest discover` modules run in FILENAME order, so that suite runs
+        BEFORE this one and would compile stale sources or skip. The residual
+        is closed where the emission happens.
+
+        Skips only when there is no toolchain, which is a genuinely absent
+        prerequisite rather than a defect.
+        """
+        vcvars = None
+        for candidate in getattr(compiles, "VCVARS_CANDIDATES", ()):
+            if pathlib.Path(candidate).is_file():
+                vcvars = candidate
+                break
+        if vcvars is None:
+            self.skipTest("no Visual Studio toolchain on this machine")
+        self.assertTrue(self.units, "no emitted units to compile")
+        with tempfile.TemporaryDirectory() as tmp:
+            work = pathlib.Path(tmp)
+            for name, text in self.units:
+                (work / name).write_text(text, encoding="ascii")
+            for name, _ in self.units:
+                with self.subTest(name):
+                    result = subprocess.run(
+                        '"%s" >nul 2>&1 && cl /c /nologo /EHsc "%s"'
+                        % (vcvars, work / name),
+                        cwd=work, shell=True, capture_output=True, text=True)
+                    self.assertEqual(
+                        result.returncode, 0,
+                        "the flag-on emission of %s does not compile:\n%s"
+                        % (name, (result.stdout or "")[-1500:]))
 
     def test_the_reservation_release_is_in_the_shipped_source(self):
         self.assertIn(
