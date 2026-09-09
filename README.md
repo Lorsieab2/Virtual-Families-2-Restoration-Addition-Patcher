@@ -417,9 +417,14 @@ relabelled at the last moment.
     a new session rolls again.
   - **What that claim rests on, and what it does not.** The fix is present in
     the emitted C++ and in the shipped executables: the gym's ten string ids
-    are in the generated source, and all 32 B185 executables differ from the
-    B184 build they were seeded from, which is what shows the relink carried
-    the new code in rather than inheriting the old. **Nobody has yet watched a
+    are in the generated source, and the generator the B185 build ran is
+    byte-identical to the one on main. All 32 B185 executables differ from
+    the B184 build they were seeded from, which rules out the failure where a
+    seeded build inherits the previous release's binary untouched -- but a
+    full relink changes every hash whether or not any particular feature is
+    in it, so that shows the executables were REBUILT and nothing narrower.
+    **The fix cannot be found by searching the executables at all**, because
+    symbol names do not survive linking. **And nobody has yet watched a
     villager use the gym repeatedly and seen the captions vary.** That is
     in-game QA and it has not been done, so this entry describes what was
     built and measured, not what has been observed in play.
