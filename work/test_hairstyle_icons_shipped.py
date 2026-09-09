@@ -31,6 +31,26 @@ def _png_size(path):
     return width, height
 
 
+def _release_sort_key(identifier):
+    """Order B174 < B174.1 < B174b < B185, or None if unparseable.
+
+    Releases are not plain integers on this project: B174.1 and B174b are both
+    real forms. int() raises on either, and an except-continue around it drops
+    the release entirely -- which is how the newest build can be silently
+    discarded in favour of an older one.
+    """
+    text = identifier.lstrip("B")
+    head = ""
+    for ch in text:
+        if ch.isdigit():
+            head += ch
+        else:
+            break
+    if not head:
+        return None
+    return (int(head), text[len(head):])
+
+
 def _current_release_prefix():
     """The newest release that actually linked something.
 
@@ -48,24 +68,51 @@ def _current_release_prefix():
     with a linked exe wins -- a build_matrix run that dies before linking still
     leaves a directory behind, so "newest directory" is not the same question
     as "newest release".
+
+    POINT AND LETTER RELEASES COUNT. B174.1 exists (see
+    data/vf2/release-identities-B174.1.json), and an int() conversion raises on
+    it. An earlier version of this function swallowed that with `continue`, so
+    the newest release could be silently discarded and an older one chosen --
+    landing straight back in the skip this function was written to remove.
     """
     named = os.environ.get("VF2_VERIFY_RELEASE")
     if named:
-        return "VF2-%s-matrix-" % named
+        prefix = "VF2-%s-matrix-" % named
+        # AN EXPLICITLY NAMED RELEASE THAT DOES NOT EXIST IS A MISTAKE, NOT A
+        # PREREQUISITE. Returning an unmatched prefix makes setUp skip, so a
+        # typo or a cleaned-away release reports OK (skipped=2) to someone who
+        # deliberately asked to verify something. Same distinction as a missing
+        # toolchain skipping while a missing contract fails.
+        if not any(d.is_dir() and not d.name.endswith("-logs")
+                   for d in OUTPUTS.glob(prefix + "*")):
+            raise AssertionError(
+                "VF2_VERIFY_RELEASE=%s names a release with no matrix output "
+                "under %s; nothing would be verified. Check the name, or "
+                "unset it to use the newest linked release." % (named, OUTPUTS))
+        return prefix
     best = None
+    unparsed = []
     for d in OUTPUTS.glob("VF2-B*-matrix-*"):
         if d.name.endswith("-logs") or not d.is_dir():
             continue
         if not list(d.glob("*.exe")):
             continue
         prefix = d.name.rsplit("-", 1)[0] if "-" in d.name else d.name
-        # Release ordering is by the B-number, not by directory name.
-        try:
-            num = int(d.name.split("-")[1].lstrip("B"))
-        except (IndexError, ValueError):
+        parts = d.name.split("-")
+        if len(parts) < 2:
+            unparsed.append(d.name)
             continue
-        if best is None or num > best[0]:
-            best = (num, prefix)
+        key = _release_sort_key(parts[1])
+        if key is None:
+            unparsed.append(d.name)
+            continue
+        if best is None or key > best[0]:
+            best = (key, prefix)
+    if unparsed and best is None:
+        raise AssertionError(
+            "no release identifier could be parsed from %s; the newest release "
+            "cannot be determined and these checks would skip while shipped "
+            "icons went unverified" % sorted(unparsed)[:6])
     return best[1] + "-" if best else None
 
 
