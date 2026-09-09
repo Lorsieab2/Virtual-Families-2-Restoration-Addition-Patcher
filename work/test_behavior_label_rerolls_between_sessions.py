@@ -214,6 +214,31 @@ def violates_label_contract(body):
     return bool(compares and against_a_group)
 
 
+def overshoot_offenders(source=None):
+    """Definitions whose body contains another function's definition header.
+
+    The scan itself, parameterised so a fixture can run IT rather than a
+    transcription of it. A body that terminates in the wrong place is worse
+    than one that never terminates: nothing reports it, and every rule is then
+    evaluated against text belonging to functions nobody is looking at.
+
+    NO `other != name` EXCLUSION. The generator defines
+    VF2MaybeCompleteDisciplineProps twice, so a body that absorbs the NEXT
+    definition of the same name carries an intruding header with that same
+    name -- and excluding it reports nothing in precisely the case this exists
+    for. A well-formed C function never contains another definition, its own
+    name included.
+    """
+    text = SOURCE if source is None else source
+    offenders = []
+    for name in sorted(set(re.findall(_HEADER_NAME, text, re.M))):
+        for body in find_function_bodies(name, text):
+            intruders = sorted(set(re.findall(_HEADER_NAME, body, re.M)))
+            if intruders:
+                offenders.append((name, len(body), intruders[:3]))
+    return offenders
+
+
 def sweep_violations(source=None):
     """Every VF2* function whose body violates the contract, plus unreadables.
 
@@ -419,7 +444,7 @@ static int VF2Split(CVillager &villager, int flag)
                         "doubled brace is eating the body" % name)
 
     def test_no_body_contains_another_function_definition(self):
-        """The strong form of the parse check.
+        """The strong form of the parse check, run through the real scan.
 
         "Unreadable" only catches bodies that never terminated. A body that
         terminates in the WRONG PLACE is worse, because nothing reports it and
@@ -427,35 +452,53 @@ static int VF2Split(CVillager &villager, int flag)
         what the one-line-definition bug did, producing a well-formed
         4190-character body containing fifteen other functions.
         """
-        header = (r'^(?:extern "C" )?[A-Za-z_][\w \*&:]*?'
-                  r'\b(VF2\w+)\([^;{]*\)\s*\n?\{')
-        offenders = []
-        names = sorted(set(re.findall(header, SOURCE, re.M)))
-        for name in names:
-            for body in find_function_bodies(name):
-                # NO `other != name` EXCLUSION. The generator defines
-                # VF2MaybeCompleteDisciplineProps twice, so if a body absorbs
-                # the NEXT definition of the same name, the intruding header
-                # carries that same name -- and excluding it reported no
-                # intruder in precisely the case this check exists for. The
-                # body-count assertion below cannot cover it either, because
-                # the header scan finds both opening headers no matter where
-                # the bodies ended. A well-formed C function never contains
-                # another function's definition, its own name included.
-                intruders = sorted(set(re.findall(header, body, re.M)))
-                if intruders:
-                    offenders.append((name, len(body), intruders[:3]))
+        offenders = overshoot_offenders()
         self.assertEqual(
             offenders, [],
             "these bodies run past their own closing brace and absorb other "
             "functions, so markers from unrelated code are attributed to them",
         )
         # The premise: this is only meaningful if it actually parsed the file.
+        names = sorted(set(re.findall(_HEADER_NAME, SOURCE, re.M)))
         self.assertGreater(
             len(names), 400,
             "only %d definitions were found; the header pattern has stopped "
             "matching most of the generator" % len(names),
         )
+
+    def test_a_body_absorbing_its_own_duplicate_is_an_offender(self):
+        """Pins the rule that has no `other != name` exclusion.
+
+        Verified unpinned twice before this worked. Restoring the exclusion
+        left the suite green, because the real generator has no body that
+        absorbs its own duplicate -- no real input separates the two rules. My
+        first fixture then asserted a LOCAL COPY of the predicate, which is the
+        same error one level down: it measured the copy, so restoring the
+        exclusion still changed nothing.
+
+        This calls overshoot_offenders itself, on a source whose one definition
+        runs into a second of the same name.
+        """
+        # The braces BALANCE. An unbalanced source produces no body at all,
+        # so the fixture would fail for failing to parse rather than for
+        # demonstrating the hazard. The extra nested block is what makes the
+        # first body legitimately run past the second definition.
+        source = (
+            "static int VF2Dup(CVillager &villager)\n{\n"
+            "    if (villager.x) {\n"
+            "        return 0;\n"
+            "\n"
+            "static int VF2Dup(CVillager &villager, int flag)\n{\n"
+            "    return 1;\n}\n"
+            "    }\n}\n")
+        offenders = overshoot_offenders(source)
+        self.assertTrue(
+            offenders,
+            "the overshoot scan did not flag a body that absorbed its own "
+            "duplicate; an `other != name` exclusion has come back")
+        self.assertEqual(
+            offenders[0][0], "VF2Dup",
+            "expected VF2Dup to be the offender, got %r" % (offenders[0],))
 
     def test_no_definition_in_the_generator_is_unreadable(self):
         """The whole-file health check.
