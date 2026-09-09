@@ -400,12 +400,15 @@ relabelled at the last moment.
   lifting weights, doing crunches, cardio exercises, resistance training,
   strength training, aerobic exercises, endurance exercises, stretching,
   high-intensity interval training, and weightlifting.
-  - **Until B185 a villager only ever showed one of the ten.** All ten were
-    built and emitted -- whether they reach a running game is the open
-    question below; the selection was stuck, so whichever variation a
-    villager rolled on their first visit was the one they showed for the rest
-    of the game. Reported in play as the gym "only showing one action out of
-    its full possibilities", and that report was accurate.
+  - **In builds before B185 a villager only ever showed one of the ten, and
+    B185 contains the intended fix for that.** Whether the defect actually
+    ends there is the open question below -- it has not been observed in
+    play, so this entry does not assert a boundary it cannot check. What was
+    observed: all ten were built and emitted, but the selection was stuck, so
+    whichever variation a villager rolled on their first visit was the one
+    they showed for the rest of the game. Reported in play as the gym "only
+    showing one action out of its full possibilities", and that report was
+    accurate.
   - The cause was not the label cache, which expires correctly. The villager's
     behaviour label persists in memory after a behaviour ENDS, and the code
     that decides "is this villager already doing X" read that leftover text --

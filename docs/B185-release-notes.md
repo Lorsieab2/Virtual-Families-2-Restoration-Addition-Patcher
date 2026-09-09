@@ -17,7 +17,7 @@ Reported from live play: the gym "only shows one action out of their full
 possibilities". That report was accurate, and the cause was not what it looked
 like.
 
-**All ten labels were already built and shipping.** The list in the README was
+**All ten labels were already built and emitted.** The list in the README was
 correct — lifting weights, doing crunches, cardio exercises, resistance
 training, strength training, aerobic exercises, endurance exercises,
 stretching, high-intensity interval training, weightlifting. What was broken
