@@ -106,9 +106,20 @@ independent confirmations would otherwise count one too many.
 
 ## What still needs a person
 
-- **Watch a villager use the Home Gym more than once.** The captions should
-  differ between visits and stay stable within one. That is the reported bug
-  and the only check that can close it.
+- **Watch a villager use the Home Gym several times and count how many
+  DIFFERENT captions appear.** Two distinct captions from one villager settles
+  it: before the fix a villager showed exactly one for the rest of the game, so
+  a second cannot happen by chance.
+
+  **A repeat is not a symptom.** Selection is a uniform
+  `GetRandom(count)` with no exclusion of the previous pick, so with ten
+  labels a given visit repeats the last one about one time in ten, and roughly
+  a third of correct five-visit playtests will contain at least one repeat.
+  Reporting "it showed the same one twice" would condemn a working build.
+- **The caption must stay stable WITHIN one visit.** That is the opposite
+  defect, and three separate versions of this fix produced it before it was
+  caught — a villager mid-workout whose caption flickers is a regression, not
+  variety.
 - The other label groups — napping, meals, sitting, careers, coffee — were
   frozen by the same defect and should now vary as well.
 - Praise a villager twice during the same action; the caption should survive
