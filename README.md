@@ -413,8 +413,9 @@ relabelled at the last moment.
     gym; it was simply most visible there because the gym has ten.
   - Fixed by asking the label cache, which is keyed to the specific behaviour
     instance, whether the label still belongs to the activity actually running.
-    A villager who is mid-workout keeps their caption rather than flickering;
-    a new session rolls again.
+    The intended effect is that a villager who is mid-workout keeps their
+    caption rather than flickering, and that a new session rolls again. That
+    is what the code does; see below for what has and has not been observed.
   - **What that claim rests on, and what it does not.** The fix is present in
     the emitted C++ and in the shipped executables: the gym's ten string ids
     are in the generated source, and all 32 B185 executables differ from the
