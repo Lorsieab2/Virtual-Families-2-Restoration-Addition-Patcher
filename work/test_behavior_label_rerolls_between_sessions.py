@@ -47,12 +47,18 @@ PERSISTENT_LABEL_OFFSET = "0x1BBA8"
 # The name-capturing form of the definition header. The sweep harvests with
 # this so that "definitions the parser can read" and "definitions the sweep
 # inspects" are the same set by construction.
+# QUALIFIERS BEFORE THE RETURN TYPE. `[\w \*&:]` cannot match the parentheses
+# in `__declspec(naked)`, so nine naked thunks were invisible to this pattern
+# while the parser was believed to see everything. Allowing a bounded prefix of
+# qualifier tokens covers naked, __cdecl, __fastcall and the extern forms
+# without turning the pattern into a catch-all.
+_QUALIFIER = r'(?:extern\s+"C"\s+|extern\s+|__declspec\([A-Za-z_]+\)\s*|static\s+)'
 _HEADER_NAME = (
-    r'^(?:extern "C" )?[A-Za-z_][\w \*&:]*?\b(VF2\w+)\([^;{]*\)\s*\n?\{'
+    r'^' + _QUALIFIER + r'{0,3}[A-Za-z_][\w \*&:]*?\b(VF2\w+)\([^;{]*\)\s*\n?\{'
 )
 
 _DEFINITION_HEADER = (
-    r'^(?:extern "C" )?[A-Za-z_][\w \*&:]*?\b%s\([^;{]*\)\s*\n?\{'
+    r'^' + _QUALIFIER + r'{0,3}[A-Za-z_][\w \*&:]*?\b%s\([^;{]*\)\s*\n?\{'
 )
 
 
@@ -499,6 +505,34 @@ static int VF2Split(CVillager &villager, int flag)
         self.assertEqual(
             offenders[0][0], "VF2Dup",
             "expected VF2Dup to be the offender, got %r" % (offenders[0],))
+
+    def test_an_independent_census_finds_no_extra_definitions(self):
+        """Discover definitions WITHOUT the parser's own pattern.
+
+        The sweep discovers and parses with the same regex, so any syntax the
+        regex does not model is invisible twice and "0 unreadable" is measured
+        against a population the pattern itself chose -- a check grading its
+        own homework. This counts with a deliberately cruder scan: any line
+        that opens a body for a VF2 name.
+
+        It has already caught the pattern narrowing twice: 185 definitions
+        missing a leading `static`, and nine `__declspec(naked)` thunks whose
+        parentheses a word-character class cannot match.
+        """
+        crude = set(re.findall(
+            r'^[A-Za-z_][^\n;]*?\b(VF2\w+)\s*\([^;]*\)[^;{]*\{', SOURCE, re.M))
+        parsed = set(re.findall(_HEADER_NAME, SOURCE, re.M))
+        missed = sorted(crude - parsed)
+        self.assertEqual(
+            missed, [],
+            "an independent scan finds definitions the parser's own pattern "
+            "does not, so every rule in this file silently exempts them: %s"
+            % missed[:8])
+        # The premise: a crude scan that finds nothing would make this vacuous.
+        self.assertGreater(
+            len(crude), 400,
+            "the independent census found only %d definitions; it has stopped "
+            "matching the generator and is no longer a check" % len(crude))
 
     def test_no_definition_in_the_generator_is_unreadable(self):
         """The whole-file health check.
