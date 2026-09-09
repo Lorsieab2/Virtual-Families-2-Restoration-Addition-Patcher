@@ -88,12 +88,22 @@ have produced the opposite regression — a caption changing *during* an action:
   release compared against itself differing 0/32. But **a full relink changes
   every hash whether or not any given feature is in it**, so this shows the
   executables were rebuilt and nothing narrower.
-- **The fix cannot be found by searching the executables at all**, because
-  symbol names do not survive linking. What can be said is that the generator
-  this build ran is byte-identical to the one on main and contains all four
-  label fixes, and that the binaries were rebuilt from it. The last link --
-  from that code to what a player actually sees -- is closed only by playing
-  the game.
+- **The executables can be examined, but no binary check has yet been found
+  that separates this build from the unfixed one.** Function names do not
+  survive linking, so the helpers cannot be looked up by name; the emitted
+  code is still locatable by decoding, and the villager label field appears
+  475 times as an immediate in the behaviour-patches build. That number is
+  identical in B184, which predates the fix — **a marker both builds share
+  proves nothing.** What can be said is that the generator this build ran is
+  byte-identical to the one on main and contains all four label fixes, and
+  that the binaries were rebuilt from it. The last link — from that code to
+  what a player actually sees — is closed only by playing the game.
+- **An earlier draft of these notes, and of the README, said the fix was
+  "confirmed present in the shipped executables".** That was wrong and is
+  recorded here rather than quietly removed: whole-executable hash changes
+  show a relink, not a feature, and the claim was written before anyone
+  checked whether a discriminating binary signature existed. It does not
+  appear to.
 - Zero Windows crash dumps for Virtual Families 2 since the relink, measured
   by timestamp rather than by eye. Absence of dumps is not proof of a fix.
 
