@@ -3,11 +3,13 @@
 **The patcher bundle.** Prerelease for testing.
 
 Marked prerelease for the usual reason and one specific one. Every automated
-gate passes and the fix below is confirmed present in the shipped executables —
-but **nobody has yet watched a villager use the Home Gym repeatedly and seen
-the captions vary.** It is verified in the emitted machine code, which is not
-the same thing. Where a claim rests on static evidence rather than live play,
-this document says so rather than rounding it up.
+gate passes and the fix below is present in the emitted C++ that this build
+compiled — but **that is not the same as knowing it is in the shipped
+executables, and it is not the same as having seen it work.** A relinked
+binary cannot be searched for it, because symbol names do not survive linking,
+and nobody has yet watched a villager use the Home Gym repeatedly and seen
+more than one caption. Where a claim rests on static evidence rather than live
+play, this document says so rather than rounding it up.
 
 ## The Home Gym showed one action out of ten
 
@@ -106,9 +108,18 @@ independent confirmations would otherwise count one too many.
 
 ## What still needs a person
 
-- **Watch a villager use the Home Gym more than once.** The captions should
-  differ between visits and stay stable within one. That is the reported bug
-  and the only check that can close it.
+- **Watch one villager use the Home Gym across several visits, and count how
+  many DIFFERENT captions you see.** Two or more distinct captions from the
+  same villager settles it: before this fix a villager showed exactly one
+  caption for the rest of the game, so a second one cannot happen by chance.
+  - **A repeat is not a symptom.** The choice is uniform random with no
+    exclusion of the previous pick, so with ten labels any given visit
+    repeats the last one about 1 time in 10, and across five visits there is
+    roughly a 1 in 3 chance of seeing at least one repeat. That is the fix
+    working, not failing.
+  - **The caption should stay stable WITHIN a single visit.** Changing
+    mid-workout is the opposite defect, and three separate versions of this
+    fix produced exactly that before it was caught.
 - The other label groups — napping, meals, sitting, careers, coffee — were
   frozen by the same defect and should now vary as well.
 - Praise a villager twice during the same action; the caption should survive
