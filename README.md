@@ -417,8 +417,8 @@ relabelled at the last moment.
     caption rather than flickering, and that a new session rolls again. That
     is what the code does; see below for what has and has not been observed.
   - **What that claim rests on, and what it does not.** The fix is present in
-    the emitted C++ and in the shipped executables: the gym's ten string ids
-    are in the generated source, and the generator the B185 build ran is
+    the emitted C++: the gym's ten string ids are in the generated source, and
+    the generator the B185 build ran is
     byte-identical to the one on main. All 32 B185 executables differ from
     the B184 build they were seeded from, which rules out the failure where a
     seeded build inherits the previous release's binary untouched -- but a

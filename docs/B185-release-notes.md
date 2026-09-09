@@ -3,11 +3,12 @@
 **The patcher bundle.** Prerelease for testing.
 
 Marked prerelease for the usual reason and one specific one. Every automated
-gate passes and the fix below is confirmed present in the shipped executables —
-but **nobody has yet watched a villager use the Home Gym repeatedly and seen
-the captions vary.** It is verified in the emitted machine code, which is not
-the same thing. Where a claim rests on static evidence rather than live play,
-this document says so rather than rounding it up.
+gate passes and the fix below is present in the generated C++ the build
+compiled — but **nobody has yet watched a villager use the Home Gym repeatedly
+and seen the captions vary.** The fix cannot be found in the executables at
+all, because symbol names do not survive linking, so the static evidence stops
+at the generator. Where a claim rests on that rather than live play, this
+document says so rather than rounding it up.
 
 ## The Home Gym showed one action out of ten
 
