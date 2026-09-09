@@ -677,11 +677,23 @@ class TheGuardSurvivesIntoTheEmittedArtifact(unittest.TestCase):
             # measured at 256211 chars against 257838 with it on. The handler
             # appears in both, so the assertions were not vacuous, but they
             # were describing a branch the release does not build.
-            old_flag = getattr(patcher, "ENABLE_BEHAVIOR_PATCHES", None)
+            # THE FLAG NAME IS A REQUIRED CONTRACT, NOT A DEFAULT. With
+            # `getattr(..., None)` and an `if old_flag is not None` guard, a
+            # rename leaves the flag UNSET and this emits the flag-OFF branch
+            # -- silently testing the branch the release does not build, which
+            # is the exact defect the comment above says this code exists to
+            # prevent. Measured: renaming ENABLE_BEHAVIOR_PATCHES across all
+            # 28 occurrences in the generator left this suite at 44 passed.
+            if not hasattr(patcher, "ENABLE_BEHAVIOR_PATCHES"):
+                return None, (
+                    "the generator no longer exposes ENABLE_BEHAVIOR_PATCHES, "
+                    "so this cannot force the flag-on branch and would emit "
+                    "the flag-off one instead; point it at the new switch "
+                    "rather than letting it degrade silently"), None
+            old_flag = patcher.ENABLE_BEHAVIOR_PATCHES
             try:
                 patcher.PATCHED = temp_root
-                if old_flag is not None:
-                    patcher.ENABLE_BEHAVIOR_PATCHES = True
+                patcher.ENABLE_BEHAVIOR_PATCHES = True
                 # An exception here is the regression, not a missing
                 # prerequisite, so it is deliberately NOT caught.
                 patcher.patch_spontaneous_behaviors({})
@@ -692,8 +704,7 @@ class TheGuardSurvivesIntoTheEmittedArtifact(unittest.TestCase):
                 patcher.patch_mobile_furniture_behavior_dispatch({})
             finally:
                 patcher.PATCHED = old_patched
-                if old_flag is not None:
-                    patcher.ENABLE_BEHAVIOR_PATCHES = old_flag
+                patcher.ENABLE_BEHAVIOR_PATCHES = old_flag
             sources = sorted(temp_root.glob("*.cpp"))
             if not sources:
                 # NOT a skip. Skipping is for a missing PREREQUISITE; an
@@ -730,6 +741,15 @@ class TheGuardSurvivesIntoTheEmittedArtifact(unittest.TestCase):
             # for an emission that produced nothing, so that path cannot be
             # mistaken for a missing prerequisite.
             reason = result[1] if result else "generation failed"
+            # A MISSING CONTRACT IS NOT A MISSING PREREQUISITE. An absent
+            # build input genuinely cannot be helped and skips; a generator
+            # that no longer exposes the switch this test flips is a harness
+            # fault, and skipping it would let the suite go green while
+            # emitting the flag-off branch the release does not build.
+            self.assertNotIn(
+                "ENABLE_BEHAVIOR_PATCHES", reason,
+                "the flag contract is gone, so this check cannot force the "
+                "shipped branch: %s" % reason)
             self.skipTest(
                 "cannot emit the C++ in this checkout: %s" % reason)
         text, count = result[0], result[1]
