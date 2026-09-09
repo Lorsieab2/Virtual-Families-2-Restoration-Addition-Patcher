@@ -8,12 +8,14 @@ at an empty chair. Receiving has no such requirement -- one adult, one free
 lounger -- so that half, and only that half, is offered autonomously.
 """
 import re
+import subprocess
 import pathlib
 import tempfile
 import shutil
 import unittest
 
 import patch_mobile_furniture_pack as patcher
+import test_generated_cpp_compiles as compiles
 
 
 def _source():
@@ -666,11 +668,20 @@ class TheGuardSurvivesIntoTheEmittedArtifact(unittest.TestCase):
                          "theMainScene.obj"):
                 src = patcher.SRC_OBJS / name
                 if not src.is_file():
-                    return None, "missing build input %s" % name
+                    return None, "missing build input %s" % name, None
                 shutil.copy2(src, temp_root / name)
-            old = patcher.PATCHED
+            old_patched = patcher.PATCHED
+            # THE FLAG-ON BRANCH IS WHAT SHIPS. ENABLE_BEHAVIOR_PATCHES is
+            # fixed at import time and is False under a normal test run, so
+            # emitting without forcing it produces the flag-OFF branch --
+            # measured at 256211 chars against 257838 with it on. The handler
+            # appears in both, so the assertions were not vacuous, but they
+            # were describing a branch the release does not build.
+            old_flag = getattr(patcher, "ENABLE_BEHAVIOR_PATCHES", None)
             try:
                 patcher.PATCHED = temp_root
+                if old_flag is not None:
+                    patcher.ENABLE_BEHAVIOR_PATCHES = True
                 # An exception here is the regression, not a missing
                 # prerequisite, so it is deliberately NOT caught.
                 patcher.patch_spontaneous_behaviors({})
@@ -680,12 +691,31 @@ class TheGuardSurvivesIntoTheEmittedArtifact(unittest.TestCase):
                 # patch_mobile_furniture_behavior_dispatch.
                 patcher.patch_mobile_furniture_behavior_dispatch({})
             finally:
-                patcher.PATCHED = old
+                patcher.PATCHED = old_patched
+                if old_flag is not None:
+                    patcher.ENABLE_BEHAVIOR_PATCHES = old_flag
             sources = sorted(temp_root.glob("*.cpp"))
             if not sources:
-                return None, "the generator emitted no .cpp at all"
-            return ("\n".join(p.read_text(encoding="utf-8", errors="replace")
-                              for p in sources), len(sources))
+                # NOT a skip. Skipping is for a missing PREREQUISITE; an
+                # emitter that runs and writes nothing is the regression, and
+                # returning a skip here left the suite green while the check
+                # that would have caught it never ran.
+                raise AssertionError(
+                    "the emitters ran but produced no .cpp at all")
+            # NOT copied into work/patched_mobile_furniture_pack_objs. Under
+            # `unittest discover` modules run in FILENAME order, so
+            # test_generated_cpp_compiles.py runs BEFORE this file -- the
+            # copies would arrive after it had already compiled stale sources
+            # or skipped, and a syntactically invalid emission would still
+            # leave the suite green. Writing into that directory is also how
+            # three unrelated stale .cpp files came to be sitting in it.
+            #
+            # The compile question is answered HERE instead, by
+            # test_the_emission_compiles below.
+            texts = [p.read_text(encoding="utf-8", errors="replace")
+                     for p in sources]
+            names = [p.name for p in sources]
+            return ("\n".join(texts), len(sources), list(zip(names, texts)))
 
     @staticmethod
     def _strip_comments(text):
@@ -696,10 +726,14 @@ class TheGuardSurvivesIntoTheEmittedArtifact(unittest.TestCase):
     def setUp(self):
         result = self._generate()
         if result is None or result[0] is None:
+            # Only a genuinely absent BUILD INPUT is a skip. _generate raises
+            # for an emission that produced nothing, so that path cannot be
+            # mistaken for a missing prerequisite.
             reason = result[1] if result else "generation failed"
             self.skipTest(
                 "cannot emit the C++ in this checkout: %s" % reason)
-        text, count = result
+        text, count = result[0], result[1]
+        self.units = result[2] if len(result) > 2 else []
         self.emitted = text
         # Every assertion below runs against comment-stripped code, so a
         # commented-out guard cannot satisfy a substring search.
@@ -735,6 +769,60 @@ class TheGuardSurvivesIntoTheEmittedArtifact(unittest.TestCase):
                 hasattr(patcher, name),
                 "%s no longer exists, so this class is no longer driving the "
                 "pass that emits the handler it checks" % name)
+
+    def test_the_emission_compiles(self):
+        """Hand the flag-on sources to the compiler, here.
+
+        Pattern-matching text cannot see syntactically invalid C++. Deferring
+        that to test_generated_cpp_compiles.py does not work: under
+        `unittest discover` modules run in FILENAME order, so that suite runs
+        BEFORE this one and would compile stale sources or skip. The residual
+        is closed where the emission happens.
+
+        Skips only when there is no toolchain, which is a genuinely absent
+        prerequisite rather than a defect.
+        """
+        # THE CONTRACT IS REQUIRED, NOT DEFAULTED. `getattr(..., ())` turns a
+        # renamed or privatised VCVARS_CANDIDATES into an empty search, which
+        # reports "no toolchain" and SKIPS. The shared compile suite could
+        # then be updated to keep finding the installed compiler while this
+        # check quietly stopped running, and an invalid flag-on emission would
+        # leave the run green. A missing toolchain is a genuine absent
+        # prerequisite; a missing contract is a defect in this file, and the
+        # two must not produce the same outcome.
+        candidates = getattr(compiles, "VCVARS_CANDIDATES", None)
+        self.assertIsNotNone(
+            candidates,
+            "work/test_generated_cpp_compiles.py no longer exposes "
+            "VCVARS_CANDIDATES, so this check cannot locate a toolchain and "
+            "would silently skip; point it at the new lookup instead of "
+            "letting it default to searching nothing")
+        self.assertTrue(
+            candidates,
+            "VCVARS_CANDIDATES is empty, so no path would ever be searched "
+            "and this check would skip on every machine")
+        vcvars = None
+        for candidate in candidates:
+            if pathlib.Path(candidate).is_file():
+                vcvars = candidate
+                break
+        if vcvars is None:
+            self.skipTest("no Visual Studio toolchain on this machine")
+        self.assertTrue(self.units, "no emitted units to compile")
+        with tempfile.TemporaryDirectory() as tmp:
+            work = pathlib.Path(tmp)
+            for name, text in self.units:
+                (work / name).write_text(text, encoding="ascii")
+            for name, _ in self.units:
+                with self.subTest(name):
+                    result = subprocess.run(
+                        '"%s" >nul 2>&1 && cl /c /nologo /EHsc "%s"'
+                        % (vcvars, work / name),
+                        cwd=work, shell=True, capture_output=True, text=True)
+                    self.assertEqual(
+                        result.returncode, 0,
+                        "the flag-on emission of %s does not compile:\n%s"
+                        % (name, (result.stdout or "")[-1500:]))
 
     def test_the_reservation_release_is_in_the_shipped_source(self):
         self.assertIn(
