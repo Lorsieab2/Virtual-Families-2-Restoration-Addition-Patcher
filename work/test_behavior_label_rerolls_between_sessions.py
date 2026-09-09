@@ -44,8 +44,21 @@ PERSISTENT_LABEL_OFFSET = "0x1BBA8"
 # The match for the first of those ran 4190 characters and swallowed fifteen
 # other functions, so markers from unrelated functions were combined into one
 # "body". That is the same hazard per-definition evaluation exists to prevent.
+# The name-capturing form of the definition header. The sweep harvests with
+# this so that "definitions the parser can read" and "definitions the sweep
+# inspects" are the same set by construction.
+# QUALIFIERS BEFORE THE RETURN TYPE. `[\w \*&:]` cannot match the parentheses
+# in `__declspec(naked)`, so nine naked thunks were invisible to this pattern
+# while the parser was believed to see everything. Allowing a bounded prefix of
+# qualifier tokens covers naked, __cdecl, __fastcall and the extern forms
+# without turning the pattern into a catch-all.
+_QUALIFIER = r'(?:extern\s+"C"\s+|extern\s+|__declspec\([A-Za-z_]+\)\s*|static\s+)'
+_HEADER_NAME = (
+    r'^' + _QUALIFIER + r'{0,3}[A-Za-z_][\w \*&:]*?\b(VF2\w+)\([^;{]*\)\s*\n?\{'
+)
+
 _DEFINITION_HEADER = (
-    r'^(?:extern "C" )?[A-Za-z_][\w \*&:]*?\b%s\([^;{]*\)\s*\n?\{'
+    r'^' + _QUALIFIER + r'{0,3}[A-Za-z_][\w \*&:]*?\b%s\([^;{]*\)\s*\n?\{'
 )
 
 
@@ -207,6 +220,31 @@ def violates_label_contract(body):
     return bool(compares and against_a_group)
 
 
+def overshoot_offenders(source=None):
+    """Definitions whose body contains another function's definition header.
+
+    The scan itself, parameterised so a fixture can run IT rather than a
+    transcription of it. A body that terminates in the wrong place is worse
+    than one that never terminates: nothing reports it, and every rule is then
+    evaluated against text belonging to functions nobody is looking at.
+
+    NO `other != name` EXCLUSION. The generator defines
+    VF2MaybeCompleteDisciplineProps twice, so a body that absorbs the NEXT
+    definition of the same name carries an intruding header with that same
+    name -- and excluding it reports nothing in precisely the case this exists
+    for. A well-formed C function never contains another definition, its own
+    name included.
+    """
+    text = SOURCE if source is None else source
+    offenders = []
+    for name in sorted(set(re.findall(_HEADER_NAME, text, re.M))):
+        for body in find_function_bodies(name, text):
+            intruders = sorted(set(re.findall(_HEADER_NAME, body, re.M)))
+            if intruders:
+                offenders.append((name, len(body), intruders[:3]))
+    return offenders
+
+
 def sweep_violations(source=None):
     """Every VF2* function whose body violates the contract, plus unreadables.
 
@@ -217,8 +255,12 @@ def sweep_violations(source=None):
     text = SOURCE if source is None else source
     readers = []
     unreadable = []
-    for name in sorted(set(
-            re.findall(r"^static [\w \*&]*?\b(VF2\w+)\(", text, re.M))):
+    # THE SAME PATTERN THE PARSER USES, not a narrower one. Harvesting with
+    # `^static ...` while parsing with the full header pattern left 185 of 507
+    # definitions exempt from every rule in this file -- every `extern "C"`,
+    # __cdecl and __fastcall definition, including three that read the
+    # persistent label. Readable by the parser, and never handed to it.
+    for name in sorted(set(re.findall(_HEADER_NAME, text, re.M))):
         bodies = find_function_bodies(name, text)
         if not bodies:
             # No definition is a forward declaration and genuinely nothing to
@@ -408,7 +450,7 @@ static int VF2Split(CVillager &villager, int flag)
                         "doubled brace is eating the body" % name)
 
     def test_no_body_contains_another_function_definition(self):
-        """The strong form of the parse check.
+        """The strong form of the parse check, run through the real scan.
 
         "Unreadable" only catches bodies that never terminated. A body that
         terminates in the WRONG PLACE is worse, because nothing reports it and
@@ -416,28 +458,81 @@ static int VF2Split(CVillager &villager, int flag)
         what the one-line-definition bug did, producing a well-formed
         4190-character body containing fifteen other functions.
         """
-        header = (r'^(?:extern "C" )?[A-Za-z_][\w \*&:]*?'
-                  r'\b(VF2\w+)\([^;{]*\)\s*\n?\{')
-        offenders = []
-        names = sorted(set(re.findall(header, SOURCE, re.M)))
-        for name in names:
-            for body in find_function_bodies(name):
-                intruders = sorted(set(
-                    other for other in re.findall(header, body, re.M)
-                    if other != name))
-                if intruders:
-                    offenders.append((name, len(body), intruders[:3]))
+        offenders = overshoot_offenders()
         self.assertEqual(
             offenders, [],
             "these bodies run past their own closing brace and absorb other "
             "functions, so markers from unrelated code are attributed to them",
         )
         # The premise: this is only meaningful if it actually parsed the file.
+        names = sorted(set(re.findall(_HEADER_NAME, SOURCE, re.M)))
         self.assertGreater(
             len(names), 400,
             "only %d definitions were found; the header pattern has stopped "
             "matching most of the generator" % len(names),
         )
+
+    def test_a_body_absorbing_its_own_duplicate_is_an_offender(self):
+        """Pins the rule that has no `other != name` exclusion.
+
+        Verified unpinned twice before this worked. Restoring the exclusion
+        left the suite green, because the real generator has no body that
+        absorbs its own duplicate -- no real input separates the two rules. My
+        first fixture then asserted a LOCAL COPY of the predicate, which is the
+        same error one level down: it measured the copy, so restoring the
+        exclusion still changed nothing.
+
+        This calls overshoot_offenders itself, on a source whose one definition
+        runs into a second of the same name.
+        """
+        # The braces BALANCE. An unbalanced source produces no body at all,
+        # so the fixture would fail for failing to parse rather than for
+        # demonstrating the hazard. The extra nested block is what makes the
+        # first body legitimately run past the second definition.
+        source = (
+            "static int VF2Dup(CVillager &villager)\n{\n"
+            "    if (villager.x) {\n"
+            "        return 0;\n"
+            "\n"
+            "static int VF2Dup(CVillager &villager, int flag)\n{\n"
+            "    return 1;\n}\n"
+            "    }\n}\n")
+        offenders = overshoot_offenders(source)
+        self.assertTrue(
+            offenders,
+            "the overshoot scan did not flag a body that absorbed its own "
+            "duplicate; an `other != name` exclusion has come back")
+        self.assertEqual(
+            offenders[0][0], "VF2Dup",
+            "expected VF2Dup to be the offender, got %r" % (offenders[0],))
+
+    def test_an_independent_census_finds_no_extra_definitions(self):
+        """Discover definitions WITHOUT the parser's own pattern.
+
+        The sweep discovers and parses with the same regex, so any syntax the
+        regex does not model is invisible twice and "0 unreadable" is measured
+        against a population the pattern itself chose -- a check grading its
+        own homework. This counts with a deliberately cruder scan: any line
+        that opens a body for a VF2 name.
+
+        It has already caught the pattern narrowing twice: 185 definitions
+        missing a leading `static`, and nine `__declspec(naked)` thunks whose
+        parentheses a word-character class cannot match.
+        """
+        crude = set(re.findall(
+            r'^[A-Za-z_][^\n;]*?\b(VF2\w+)\s*\([^;]*\)[^;{]*\{', SOURCE, re.M))
+        parsed = set(re.findall(_HEADER_NAME, SOURCE, re.M))
+        missed = sorted(crude - parsed)
+        self.assertEqual(
+            missed, [],
+            "an independent scan finds definitions the parser's own pattern "
+            "does not, so every rule in this file silently exempts them: %s"
+            % missed[:8])
+        # The premise: a crude scan that finds nothing would make this vacuous.
+        self.assertGreater(
+            len(crude), 400,
+            "the independent census found only %d definitions; it has stopped "
+            "matching the generator and is no longer a check" % len(crude))
 
     def test_no_definition_in_the_generator_is_unreadable(self):
         """The whole-file health check.
