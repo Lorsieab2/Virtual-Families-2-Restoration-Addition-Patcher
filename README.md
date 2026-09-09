@@ -401,7 +401,8 @@ relabelled at the last moment.
   strength training, aerobic exercises, endurance exercises, stretching,
   high-intensity interval training, and weightlifting.
   - **Until B185 a villager only ever showed one of the ten.** All ten were
-    built and shipping; the selection was stuck, so whichever variation a
+    built and emitted -- whether they reach a running game is the open
+    question below; the selection was stuck, so whichever variation a
     villager rolled on their first visit was the one they showed for the rest
     of the game. Reported in play as the gym "only showing one action out of
     its full possibilities", and that report was accurate.
@@ -424,8 +425,13 @@ relabelled at the last moment.
     seeded build inherits the previous release's binary untouched -- but a
     full relink changes every hash whether or not any particular feature is
     in it, so that shows the executables were REBUILT and nothing narrower.
-    **The fix cannot be found by searching the executables at all**, because
-    symbol names do not survive linking. **And nobody has yet watched a
+    The executables *can* be examined -- the villager label field appears
+    475 times as a 4-byte immediate in the behaviour-patches build, so the
+    emitted code is locatable by decoding even though the function names are
+    gone -- but **that signature does not discriminate**: B184 predates the
+    fix and carries the identical 475. A marker both builds share proves
+    nothing, so **no binary check separating this build from the unfixed one
+    has been found**. **And nobody has yet watched a
     villager use the gym repeatedly and seen the captions vary.** That is
     in-game QA and it has not been done, so this entry describes what was
     built and measured, not what has been observed in play.

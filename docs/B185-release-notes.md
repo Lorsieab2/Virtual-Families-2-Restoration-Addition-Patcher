@@ -5,9 +5,10 @@
 Marked prerelease for the usual reason and one specific one. Every automated
 gate passes and the fix below is present in the generated C++ the build
 compiled — but **nobody has yet watched a villager use the Home Gym repeatedly
-and seen the captions vary.** The fix cannot be found in the executables at
-all, because symbol names do not survive linking, so the static evidence stops
-at the generator. Where a claim rests on that rather than live play, this
+and seen the captions vary.** No binary check separating this build from the
+unfixed one has been found either -- the executables can be examined, but the
+one signature tried appears equally in B184, which predates the fix -- so the
+static evidence stops at the generator. Where a claim rests on that rather than live play, this
 document says so rather than rounding it up.
 
 ## The Home Gym showed one action out of ten
@@ -87,8 +88,13 @@ have produced the opposite regression — a caption changing *during* an action:
   release compared against itself differing 0/32. But **a full relink changes
   every hash whether or not any given feature is in it**, so this shows the
   executables were rebuilt and nothing narrower.
-- **The fix cannot be found by searching the executables at all**, because
-  symbol names do not survive linking. What can be said is that the generator
+- **The executables can be examined, but no binary check separating this
+  build from the unfixed one has been found.** Function names do not survive
+  linking, so the helpers cannot be looked up by name; the emitted code is
+  still locatable by decoding, and the villager label field appears 475 times
+  as a 4-byte immediate in the behaviour-patches build. That number is
+  identical in B184, which predates the fix -- **a marker both builds share
+  proves nothing.** What can be said is that the generator
   this build ran is byte-identical to the one on main and contains all four
   label fixes, and that the binaries were rebuilt from it. The last link --
   from that code to what a player actually sees -- is closed only by playing
@@ -104,6 +110,16 @@ the manifest to the same payload file, so "the two loungers agree" is true by
 construction and could never fail. The release gate's own output says the same
 thing: the spa loungers share a digest. Stated here because a reader counting
 independent confirmations would otherwise count one too many.
+
+### A claim these notes used to make, and why it was wrong
+
+An earlier draft of this file, and of the README, said the fix was "confirmed
+present in the shipped executables". **That was wrong**, and it is recorded
+here rather than quietly removed, because the wrong version supports a
+conclusion that does not follow and a reader seeing only the corrected text
+would not know which claim had been retracted. Whole-executable hash changes
+show a relink, not a feature. A byte-level signature was then tried as a
+substitute and also failed to discriminate, for the reason above.
 
 ## What still needs a person
 
