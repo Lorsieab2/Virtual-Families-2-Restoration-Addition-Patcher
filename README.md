@@ -438,6 +438,15 @@ relabelled at the last moment.
     villager use the gym repeatedly and seen the captions vary.** That is
     in-game QA and it has not been done, so this entry describes what was
     built and measured, not what has been observed in play.
+  - **Claims this entry used to make, recorded rather than quietly removed.**
+    Earlier drafts said the fix was "present in the emitted C++ *and in the
+    shipped executables*", and that the defect held only "until B185" — a
+    runtime boundary nobody had observed. **Both were wrong.** They are noted
+    here because a reader seeing only the corrected text cannot tell which
+    claim was withdrawn, and because each is a conclusion someone would
+    otherwise reach again from the same evidence: a whole-executable hash
+    change shows a relink rather than a feature, and a fix being built is not
+    the same as a defect being over.
 - The **Yoga Equipment** has its own action, labelled **Doing yoga**.
 - The **Ping-Pong Table** has its own action, labelled **Playing ping-pong**.
 
