@@ -415,6 +415,14 @@ relabelled at the last moment.
     instance, whether the label still belongs to the activity actually running.
     A villager who is mid-workout keeps their caption rather than flickering;
     a new session rolls again.
+  - **What that claim rests on, and what it does not.** The fix is present in
+    the emitted C++ and in the shipped executables: the gym's ten string ids
+    are in the generated source, and all 32 B185 executables differ from the
+    B184 build they were seeded from, which is what shows the relink carried
+    the new code in rather than inheriting the old. **Nobody has yet watched a
+    villager use the gym repeatedly and seen the captions vary.** That is
+    in-game QA and it has not been done, so this entry describes what was
+    built and measured, not what has been observed in play.
 - The **Yoga Equipment** has its own action, labelled **Doing yoga**.
 - The **Ping-Pong Table** has its own action, labelled **Playing ping-pong**.
 
