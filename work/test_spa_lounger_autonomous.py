@@ -662,6 +662,20 @@ class TheGuardSurvivesIntoTheEmittedArtifact(unittest.TestCase):
         naming one would fail on a harmless reorganisation while still passing
         if the code vanished from the file it moved out of.
         """
+        # THE CONTRACT IS CHECKED BEFORE THE BUILD INPUTS, and the ordering is
+        # the whole point. No .obj file is tracked, so a clean clone returns
+        # from the loop below on the first missing input -- and a guard placed
+        # after that loop is never reached there. Renaming
+        # ENABLE_BEHAVIOR_PATCHES would then still SKIP rather than fail,
+        # which is precisely the case this guard exists to pin. A missing
+        # switch is a harness fault wherever it happens; a missing .obj is a
+        # prerequisite only some checkouts have.
+        if not hasattr(patcher, "ENABLE_BEHAVIOR_PATCHES"):
+            return None, (
+                "the generator no longer exposes ENABLE_BEHAVIOR_PATCHES, so "
+                "this cannot force the flag-on branch and would emit the "
+                "flag-off one instead; point it at the new switch rather than "
+                "letting it degrade silently"), None
         with tempfile.TemporaryDirectory() as tmp:
             temp_root = pathlib.Path(tmp)
             for name in ("Villager.obj", "VillagerAI.obj", "Behavior.obj",
@@ -684,12 +698,8 @@ class TheGuardSurvivesIntoTheEmittedArtifact(unittest.TestCase):
             # is the exact defect the comment above says this code exists to
             # prevent. Measured: renaming ENABLE_BEHAVIOR_PATCHES across all
             # 28 occurrences in the generator left this suite at 44 passed.
-            if not hasattr(patcher, "ENABLE_BEHAVIOR_PATCHES"):
-                return None, (
-                    "the generator no longer exposes ENABLE_BEHAVIOR_PATCHES, "
-                    "so this cannot force the flag-on branch and would emit "
-                    "the flag-off one instead; point it at the new switch "
-                    "rather than letting it degrade silently"), None
+            # Checked at the top of this helper, before the build-input loop,
+            # so a clean clone cannot return past it.
             old_flag = patcher.ENABLE_BEHAVIOR_PATCHES
             try:
                 patcher.PATCHED = temp_root
