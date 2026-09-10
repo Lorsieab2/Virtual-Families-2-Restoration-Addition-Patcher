@@ -985,17 +985,32 @@ class TheGlobalGuardedReadIsAlwaysPrimedFirst(unittest.TestCase):
     """
 
     GUARDED_READ = "VF2GetCachedBehaviorLabel("
-    PRIMERS = (
-        "gVF2BehaviorLabelBeforeVillager = &villager;",
-        "VF2RunNativeBehaviorAndChangedLabel(",
+
+    # THE PRIMER MUST NAME THE SAME VILLAGER THE READ USES. Matching the bare
+    # call was wrong: a body that primes for `other` and then reads for
+    # `villager` left the global pointing at `other` and still passed, which
+    # is precisely the cross-villager miss this class exists to forbid. Both
+    # forms capture the identifier they prime so it can be compared.
+    PRIMER_PATTERNS = (
+        r"gVF2BehaviorLabelBeforeVillager\s*=\s*&(\w+)\s*;",
+        r"VF2RunNativeBehaviorAndChangedLabel\(\s*(\w+)",
     )
+    READ_PATTERN = r"VF2GetCachedBehaviorLabel\(\s*(\w+)"
 
     def _callers(self):
-        callers = {}
+        """Every (name, body) pair that reads through the guarded helper.
+
+        A LIST, NOT A DICT KEYED BY NAME. The generator permits a name with
+        two definitions, so `callers[name] = body` silently discarded the
+        first: an unprimed definition would vanish behind a correctly primed
+        later one and this class would report green over the very defect it
+        is here to catch.
+        """
+        callers = []
         for name in sorted(set(re.findall(_HEADER_NAME, SOURCE, re.M))):
-            for body in find_function_bodies(name):
+            for index, body in enumerate(find_function_bodies(name)):
                 if self.GUARDED_READ in body:
-                    callers[name] = body
+                    callers.append((name, index, body))
         return callers
 
     def test_the_guarded_read_still_has_callers_to_check(self):
@@ -1010,24 +1025,35 @@ class TheGlobalGuardedReadIsAlwaysPrimedFirst(unittest.TestCase):
             "leaving it green over nothing" % self.GUARDED_READ)
 
     def test_every_guarded_read_is_primed_before_it_runs(self):
-        for name, body in sorted(self._callers().items()):
-            with self.subTest(function=name):
+        for name, index, body in self._callers():
+            with self.subTest(function=name, definition=index):
                 code = "\n".join(
                     line for line in body.split("\n")
                     if not line.strip().startswith("//"))
-                read_at = code.index(self.GUARDED_READ)
-                primed = [code.index(p) for p in self.PRIMERS if p in code]
+                read = re.search(self.READ_PATTERN, code)
+                self.assertIsNotNone(
+                    read,
+                    "%s contains %s but its villager argument could not be "
+                    "read, so this check cannot verify the priming"
+                    % (name, self.GUARDED_READ))
+                subject = read.group(1)
+
+                # Only a primer naming the SAME villager counts, and only one
+                # that runs before the read.
+                primed_at = []
+                for pattern in self.PRIMER_PATTERNS:
+                    for match in re.finditer(pattern, code):
+                        if match.group(1) == subject and match.start() < read.start():
+                            primed_at.append(match.start())
+
                 self.assertTrue(
-                    primed,
-                    "%s reads the persistent label through the global-guarded "
-                    "helper but never primes gVF2BehaviorLabelBeforeVillager, "
-                    "so the gate compares against whichever villager ran last"
-                    % name)
-                self.assertLess(
-                    min(primed), read_at,
-                    "%s primes the global AFTER the guarded read, so the read "
-                    "sees the previous villager -- that is the original "
-                    "re-roll defect" % name)
+                    primed_at,
+                    "%s reads the persistent label for `%s` through the "
+                    "global-guarded helper, but nothing primes "
+                    "gVF2BehaviorLabelBeforeVillager for `%s` beforehand -- so "
+                    "the gate compares against whichever villager ran last, "
+                    "which is the original re-roll defect"
+                    % (name, subject, subject))
 
 
 if __name__ == "__main__":
