@@ -15312,7 +15312,17 @@ class ForcePregnancyRefusalSkipTests(unittest.TestCase):
             function = obj.symbol("?StartEmbrace@CVillager@@IAEXXZ")
             section = obj.section(function.section)
             data = bytes(obj.buf[section.raw_ptr:section.raw_ptr + section.raw_size])
-            for site in manifest["ForcePregnancySkipsRefusals"]["sites"]:
+            sites = manifest["ForcePregnancySkipsRefusals"]["sites"]
+            # THE COUNT BEFORE THE LOOP. Every assertion here lives inside the
+            # loop, so a patch that installs NOTHING emits zero sites and this
+            # passes green. Measured by emptying the production site loop: this
+            # test and its sibling below both passed vacuously.
+            self.assertEqual(
+                len(sites), len(self.ONLY_SKIPPABLE),
+                "the patch emitted %d sites, expected %d -- a patch that "
+                "installs nothing leaves every assertion below unreached"
+                % (len(sites), len(self.ONLY_SKIPPABLE)))
+            for site in sites:
                 offset = int(site["offset"], 16)
                 cave = int(site["trampoline"], 16)
                 resume = struct.unpack_from("<i", data, cave + 14)[0] + cave + 18
@@ -15325,7 +15335,14 @@ class ForcePregnancyRefusalSkipTests(unittest.TestCase):
             function = obj.symbol("?StartEmbrace@CVillager@@IAEXXZ")
             section = obj.section(function.section)
             data = bytes(obj.buf[section.raw_ptr:section.raw_ptr + section.raw_size])
-            for site in manifest["ForcePregnancySkipsRefusals"]["sites"]:
+            sites = manifest["ForcePregnancySkipsRefusals"]["sites"]
+            # Same reason as the sibling above: every assertion is inside the
+            # loop, so zero sites is a silent pass.
+            self.assertEqual(
+                len(sites), len(self.ONLY_SKIPPABLE),
+                "the patch emitted %d sites, expected %d"
+                % (len(sites), len(self.ONLY_SKIPPABLE)))
+            for site in sites:
                 cave = int(site["trampoline"], 16)
                 # ...mov esi, <StringId> reproduced, then the jump to the tail.
                 self.assertEqual(data[cave + 18], 0xBE)
