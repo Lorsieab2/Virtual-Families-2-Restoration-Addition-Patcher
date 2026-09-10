@@ -3469,11 +3469,34 @@ class ShippedRunnerPythonFloorTests(unittest.TestCase):
     }
 
     def _sources(self):
+        """The runner scripts, and a hard assertion that we found them all.
+
+        THE COUNT IS THE POINT. Both consumers below are `for path in
+        self._sources()` loops with no non-emptiness check, so a rename, a
+        move, or drift in RUNNERS makes this yield NOTHING and both tests pass
+        green over zero files. Measured by building a tree with all four
+        runners renamed and each carrying two real forbidden constructs:
+        `run=2 failures=0` -- a clean report over four defective files.
+
+        Two trees times two runners is four, and every one is tracked, so a
+        shortfall is a real problem rather than a checkout that lacks an
+        optional input.
+        """
+        found = []
         for tree in ("src", "work"):
             for name in self.RUNNERS:
                 path = ROOT / tree / name
                 if path.is_file():
-                    yield path
+                    found.append(path)
+        expected = 2 * len(self.RUNNERS)
+        self.assertEqual(
+            len(found), expected,
+            "expected %d runner scripts (src/ and work/ x %s) but found %d: "
+            "%s -- a renamed or moved runner would otherwise leave these "
+            "checks iterating nothing and passing"
+            % (expected, list(self.RUNNERS), len(found),
+               [str(p) for p in found]))
+        return found
 
     def test_no_construct_newer_than_the_documented_minimum(self):
         import re
