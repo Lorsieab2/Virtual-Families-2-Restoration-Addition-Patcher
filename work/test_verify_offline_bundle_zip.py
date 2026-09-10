@@ -240,7 +240,13 @@ class OfflineBundleZipVerifierTests(unittest.TestCase):
     def test_identities_authenticate_variants_against_an_independent_source(self):
         archive = newest_release_zip()
         identities = newest_release_identities()
-        if archive is None or not identities.is_file():
+        # `identities is None` FIRST. newest_release_identities() returns None
+        # on three separate paths -- no archive, no version match in the name,
+        # no point suffix -- and calling .is_file() on that raises
+        # AttributeError instead of skipping, which is an ERROR where the
+        # surrounding code intends an absent prerequisite. The equivalent
+        # guard further down this file already checks it; this one did not.
+        if archive is None or identities is None or not identities.is_file():
             self.skipTest("no release ZIP or identities file present")
 
         # Without identities the executables are only self-consistent, and the
