@@ -450,8 +450,23 @@ class TheClaimRuleProducesTheApprovedNumber(unittest.TestCase):
             self.skipTest("mobile donor not present in this checkout")
         raw = _cells_of(mobile.read_bytes())
         safe = _cells_of(DONOR.read_bytes())
-        if len(raw) != len(safe):
-            self.skipTest("donor grids disagree in this checkout")
+        # A SIZE MISMATCH IS THE FAILURE, NOT A REASON TO SKIP.
+        #
+        # borrowed_fmap_bytes returns None when the two grids disagree, and
+        # copy_donor_fmap answers that by copying the sparse desktop-safe map
+        # verbatim -- which is the fallback regression this class exists to
+        # catch. Skipping here lets exactly that through: measured by
+        # shrinking the mobile donor by one row, the suite reported
+        # "23 passed, 3 skipped" with the widening unverified.
+        #
+        # test_shipped_lounger_fmaps.py already treats this condition as a
+        # failure and says so in its own comment. Same defect, fixed in one
+        # file and never swept to the sibling.
+        self.assertEqual(
+            len(raw), len(safe),
+            "the mobile donor and the desktop-safe map disagree about grid "
+            "size, which is the condition that makes the build fall back to "
+            "the sparse map instead of merging the donor's geometry")
         return [s if s and s != d else d for d, s in zip(raw, safe)], safe
 
     def test_the_drop_target_reaches_the_donor_ring(self):
