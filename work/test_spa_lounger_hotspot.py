@@ -223,11 +223,17 @@ class TheProductionWidenerActuallyWidens(unittest.TestCase):
             path = next((d / target for d in search if (d / target).is_file()),
                         None)
             with self.subTest(target=target):
-                if path is None:
-                    self.skipTest(
-                        "%s was not written by sync_behavior_assets and is "
-                        "not staged; looked in %s"
-                        % (target, ", ".join(str(d) for d in search[:3])))
+                # NOT A SKIP. Once the staged fallback was removed, `search`
+                # holds only the directory sync_behavior_assets writes into --
+                # so a missing file means THE CALL ABOVE DID NOT WRITE IT,
+                # which is the regression this class exists to catch, not an
+                # absent prerequisite. setUp has already established the
+                # generator imports and the donor is present, so there is no
+                # legitimate reason for the map to be absent here.
+                self.assertIsNotNone(
+                    path,
+                    "sync_behavior_assets did not write %s; looked in %s"
+                    % (target, ", ".join(str(d) for d in search)))
                 shipped = _object_cell_count(path.read_bytes())
                 self.assertGreater(
                     shipped, donor_cells,
