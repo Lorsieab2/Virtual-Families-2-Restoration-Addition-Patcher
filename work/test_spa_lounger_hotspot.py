@@ -209,8 +209,16 @@ class TheProductionWidenerActuallyWidens(unittest.TestCase):
         #
         # Measured when that was found: donor 11 object cells, and both
         # written maps 33.
+        # ONLY WHERE sync_behavior_assets WRITES. An earlier version also
+        # searched FMAP_SOURCE_DIRS as a fallback, which defeats the point of
+        # this class: in a checkout that stages these maps, a regression that
+        # stops the widening from being WRITTEN would find the staged copy
+        # instead and report 33 from a file the generator never touched.
+        # Measured: with `for target in ()` injected into the widener, this
+        # suite gives 6 failed here -- but that is only because no entry in
+        # FMAP_SOURCE_DIRS holds the two spa maps today. The fallback is dead
+        # code that becomes a silent mask the moment anyone stages them.
         search = [pathlib.Path(gen.OUT) / "Assets", pathlib.Path(gen.OUT)]
-        search += [pathlib.Path(d) for d in getattr(gen, "FMAP_SOURCE_DIRS", ())]
         for target in gen.SPA_LOUNGER_WIDENED_FMAPS:
             path = next((d / target for d in search if (d / target).is_file()),
                         None)
