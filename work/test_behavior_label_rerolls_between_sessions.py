@@ -961,5 +961,74 @@ class TheSweepSeesEveryEmittedDefinition(unittest.TestCase):
             "%s" % (len(invisible), invisible[:8]))
 
 
+class TheGlobalGuardedReadIsAlwaysPrimedFirst(unittest.TestCase):
+    """Two callers still read the cache through the global-guarded helper.
+
+    Every applier was moved onto VF2GetVillagerCachedBehaviorLabel, which
+    anchors on the villager it is handed. Two callers were deliberately left
+    on the older VF2GetCachedBehaviorLabel, and both are correct today -- but
+    for DIFFERENT reasons, and neither reason was enforced by anything:
+
+      VF2RandomRadioBehavior  assigns gVF2BehaviorLabelBeforeVillager itself,
+                              on the line before the read
+      VF2TrampolineLabel      calls VF2RunNativeBehaviorAndChangedLabel first,
+                              which primes that global as a side effect
+
+    So their correctness rests on statement ORDER inside those two bodies. An
+    edit that hoists the read above the priming call, or drops the priming
+    call, reintroduces the original defect -- the gate matching a leftover
+    label from whichever villager ran last -- and every other test in this
+    file would still pass, because they all check the anchored helper instead.
+
+    Adjudicating an old review thread surfaced this: the ordering had been
+    verified by hand and found sound, and then nothing recorded it.
+    """
+
+    GUARDED_READ = "VF2GetCachedBehaviorLabel("
+    PRIMERS = (
+        "gVF2BehaviorLabelBeforeVillager = &villager;",
+        "VF2RunNativeBehaviorAndChangedLabel(",
+    )
+
+    def _callers(self):
+        callers = {}
+        for name in sorted(set(re.findall(_HEADER_NAME, SOURCE, re.M))):
+            for body in find_function_bodies(name):
+                if self.GUARDED_READ in body:
+                    callers[name] = body
+        return callers
+
+    def test_the_guarded_read_still_has_callers_to_check(self):
+        # Guards the premise. If both callers are ever migrated to the
+        # anchored helper, this class protects nothing and should be deleted
+        # -- but it must SAY so rather than passing over an empty set.
+        callers = self._callers()
+        self.assertTrue(
+            callers,
+            "nothing calls %s any more; if every caller moved to "
+            "VF2GetVillagerCachedBehaviorLabel, delete this class rather than "
+            "leaving it green over nothing" % self.GUARDED_READ)
+
+    def test_every_guarded_read_is_primed_before_it_runs(self):
+        for name, body in sorted(self._callers().items()):
+            with self.subTest(function=name):
+                code = "\n".join(
+                    line for line in body.split("\n")
+                    if not line.strip().startswith("//"))
+                read_at = code.index(self.GUARDED_READ)
+                primed = [code.index(p) for p in self.PRIMERS if p in code]
+                self.assertTrue(
+                    primed,
+                    "%s reads the persistent label through the global-guarded "
+                    "helper but never primes gVF2BehaviorLabelBeforeVillager, "
+                    "so the gate compares against whichever villager ran last"
+                    % name)
+                self.assertLess(
+                    min(primed), read_at,
+                    "%s primes the global AFTER the guarded read, so the read "
+                    "sees the previous villager -- that is the original "
+                    "re-roll defect" % name)
+
+
 if __name__ == "__main__":
     unittest.main()
