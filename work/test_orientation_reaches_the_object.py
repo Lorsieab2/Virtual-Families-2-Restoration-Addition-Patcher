@@ -15,18 +15,43 @@ the comparison compiles to a read at +4 from the struct pointer, not +0x14.
 """
 
 import pathlib
+import sys
 import re
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 WORK = ROOT / "work"
+sys.path.insert(0, str(WORK))
+import patch_mobile_furniture_pack as patcher
 OBJS = WORK / "patched_mobile_furniture_pack_objs"
 
 CHAIR = 'info.orientation == 1 ? "Sit In Chair NW" : "Sit In Chair NE"'
 
 
 def emitted_sources():
-    return sorted(WORK.glob("vf2_*.cpp"))
+    """Every emitted translation unit, wherever the generator put it.
+
+    NOT just WORK. The generator writes into its own output directory --
+    work/patched_mobile_furniture_pack_objs -- and work/ itself holds only a
+    stray vf2_fmod_thunks.cpp. Measured when that was found: 1 .cpp in work/,
+    10 in the output directory, including both units this class needs
+    (vf2_mobile_furniture_behaviors.cpp and vf2_spontaneous_behaviors.cpp).
+
+    So every check here skipped on every run, in every checkout, even with a
+    complete build present. Same shape as the hairstyle suite pinned to B180:
+    a check looking where the artifact is not, reporting the absence as a
+    clean skip.
+
+    work/ stays in the search because a stray unit there is the reason the
+    "furniture or behavior" filter exists -- see setUp.
+    """
+    seen = {}
+    for directory in (getattr(patcher, "PATCHED", None), WORK):
+        if directory is None:
+            continue
+        for p in sorted(pathlib.Path(directory).glob("vf2_*.cpp")):
+            seen.setdefault(p.name, p)
+    return [seen[name] for name in sorted(seen)]
 
 
 class TheEmittedSourceCarriesIt(unittest.TestCase):
