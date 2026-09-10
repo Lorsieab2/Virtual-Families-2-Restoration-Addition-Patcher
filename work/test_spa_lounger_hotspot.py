@@ -198,13 +198,28 @@ class TheProductionWidenerActuallyWidens(unittest.TestCase):
         gen.sync_behavior_assets(manifest)
 
         donor_cells = _object_cell_count(DONOR.read_bytes())
-        assets = (ROOT / "patcher_assets" / "optional_patches"
-                  / "mobile_furniture_behaviors" / "pc_fmaps")
+        # WHERE sync_behavior_assets WROTE THEM, not where it read from.
+        #
+        # This looked only in pc_fmaps -- an INPUT directory that has never
+        # held these two files. It holds 34 fmaps including the donor
+        # Chaise_brown, and neither spa lounger. So both subtests skipped on
+        # every run while the freshly written maps sat in gen.OUT/Assets
+        # unexamined, and the one assertion in this file that reads the
+        # WRITTEN BYTES rather than the generator's intent never ran.
+        #
+        # Measured when that was found: donor 11 object cells, and both
+        # written maps 33.
+        search = [pathlib.Path(gen.OUT) / "Assets", pathlib.Path(gen.OUT)]
+        search += [pathlib.Path(d) for d in getattr(gen, "FMAP_SOURCE_DIRS", ())]
         for target in gen.SPA_LOUNGER_WIDENED_FMAPS:
-            path = assets / target
+            path = next((d / target for d in search if (d / target).is_file()),
+                        None)
             with self.subTest(target=target):
-                if not path.is_file():
-                    self.skipTest("%s is not staged in this checkout" % target)
+                if path is None:
+                    self.skipTest(
+                        "%s was not written by sync_behavior_assets and is "
+                        "not staged; looked in %s"
+                        % (target, ", ".join(str(d) for d in search[:3])))
                 shipped = _object_cell_count(path.read_bytes())
                 self.assertGreater(
                     shipped, donor_cells,
