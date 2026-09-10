@@ -961,5 +961,100 @@ class TheSweepSeesEveryEmittedDefinition(unittest.TestCase):
             "%s" % (len(invisible), invisible[:8]))
 
 
+class TheGlobalGuardedReadIsAlwaysPrimedFirst(unittest.TestCase):
+    """Two callers still read the cache through the global-guarded helper.
+
+    Every applier was moved onto VF2GetVillagerCachedBehaviorLabel, which
+    anchors on the villager it is handed. Two callers were deliberately left
+    on the older VF2GetCachedBehaviorLabel, and both are correct today -- but
+    for DIFFERENT reasons, and neither reason was enforced by anything:
+
+      VF2RandomRadioBehavior  assigns gVF2BehaviorLabelBeforeVillager itself,
+                              on the line before the read
+      VF2TrampolineLabel      calls VF2RunNativeBehaviorAndChangedLabel first,
+                              which primes that global as a side effect
+
+    So their correctness rests on statement ORDER inside those two bodies. An
+    edit that hoists the read above the priming call, or drops the priming
+    call, reintroduces the original defect -- the gate matching a leftover
+    label from whichever villager ran last -- and every other test in this
+    file would still pass, because they all check the anchored helper instead.
+
+    Adjudicating an old review thread surfaced this: the ordering had been
+    verified by hand and found sound, and then nothing recorded it.
+    """
+
+    GUARDED_READ = "VF2GetCachedBehaviorLabel("
+
+    # THE PRIMER MUST NAME THE SAME VILLAGER THE READ USES. Matching the bare
+    # call was wrong: a body that primes for `other` and then reads for
+    # `villager` left the global pointing at `other` and still passed, which
+    # is precisely the cross-villager miss this class exists to forbid. Both
+    # forms capture the identifier they prime so it can be compared.
+    PRIMER_PATTERNS = (
+        r"gVF2BehaviorLabelBeforeVillager\s*=\s*&(\w+)\s*;",
+        r"VF2RunNativeBehaviorAndChangedLabel\(\s*(\w+)",
+    )
+    READ_PATTERN = r"VF2GetCachedBehaviorLabel\(\s*(\w+)"
+
+    def _callers(self):
+        """Every (name, body) pair that reads through the guarded helper.
+
+        A LIST, NOT A DICT KEYED BY NAME. The generator permits a name with
+        two definitions, so `callers[name] = body` silently discarded the
+        first: an unprimed definition would vanish behind a correctly primed
+        later one and this class would report green over the very defect it
+        is here to catch.
+        """
+        callers = []
+        for name in sorted(set(re.findall(_HEADER_NAME, SOURCE, re.M))):
+            for index, body in enumerate(find_function_bodies(name)):
+                if self.GUARDED_READ in body:
+                    callers.append((name, index, body))
+        return callers
+
+    def test_the_guarded_read_still_has_callers_to_check(self):
+        # Guards the premise. If both callers are ever migrated to the
+        # anchored helper, this class protects nothing and should be deleted
+        # -- but it must SAY so rather than passing over an empty set.
+        callers = self._callers()
+        self.assertTrue(
+            callers,
+            "nothing calls %s any more; if every caller moved to "
+            "VF2GetVillagerCachedBehaviorLabel, delete this class rather than "
+            "leaving it green over nothing" % self.GUARDED_READ)
+
+    def test_every_guarded_read_is_primed_before_it_runs(self):
+        for name, index, body in self._callers():
+            with self.subTest(function=name, definition=index):
+                code = "\n".join(
+                    line for line in body.split("\n")
+                    if not line.strip().startswith("//"))
+                read = re.search(self.READ_PATTERN, code)
+                self.assertIsNotNone(
+                    read,
+                    "%s contains %s but its villager argument could not be "
+                    "read, so this check cannot verify the priming"
+                    % (name, self.GUARDED_READ))
+                subject = read.group(1)
+
+                # Only a primer naming the SAME villager counts, and only one
+                # that runs before the read.
+                primed_at = []
+                for pattern in self.PRIMER_PATTERNS:
+                    for match in re.finditer(pattern, code):
+                        if match.group(1) == subject and match.start() < read.start():
+                            primed_at.append(match.start())
+
+                self.assertTrue(
+                    primed_at,
+                    "%s reads the persistent label for `%s` through the "
+                    "global-guarded helper, but nothing primes "
+                    "gVF2BehaviorLabelBeforeVillager for `%s` beforehand -- so "
+                    "the gate compares against whichever villager ran last, "
+                    "which is the original re-roll defect"
+                    % (name, subject, subject))
+
+
 if __name__ == "__main__":
     unittest.main()
