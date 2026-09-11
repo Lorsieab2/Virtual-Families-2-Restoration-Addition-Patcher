@@ -892,5 +892,62 @@ class TheGuardSurvivesIntoTheEmittedArtifact(unittest.TestCase):
             "emitted C++")
 
 
+class TheTreatmentPoseFollowsTheLounger(unittest.TestCase):
+    """A villager must recline ALONG the lounger, not lie flat across it.
+
+    Reported from live play with a screenshot: the villager lies across the
+    spa lounger with feet and head hanging off the sides. Cause: the NE branch
+    of VF2PlanSpaTreatment used PlanToLieDown, the flat pose the base game
+    uses for a bed or the ground. That is correct for a stock chaise -- and is
+    still used there -- but the spa lounger's art is a reclined seat, so a flat
+    body does not follow it.
+
+    eBodyPositionChaise is the reclined pose and carries no facing; the
+    SleepNW / SleepNE animation is what distinguishes the two orientations.
+    """
+
+    def _treatment_body(self):
+        # Bounded by the NEXT top-level definition, not by the first "\n}".
+        # A non-greedy match to "\n}" runs past this function's inner braces
+        # and swallows the one after it -- which made an earlier version of
+        # this test read a stock chaise helper's PlanToLieDown and report a
+        # defect that was not there.
+        src = _source()
+        start = src.find("static void VF2PlanSpaTreatment(")
+        self.assertNotEqual(start, -1, "VF2PlanSpaTreatment is gone")
+        end = src.find("\nstatic ", start + 10)
+        self.assertNotEqual(end, -1, "no definition follows VF2PlanSpaTreatment")
+        # COMMENTS STRIPPED. The comments here name PlanToLieDown and
+        # eBodyPositionChaise while explaining why the pose changed, so a
+        # substring search over the raw text counts prose as code and reports
+        # a defect that is not in the emitted C++.
+        return "\n".join(
+            line for line in src[start:end].splitlines()
+            if not line.lstrip().startswith("//"))
+
+    def test_the_treatment_never_uses_the_flat_lying_pose(self):
+        body = self._treatment_body()
+        self.assertNotIn(
+            "PlanToLieDown", body,
+            "the spa treatment plans a flat lie-down; that is the pose that "
+            "put the villager across the lounger instead of along it")
+
+    def test_both_orientations_use_the_reclined_pose(self):
+        body = self._treatment_body()
+        self.assertEqual(
+            body.count("eBodyPositionChaise"), 1,
+            "the reclined pose should be planned once, before the "
+            "orientation-specific animation, so both facings get it")
+
+    def test_the_orientation_still_picks_the_animation(self):
+        # The fix must not flatten the two facings into one.
+        body = self._treatment_body()
+        self.assertIn("SleepNW", body)
+        self.assertIn("SleepNE", body)
+        self.assertIn("info.orientation == 1", body,
+                      "the orientation no longer selects between the two "
+                      "sleep animations, so one facing will look wrong")
+
+
 if __name__ == "__main__":
     unittest.main()

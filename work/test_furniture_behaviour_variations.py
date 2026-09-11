@@ -207,5 +207,64 @@ class GeneralBehavioursStayUngated(unittest.TestCase):
                     "would gate a base-game behaviour on owning an item" % bare)
 
 
+class TheGymLabelVariesPerVisit(unittest.TestCase):
+    """The ten workout variations must not collapse to one per villager.
+
+    Reported from live play: adults always "Doing crunches", kids always
+    "Doing endurance exercises". VF2ApplyVenueLabel rolls once and every later
+    visit takes its remembered-or-cached branch, so a villager keeps the first
+    label they ever rolled for the life of the save.
+
+    These assertions are written so that reverting the fix FAILS them. An
+    earlier version of this suite passed happily with the gym wired back to
+    the sticky applier, which is what let the defect ship.
+    """
+
+    def varied_dispatcher(self):
+        m = re.search(
+            r"static void VF2RunOwnFurnitureActionVaried\(\s*\n(.*?)\n\}",
+            SOURCE, re.S)
+        self.assertIsNotNone(m, "VF2RunOwnFurnitureActionVaried is gone")
+        return m.group(1)
+
+    def test_the_gym_dispatcher_asks_for_a_varying_label(self):
+        body = self.varied_dispatcher()
+        call = re.search(r"VF2RunOwnFurnitureActionEx\((.*?)\);", body, re.S)
+        self.assertIsNotNone(
+            call,
+            "the gym dispatcher no longer routes through "
+            "VF2RunOwnFurnitureActionEx, so it cannot request a varying label")
+        args = call.group(1)
+        self.assertRegex(
+            args, r"\btrue\b",
+            "the gym dispatcher passes varyLabelEachVisit=false, so every "
+            "villager is stuck with the first workout label they roll -- the "
+            "exact defect reported in play")
+
+    def test_the_varying_applier_does_not_consult_the_cache(self):
+        m = re.search(
+            r"static void VF2ApplyVenueLabelVarying\(\s*\n(.*?)\n\}",
+            SOURCE, re.S)
+        self.assertIsNotNone(m, "VF2ApplyVenueLabelVarying is gone")
+        body = m.group(1)
+        self.assertNotIn(
+            "VF2GetVillagerCachedBehaviorLabel", body,
+            "the varying applier reads the per-villager cache, which is what "
+            "pins one label forever")
+        self.assertIn(
+            "ldwGameState::GetRandom", body,
+            "the varying applier must actually re-roll")
+
+    def test_the_sticky_applier_is_left_alone_for_other_furniture(self):
+        # The stable caption is deliberate elsewhere; only the gym opts out.
+        m = re.search(
+            r"static void VF2ApplyVenueLabel\(\s*\n(.*?)\n\}", SOURCE, re.S)
+        self.assertIsNotNone(m, "VF2ApplyVenueLabel is gone")
+        self.assertIn(
+            "VF2GetVillagerCachedBehaviorLabel", m.group(1),
+            "the ordinary venue applier lost its cache read, which would "
+            "change captions for furniture that is working correctly")
+
+
 if __name__ == "__main__":
     unittest.main()
