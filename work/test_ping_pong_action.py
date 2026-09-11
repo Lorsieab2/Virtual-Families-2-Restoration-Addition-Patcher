@@ -86,7 +86,9 @@ class TestTheWrapperIsInstalled(unittest.TestCase):
             r"VF2RandomPooltableLabel\(CVillager &villager\)\n\{(.*?)\n\}",
             src, re.S,
         ).group(1)
-        self.assertIn("if (!pingPong)", body)
+        self.assertIn("if (!pingPong || !pingPongNow)", body,
+                      "the stock pool table must keep its label, and the "
+                      "machine must be confirmed AFTER the walk")
         # The early return must come before any label is applied.
         #
         # Found by matching the CALL SHAPE rather than one helper's name.
@@ -95,7 +97,7 @@ class TestTheWrapperIsInstalled(unittest.TestCase):
         # behaviour it protects was completely unchanged. The property is
         # that a stock table returns before ANY label is applied, and which
         # helper applies it is not what this test is for.
-        refuse = body.index("if (!pingPong)")
+        refuse = body.index("if (!pingPong || !pingPongNow)")
         applications = [
             match.start()
             for match in re.finditer(r"\bVF2Apply\w*Label\w*\(", body)

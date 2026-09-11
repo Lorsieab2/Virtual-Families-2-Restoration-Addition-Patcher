@@ -158,17 +158,18 @@ class GymAndYogaOfferTheirWholeSet(unittest.TestCase):
 
     def test_a_missing_item_still_falls_back_to_the_plain_donor(self):
         # The availability rule: a placed item changes WHERE, never WHETHER.
-        # VF2RunOwnFurnitureAction owns that fallback, so it must still be
-        # reached rather than replaced by the varied runner.
-        m = re.search(r"static void VF2RunOwnFurnitureAction\(\s*\n(.*?)\n\}",
+        # The fallback now lives in VF2RunOwnFurnitureActionEx, which the plain
+        # VF2RunOwnFurnitureAction forwards to; match Ex so this checks the
+        # implementation rather than the one-line wrapper.
+        m = re.search(r"static void VF2RunOwnFurnitureActionEx\(\s*\n(.*?)\n\}",
                       SOURCE, re.S)
-        self.assertIsNotNone(m, "VF2RunOwnFurnitureAction is gone")
+        self.assertIsNotNone(m, "VF2RunOwnFurnitureActionEx is gone")
         body = m.group(1)
         self.assertIn("if (!hasVenue)", body,
                       "the no-venue branch is gone, so an absent item would "
                       "suppress the behaviour instead of falling back")
         self.assertIn("VF2RunNativeBehaviorAndChangedLabel", body)
-        self.assertIn("VF2RunOwnFurnitureAction(", donor_runner_call(),
+        self.assertIn("VF2RunOwnFurnitureActionEx(", donor_runner_call(),
                       "the varied runner no longer delegates to the runner "
                       "that owns the fallback")
 

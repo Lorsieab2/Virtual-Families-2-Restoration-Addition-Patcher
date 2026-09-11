@@ -28894,11 +28894,23 @@ static void VF2PlanSpaTreatment(
     // continuing the previous rest, so the villager perpetually prepared and
     // never rested. Every working chaise route in this file issues a single
     // call for the full duration; this now does the same.
+    // THE CHAISE POSE IN BOTH ORIENTATIONS.
+    //
+    // Reported from live play with a screenshot: the villager lies ACROSS the
+    // spa lounger rather than along it, feet and head hanging off the sides.
+    // Cause: the NE branch used PlanToLieDown, which is the FLAT lying pose
+    // the base game uses for a bed or the ground. It is correct for a stock
+    // chaise -- that is the pattern this file copies elsewhere -- but the spa
+    // lounger's art is a reclined seat, so a flat body does not follow it.
+    //
+    // eBodyPositionChaise is the reclined pose and it is orientation-agnostic;
+    // the SleepNW / SleepNE animation below is what carries the facing. So the
+    // pose is now the same in both branches and only the animation differs,
+    // which is what the two furniture frames actually distinguish.
+    plans->PlanToWait(settle, eBodyPositionChaise);
     if (info.orientation == 1) {
-        plans->PlanToWait(settle, eBodyPositionChaise);
         plans->PlanToPlayAnim(total - settle, "SleepNW", false, 0.02f);
     } else {
-        plans->PlanToLieDown(settle);
         plans->PlanToPlayAnim(total - settle, "SleepNE", false, 0.02f);
     }
 
@@ -33311,6 +33323,36 @@ static void VF2ApplyVenueLabel(
     VF2SetBehaviorLabel(villager, selectedStringId);
 }
 
+// Pick a FRESH label on every visit, ignoring any remembered or cached one.
+//
+// The owner reported the Home Gym and the Yoga Equipment "only have one action
+// label enabled" -- adults always "Doing crunches", kids always "Doing
+// endurance exercises". Measured cause: VF2ApplyVenueLabel rolls once, stores
+// the result through VF2RememberBehaviorLabel, and every later visit takes the
+// remembered or cached branch and re-applies the SAME string. With ten labels
+// defined the villager still only ever shows the first one they rolled, which
+// reads in play as a single enabled label per villager.
+//
+// That stickiness is deliberate for furniture whose caption should stay put
+// while the animation underneath varies, so it is left exactly as it is. The
+// gym and the yoga mat are the opposite case: the ten variations ARE the
+// feature, so they re-roll per use. The remembered slot is still written, so
+// a praise restat within the same behaviour restores the caption it is
+// showing rather than flipping mid-action.
+static void VF2ApplyVenueLabelVarying(
+    CVillager &villager, int const *labels, int count, int rememberedStringId)
+{
+    if (rememberedStringId) {
+        VF2RememberBehaviorLabel(villager, (int)labels, rememberedStringId);
+        VF2SetBehaviorLabel(villager, rememberedStringId);
+        return;
+    }
+    if (count <= 0) return;
+    int selectedStringId = labels[ldwGameState::GetRandom(count)];
+    VF2RememberBehaviorLabel(villager, (int)labels, selectedStringId);
+    VF2SetBehaviorLabel(villager, selectedStringId);
+}
+
 static void VF2ApplyRandomLabel(CVillager &villager, int const *labels, int count)
 {
     VF2ApplyRememberedOrRandomLabel(villager, labels, count, 0);
@@ -33917,13 +33959,14 @@ extern "C" __declspec(naked) void VF2PlanToGoObjectAtAddedFurniture()
 // Runs the donor's native action, then relabels to the item's own group.
 // Returning early when the native behaviour did not take leaves the villager
 // exactly as the stock game left them.
-static void VF2RunOwnFurnitureAction(
+static void VF2RunOwnFurnitureActionEx(
     CVillager &villager,
     void (__cdecl *donorBehavior)(CVillager &),
     int itemId,
     int object,
     int const *labels,
-    int labelCount)
+    int labelCount,
+    bool varyLabelEachVisit)
 {
     ldwPoint venue = {};
     bool const hasVenue = VF2FindAddedFurnitureVenue(
@@ -33943,7 +33986,24 @@ static void VF2RunOwnFurnitureAction(
     // example, "Stretching" or "Walking on the treadmill"). The venue was
     // already resolved to this item, so do not mistake an unchanged label for
     // a rejected action; preserve the donor action and apply the item's label.
-    VF2ApplyVenueLabel(villager, labels, labelCount, remembered);
+    if (varyLabelEachVisit) {
+        VF2ApplyVenueLabelVarying(villager, labels, labelCount, remembered);
+    } else {
+        VF2ApplyVenueLabel(villager, labels, labelCount, remembered);
+    }
+}
+
+// The original entry point: unchanged behaviour for every existing caller.
+static void VF2RunOwnFurnitureAction(
+    CVillager &villager,
+    void (__cdecl *donorBehavior)(CVillager &),
+    int itemId,
+    int object,
+    int const *labels,
+    int labelCount)
+{
+    VF2RunOwnFurnitureActionEx(
+        villager, donorBehavior, itemId, object, labels, labelCount, false);
 }
 
 // Run ONE OF SEVERAL donor behaviours at the item's venue.
@@ -33980,8 +34040,13 @@ static void VF2RunOwnFurnitureActionVaried(
     // GetRandom belongs to the engine, so bound its result here rather than
     // trust a range this code does not own.
     if (index < 0 || index >= donorCount) index = 0;
-    VF2RunOwnFurnitureAction(
-        villager, donorBehaviors[index], itemId, object, labels, labelCount);
+    // VARY THE LABEL PER VISIT. Only the Home Gym and the Yoga Equipment reach
+    // this dispatcher, and their whole point is the set of workout variations
+    // the owner asked for: a villager who rolled "Doing crunches" once must not
+    // be stuck with it for the rest of the save.
+    VF2RunOwnFurnitureActionEx(
+        villager, donorBehaviors[index], itemId, object, labels, labelCount,
+        true);
 }
 
 // The general workout behaviours the Home Gym System and the Yoga Equipment
@@ -34085,26 +34150,20 @@ static bool VF2OpenBikeSeatedWindow(CVillager &villager, int itemId, int object)
 
 extern "C" void __cdecl VF2ExerciseBikeWalk(CVillager &villager)
 {
-    bool const seated =
-        VF2OpenBikeSeatedWindow(villager, __VF2_EXERCISE_BIKE_ITEM_ID__, 0x04);
     VF2RunOwnFurnitureAction(
         villager, CBehavior::WorkoutTreadmill,
         __VF2_EXERCISE_BIKE_ITEM_ID__, 0x04,
         kVF2BehaviorLabels_exercise_bike_walk,
         VF2_LABEL_COUNT(kVF2BehaviorLabels_exercise_bike_walk));
-    if (seated) VF2EndBikeSeated(villager);
 }
 
 extern "C" void __cdecl VF2ExerciseBikeRun(CVillager &villager)
 {
-    bool const seated =
-        VF2OpenBikeSeatedWindow(villager, __VF2_EXERCISE_BIKE_ITEM_ID__, 0x04);
     VF2RunOwnFurnitureAction(
         villager, CBehavior::RunningOnTreadmill,
         __VF2_EXERCISE_BIKE_ITEM_ID__, 0x04,
         kVF2BehaviorLabels_exercise_bike_run,
         VF2_LABEL_COUNT(kVF2BehaviorLabels_exercise_bike_run));
-    if (seated) VF2EndBikeSeated(villager);
 }
 
 // The Home Gym System. Its donor, the Yoga Equipment, is scenery in the base
@@ -34164,7 +34223,12 @@ extern "C" void __cdecl VF2RandomPooltableLabel(CVillager &villager)
     bool pingPong = VF2LinkedFurnitureItemIs(
         villager, 0x36, __VF2_PING_PONG_TABLE_ITEM_ID__);
     if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::PlayingPooltable)) return;
-    if (!pingPong) {
+    // Same stale-probe hazard as the treadmill pair: the pre-probe is a
+    // nearest-match from the villager's feet before they walk. Confirm at the
+    // table they actually reached before relabelling.
+    bool const pingPongNow = VF2LinkedFurnitureItemIs(
+        villager, 0x36, __VF2_PING_PONG_TABLE_ITEM_ID__);
+    if (!pingPong || !pingPongNow) {
         // A stock pool table: leave the native label exactly as it was.
         return;
     }
@@ -34191,7 +34255,19 @@ extern "C" void __cdecl VF2RandomTreadmillWalkLabel(CVillager &villager)
     bool bike = VF2LinkedFurnitureItemIs(
         villager, 0x04, __VF2_EXERCISE_BIKE_ITEM_ID__);
     if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::WorkoutTreadmill)) return;
-    if (!bike) return;
+    // CONFIRM AFTER THE BEHAVIOUR, NOT ONLY BEFORE.
+    //
+    // The owner reported exercise-bike captions appearing on the TREADMILL.
+    // The pre-probe is a nearest-match FindFurniture from the villager's feet
+    // taken BEFORE the plan runs -- so a villager standing nearer the bike
+    // when the behaviour starts answers "bike" and then walks to the
+    // treadmill. Re-asking once the villager is AT the machine resolves which
+    // one they actually used. Both probes must agree before the added item's
+    // label is applied; if they disagree the stock label stays, which is the
+    // safe direction (a real treadmill keeps its real caption).
+    bool const bikeNow = VF2LinkedFurnitureItemIs(
+        villager, 0x04, __VF2_EXERCISE_BIKE_ITEM_ID__);
+    if (!bike || !bikeNow) return;
     VF2ApplyVenueLabel(
         villager, kVF2BehaviorLabels_exercise_bike_walk,
         VF2_LABEL_COUNT(kVF2BehaviorLabels_exercise_bike_walk), remembered);
@@ -34206,7 +34282,19 @@ extern "C" void __cdecl VF2RandomTreadmillRunLabel(CVillager &villager)
     bool bike = VF2LinkedFurnitureItemIs(
         villager, 0x04, __VF2_EXERCISE_BIKE_ITEM_ID__);
     if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::RunningOnTreadmill)) return;
-    if (!bike) return;
+    // CONFIRM AFTER THE BEHAVIOUR, NOT ONLY BEFORE.
+    //
+    // The owner reported exercise-bike captions appearing on the TREADMILL.
+    // The pre-probe is a nearest-match FindFurniture from the villager's feet
+    // taken BEFORE the plan runs -- so a villager standing nearer the bike
+    // when the behaviour starts answers "bike" and then walks to the
+    // treadmill. Re-asking once the villager is AT the machine resolves which
+    // one they actually used. Both probes must agree before the added item's
+    // label is applied; if they disagree the stock label stays, which is the
+    // safe direction (a real treadmill keeps its real caption).
+    bool const bikeNow = VF2LinkedFurnitureItemIs(
+        villager, 0x04, __VF2_EXERCISE_BIKE_ITEM_ID__);
+    if (!bike || !bikeNow) return;
     VF2ApplyVenueLabel(
         villager, kVF2BehaviorLabels_exercise_bike_run,
         VF2_LABEL_COUNT(kVF2BehaviorLabels_exercise_bike_run), remembered);
@@ -35311,7 +35399,6 @@ def patch_added_furniture_venue_callsites(manifest):
     # upright for the whole workout. Retargeting the waits substitutes the
     # seated pose while preserving the donor's own durations and animations.
     wait_plan = "?PlanToWait@CVillagerPlans@@QAEXHW4EBodyPosition@@@Z"
-    seated_helper = obj.append_undefined_symbol("_VF2PlanToWaitSeatedOnBike")
     patched = []
 
     for donor, target, helper, label in (
@@ -35320,13 +35407,18 @@ def patch_added_furniture_venue_callsites(manifest):
         ("?WorkoutTreadmill@CBehavior@@CAXAAVCVillager@@@Z", object_plan, object_helper, "WorkoutTreadmill object PlanToGo"),
         ("?RunningOnTreadmill@CBehavior@@CAXAAVCVillager@@@Z", object_plan, object_helper, "RunningOnTreadmill object PlanToGo"),
         ("?PlayingPooltable@CBehavior@@CAXAAVCVillager@@@Z", object_plan, object_helper, "PlayingPooltable object PlanToGo"),
-        ("?WorkoutTreadmill@CBehavior@@CAXAAVCVillager@@@Z", wait_plan, seated_helper, "WorkoutTreadmill seated PlanToWait"),
-        # VF2ExerciseBikeRun borrows RunningOnTreadmill, which has its OWN six
-        # two-argument PlanToWait calls. Retargeting only WorkoutTreadmill left
-        # the high-intensity cycling action fully upright while the walking one
-        # sat down -- the fix half-applied, and invisible to any check that
-        # looked at one donor.
-        ("?RunningOnTreadmill@CBehavior@@CAXAAVCVillager@@@Z", wait_plan, seated_helper, "RunningOnTreadmill seated PlanToWait"),
+        # SEATED POSE REMOVED AT THE OWNER'S INSTRUCTION.
+        #
+        # "for the exercise bike animations just use the base-game treadmill
+        # animation sequence and orientation. forget the sitting animation."
+        #
+        # The seated retargets substituted VF2PlanToWaitSeatedOnBike for the
+        # donor's own PlanToWait, which put the rider in a sitting pose that
+        # did not line up with the bike art -- the villager appeared standing
+        # inside the machine. Dropping both retargets leaves WorkoutTreadmill
+        # and RunningOnTreadmill running their stock plans unmodified, so the
+        # bike now uses the treadmill's animation sequence, orientation and
+        # durations exactly as the base game does.
     ):
         _, sec, rows = function_relocations(donor)
         matches = [row for row in rows if obj.symbol_by_index[row[1]].name == target and row[2] == IMAGE_REL_I386_REL32]
