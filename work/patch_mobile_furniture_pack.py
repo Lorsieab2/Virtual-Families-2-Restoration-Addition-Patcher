@@ -33339,10 +33339,36 @@ static void VF2ApplyVenueLabel(
 // feature, so they re-roll per use. The remembered slot is still written, so
 // a praise restat within the same behaviour restores the caption it is
 // showing rather than flipping mid-action.
+static bool VF2LabelSlotIsPraiseRestart(CVillager &villager, int const *labels)
+{
+    // A praise restarts the SAME activity and bumps the behaviour serial by
+    // one; a genuinely new visit arrives with a serial that does not sit one
+    // past the slot. Only the former may keep the caption -- flipping the
+    // words mid-massage or mid-workout because the player praised is the
+    // defect VF2BehaviorLabelSlotIsCurrentFor exists to prevent.
+    VF2BehaviorLabelCacheSlot *slot =
+        VF2FindBehaviorLabelCache(villager, (int)labels, false);
+    if (!slot || slot->villager != &villager) return false;
+    unsigned char *data = (unsigned char *)&villager;
+    int behaviorId = *(int *)(data + 0x1BBA0);
+    unsigned int behaviorSerial = *(unsigned int *)(data + 0x1BBA4);
+    if (behaviorId != slot->behaviorId) return false;
+    return behaviorSerial == slot->behaviorSerial
+        || behaviorSerial == slot->behaviorSerial + 1;
+}
+
 static void VF2ApplyVenueLabelVarying(
     CVillager &villager, int const *labels, int count, int rememberedStringId)
 {
-    if (rememberedStringId) {
+    // KEEP the caption only while this is the SAME visit.
+    //
+    // Taking `rememberedStringId` on its own was a no-op fix: the caller
+    // resolves it through VF2CurrentLabelInGroup, which already returns 0
+    // unless the slot is current -- so this branch fired on exactly the
+    // condition that made the ordinary applier keep the label too, and the
+    // gym went on showing one caption per villager forever. The serial is
+    // what separates a praise restart from a new visit.
+    if (rememberedStringId && VF2LabelSlotIsPraiseRestart(villager, labels)) {
         VF2RememberBehaviorLabel(villager, (int)labels, rememberedStringId);
         VF2SetBehaviorLabel(villager, rememberedStringId);
         return;
@@ -34223,12 +34249,7 @@ extern "C" void __cdecl VF2RandomPooltableLabel(CVillager &villager)
     bool pingPong = VF2LinkedFurnitureItemIs(
         villager, 0x36, __VF2_PING_PONG_TABLE_ITEM_ID__);
     if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::PlayingPooltable)) return;
-    // Same stale-probe hazard as the treadmill pair: the pre-probe is a
-    // nearest-match from the villager's feet before they walk. Confirm at the
-    // table they actually reached before relabelling.
-    bool const pingPongNow = VF2LinkedFurnitureItemIs(
-        villager, 0x36, __VF2_PING_PONG_TABLE_ITEM_ID__);
-    if (!pingPong || !pingPongNow) {
+    if (!pingPong) {
         // A stock pool table: leave the native label exactly as it was.
         return;
     }
@@ -34255,19 +34276,7 @@ extern "C" void __cdecl VF2RandomTreadmillWalkLabel(CVillager &villager)
     bool bike = VF2LinkedFurnitureItemIs(
         villager, 0x04, __VF2_EXERCISE_BIKE_ITEM_ID__);
     if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::WorkoutTreadmill)) return;
-    // CONFIRM AFTER THE BEHAVIOUR, NOT ONLY BEFORE.
-    //
-    // The owner reported exercise-bike captions appearing on the TREADMILL.
-    // The pre-probe is a nearest-match FindFurniture from the villager's feet
-    // taken BEFORE the plan runs -- so a villager standing nearer the bike
-    // when the behaviour starts answers "bike" and then walks to the
-    // treadmill. Re-asking once the villager is AT the machine resolves which
-    // one they actually used. Both probes must agree before the added item's
-    // label is applied; if they disagree the stock label stays, which is the
-    // safe direction (a real treadmill keeps its real caption).
-    bool const bikeNow = VF2LinkedFurnitureItemIs(
-        villager, 0x04, __VF2_EXERCISE_BIKE_ITEM_ID__);
-    if (!bike || !bikeNow) return;
+    if (!bike) return;
     VF2ApplyVenueLabel(
         villager, kVF2BehaviorLabels_exercise_bike_walk,
         VF2_LABEL_COUNT(kVF2BehaviorLabels_exercise_bike_walk), remembered);
@@ -34282,19 +34291,7 @@ extern "C" void __cdecl VF2RandomTreadmillRunLabel(CVillager &villager)
     bool bike = VF2LinkedFurnitureItemIs(
         villager, 0x04, __VF2_EXERCISE_BIKE_ITEM_ID__);
     if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::RunningOnTreadmill)) return;
-    // CONFIRM AFTER THE BEHAVIOUR, NOT ONLY BEFORE.
-    //
-    // The owner reported exercise-bike captions appearing on the TREADMILL.
-    // The pre-probe is a nearest-match FindFurniture from the villager's feet
-    // taken BEFORE the plan runs -- so a villager standing nearer the bike
-    // when the behaviour starts answers "bike" and then walks to the
-    // treadmill. Re-asking once the villager is AT the machine resolves which
-    // one they actually used. Both probes must agree before the added item's
-    // label is applied; if they disagree the stock label stays, which is the
-    // safe direction (a real treadmill keeps its real caption).
-    bool const bikeNow = VF2LinkedFurnitureItemIs(
-        villager, 0x04, __VF2_EXERCISE_BIKE_ITEM_ID__);
-    if (!bike || !bikeNow) return;
+    if (!bike) return;
     VF2ApplyVenueLabel(
         villager, kVF2BehaviorLabels_exercise_bike_run,
         VF2_LABEL_COUNT(kVF2BehaviorLabels_exercise_bike_run), remembered);
