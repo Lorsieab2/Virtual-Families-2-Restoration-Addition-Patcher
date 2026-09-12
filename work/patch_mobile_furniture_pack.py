@@ -26579,6 +26579,8 @@ static int VF2CurrentEnergy(CVillager &villager)
     return value;
 }
 
+static bool VF2SpaLoungerHasHandle(int handle);
+
 static bool VF2HandleMobileChaise(CVillager &villager)
 {
     CVillagerPlans *plans = reinterpret_cast<CVillagerPlans *>(&villager);
@@ -26647,7 +26649,19 @@ static bool VF2HandleMobileChaise(CVillager &villager)
 
     plans->PlanToGo(info.point, eSpeedNormal, ePriorityNormal);
     if (carrying != static_cast<ECarrying>(0)) plans->PlanToCarry(carrying);
-    if (info.orientation == 1) {
+    // A SPA LOUNGER IS A RECLINED SEAT, NOT A BED.
+    //
+    // This links to eObjectChaise, which BOTH spa loungers share with every
+    // stock and mobile chaise, so these actions can land on a spa lounger.
+    // PlanToLieDown is the FLAT pose the base game uses for a bed or the
+    // ground; on the lounger art it put the villager ACROSS the chair with
+    // feet and head off the sides -- what the owner reported with a
+    // screenshot for the spa treatment, and the same defect on this path.
+    //
+    // Scoped to the spa loungers deliberately: a stock chaise keeps the flat
+    // pose it has always used here. Changing that would alter base-game
+    // furniture, which is the owner's call and not this fix's.
+    if (info.orientation == 1 || VF2SpaLoungerHasHandle(info.unknown0)) {
         plans->PlanToWait(duration, eBodyPositionChaise);
     } else {
         plans->PlanToLieDown(duration);
@@ -28708,7 +28722,19 @@ static void VF2PlanLinkedChaiseAction(
     VF2SetActionLabel(villager, label);
     plans->PlanToGo(info.point, eSpeedNormal, ePriorityNormal);
     if (carrying != static_cast<ECarrying>(0)) plans->PlanToCarry(carrying);
-    if (info.orientation == 1) {
+    // A SPA LOUNGER IS A RECLINED SEAT, NOT A BED.
+    //
+    // This links to eObjectChaise, which BOTH spa loungers share with every
+    // stock and mobile chaise, so these actions can land on a spa lounger.
+    // PlanToLieDown is the FLAT pose the base game uses for a bed or the
+    // ground; on the lounger art it put the villager ACROSS the chair with
+    // feet and head off the sides -- what the owner reported with a
+    // screenshot for the spa treatment, and the same defect on this path.
+    //
+    // Scoped to the spa loungers deliberately: a stock chaise keeps the flat
+    // pose it has always used here. Changing that would alter base-game
+    // furniture, which is the owner's call and not this fix's.
+    if (info.orientation == 1 || VF2SpaLoungerHasHandle(info.unknown0)) {
         plans->PlanToWait(duration, eBodyPositionChaise);
     } else {
         plans->PlanToLieDown(duration);
@@ -28894,11 +28920,23 @@ static void VF2PlanSpaTreatment(
     // continuing the previous rest, so the villager perpetually prepared and
     // never rested. Every working chaise route in this file issues a single
     // call for the full duration; this now does the same.
+    // THE CHAISE POSE IN BOTH ORIENTATIONS.
+    //
+    // Reported from live play with a screenshot: the villager lies ACROSS the
+    // spa lounger rather than along it, feet and head hanging off the sides.
+    // Cause: the NE branch used PlanToLieDown, which is the FLAT lying pose
+    // the base game uses for a bed or the ground. It is correct for a stock
+    // chaise -- that is the pattern this file copies elsewhere -- but the spa
+    // lounger's art is a reclined seat, so a flat body does not follow it.
+    //
+    // eBodyPositionChaise is the reclined pose and it is orientation-agnostic;
+    // the SleepNW / SleepNE animation below is what carries the facing. So the
+    // pose is now the same in both branches and only the animation differs,
+    // which is what the two furniture frames actually distinguish.
+    plans->PlanToWait(settle, eBodyPositionChaise);
     if (info.orientation == 1) {
-        plans->PlanToWait(settle, eBodyPositionChaise);
         plans->PlanToPlayAnim(total - settle, "SleepNW", false, 0.02f);
     } else {
-        plans->PlanToLieDown(settle);
         plans->PlanToPlayAnim(total - settle, "SleepNE", false, 0.02f);
     }
 
@@ -32463,10 +32501,30 @@ public:
 
 extern CAchievement Achievement;
 
+struct ldwPoint;
 class CContentMap {
 public:
     enum EObject { eObjectHammock = 0x5B };
+    // The destination resolver PlanToGo(EObject, ...) uses internally.
+    //
+    // Decoded from VillagerPlans_patched_disasm.txt: the object overload of
+    // PlanToGo zeroes a local ldwPoint, hands its address to
+    //   ?FindObject@CContentMap@@QAE?B_NW4EObject@1@AAUldwPoint@@@Z
+    // and routes to whatever that writes back. So asking the SAME function
+    // the same question is how this code learns which machine the engine
+    // will actually pick -- not a second nearest-match probe of its own.
+    // `const bool`, NOT `bool`. The native symbol is
+    //   ?FindObject@CContentMap@@QAE?B_NW4EObject@1@AAUldwPoint@@@Z
+    // recorded in work/VillagerPlans_symbols.txt:436 as
+    //   public: bool const __thiscall CContentMap::FindObject(...)
+    // The ?B in the mangling is the const qualifier on the RETURN type,
+    // and MSVC mangles it into the name. Declaring plain `bool` emits a
+    // reference to ?FindObject@CContentMap@@QAE_N... which compiles to an
+    // object perfectly well and then fails to LINK -- a failure the
+    // compile suite cannot see, because it stops at the object file.
+    const bool FindObject(EObject object, ldwPoint &outPoint);
 };
+extern CContentMap ContentMap;
 enum ESpeed { eSpeedNormal = 0xC8 };
 enum EPriority { ePriorityNormal = 0 };
 enum EBodyPosition {
@@ -33311,6 +33369,62 @@ static void VF2ApplyVenueLabel(
     VF2SetBehaviorLabel(villager, selectedStringId);
 }
 
+// Pick a FRESH label on every visit, ignoring any remembered or cached one.
+//
+// The owner reported the Home Gym and the Yoga Equipment "only have one action
+// label enabled" -- adults always "Doing crunches", kids always "Doing
+// endurance exercises". Measured cause: VF2ApplyVenueLabel rolls once, stores
+// the result through VF2RememberBehaviorLabel, and every later visit takes the
+// remembered or cached branch and re-applies the SAME string. With ten labels
+// defined the villager still only ever shows the first one they rolled, which
+// reads in play as a single enabled label per villager.
+//
+// That stickiness is deliberate for furniture whose caption should stay put
+// while the animation underneath varies, so it is left exactly as it is. The
+// gym and the yoga mat are the opposite case: the ten variations ARE the
+// feature, so they re-roll per use. The remembered slot is still written, so
+// a praise restat within the same behaviour restores the caption it is
+// showing rather than flipping mid-action.
+static bool VF2LabelSlotIsPraiseRestart(CVillager &villager, int const *labels)
+{
+    // A praise restarts the SAME activity and bumps the behaviour serial by
+    // one; a genuinely new visit arrives with a serial that does not sit one
+    // past the slot. Only the former may keep the caption -- flipping the
+    // words mid-massage or mid-workout because the player praised is the
+    // defect VF2BehaviorLabelSlotIsCurrentFor exists to prevent.
+    VF2BehaviorLabelCacheSlot *slot =
+        VF2FindBehaviorLabelCache(villager, (int)labels, false);
+    if (!slot || slot->villager != &villager) return false;
+    unsigned char *data = (unsigned char *)&villager;
+    int behaviorId = *(int *)(data + 0x1BBA0);
+    unsigned int behaviorSerial = *(unsigned int *)(data + 0x1BBA4);
+    if (behaviorId != slot->behaviorId) return false;
+    return behaviorSerial == slot->behaviorSerial
+        || behaviorSerial == slot->behaviorSerial + 1;
+}
+
+static void VF2ApplyVenueLabelVarying(
+    CVillager &villager, int const *labels, int count, int rememberedStringId)
+{
+    // KEEP the caption only while this is the SAME visit.
+    //
+    // Taking `rememberedStringId` on its own was a no-op fix: the caller
+    // resolves it through VF2CurrentLabelInGroup, which already returns 0
+    // unless the slot is current -- so this branch fired on exactly the
+    // condition that made the ordinary applier keep the label too, and the
+    // gym went on showing one caption per villager forever. The serial is
+    // what separates a praise restart from a new visit.
+    if (rememberedStringId && VF2LabelSlotIsPraiseRestart(villager, labels)) {
+        VF2RememberBehaviorLabel(villager, (int)labels, rememberedStringId);
+        VF2SetBehaviorLabel(villager, rememberedStringId);
+        return;
+    }
+    if (count <= 0) return;
+    int selectedStringId = labels[ldwGameState::GetRandom(count)];
+    VF2RememberBehaviorLabel(villager, (int)labels, selectedStringId);
+    VF2SetBehaviorLabel(villager, selectedStringId);
+}
+
 static void VF2ApplyRandomLabel(CVillager &villager, int const *labels, int count)
 {
     VF2ApplyRememberedOrRandomLabel(villager, labels, count, 0);
@@ -33705,6 +33819,67 @@ static CVillagerPlans *gVF2AddedFurnitureVenuePlans = 0;
 static ldwPoint gVF2AddedFurnitureVenuePoint = {};
 static bool gVF2AddedFurnitureVenueActive = false;
 
+// Which placement the engine's own route resolver picked, for the case where
+// no venue is forced and a stock behaviour is merely being relabelled.
+static int gVF2RoutedItemId = 0;
+static bool gVF2RoutedItemValid = false;
+// WHOSE route this was. The interceptor runs during plan construction and the
+// wrapper reads the result after the native behaviour returns, so without an
+// owner a plan built for one villager could be read by a wrapper acting for
+// another. The venue globals beside this one carry the same owner for the
+// same reason.
+static CVillagerPlans *gVF2RoutedItemPlans = 0;
+
+// The item id of the placement sitting at a resolved route destination.
+//
+// FindObject answers with a map point, not a furniture record, so the
+// placement array is walked for the record whose own lookup lands on that
+// same point. FindFurniture is the read-only nearest-match query the engine
+// itself uses and reserves nothing, so asking it per record is free.
+static int VF2ItemIdAtPoint(int object, ldwPoint routed)
+{
+    // RESOLVE BY HANDLE, NOT BY POSITION.
+    //
+    // An earlier version asked FindFurniture once per record and compared
+    // info.point against the routed point. That join is wrong twice over:
+    // two placements sharing a walk-to anchor both match, and a record whose
+    // own query resolves a NEIGHBOURING placement matches on that
+    // neighbour's point while the loop returns the current record's item id.
+    // Either way a treadmill route could be classified as a bike route.
+    //
+    // info.unknown0 is the unique placement handle -- the same field
+    // VF2CaptureTableProp and VF2FindAddedFurnitureVenue already use to name
+    // a record -- so one query and a handle comparison answers exactly which
+    // placement was resolved.
+    sFurnitureInfo2 info = {};
+    if (!FurnitureManager.FindFurniture(
+            (CContentMap::EObject)object, routed, info, true, 0, false)) {
+        return 0;
+    }
+    unsigned char *manager = reinterpret_cast<unsigned char *>(&FurnitureManager);
+    int count = *reinterpret_cast<int *>(manager + 0x1004);
+    if (count < 0 || count > 0x200) return 0;
+    for (int slot = 0; slot < count; ++slot) {
+        unsigned char *record = manager + 0x1008 + slot * 0x40;
+        if ((*reinterpret_cast<unsigned int *>(record + 0x0C) & 1) == 0) continue;
+        if (*reinterpret_cast<int *>(record + 0x04) != info.unknown0) continue;
+        return *reinterpret_cast<int *>(record);
+    }
+    return 0;
+}
+
+// True when the route the engine just planned leads to this exact item.
+//
+// Returns false when nothing was recorded, so a wrapper that cannot tell
+// leaves the stock label alone -- a real treadmill keeping its real caption
+// is the safe direction.
+static bool VF2RoutedToItem(CVillager &villager, int itemId)
+{
+    return gVF2RoutedItemValid
+        && gVF2RoutedItemPlans == reinterpret_cast<CVillagerPlans *>(&villager)
+        && gVF2RoutedItemId == itemId;
+}
+
 static bool VF2AddedFurnitureHandleIsItem(int handle, int itemId)
 {
     unsigned char *manager = reinterpret_cast<unsigned char *>(&FurnitureManager);
@@ -33868,6 +34043,30 @@ static bool __cdecl VF2PlanToGoObjectAtAddedFurnitureImpl(
         plans->PlanToGo(point, speed, priority);
         return true;
     }
+    // NO VENUE: the engine chooses. Record WHICH placement it chose, so a
+    // wrapper on a stock behaviour can label the machine the villager
+    // actually walks to.
+    //
+    // This is the fix for exercise-bike captions appearing on the treadmill.
+    // The wrappers used to probe FindFurniture from the villager's feet
+    // BEFORE the behaviour ran; both machines answer object 0x04, so with a
+    // bike nearer the villager at the moment the behaviour started, the bike
+    // caption was applied to a treadmill workout. Probing again after the
+    // call cannot help either -- the native helper only enqueues plans, so
+    // the villager has not moved yet.
+    //
+    // PlanToGo(object, ...) resolves its destination through
+    // CContentMap::FindObject. Asking that same function the same question
+    // yields the point the route will use, and the placement at that point
+    // names the item.
+    gVF2RoutedItemValid = false;
+    gVF2RoutedItemPlans = 0;
+    ldwPoint routed = {};
+    if (ContentMap.FindObject(object, routed)) {
+        gVF2RoutedItemId = VF2ItemIdAtPoint(object, routed);
+        gVF2RoutedItemPlans = plans;
+        gVF2RoutedItemValid = true;
+    }
     return plans->PlanToGo(object, speed, priority, unknown);
 }
 
@@ -33917,13 +34116,14 @@ extern "C" __declspec(naked) void VF2PlanToGoObjectAtAddedFurniture()
 // Runs the donor's native action, then relabels to the item's own group.
 // Returning early when the native behaviour did not take leaves the villager
 // exactly as the stock game left them.
-static void VF2RunOwnFurnitureAction(
+static void VF2RunOwnFurnitureActionEx(
     CVillager &villager,
     void (__cdecl *donorBehavior)(CVillager &),
     int itemId,
     int object,
     int const *labels,
-    int labelCount)
+    int labelCount,
+    bool varyLabelEachVisit)
 {
     ldwPoint venue = {};
     bool const hasVenue = VF2FindAddedFurnitureVenue(
@@ -33943,7 +34143,24 @@ static void VF2RunOwnFurnitureAction(
     // example, "Stretching" or "Walking on the treadmill"). The venue was
     // already resolved to this item, so do not mistake an unchanged label for
     // a rejected action; preserve the donor action and apply the item's label.
-    VF2ApplyVenueLabel(villager, labels, labelCount, remembered);
+    if (varyLabelEachVisit) {
+        VF2ApplyVenueLabelVarying(villager, labels, labelCount, remembered);
+    } else {
+        VF2ApplyVenueLabel(villager, labels, labelCount, remembered);
+    }
+}
+
+// The original entry point: unchanged behaviour for every existing caller.
+static void VF2RunOwnFurnitureAction(
+    CVillager &villager,
+    void (__cdecl *donorBehavior)(CVillager &),
+    int itemId,
+    int object,
+    int const *labels,
+    int labelCount)
+{
+    VF2RunOwnFurnitureActionEx(
+        villager, donorBehavior, itemId, object, labels, labelCount, false);
 }
 
 // Run ONE OF SEVERAL donor behaviours at the item's venue.
@@ -33980,8 +34197,13 @@ static void VF2RunOwnFurnitureActionVaried(
     // GetRandom belongs to the engine, so bound its result here rather than
     // trust a range this code does not own.
     if (index < 0 || index >= donorCount) index = 0;
-    VF2RunOwnFurnitureAction(
-        villager, donorBehaviors[index], itemId, object, labels, labelCount);
+    // VARY THE LABEL PER VISIT. Only the Home Gym and the Yoga Equipment reach
+    // this dispatcher, and their whole point is the set of workout variations
+    // the owner asked for: a villager who rolled "Doing crunches" once must not
+    // be stuck with it for the rest of the save.
+    VF2RunOwnFurnitureActionEx(
+        villager, donorBehaviors[index], itemId, object, labels, labelCount,
+        true);
 }
 
 // The general workout behaviours the Home Gym System and the Yoga Equipment
@@ -34085,26 +34307,20 @@ static bool VF2OpenBikeSeatedWindow(CVillager &villager, int itemId, int object)
 
 extern "C" void __cdecl VF2ExerciseBikeWalk(CVillager &villager)
 {
-    bool const seated =
-        VF2OpenBikeSeatedWindow(villager, __VF2_EXERCISE_BIKE_ITEM_ID__, 0x04);
     VF2RunOwnFurnitureAction(
         villager, CBehavior::WorkoutTreadmill,
         __VF2_EXERCISE_BIKE_ITEM_ID__, 0x04,
         kVF2BehaviorLabels_exercise_bike_walk,
         VF2_LABEL_COUNT(kVF2BehaviorLabels_exercise_bike_walk));
-    if (seated) VF2EndBikeSeated(villager);
 }
 
 extern "C" void __cdecl VF2ExerciseBikeRun(CVillager &villager)
 {
-    bool const seated =
-        VF2OpenBikeSeatedWindow(villager, __VF2_EXERCISE_BIKE_ITEM_ID__, 0x04);
     VF2RunOwnFurnitureAction(
         villager, CBehavior::RunningOnTreadmill,
         __VF2_EXERCISE_BIKE_ITEM_ID__, 0x04,
         kVF2BehaviorLabels_exercise_bike_run,
         VF2_LABEL_COUNT(kVF2BehaviorLabels_exercise_bike_run));
-    if (seated) VF2EndBikeSeated(villager);
 }
 
 // The Home Gym System. Its donor, the Yoga Equipment, is scenery in the base
@@ -34191,7 +34407,18 @@ extern "C" void __cdecl VF2RandomTreadmillWalkLabel(CVillager &villager)
     bool bike = VF2LinkedFurnitureItemIs(
         villager, 0x04, __VF2_EXERCISE_BIKE_ITEM_ID__);
     if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::WorkoutTreadmill)) return;
-    if (!bike) return;
+    // WHICH MACHINE DID THE ROUTE PICK?
+    //
+    // The pre-probe below is a nearest-match from the villager's feet taken
+    // before the behaviour runs, so a villager standing nearer the bike gets
+    // the bike caption even when the route sends them to the treadmill. The
+    // interceptor on PlanToGo(object, ...) records the placement the engine's
+    // own resolver chose; prefer that, and fall back to the probe only when
+    // nothing was recorded.
+    bool const onBike = gVF2RoutedItemValid
+        ? VF2RoutedToItem(villager, __VF2_EXERCISE_BIKE_ITEM_ID__)
+        : bike;
+    if (!onBike) return;
     VF2ApplyVenueLabel(
         villager, kVF2BehaviorLabels_exercise_bike_walk,
         VF2_LABEL_COUNT(kVF2BehaviorLabels_exercise_bike_walk), remembered);
@@ -34206,7 +34433,18 @@ extern "C" void __cdecl VF2RandomTreadmillRunLabel(CVillager &villager)
     bool bike = VF2LinkedFurnitureItemIs(
         villager, 0x04, __VF2_EXERCISE_BIKE_ITEM_ID__);
     if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::RunningOnTreadmill)) return;
-    if (!bike) return;
+    // WHICH MACHINE DID THE ROUTE PICK?
+    //
+    // The pre-probe below is a nearest-match from the villager's feet taken
+    // before the behaviour runs, so a villager standing nearer the bike gets
+    // the bike caption even when the route sends them to the treadmill. The
+    // interceptor on PlanToGo(object, ...) records the placement the engine's
+    // own resolver chose; prefer that, and fall back to the probe only when
+    // nothing was recorded.
+    bool const onBike = gVF2RoutedItemValid
+        ? VF2RoutedToItem(villager, __VF2_EXERCISE_BIKE_ITEM_ID__)
+        : bike;
+    if (!onBike) return;
     VF2ApplyVenueLabel(
         villager, kVF2BehaviorLabels_exercise_bike_run,
         VF2_LABEL_COUNT(kVF2BehaviorLabels_exercise_bike_run), remembered);
@@ -35311,7 +35549,6 @@ def patch_added_furniture_venue_callsites(manifest):
     # upright for the whole workout. Retargeting the waits substitutes the
     # seated pose while preserving the donor's own durations and animations.
     wait_plan = "?PlanToWait@CVillagerPlans@@QAEXHW4EBodyPosition@@@Z"
-    seated_helper = obj.append_undefined_symbol("_VF2PlanToWaitSeatedOnBike")
     patched = []
 
     for donor, target, helper, label in (
@@ -35320,13 +35557,18 @@ def patch_added_furniture_venue_callsites(manifest):
         ("?WorkoutTreadmill@CBehavior@@CAXAAVCVillager@@@Z", object_plan, object_helper, "WorkoutTreadmill object PlanToGo"),
         ("?RunningOnTreadmill@CBehavior@@CAXAAVCVillager@@@Z", object_plan, object_helper, "RunningOnTreadmill object PlanToGo"),
         ("?PlayingPooltable@CBehavior@@CAXAAVCVillager@@@Z", object_plan, object_helper, "PlayingPooltable object PlanToGo"),
-        ("?WorkoutTreadmill@CBehavior@@CAXAAVCVillager@@@Z", wait_plan, seated_helper, "WorkoutTreadmill seated PlanToWait"),
-        # VF2ExerciseBikeRun borrows RunningOnTreadmill, which has its OWN six
-        # two-argument PlanToWait calls. Retargeting only WorkoutTreadmill left
-        # the high-intensity cycling action fully upright while the walking one
-        # sat down -- the fix half-applied, and invisible to any check that
-        # looked at one donor.
-        ("?RunningOnTreadmill@CBehavior@@CAXAAVCVillager@@@Z", wait_plan, seated_helper, "RunningOnTreadmill seated PlanToWait"),
+        # SEATED POSE REMOVED AT THE OWNER'S INSTRUCTION.
+        #
+        # "for the exercise bike animations just use the base-game treadmill
+        # animation sequence and orientation. forget the sitting animation."
+        #
+        # The seated retargets substituted VF2PlanToWaitSeatedOnBike for the
+        # donor's own PlanToWait, which put the rider in a sitting pose that
+        # did not line up with the bike art -- the villager appeared standing
+        # inside the machine. Dropping both retargets leaves WorkoutTreadmill
+        # and RunningOnTreadmill running their stock plans unmodified, so the
+        # bike now uses the treadmill's animation sequence, orientation and
+        # durations exactly as the base game does.
     ):
         _, sec, rows = function_relocations(donor)
         matches = [row for row in rows if obj.symbol_by_index[row[1]].name == target and row[2] == IMAGE_REL_I386_REL32]

@@ -158,17 +158,18 @@ class GymAndYogaOfferTheirWholeSet(unittest.TestCase):
 
     def test_a_missing_item_still_falls_back_to_the_plain_donor(self):
         # The availability rule: a placed item changes WHERE, never WHETHER.
-        # VF2RunOwnFurnitureAction owns that fallback, so it must still be
-        # reached rather than replaced by the varied runner.
-        m = re.search(r"static void VF2RunOwnFurnitureAction\(\s*\n(.*?)\n\}",
+        # The fallback now lives in VF2RunOwnFurnitureActionEx, which the plain
+        # VF2RunOwnFurnitureAction forwards to; match Ex so this checks the
+        # implementation rather than the one-line wrapper.
+        m = re.search(r"static void VF2RunOwnFurnitureActionEx\(\s*\n(.*?)\n\}",
                       SOURCE, re.S)
-        self.assertIsNotNone(m, "VF2RunOwnFurnitureAction is gone")
+        self.assertIsNotNone(m, "VF2RunOwnFurnitureActionEx is gone")
         body = m.group(1)
         self.assertIn("if (!hasVenue)", body,
                       "the no-venue branch is gone, so an absent item would "
                       "suppress the behaviour instead of falling back")
         self.assertIn("VF2RunNativeBehaviorAndChangedLabel", body)
-        self.assertIn("VF2RunOwnFurnitureAction(", donor_runner_call(),
+        self.assertIn("VF2RunOwnFurnitureActionEx(", donor_runner_call(),
                       "the varied runner no longer delegates to the runner "
                       "that owns the fallback")
 
@@ -204,6 +205,123 @@ class GeneralBehavioursStayUngated(unittest.TestCase):
                     '"%s"' % bare, block,
                     "%s was registered as an added-furniture behaviour, which "
                     "would gate a base-game behaviour on owning an item" % bare)
+
+
+class TheGymLabelVariesPerVisit(unittest.TestCase):
+    """The ten workout variations must not collapse to one per villager.
+
+    Reported from live play: adults always "Doing crunches", kids always
+    "Doing endurance exercises". VF2ApplyVenueLabel rolls once and every later
+    visit takes its remembered-or-cached branch, so a villager keeps the first
+    label they ever rolled for the life of the save.
+
+    These assertions are written so that reverting the fix FAILS them. An
+    earlier version of this suite passed happily with the gym wired back to
+    the sticky applier, which is what let the defect ship.
+    """
+
+    def varied_dispatcher(self):
+        m = re.search(
+            r"static void VF2RunOwnFurnitureActionVaried\(\s*\n(.*?)\n\}",
+            SOURCE, re.S)
+        self.assertIsNotNone(m, "VF2RunOwnFurnitureActionVaried is gone")
+        return m.group(1)
+
+    def test_the_gym_dispatcher_asks_for_a_varying_label(self):
+        body = self.varied_dispatcher()
+        call = re.search(r"VF2RunOwnFurnitureActionEx\((.*?)\);", body, re.S)
+        self.assertIsNotNone(
+            call,
+            "the gym dispatcher no longer routes through "
+            "VF2RunOwnFurnitureActionEx, so it cannot request a varying label")
+        args = call.group(1)
+        self.assertRegex(
+            args, r"\btrue\b",
+            "the gym dispatcher passes varyLabelEachVisit=false, so every "
+            "villager is stuck with the first workout label they roll -- the "
+            "exact defect reported in play")
+
+    def test_the_varying_applier_does_not_consult_the_cache(self):
+        m = re.search(
+            r"static void VF2ApplyVenueLabelVarying\(\s*\n(.*?)\n\}",
+            SOURCE, re.S)
+        self.assertIsNotNone(m, "VF2ApplyVenueLabelVarying is gone")
+        body = m.group(1)
+        self.assertNotIn(
+            "VF2GetVillagerCachedBehaviorLabel", body,
+            "the varying applier reads the per-villager cache, which is what "
+            "pins one label forever")
+        self.assertIn(
+            "ldwGameState::GetRandom", body,
+            "the varying applier must actually re-roll")
+
+    def test_the_sticky_applier_is_left_alone_for_other_furniture(self):
+        # The stable caption is deliberate elsewhere; only the gym opts out.
+        m = re.search(
+            r"static void VF2ApplyVenueLabel\(\s*\n(.*?)\n\}", SOURCE, re.S)
+        self.assertIsNotNone(m, "VF2ApplyVenueLabel is gone")
+        self.assertIn(
+            "VF2GetVillagerCachedBehaviorLabel", m.group(1),
+            "the ordinary venue applier lost its cache read, which would "
+            "change captions for furniture that is working correctly")
+
+    def test_the_remembered_caption_is_gated_on_the_behaviour_serial(self):
+        # THE FIRST VERSION OF THIS FIX WAS A NO-OP AND IS PINNED HERE.
+        #
+        # It kept the caption whenever rememberedStringId was non-zero. But
+        # the caller resolves that through VF2CurrentLabelInGroup, which
+        # already returns 0 unless VF2BehaviorLabelStillFromThisSession says
+        # the slot is current -- so the branch fired on exactly the condition
+        # that made the ORDINARY applier keep the caption, and the gym went on
+        # showing one label per villager. The two appliers differed in source
+        # shape and not in behaviour.
+        #
+        # The serial is what separates a praise restarting the same activity
+        # from a genuinely new visit, so the accept branch must consult it.
+        m = re.search(
+            r"static void VF2ApplyVenueLabelVarying\(\s*\n(.*?)\n\}",
+            SOURCE, re.S)
+        self.assertIsNotNone(m, "VF2ApplyVenueLabelVarying is gone")
+        body = "\n".join(
+            line for line in m.group(1).splitlines()
+            if not line.lstrip().startswith("//"))
+        self.assertNotRegex(
+            body, r"if \(rememberedStringId\)\s*\{",
+            "the remembered caption is accepted unconditionally again, which "
+            "is the no-op version of this fix: it keeps the label on exactly "
+            "the visits the plain applier would have kept it")
+        self.assertIn(
+            "VF2LabelSlotIsPraiseRestart", body,
+            "nothing distinguishes a praise restart from a new visit, so the "
+            "caption either sticks forever or flips mid-activity")
+
+    def test_an_accepted_praise_advances_the_slot(self):
+        # VF2BehaviorLabelSlotIsCurrentFor writes the serial back when it
+        # accepts a praise, and the comment there records why: leaving the
+        # slot at N makes the SECOND praise arrive at N+2 and be rejected as a
+        # new session, which re-rolls the caption mid-activity.
+        #
+        # This predicate deliberately does NOT mutate. It is safe only because
+        # the accept branch calls VF2RememberBehaviorLabel, which refreshes
+        # behaviorSerial from the villager -- so consecutive praises stay at
+        # N+1. If that call is ever dropped, two praises in a row would
+        # re-roll, so the pairing is asserted rather than left to be noticed.
+        m = re.search(
+            r"static void VF2ApplyVenueLabelVarying\(\s*\n(.*?)\n\}",
+            SOURCE, re.S)
+        self.assertIsNotNone(m, "VF2ApplyVenueLabelVarying is gone")
+        body = m.group(1)
+        accept = body.index("VF2LabelSlotIsPraiseRestart")
+        tail = body[accept:]
+        remember = tail.find("VF2RememberBehaviorLabel")
+        self.assertNotEqual(
+            remember, -1,
+            "the praise branch returns without VF2RememberBehaviorLabel, so "
+            "the slot keeps its old serial and a second consecutive praise "
+            "arrives at N+2 and re-rolls the caption")
+        self.assertLess(
+            remember, tail.index("return;"),
+            "the slot must be refreshed before the branch returns")
 
 
 if __name__ == "__main__":
