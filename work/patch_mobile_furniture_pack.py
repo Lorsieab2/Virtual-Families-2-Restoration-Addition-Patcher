@@ -26391,20 +26391,49 @@ static void VF2DrawTableProp(
     // very first of our calls walks past the end of the array and writes
     // there.
     //
-    // Switching to the five-argument overload is not the fix either. Its
-    // extra argument is a per-decal value RefreshProps reads from its own
-    // object -- [edi+0x1940] indexed by the current prop, at +0x25BB8 --
-    // and there is no correct constant to substitute for it. Passing a
-    // guessed layer would write a wrong value into the slot field.
+    // USE THE FIVE-ARGUMENT OVERLOAD. An earlier version of this comment said
+    // its extra argument is a per-decal value RefreshProps reads from
+    // [edi+0x1940] at +0x25BB8, with no correct constant to substitute. THAT
+    // WAS WRONG, and it is corrected here rather than deleted, because it is
+    // the reason the four-argument form was chosen in the first place.
     //
-    // So the same bound is applied here, against the same array, using the
-    // same scan the engine uses. A full array means our prop is not drawn,
-    // which is what the guarded overload does too.
+    // Measured across all 25 five-argument callsites in CDecal::RefreshProps
+    // (Decal.obj section 28): every one pushes a SMALL IMMEDIATE, never a
+    // memory read. A representative site is
+    //   push [edi+0x1804] / push 0x5a8 / push 0x418 / push 5 / 1.0f
+    // and the values seen are 0,1,2,3,4,5,6,7,21,23,26,28,35,49,51,54,64 --
+    // one per prop type, plus two computed. RefreshProps uses the
+    // five-argument form 25 times against the four-argument form's 19, so it
+    // is the ordinary case rather than an exception.
+    //
+    // Decoding both bodies shows what the argument is. They are otherwise
+    // alike -- same free-slot scan at stride 0x18, same grid/x/y/scale
+    // stores -- and differ in exactly two ways:
+    //
+    //   the FIVE-argument form writes the extra value to slot +0x10 and
+    //   guards the scan with `cmp edx,0x100 / jg`;
+    //   the FOUR-argument form writes NEITHER.
+    //
+    // +0x10 is a FRAME INDEX into the image grid. Leaving it unwritten means
+    // a recycled slot keeps whatever the previous decal put there, so these
+    // props were drawn with another prop's frame -- which, for sprites of
+    // differing size and anchor, reads exactly as "misaligned and behind the
+    // furniture", the symptom reported in play.
+    //
+    // The index is 0, and that is not a guess: these descriptors are built
+    // with vals[2] = vals[3] = 1, recorded as "grid": [1, 1] in the prop art
+    // manifest, and mealSE/mealSW/patioDrinks are three separate single-image
+    // files (105x71, 115x67, 44x39). A one-by-one grid has exactly one valid
+    // index.
+    //
+    // Passing it also restores the bound the four-argument form lacks, so the
+    // manual scan below is no longer load-bearing. It is kept because it
+    // costs nothing and states the same limit at the callsite.
     unsigned char *decals = (unsigned char *)&Decal;
     int used = 0;
     while (used < 0x100 && decals[used * 0x18] != 0) ++used;
     if (used >= 0x100) return;
-    Decal.AddDecal(grid, x, y, 1.0f);
+    Decal.AddDecal(grid, x, y, 0, 1.0f);
 }
 
 // Called after the stock prop pass, so our two draw on top of it rather than

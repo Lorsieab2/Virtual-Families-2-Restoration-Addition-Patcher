@@ -452,5 +452,99 @@ class TestTheDecalCallShape(unittest.TestCase):
 
 
 
+class TheTablePropsWriteTheirFrameIndex(unittest.TestCase):
+    """The prop draw must use the overload that writes decal slot +0x10.
+
+    Reported in play: the picnic and patio table props DO draw, but they are
+    misaligned and render behind the furniture.
+
+    The four-argument AddDecal never writes +0x10, so a recycled decal slot
+    keeps whatever the previous decal left there and the prop renders with
+    another prop's frame index. For sprites of differing size and anchor that
+    reads exactly as a misplaced image.
+
+    An earlier comment in the generator claimed the five-argument overload's
+    extra parameter was a per-decal value read from [edi+0x1940], with no
+    correct constant available -- and that claim is why the broken overload
+    stayed. These tests read the instruction bytes instead of restating it.
+    """
+
+    OBJ = OBJS / "Decal.obj"
+
+    # mov [esi+ecx*8+0x10], eax  -- the frame-index store
+    WRITE_FRAME = bytes((0x89, 0x44, 0xCE, 0x10))
+    # cmp edx, 0x100             -- the slot-count bound
+    BOUND = bytes((0x81, 0xFA, 0x00, 0x01, 0x00, 0x00))
+
+    def setUp(self):
+        if not OBJS.is_dir():
+            self.skipTest("desktop object files are not present in this checkout")
+
+    def _body(self, symbol_name):
+        """One function's own bytes, bounded by the next symbol in its section.
+
+        Taking the whole section would fold the sibling overload in, and the
+        two differ by exactly the bytes under test -- so a section-wide search
+        would find every pattern in both and assert nothing.
+        """
+        import sys
+        sys.path.insert(0, str(ROOT / "work"))
+        from coff_patch import CoffObject
+
+        obj = CoffObject(self.OBJ)
+        symbol = obj.symbol(symbol_name)
+        self.assertIsNotNone(symbol, "%s is not in Decal.obj" % symbol_name)
+        data = self.OBJ.read_bytes()
+        _name, funcs = _symbols(data)
+        later = [
+            value for secnum, value, _n in funcs
+            if secnum == symbol.section and value > symbol.value
+        ]
+        end = min(later) if later else None
+        body = bytes(obj.section_data(symbol.section))
+        return body[symbol.value:end] if end else body[symbol.value:]
+
+    def test_only_the_five_argument_overload_writes_the_frame_index(self):
+        five = self._body(ADD_DECAL_5)
+        four = self._body(ADD_DECAL_4)
+        self.assertIn(
+            self.WRITE_FRAME, five,
+            "the five-argument overload no longer writes slot +0x10, so it "
+            "is not the fix the generator now claims it is")
+        self.assertNotIn(
+            self.WRITE_FRAME, four,
+            "the four-argument overload now writes +0x10 too, which would "
+            "make this whole change unnecessary -- re-measure before "
+            "trusting it")
+
+    def test_only_the_five_argument_overload_bounds_the_scan(self):
+        self.assertIn(self.BOUND, self._body(ADD_DECAL_5))
+        self.assertNotIn(
+            self.BOUND, self._body(ADD_DECAL_4),
+            "the four-argument overload gained a bound; the generator's "
+            "manual slot scan may no longer be load-bearing")
+
+    def test_the_generator_calls_the_five_argument_overload(self):
+        gen = (ROOT / "work" / "patch_mobile_furniture_pack.py").read_text(
+            encoding="utf-8")
+        start = gen.index("static void VF2DrawTableProp(")
+        body = gen[start:gen.index("\n}", start)]
+        self.assertIn(
+            "Decal.AddDecal(grid, x, y, 0, 1.0f);", body,
+            "VF2DrawTableProp is back on the four-argument overload, which "
+            "leaves the frame index at whatever the previous decal wrote")
+
+    def test_the_frame_index_matches_the_descriptor_grid(self):
+        # Index 0 is correct ONLY because the descriptors are 1x1. If a prop
+        # ever ships as a multi-frame sheet, 0 stops being self-evidently
+        # right, and this should fail rather than let it pass silently.
+        gen = (ROOT / "work" / "patch_mobile_furniture_pack.py").read_text(
+            encoding="utf-8")
+        self.assertIn(
+            '"grid": [1, 1],', gen,
+            "the prop art descriptors are no longer 1x1, so frame index 0 is "
+            "no longer the only valid index")
+
+
 if __name__ == "__main__":
     unittest.main()
