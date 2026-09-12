@@ -33814,6 +33814,12 @@ static bool gVF2AddedFurnitureVenueActive = false;
 // no venue is forced and a stock behaviour is merely being relabelled.
 static int gVF2RoutedItemId = 0;
 static bool gVF2RoutedItemValid = false;
+// WHOSE route this was. The interceptor runs during plan construction and the
+// wrapper reads the result after the native behaviour returns, so without an
+// owner a plan built for one villager could be read by a wrapper acting for
+// another. The venue globals beside this one carry the same owner for the
+// same reason.
+static CVillagerPlans *gVF2RoutedItemPlans = 0;
 
 // The item id of the placement sitting at a resolved route destination.
 //
@@ -33847,9 +33853,11 @@ static int VF2ItemIdAtPoint(int object, ldwPoint routed)
 // Returns false when nothing was recorded, so a wrapper that cannot tell
 // leaves the stock label alone -- a real treadmill keeping its real caption
 // is the safe direction.
-static bool VF2RoutedToItem(int itemId)
+static bool VF2RoutedToItem(CVillager &villager, int itemId)
 {
-    return gVF2RoutedItemValid && gVF2RoutedItemId == itemId;
+    return gVF2RoutedItemValid
+        && gVF2RoutedItemPlans == reinterpret_cast<CVillagerPlans *>(&villager)
+        && gVF2RoutedItemId == itemId;
 }
 
 static bool VF2AddedFurnitureHandleIsItem(int handle, int itemId)
@@ -34032,9 +34040,11 @@ static bool __cdecl VF2PlanToGoObjectAtAddedFurnitureImpl(
     // yields the point the route will use, and the placement at that point
     // names the item.
     gVF2RoutedItemValid = false;
+    gVF2RoutedItemPlans = 0;
     ldwPoint routed = {};
     if (ContentMap.FindObject(object, routed)) {
         gVF2RoutedItemId = VF2ItemIdAtPoint(object, routed);
+        gVF2RoutedItemPlans = plans;
         gVF2RoutedItemValid = true;
     }
     return plans->PlanToGo(object, speed, priority, unknown);
@@ -34386,7 +34396,7 @@ extern "C" void __cdecl VF2RandomTreadmillWalkLabel(CVillager &villager)
     // own resolver chose; prefer that, and fall back to the probe only when
     // nothing was recorded.
     bool const onBike = gVF2RoutedItemValid
-        ? VF2RoutedToItem(__VF2_EXERCISE_BIKE_ITEM_ID__)
+        ? VF2RoutedToItem(villager, __VF2_EXERCISE_BIKE_ITEM_ID__)
         : bike;
     if (!onBike) return;
     VF2ApplyVenueLabel(
@@ -34412,7 +34422,7 @@ extern "C" void __cdecl VF2RandomTreadmillRunLabel(CVillager &villager)
     // own resolver chose; prefer that, and fall back to the probe only when
     // nothing was recorded.
     bool const onBike = gVF2RoutedItemValid
-        ? VF2RoutedToItem(__VF2_EXERCISE_BIKE_ITEM_ID__)
+        ? VF2RoutedToItem(villager, __VF2_EXERCISE_BIKE_ITEM_ID__)
         : bike;
     if (!onBike) return;
     VF2ApplyVenueLabel(

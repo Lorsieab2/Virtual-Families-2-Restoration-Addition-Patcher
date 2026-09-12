@@ -170,7 +170,7 @@ class TheCaptionFollowsTheMachineTheRouteChose(unittest.TestCase):
                     'extern "C" void __cdecl %s(CVillager &villager)\n{' % name)
                 body = SOURCE[start:SOURCE.index('\nextern "C"', start)]
                 self.assertIn(
-                    "VF2RoutedToItem(__VF2_EXERCISE_BIKE_ITEM_ID__)", body,
+                    "VF2RoutedToItem(villager, __VF2_EXERCISE_BIKE_ITEM_ID__)", body,
                     "%s still decides from the stale pre-probe alone, which is "
                     "the defect: a bike caption on a treadmill workout" % name)
                 self.assertIn("if (!onBike) return;", body)
@@ -179,11 +179,18 @@ class TheCaptionFollowsTheMachineTheRouteChose(unittest.TestCase):
         # VF2RoutedToItem returns false when nothing was recorded, so a
         # wrapper that cannot tell must not relabel. A real treadmill keeping
         # its real caption is the safe direction.
-        start = SOURCE.index("static bool VF2RoutedToItem(int itemId)")
+        start = SOURCE.index("static bool VF2RoutedToItem(CVillager &villager, int itemId)")
         body = SOURCE[start:SOURCE.index("\n}", start)]
-        self.assertIn("gVF2RoutedItemValid &&", body,
+        self.assertIn("gVF2RoutedItemValid", body,
                       "VF2RoutedToItem must refuse to answer when nothing was "
                       "recorded rather than defaulting to a match")
+        # And it must belong to THIS villager: the interceptor runs during plan
+        # construction while the wrapper reads after the behaviour returns, so
+        # an unowned global could hand one villager another's route.
+        self.assertIn("gVF2RoutedItemPlans == reinterpret_cast<CVillagerPlans *>(&villager)",
+                      body,
+                      "the recorded route is not tied to the villager reading "
+                      "it, so a plan built for someone else could be used")
 
     def test_the_ineffective_post_walk_probe_stays_gone(self):
         # Re-probing after the native call was tried and cannot fire.
