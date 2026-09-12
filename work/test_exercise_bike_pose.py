@@ -197,6 +197,50 @@ class TheCaptionFollowsTheMachineTheRouteChose(unittest.TestCase):
         self.assertNotIn("bikeNow", SOURCE)
         self.assertNotIn("pingPongNow", SOURCE)
 
+    def test_find_object_is_declared_with_its_const_return(self):
+        """The native symbol is `bool const`, and MSVC mangles that in.
+
+        work/VillagerPlans_symbols.txt:436 records
+          ?FindObject@CContentMap@@QAE?B_NW4EObject@1@AAUldwPoint@@@Z
+          public: bool const __thiscall CContentMap::FindObject(...)
+
+        The ?B is the const qualifier on the RETURN type. Declaring plain
+        `bool` emits a reference to ?FindObject@CContentMap@@QAE_N... which
+        COMPILES to an object and then fails to LINK -- a failure the compile
+        suite cannot see, because it stops at the object file. So this is
+        asserted on the declaration rather than left to a build nobody runs
+        here.
+        """
+        # There are several CContentMap declarations, one per emitted unit.
+        # The one that matters is the behaviours unit's -- the only one that
+        # declares FindObject -- so find it by that member rather than by
+        # taking the first class of that name.
+        self.assertIn(
+            "const bool FindObject(EObject object, ldwPoint &outPoint);",
+            SOURCE,
+            "FindObject must be declared with its const-qualified return type "
+            "or the executable link fails unresolved")
+
+    def test_the_routed_placement_is_resolved_by_handle(self):
+        """Point equality cannot name a placement; the handle can.
+
+        Two placements sharing a walk-to anchor both match a point compare,
+        and a record whose own query resolves a NEIGHBOURING placement matches
+        on that neighbour's point while the loop returns the current record's
+        item id. Either way a treadmill route could be read as a bike route,
+        which is the very defect this machinery exists to prevent.
+        """
+        start = SOURCE.index("static int VF2ItemIdAtPoint(")
+        body = SOURCE[start:SOURCE.index("\n}", start)]
+        self.assertIn(
+            "!= info.unknown0", body,
+            "VF2ItemIdAtPoint no longer matches on the placement handle, so "
+            "it can name the wrong machine")
+        self.assertNotIn(
+            "info.point.x != routed.x", body,
+            "the point-equality join is back; it cannot distinguish two "
+            "placements that share a walk-to anchor")
+
 
 if __name__ == "__main__":
     unittest.main()

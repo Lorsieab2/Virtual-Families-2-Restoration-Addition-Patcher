@@ -32513,7 +32513,16 @@ public:
     // and routes to whatever that writes back. So asking the SAME function
     // the same question is how this code learns which machine the engine
     // will actually pick -- not a second nearest-match probe of its own.
-    bool FindObject(EObject object, ldwPoint &outPoint);
+    // `const bool`, NOT `bool`. The native symbol is
+    //   ?FindObject@CContentMap@@QAE?B_NW4EObject@1@AAUldwPoint@@@Z
+    // recorded in work/VillagerPlans_symbols.txt:436 as
+    //   public: bool const __thiscall CContentMap::FindObject(...)
+    // The ?B in the mangling is the const qualifier on the RETURN type,
+    // and MSVC mangles it into the name. Declaring plain `bool` emits a
+    // reference to ?FindObject@CContentMap@@QAE_N... which compiles to an
+    // object perfectly well and then fails to LINK -- a failure the
+    // compile suite cannot see, because it stops at the object file.
+    const bool FindObject(EObject object, ldwPoint &outPoint);
 };
 extern CContentMap ContentMap;
 enum ESpeed { eSpeedNormal = 0xC8 };
@@ -33829,20 +33838,31 @@ static CVillagerPlans *gVF2RoutedItemPlans = 0;
 // itself uses and reserves nothing, so asking it per record is free.
 static int VF2ItemIdAtPoint(int object, ldwPoint routed)
 {
+    // RESOLVE BY HANDLE, NOT BY POSITION.
+    //
+    // An earlier version asked FindFurniture once per record and compared
+    // info.point against the routed point. That join is wrong twice over:
+    // two placements sharing a walk-to anchor both match, and a record whose
+    // own query resolves a NEIGHBOURING placement matches on that
+    // neighbour's point while the loop returns the current record's item id.
+    // Either way a treadmill route could be classified as a bike route.
+    //
+    // info.unknown0 is the unique placement handle -- the same field
+    // VF2CaptureTableProp and VF2FindAddedFurnitureVenue already use to name
+    // a record -- so one query and a handle comparison answers exactly which
+    // placement was resolved.
+    sFurnitureInfo2 info = {};
+    if (!FurnitureManager.FindFurniture(
+            (CContentMap::EObject)object, routed, info, true, 0, false)) {
+        return 0;
+    }
     unsigned char *manager = reinterpret_cast<unsigned char *>(&FurnitureManager);
     int count = *reinterpret_cast<int *>(manager + 0x1004);
     if (count < 0 || count > 0x200) return 0;
     for (int slot = 0; slot < count; ++slot) {
         unsigned char *record = manager + 0x1008 + slot * 0x40;
         if ((*reinterpret_cast<unsigned int *>(record + 0x0C) & 1) == 0) continue;
-        sFurnitureInfo2 info = {};
-        if (!FurnitureManager.FindFurniture(
-                (CContentMap::EObject)object,
-                *reinterpret_cast<ldwPoint *>(record + 0x14),
-                info, true, 0, false)) {
-            continue;
-        }
-        if (info.point.x != routed.x || info.point.y != routed.y) continue;
+        if (*reinterpret_cast<int *>(record + 0x04) != info.unknown0) continue;
         return *reinterpret_cast<int *>(record);
     }
     return 0;
