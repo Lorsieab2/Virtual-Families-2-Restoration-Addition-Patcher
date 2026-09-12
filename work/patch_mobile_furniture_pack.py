@@ -26579,6 +26579,8 @@ static int VF2CurrentEnergy(CVillager &villager)
     return value;
 }
 
+static bool VF2SpaLoungerHasHandle(int handle);
+
 static bool VF2HandleMobileChaise(CVillager &villager)
 {
     CVillagerPlans *plans = reinterpret_cast<CVillagerPlans *>(&villager);
@@ -26647,7 +26649,19 @@ static bool VF2HandleMobileChaise(CVillager &villager)
 
     plans->PlanToGo(info.point, eSpeedNormal, ePriorityNormal);
     if (carrying != static_cast<ECarrying>(0)) plans->PlanToCarry(carrying);
-    if (info.orientation == 1) {
+    // A SPA LOUNGER IS A RECLINED SEAT, NOT A BED.
+    //
+    // This links to eObjectChaise, which BOTH spa loungers share with every
+    // stock and mobile chaise, so these actions can land on a spa lounger.
+    // PlanToLieDown is the FLAT pose the base game uses for a bed or the
+    // ground; on the lounger art it put the villager ACROSS the chair with
+    // feet and head off the sides -- what the owner reported with a
+    // screenshot for the spa treatment, and the same defect on this path.
+    //
+    // Scoped to the spa loungers deliberately: a stock chaise keeps the flat
+    // pose it has always used here. Changing that would alter base-game
+    // furniture, which is the owner's call and not this fix's.
+    if (info.orientation == 1 || VF2SpaLoungerHasHandle(info.unknown0)) {
         plans->PlanToWait(duration, eBodyPositionChaise);
     } else {
         plans->PlanToLieDown(duration);
@@ -28708,7 +28722,19 @@ static void VF2PlanLinkedChaiseAction(
     VF2SetActionLabel(villager, label);
     plans->PlanToGo(info.point, eSpeedNormal, ePriorityNormal);
     if (carrying != static_cast<ECarrying>(0)) plans->PlanToCarry(carrying);
-    if (info.orientation == 1) {
+    // A SPA LOUNGER IS A RECLINED SEAT, NOT A BED.
+    //
+    // This links to eObjectChaise, which BOTH spa loungers share with every
+    // stock and mobile chaise, so these actions can land on a spa lounger.
+    // PlanToLieDown is the FLAT pose the base game uses for a bed or the
+    // ground; on the lounger art it put the villager ACROSS the chair with
+    // feet and head off the sides -- what the owner reported with a
+    // screenshot for the spa treatment, and the same defect on this path.
+    //
+    // Scoped to the spa loungers deliberately: a stock chaise keeps the flat
+    // pose it has always used here. Changing that would alter base-game
+    // furniture, which is the owner's call and not this fix's.
+    if (info.orientation == 1 || VF2SpaLoungerHasHandle(info.unknown0)) {
         plans->PlanToWait(duration, eBodyPositionChaise);
     } else {
         plans->PlanToLieDown(duration);

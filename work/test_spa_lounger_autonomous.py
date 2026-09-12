@@ -939,6 +939,39 @@ class TheTreatmentPoseFollowsTheLounger(unittest.TestCase):
             "the reclined pose should be planned once, before the "
             "orientation-specific animation, so both facings get it")
 
+    def test_the_shared_chaise_paths_recline_on_a_spa_lounger(self):
+        """Relaxing and napping can land on a spa lounger too.
+
+        VF2HandleMobileChaise and VF2PlanLinkedChaiseAction both link to
+        eObjectChaise, which BOTH spa loungers share with every stock and
+        mobile chaise -- so "Relaxing on lounger", "Catching some rays" and
+        the nap routes can target one. Their NE branch used PlanToLieDown,
+        the same flat pose that put the villager across the lounger in the
+        spa treatment. Fixing only VF2PlanSpaTreatment would have left the
+        identical defect visible on every other lounger action.
+
+        A stock chaise must KEEP the flat pose: changing that is a base-game
+        behaviour change and the owner's call.
+        """
+        src = _source()
+        for fn in ("static bool VF2HandleMobileChaise(",
+                   "static void VF2PlanLinkedChaiseAction("):
+            with self.subTest(function=fn):
+                start = src.index(fn)
+                end = src.index("\nstatic ", start + 20)
+                body = "\n".join(
+                    line for line in src[start:end].splitlines()
+                    if not line.lstrip().startswith("//"))
+                self.assertIn(
+                    "VF2SpaLoungerHasHandle(info.unknown0)", body,
+                    "this path cannot tell a spa lounger from a stock chaise, "
+                    "so a villager relaxing on a spa lounger lies flat across "
+                    "it")
+                self.assertIn(
+                    "plans->PlanToLieDown(duration);", body,
+                    "the flat pose is gone entirely; a STOCK chaise must keep "
+                    "it, and removing it changes base-game furniture")
+
     def test_the_orientation_still_picks_the_animation(self):
         # The fix must not flatten the two facings into one.
         body = self._treatment_body()
