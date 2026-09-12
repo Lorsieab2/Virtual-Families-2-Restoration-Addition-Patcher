@@ -110,5 +110,86 @@ class TheBikeKeepsItsOwnIdentity(unittest.TestCase):
                          handler_body("VF2ExerciseBikeRun"))
 
 
+class TheCaptionFollowsTheMachineTheRouteChose(unittest.TestCase):
+    """Bike captions must not appear on a stock treadmill.
+
+    Reported from live play. Both machines answer EObject 0x04, so the
+    wrappers on the stock treadmill behaviours cannot tell them apart on
+    their own.
+
+    WHY THE OBVIOUS FIXES DO NOT WORK, both established by measurement:
+
+    The PRE-probe is a nearest-match FindFurniture from the villager's feet
+    taken before the behaviour runs. WorkoutTreadmill makes that same query
+    from that same position, so the probe is not wrong -- it just answers
+    "which machine is nearest now", which is not "which machine will the
+    route pick".
+
+    Probing AGAIN after the call cannot help either.
+    VF2RunNativeBehaviorAndChangedLabel only invokes the behaviour
+    constructor and enqueues plans; it does not execute them, so FeetPos()
+    is unchanged and both probes inspect identical state. That version was
+    written, shipped in a PR, and correctly rejected.
+
+    WHAT DOES WORK: PlanToGo(EObject, ...) resolves its destination through
+    CContentMap::FindObject -- decoded from VillagerPlans_patched_disasm.txt,
+    where the object overload zeroes a local ldwPoint, passes its address to
+    ?FindObject@CContentMap@@QAE?B_NW4EObject@1@AAUldwPoint@@@Z and routes to
+    what it writes back. The interceptor already wrapping that call asks the
+    same function the same question and records the placement at the answer.
+    """
+
+    def intercept_body(self):
+        start = SOURCE.find("static bool __cdecl VF2PlanToGoObjectAtAddedFurnitureImpl(")
+        self.assertNotEqual(start, -1, "the PlanToGo(object) interceptor is gone")
+        end = SOURCE.find('\nextern "C"', start)
+        self.assertNotEqual(end, -1, "no definition follows the interceptor")
+        return SOURCE[start:end]
+
+    def test_the_interceptor_asks_the_engines_own_resolver(self):
+        body = self.intercept_body()
+        self.assertIn(
+            "ContentMap.FindObject(object, routed)", body,
+            "the interceptor no longer resolves the destination, so a wrapper "
+            "cannot learn which machine the route picked")
+        self.assertIn("gVF2RoutedItemValid = true;", body)
+
+    def test_the_resolver_runs_only_when_no_venue_is_forced(self):
+        # With a venue active the route is already ours and the recorded item
+        # would be meaningless; the early return must come first.
+        body = self.intercept_body()
+        self.assertLess(
+            body.index("gVF2AddedFurnitureVenueActive"),
+            body.index("ContentMap.FindObject"),
+            "the venue branch must return before the fallback records anything")
+
+    def test_both_treadmill_wrappers_prefer_the_routed_machine(self):
+        for name in ("VF2RandomTreadmillWalkLabel", "VF2RandomTreadmillRunLabel"):
+            with self.subTest(wrapper=name):
+                start = SOURCE.index(
+                    'extern "C" void __cdecl %s(CVillager &villager)\n{' % name)
+                body = SOURCE[start:SOURCE.index('\nextern "C"', start)]
+                self.assertIn(
+                    "VF2RoutedToItem(__VF2_EXERCISE_BIKE_ITEM_ID__)", body,
+                    "%s still decides from the stale pre-probe alone, which is "
+                    "the defect: a bike caption on a treadmill workout" % name)
+                self.assertIn("if (!onBike) return;", body)
+
+    def test_an_unrecorded_route_leaves_the_stock_label_alone(self):
+        # VF2RoutedToItem returns false when nothing was recorded, so a
+        # wrapper that cannot tell must not relabel. A real treadmill keeping
+        # its real caption is the safe direction.
+        start = SOURCE.index("static bool VF2RoutedToItem(int itemId)")
+        body = SOURCE[start:SOURCE.index("\n}", start)]
+        self.assertIn("gVF2RoutedItemValid &&", body,
+                      "VF2RoutedToItem must refuse to answer when nothing was "
+                      "recorded rather than defaulting to a match")
+
+    def test_the_ineffective_post_walk_probe_stays_gone(self):
+        # Re-probing after the native call was tried and cannot fire.
+        self.assertNotIn("bikeNow", SOURCE)
+        self.assertNotIn("pingPongNow", SOURCE)
+
+
 if __name__ == "__main__":
     unittest.main()

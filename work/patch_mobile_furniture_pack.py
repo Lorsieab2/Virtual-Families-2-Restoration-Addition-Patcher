@@ -32501,10 +32501,21 @@ public:
 
 extern CAchievement Achievement;
 
+struct ldwPoint;
 class CContentMap {
 public:
     enum EObject { eObjectHammock = 0x5B };
+    // The destination resolver PlanToGo(EObject, ...) uses internally.
+    //
+    // Decoded from VillagerPlans_patched_disasm.txt: the object overload of
+    // PlanToGo zeroes a local ldwPoint, hands its address to
+    //   ?FindObject@CContentMap@@QAE?B_NW4EObject@1@AAUldwPoint@@@Z
+    // and routes to whatever that writes back. So asking the SAME function
+    // the same question is how this code learns which machine the engine
+    // will actually pick -- not a second nearest-match probe of its own.
+    bool FindObject(EObject object, ldwPoint &outPoint);
 };
+extern CContentMap ContentMap;
 enum ESpeed { eSpeedNormal = 0xC8 };
 enum EPriority { ePriorityNormal = 0 };
 enum EBodyPosition {
@@ -33799,6 +33810,48 @@ static CVillagerPlans *gVF2AddedFurnitureVenuePlans = 0;
 static ldwPoint gVF2AddedFurnitureVenuePoint = {};
 static bool gVF2AddedFurnitureVenueActive = false;
 
+// Which placement the engine's own route resolver picked, for the case where
+// no venue is forced and a stock behaviour is merely being relabelled.
+static int gVF2RoutedItemId = 0;
+static bool gVF2RoutedItemValid = false;
+
+// The item id of the placement sitting at a resolved route destination.
+//
+// FindObject answers with a map point, not a furniture record, so the
+// placement array is walked for the record whose own lookup lands on that
+// same point. FindFurniture is the read-only nearest-match query the engine
+// itself uses and reserves nothing, so asking it per record is free.
+static int VF2ItemIdAtPoint(int object, ldwPoint routed)
+{
+    unsigned char *manager = reinterpret_cast<unsigned char *>(&FurnitureManager);
+    int count = *reinterpret_cast<int *>(manager + 0x1004);
+    if (count < 0 || count > 0x200) return 0;
+    for (int slot = 0; slot < count; ++slot) {
+        unsigned char *record = manager + 0x1008 + slot * 0x40;
+        if ((*reinterpret_cast<unsigned int *>(record + 0x0C) & 1) == 0) continue;
+        sFurnitureInfo2 info = {};
+        if (!FurnitureManager.FindFurniture(
+                (CContentMap::EObject)object,
+                *reinterpret_cast<ldwPoint *>(record + 0x14),
+                info, true, 0, false)) {
+            continue;
+        }
+        if (info.point.x != routed.x || info.point.y != routed.y) continue;
+        return *reinterpret_cast<int *>(record);
+    }
+    return 0;
+}
+
+// True when the route the engine just planned leads to this exact item.
+//
+// Returns false when nothing was recorded, so a wrapper that cannot tell
+// leaves the stock label alone -- a real treadmill keeping its real caption
+// is the safe direction.
+static bool VF2RoutedToItem(int itemId)
+{
+    return gVF2RoutedItemValid && gVF2RoutedItemId == itemId;
+}
+
 static bool VF2AddedFurnitureHandleIsItem(int handle, int itemId)
 {
     unsigned char *manager = reinterpret_cast<unsigned char *>(&FurnitureManager);
@@ -33961,6 +34014,28 @@ static bool __cdecl VF2PlanToGoObjectAtAddedFurnitureImpl(
         ldwPoint point = gVF2AddedFurnitureVenuePoint;
         plans->PlanToGo(point, speed, priority);
         return true;
+    }
+    // NO VENUE: the engine chooses. Record WHICH placement it chose, so a
+    // wrapper on a stock behaviour can label the machine the villager
+    // actually walks to.
+    //
+    // This is the fix for exercise-bike captions appearing on the treadmill.
+    // The wrappers used to probe FindFurniture from the villager's feet
+    // BEFORE the behaviour ran; both machines answer object 0x04, so with a
+    // bike nearer the villager at the moment the behaviour started, the bike
+    // caption was applied to a treadmill workout. Probing again after the
+    // call cannot help either -- the native helper only enqueues plans, so
+    // the villager has not moved yet.
+    //
+    // PlanToGo(object, ...) resolves its destination through
+    // CContentMap::FindObject. Asking that same function the same question
+    // yields the point the route will use, and the placement at that point
+    // names the item.
+    gVF2RoutedItemValid = false;
+    ldwPoint routed = {};
+    if (ContentMap.FindObject(object, routed)) {
+        gVF2RoutedItemId = VF2ItemIdAtPoint(object, routed);
+        gVF2RoutedItemValid = true;
     }
     return plans->PlanToGo(object, speed, priority, unknown);
 }
@@ -34302,7 +34377,18 @@ extern "C" void __cdecl VF2RandomTreadmillWalkLabel(CVillager &villager)
     bool bike = VF2LinkedFurnitureItemIs(
         villager, 0x04, __VF2_EXERCISE_BIKE_ITEM_ID__);
     if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::WorkoutTreadmill)) return;
-    if (!bike) return;
+    // WHICH MACHINE DID THE ROUTE PICK?
+    //
+    // The pre-probe below is a nearest-match from the villager's feet taken
+    // before the behaviour runs, so a villager standing nearer the bike gets
+    // the bike caption even when the route sends them to the treadmill. The
+    // interceptor on PlanToGo(object, ...) records the placement the engine's
+    // own resolver chose; prefer that, and fall back to the probe only when
+    // nothing was recorded.
+    bool const onBike = gVF2RoutedItemValid
+        ? VF2RoutedToItem(__VF2_EXERCISE_BIKE_ITEM_ID__)
+        : bike;
+    if (!onBike) return;
     VF2ApplyVenueLabel(
         villager, kVF2BehaviorLabels_exercise_bike_walk,
         VF2_LABEL_COUNT(kVF2BehaviorLabels_exercise_bike_walk), remembered);
@@ -34317,7 +34403,18 @@ extern "C" void __cdecl VF2RandomTreadmillRunLabel(CVillager &villager)
     bool bike = VF2LinkedFurnitureItemIs(
         villager, 0x04, __VF2_EXERCISE_BIKE_ITEM_ID__);
     if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::RunningOnTreadmill)) return;
-    if (!bike) return;
+    // WHICH MACHINE DID THE ROUTE PICK?
+    //
+    // The pre-probe below is a nearest-match from the villager's feet taken
+    // before the behaviour runs, so a villager standing nearer the bike gets
+    // the bike caption even when the route sends them to the treadmill. The
+    // interceptor on PlanToGo(object, ...) records the placement the engine's
+    // own resolver chose; prefer that, and fall back to the probe only when
+    // nothing was recorded.
+    bool const onBike = gVF2RoutedItemValid
+        ? VF2RoutedToItem(__VF2_EXERCISE_BIKE_ITEM_ID__)
+        : bike;
+    if (!onBike) return;
     VF2ApplyVenueLabel(
         villager, kVF2BehaviorLabels_exercise_bike_run,
         VF2_LABEL_COUNT(kVF2BehaviorLabels_exercise_bike_run), remembered);
