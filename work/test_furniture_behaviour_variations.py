@@ -265,6 +265,64 @@ class TheGymLabelVariesPerVisit(unittest.TestCase):
             "the ordinary venue applier lost its cache read, which would "
             "change captions for furniture that is working correctly")
 
+    def test_the_remembered_caption_is_gated_on_the_behaviour_serial(self):
+        # THE FIRST VERSION OF THIS FIX WAS A NO-OP AND IS PINNED HERE.
+        #
+        # It kept the caption whenever rememberedStringId was non-zero. But
+        # the caller resolves that through VF2CurrentLabelInGroup, which
+        # already returns 0 unless VF2BehaviorLabelStillFromThisSession says
+        # the slot is current -- so the branch fired on exactly the condition
+        # that made the ORDINARY applier keep the caption, and the gym went on
+        # showing one label per villager. The two appliers differed in source
+        # shape and not in behaviour.
+        #
+        # The serial is what separates a praise restarting the same activity
+        # from a genuinely new visit, so the accept branch must consult it.
+        m = re.search(
+            r"static void VF2ApplyVenueLabelVarying\(\s*\n(.*?)\n\}",
+            SOURCE, re.S)
+        self.assertIsNotNone(m, "VF2ApplyVenueLabelVarying is gone")
+        body = "\n".join(
+            line for line in m.group(1).splitlines()
+            if not line.lstrip().startswith("//"))
+        self.assertNotRegex(
+            body, r"if \(rememberedStringId\)\s*\{",
+            "the remembered caption is accepted unconditionally again, which "
+            "is the no-op version of this fix: it keeps the label on exactly "
+            "the visits the plain applier would have kept it")
+        self.assertIn(
+            "VF2LabelSlotIsPraiseRestart", body,
+            "nothing distinguishes a praise restart from a new visit, so the "
+            "caption either sticks forever or flips mid-activity")
+
+    def test_an_accepted_praise_advances_the_slot(self):
+        # VF2BehaviorLabelSlotIsCurrentFor writes the serial back when it
+        # accepts a praise, and the comment there records why: leaving the
+        # slot at N makes the SECOND praise arrive at N+2 and be rejected as a
+        # new session, which re-rolls the caption mid-activity.
+        #
+        # This predicate deliberately does NOT mutate. It is safe only because
+        # the accept branch calls VF2RememberBehaviorLabel, which refreshes
+        # behaviorSerial from the villager -- so consecutive praises stay at
+        # N+1. If that call is ever dropped, two praises in a row would
+        # re-roll, so the pairing is asserted rather than left to be noticed.
+        m = re.search(
+            r"static void VF2ApplyVenueLabelVarying\(\s*\n(.*?)\n\}",
+            SOURCE, re.S)
+        self.assertIsNotNone(m, "VF2ApplyVenueLabelVarying is gone")
+        body = m.group(1)
+        accept = body.index("VF2LabelSlotIsPraiseRestart")
+        tail = body[accept:]
+        remember = tail.find("VF2RememberBehaviorLabel")
+        self.assertNotEqual(
+            remember, -1,
+            "the praise branch returns without VF2RememberBehaviorLabel, so "
+            "the slot keeps its old serial and a second consecutive praise "
+            "arrives at N+2 and re-rolls the caption")
+        self.assertLess(
+            remember, tail.index("return;"),
+            "the slot must be refreshed before the branch returns")
+
 
 if __name__ == "__main__":
     unittest.main()
