@@ -33385,36 +33385,45 @@ static void VF2ApplyVenueLabel(
 // feature, so they re-roll per use. The remembered slot is still written, so
 // a praise restat within the same behaviour restores the caption it is
 // showing rather than flipping mid-action.
-static bool VF2LabelSlotIsPraiseRestart(CVillager &villager, int const *labels)
+// The slot's recorded serial for this label group, or 0 when there is no
+// slot yet. Read BEFORE the resolver, which overwrites it.
+static unsigned int VF2SlotSerialFor(CVillager &villager, int cacheTag)
 {
-    // A praise restarts the SAME activity and bumps the behaviour serial by
-    // one; a genuinely new visit arrives with a serial that does not sit one
-    // past the slot. Only the former may keep the caption -- flipping the
-    // words mid-massage or mid-workout because the player praised is the
-    // defect VF2BehaviorLabelSlotIsCurrentFor exists to prevent.
     VF2BehaviorLabelCacheSlot *slot =
-        VF2FindBehaviorLabelCache(villager, (int)labels, false);
-    if (!slot || slot->villager != &villager) return false;
-    unsigned char *data = (unsigned char *)&villager;
-    int behaviorId = *(int *)(data + 0x1BBA0);
-    unsigned int behaviorSerial = *(unsigned int *)(data + 0x1BBA4);
-    if (behaviorId != slot->behaviorId) return false;
-    return behaviorSerial == slot->behaviorSerial
-        || behaviorSerial == slot->behaviorSerial + 1;
+        VF2FindBehaviorLabelCache(villager, cacheTag, false);
+    if (!slot || slot->villager != &villager) return 0;
+    return slot->behaviorSerial;
 }
 
 static void VF2ApplyVenueLabelVarying(
-    CVillager &villager, int const *labels, int count, int rememberedStringId)
+    CVillager &villager, int const *labels, int count, int rememberedStringId,
+    unsigned int serialBefore)
 {
-    // KEEP the caption only while this is the SAME visit.
+    // TWO EARLIER VERSIONS OF THIS WERE INERT, recorded because the second
+    // looked like a fix for the first.
     //
-    // Taking `rememberedStringId` on its own was a no-op fix: the caller
-    // resolves it through VF2CurrentLabelInGroup, which already returns 0
-    // unless the slot is current -- so this branch fired on exactly the
-    // condition that made the ordinary applier keep the label too, and the
-    // gym went on showing one caption per villager forever. The serial is
-    // what separates a praise restart from a new visit.
-    if (rememberedStringId && VF2LabelSlotIsPraiseRestart(villager, labels)) {
+    // v1 took `rememberedStringId` alone. The caller resolves that through
+    // VF2CurrentLabelInGroup, which already returns 0 unless the slot is
+    // current -- so the branch fired on exactly the condition that made the
+    // ordinary applier keep the label too.
+    //
+    // v2 re-read the slot here and asked whether the serials matched. They
+    // always did: VF2BehaviorLabelSlotIsCurrentFor WRITES
+    // slot->behaviorSerial = behaviorSerial on its praise arm, and the
+    // equality arm leaves it already equal, so by the time this runs the
+    // slot serial equals the villager's on every path. Codex caught it.
+    //
+    // KEEP the caption only for a praise restarting the SAME visit.
+    //
+    // serialBefore was read before the resolver touched the slot, so it still
+    // holds the serial from the villager's PREVIOUS visit. A praise bumps the
+    // behaviour serial by one without starting a new activity, so a restart
+    // arrives one past what the slot held; a genuinely new visit does not.
+    unsigned char *data = (unsigned char *)&villager;
+    unsigned int const serialNow = *(unsigned int *)(data + 0x1BBA4);
+    bool const praiseRestart =
+        serialBefore != 0 && serialNow == serialBefore + 1;
+    if (rememberedStringId && praiseRestart) {
         VF2RememberBehaviorLabel(villager, (int)labels, rememberedStringId);
         VF2SetBehaviorLabel(villager, rememberedStringId);
         return;
@@ -34136,6 +34145,20 @@ static void VF2RunOwnFurnitureActionEx(
         return;
     }
     VF2BeginAddedFurnitureVenue(villager, venue);
+    // READ THE SLOT SERIAL BEFORE THE RESOLVER RUNS.
+    //
+    // VF2CurrentLabelInGroup reaches VF2BehaviorLabelSlotIsCurrentFor, whose
+    // praise arm WRITES slot->behaviorSerial = behaviorSerial as part of its
+    // rule -- deliberately, so a second praise is not rejected. The equality
+    // arm leaves it already equal. So after the resolver returns, the slot
+    // serial equals the villager's on EVERY path, and any later comparison
+    // against it is dead.
+    //
+    // That is exactly how the previous attempt at this fix was inert: it
+    // re-read the slot afterwards and asked whether the serials matched,
+    // which they always did. Capturing here is what makes the question
+    // answerable at all.
+    unsigned int const serialBefore = VF2SlotSerialFor(villager, (int)labels);
     int remembered = VF2CurrentLabelInGroup(villager, labels, labelCount);
     VF2RunNativeBehaviorAndChangedLabel(villager, donorBehavior);
     VF2EndAddedFurnitureVenue(villager);
@@ -34144,7 +34167,8 @@ static void VF2RunOwnFurnitureActionEx(
     // already resolved to this item, so do not mistake an unchanged label for
     // a rejected action; preserve the donor action and apply the item's label.
     if (varyLabelEachVisit) {
-        VF2ApplyVenueLabelVarying(villager, labels, labelCount, remembered);
+        VF2ApplyVenueLabelVarying(
+            villager, labels, labelCount, remembered, serialBefore);
     } else {
         VF2ApplyVenueLabel(villager, labels, labelCount, remembered);
     }

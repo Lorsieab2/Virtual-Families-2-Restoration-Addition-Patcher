@@ -265,35 +265,73 @@ class TheGymLabelVariesPerVisit(unittest.TestCase):
             "the ordinary venue applier lost its cache read, which would "
             "change captions for furniture that is working correctly")
 
-    def test_the_remembered_caption_is_gated_on_the_behaviour_serial(self):
-        # THE FIRST VERSION OF THIS FIX WAS A NO-OP AND IS PINNED HERE.
-        #
-        # It kept the caption whenever rememberedStringId was non-zero. But
-        # the caller resolves that through VF2CurrentLabelInGroup, which
-        # already returns 0 unless VF2BehaviorLabelStillFromThisSession says
-        # the slot is current -- so the branch fired on exactly the condition
-        # that made the ORDINARY applier keep the caption, and the gym went on
-        # showing one label per villager. The two appliers differed in source
-        # shape and not in behaviour.
-        #
-        # The serial is what separates a praise restarting the same activity
-        # from a genuinely new visit, so the accept branch must consult it.
+    def test_the_kept_caption_is_gated_on_a_value_the_resolver_cannot_touch(self):
+        """Two earlier versions of this gate were INERT. Pin the property.
+
+        v1 kept the caption whenever rememberedStringId was non-zero. The
+        caller resolves that through VF2CurrentLabelInGroup, which already
+        returns 0 unless the slot is current -- so the branch fired on exactly
+        the condition that made the ORDINARY applier keep the caption too.
+
+        v2 re-read the slot inside the applier and compared serials. They
+        always matched: VF2BehaviorLabelSlotIsCurrentFor WRITES
+        slot->behaviorSerial = behaviorSerial on its praise arm, and its
+        equality arm leaves the two already equal, so after the resolver runs
+        the slot serial equals the villager's on every reachable path.
+
+        Both compiled, both passed a text-matching test, and neither changed
+        what the game does. So this asserts the STRUCTURAL property that makes
+        the gate answerable: the value it compares must be captured BEFORE the
+        resolver, and must arrive as a parameter rather than be re-read from
+        the slot.
+        """
         m = re.search(
             r"static void VF2ApplyVenueLabelVarying\(\s*\n(.*?)\n\}",
             SOURCE, re.S)
         self.assertIsNotNone(m, "VF2ApplyVenueLabelVarying is gone")
+        sig_and_body = m.group(1)
+        body = "\n".join(
+            line for line in sig_and_body.splitlines()
+            if not line.lstrip().startswith("//"))
+
+        self.assertIn(
+            "serialBefore", sig_and_body,
+            "the applier no longer receives a serial captured before the "
+            "resolver ran, so any comparison it makes is against a value the "
+            "resolver has already overwritten -- the v2 defect")
+
+        self.assertNotIn(
+            "VF2FindBehaviorLabelCache", body,
+            "the applier re-reads the cache slot itself; that is the v2 "
+            "defect, because the resolver has already written the serial "
+            "there by the time this runs")
+
+        self.assertRegex(
+            body, r"serialBefore\s*\+\s*1",
+            "the gate no longer tests for the one-step serial bump that "
+            "distinguishes a praise restart from a new visit")
+
+    def test_the_caller_captures_the_serial_before_resolving(self):
+        # Ordering is the whole fix: capturing after VF2CurrentLabelInGroup
+        # would read the value the resolver just wrote.
+        m = re.search(
+            r"static void VF2RunOwnFurnitureActionEx\(\s*\n(.*?)\n\}",
+            SOURCE, re.S)
+        self.assertIsNotNone(m, "VF2RunOwnFurnitureActionEx is gone")
+        # COMMENTS STRIPPED. The comment above the capture NAMES
+        # VF2CurrentLabelInGroup while explaining why the order matters, so an
+        # index comparison over the raw text finds the prose first and reports
+        # the wrong order. Same trap as the spa-lounger pose test.
         body = "\n".join(
             line for line in m.group(1).splitlines()
             if not line.lstrip().startswith("//"))
-        self.assertNotRegex(
-            body, r"if \(rememberedStringId\)\s*\{",
-            "the remembered caption is accepted unconditionally again, which "
-            "is the no-op version of this fix: it keeps the label on exactly "
-            "the visits the plain applier would have kept it")
-        self.assertIn(
-            "VF2LabelSlotIsPraiseRestart", body,
-            "nothing distinguishes a praise restart from a new visit, so the "
-            "caption either sticks forever or flips mid-activity")
+        self.assertIn("VF2SlotSerialFor", body,
+                      "the caller no longer captures the slot serial at all")
+        self.assertLess(
+            body.index("VF2SlotSerialFor"),
+            body.index("VF2CurrentLabelInGroup"),
+            "the serial is captured AFTER the resolver, which overwrites it -- "
+            "the capture must come first or it measures nothing")
 
     def test_an_accepted_praise_advances_the_slot(self):
         # VF2BehaviorLabelSlotIsCurrentFor writes the serial back when it
@@ -310,8 +348,12 @@ class TheGymLabelVariesPerVisit(unittest.TestCase):
             r"static void VF2ApplyVenueLabelVarying\(\s*\n(.*?)\n\}",
             SOURCE, re.S)
         self.assertIsNotNone(m, "VF2ApplyVenueLabelVarying is gone")
+        # Anchored on the GATE, not on a helper name. An earlier version
+        # indexed VF2LabelSlotIsPraiseRestart, which went away when that
+        # helper turned out to be inert -- and the test then failed for the
+        # wrong reason, hiding whether the property still held.
         body = m.group(1)
-        accept = body.index("VF2LabelSlotIsPraiseRestart")
+        accept = body.index("praiseRestart)")
         tail = body[accept:]
         remember = tail.find("VF2RememberBehaviorLabel")
         self.assertNotEqual(
