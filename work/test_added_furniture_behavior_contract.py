@@ -13,7 +13,7 @@ def source():
 class TestAddedFurnitureContract(unittest.TestCase):
     def test_ownership_never_gates_the_own_handlers(self):
         src = source()
-        block = src[src.index("static void VF2RunOwnFurnitureAction("):src.index("// The Ping-Pong Table", src.index("static void VF2RunOwnFurnitureAction("))]
+        block = src[src.index("static void VF2RunOwnFurnitureActionEx("):src.index("// The Ping-Pong Table", src.index("static void VF2RunOwnFurnitureActionEx("))]
         self.assertNotIn("IsInWorld", block)
         self.assertIn("VF2RunNativeBehaviorAndChangedLabel", block)
         self.assertNotIn("if (!changed) return;", block)
@@ -22,7 +22,7 @@ class TestAddedFurnitureContract(unittest.TestCase):
 
     def test_venue_label_is_applied_when_donor_keeps_native_label(self):
         src = source()
-        start = src.index("static void VF2RunOwnFurnitureAction(")
+        start = src.index("static void VF2RunOwnFurnitureActionEx(")
         body = src[start:src.index('extern "C" void __cdecl VF2ExerciseBikeWalk', start)]
         donor = body.index("VF2RunNativeBehaviorAndChangedLabel(villager, donorBehavior);")
         after = body[donor:]
@@ -50,7 +50,7 @@ class TestAddedFurnitureContract(unittest.TestCase):
 
     def test_missing_venue_falls_back_to_native_donor(self):
         src = source()
-        start = src.index("static void VF2RunOwnFurnitureAction(")
+        start = src.index("static void VF2RunOwnFurnitureActionEx(")
         body = src[start:src.index("extern \"C\" void __cdecl VF2ExerciseBikeWalk", start)]
         self.assertIn("bool const hasVenue", body)
         self.assertIn("VF2RunNativeBehaviorAndChangedLabel", body)

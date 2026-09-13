@@ -1,32 +1,26 @@
-"""The Exercise Bike must be ridden SEATED, in the orientation it was placed.
+"""The Exercise Bike uses the BASE-GAME TREADMILL sequence, with no seated pose.
 
-THE REPORT: the bike should use "the animation cycles sittingNW and SittingNE
-depending on the furniture position (first furniture frame is northwest
-orientation, second is northeast orientation)".
+THE OWNER'S INSTRUCTION, which supersedes the earlier seated-pose design:
 
-WHAT IT DID: both bike handlers delegate to a treadmill donor, which is a
-standing animation, and set no pose at all -- so a villager on the bike stood
-beside it and jogged on the spot.
+    "for the exercise bike animations just use the base-game treadmill
+     animation sequence and orientation. forget the sitting animation."
 
-THE VALUES WERE DECODED, NOT GUESSED. work/desktop_obj_files/AnimManager.obj
-carries the enum:
+WHAT CAME BEFORE, and why it is gone. The bike originally rode standing,
+because both handlers delegate to a treadmill donor and set no pose. That was
+reported as a bug, and the fix retargeted the donors' own PlanToWait callsites
+to VF2PlanToWaitSeatedOnBike so the rider sat while the donor kept its
+durations and animations. In play that seated pose did not line up with the
+bike art -- the villager read as standing inside the machine -- so the owner
+asked for the stock treadmill presentation instead.
 
-    eBodyPosition_Upright    0x00
-    eBodyPosition_Sitting    0x02
-    eBodyPosition_SittingNE  0x11
-    eBodyPosition_SittingNW  0x12
+So the requirement inverted. These tests now pin the ABSENCE of the seated
+machinery, because a silent reintroduction would bring the misaligned pose
+back. The donors run their stock plans untouched: same animation sequence,
+same orientation, same durations as the base game.
 
-Upright at 0x00 matches the eBodyPositionStanding the generator already
-declared, which is what validates the extraction -- a wrong constant would seat
-the villager in some unrelated pose.
-
-THE FIRST FIX WAS WRONG AND IS PINNED HERE AS A REGRESSION. It appended a pose
-after the donor ran. WorkoutTreadmill enqueues PlanToPlayAnim + PlanToWait
-cycles and each wait carries a STANDING body position, so an appended pose left
-the villager jogging upright for the entire workout with one seated frame at
-the end. The shipped design instead retargets the donor's own PlanToWait
-callsites, substituting the seated pose while the donor keeps its durations and
-animations.
+What is NOT affected, and must stay: the bike keeps its own LABELS ("Using the
+exercise bike", "Doing high-intensity cycling") and its own item identity. Only
+the pose substitution was removed.
 
 These tests read the generator source that emits the C++, because that is the
 artifact which reaches the build.
@@ -51,97 +45,201 @@ def handler_body(name):
     return m.group(1)
 
 
-def seated_window():
-    m = re.search(r"static bool VF2OpenBikeSeatedWindow\(.*?\n\}", SOURCE, re.S)
-    assert m, "VF2OpenBikeSeatedWindow not found in the generator"
-    return m.group(0)
+class TheSeatedPoseIsGone(unittest.TestCase):
+    """The pose substitution must not come back by accident."""
 
-
-class TheSeatedWindowIsWiredUp(unittest.TestCase):
-    def test_the_window_helper_exists(self):
-        # Three arguments: the third resolves the venue so the pose belongs to
-        # the bike the villager actually rides.
-        self.assertIn(
-            "static bool VF2OpenBikeSeatedWindow("
-            "CVillager &villager, int itemId, int object)", SOURCE)
-
-    def test_the_abandoned_append_design_is_gone(self):
-        # Appending a pose after the donor is the bug, not the fix.
-        self.assertNotIn("VF2SeatOnExerciseBike", SOURCE)
-
-    def test_both_handlers_open_and_close_the_window(self):
+    def test_neither_handler_opens_a_seated_window(self):
         for name in HANDLERS:
             with self.subTest(handler=name):
                 body = handler_body(name)
-                self.assertIn(
-                    "VF2OpenBikeSeatedWindow("
-                    "villager, __VF2_EXERCISE_BIKE_ITEM_ID__, 0x04)", body)
-                self.assertIn("if (seated) VF2EndBikeSeated(villager);", body)
+                self.assertNotIn(
+                    "VF2OpenBikeSeatedWindow", body,
+                    "%s still opens the seated window; the owner asked for "
+                    "the stock treadmill sequence with no sitting animation"
+                    % name)
+                self.assertNotIn(
+                    "VF2EndBikeSeated", body,
+                    "%s still closes a seated window that is no longer opened"
+                    % name)
 
-    def test_the_window_opens_before_the_donor_runs(self):
-        # The window must be open while the donor enqueues its waits;
-        # opening it afterwards substitutes nothing.
+    def test_no_wait_callsite_is_retargeted_to_a_seated_helper(self):
+        # The seated pose was installed by substituting the donors' own
+        # PlanToWait calls. If that retarget returns, the misaligned pose
+        # returns with it.
+        self.assertNotIn(
+            "_VF2PlanToWaitSeatedOnBike", SOURCE,
+            "the seated PlanToWait helper is referenced again; the bike must "
+            "run the treadmill donors' stock waits")
+        self.assertNotIn(
+            "seated PlanToWait", SOURCE,
+            "a seated PlanToWait retarget entry is back in the table")
+
+    def test_the_donors_keep_their_own_plans(self):
+        # Each handler still runs a treadmill donor -- that is where the
+        # animation sequence, orientation and duration come from.
+        self.assertIn("CBehavior::WorkoutTreadmill",
+                      handler_body("VF2ExerciseBikeWalk"))
+        self.assertIn("CBehavior::RunningOnTreadmill",
+                      handler_body("VF2ExerciseBikeRun"))
+
+
+class TheBikeKeepsItsOwnIdentity(unittest.TestCase):
+    """Removing the pose must not cost the bike its labels or its item."""
+
+    def test_each_handler_still_uses_its_own_label_group(self):
+        pairs = (
+            ("VF2ExerciseBikeWalk", "kVF2BehaviorLabels_exercise_bike_walk"),
+            ("VF2ExerciseBikeRun", "kVF2BehaviorLabels_exercise_bike_run"),
+        )
+        for name, group in pairs:
+            with self.subTest(handler=name):
+                self.assertIn(group, handler_body(name))
+
+    def test_each_handler_still_resolves_the_bike_item(self):
         for name in HANDLERS:
             with self.subTest(handler=name):
-                body = handler_body(name)
-                self.assertLess(
-                    body.index("VF2OpenBikeSeatedWindow"),
-                    body.index("VF2RunOwnFurnitureAction"))
+                self.assertIn("__VF2_EXERCISE_BIKE_ITEM_ID__",
+                              handler_body(name))
 
     def test_high_intensity_cycling_uses_the_running_donor(self):
-        # The owner asked that high-intensity cycling be restricted to the
-        # bike. It borrows RunningOnTreadmill, which has its OWN wait callsites.
+        # The two actions must stay distinct: walking borrows the walk donor,
+        # cycling borrows the run donor.
+        self.assertNotIn("CBehavior::RunningOnTreadmill",
+                         handler_body("VF2ExerciseBikeWalk"))
+        self.assertNotIn("CBehavior::WorkoutTreadmill",
+                         handler_body("VF2ExerciseBikeRun"))
+
+
+class TheCaptionFollowsTheMachineTheRouteChose(unittest.TestCase):
+    """Bike captions must not appear on a stock treadmill.
+
+    Reported from live play. Both machines answer EObject 0x04, so the
+    wrappers on the stock treadmill behaviours cannot tell them apart on
+    their own.
+
+    WHY THE OBVIOUS FIXES DO NOT WORK, both established by measurement:
+
+    The PRE-probe is a nearest-match FindFurniture from the villager's feet
+    taken before the behaviour runs. WorkoutTreadmill makes that same query
+    from that same position, so the probe is not wrong -- it just answers
+    "which machine is nearest now", which is not "which machine will the
+    route pick".
+
+    Probing AGAIN after the call cannot help either.
+    VF2RunNativeBehaviorAndChangedLabel only invokes the behaviour
+    constructor and enqueues plans; it does not execute them, so FeetPos()
+    is unchanged and both probes inspect identical state. That version was
+    written, shipped in a PR, and correctly rejected.
+
+    WHAT DOES WORK: PlanToGo(EObject, ...) resolves its destination through
+    CContentMap::FindObject -- decoded from VillagerPlans_patched_disasm.txt,
+    where the object overload zeroes a local ldwPoint, passes its address to
+    ?FindObject@CContentMap@@QAE?B_NW4EObject@1@AAUldwPoint@@@Z and routes to
+    what it writes back. The interceptor already wrapping that call asks the
+    same function the same question and records the placement at the answer.
+    """
+
+    def intercept_body(self):
+        start = SOURCE.find("static bool __cdecl VF2PlanToGoObjectAtAddedFurnitureImpl(")
+        self.assertNotEqual(start, -1, "the PlanToGo(object) interceptor is gone")
+        end = SOURCE.find('\nextern "C"', start)
+        self.assertNotEqual(end, -1, "no definition follows the interceptor")
+        return SOURCE[start:end]
+
+    def test_the_interceptor_asks_the_engines_own_resolver(self):
+        body = self.intercept_body()
         self.assertIn(
-            "CBehavior::RunningOnTreadmill", handler_body("VF2ExerciseBikeRun"))
+            "ContentMap.FindObject(object, routed)", body,
+            "the interceptor no longer resolves the destination, so a wrapper "
+            "cannot learn which machine the route picked")
+        self.assertIn("gVF2RoutedItemValid = true;", body)
+
+    def test_the_resolver_runs_only_when_no_venue_is_forced(self):
+        # With a venue active the route is already ours and the recorded item
+        # would be meaningless; the early return must come first.
+        body = self.intercept_body()
+        self.assertLess(
+            body.index("gVF2AddedFurnitureVenueActive"),
+            body.index("ContentMap.FindObject"),
+            "the venue branch must return before the fallback records anything")
+
+    def test_both_treadmill_wrappers_prefer_the_routed_machine(self):
+        for name in ("VF2RandomTreadmillWalkLabel", "VF2RandomTreadmillRunLabel"):
+            with self.subTest(wrapper=name):
+                start = SOURCE.index(
+                    'extern "C" void __cdecl %s(CVillager &villager)\n{' % name)
+                body = SOURCE[start:SOURCE.index('\nextern "C"', start)]
+                self.assertIn(
+                    "VF2RoutedToItem(villager, __VF2_EXERCISE_BIKE_ITEM_ID__)", body,
+                    "%s still decides from the stale pre-probe alone, which is "
+                    "the defect: a bike caption on a treadmill workout" % name)
+                self.assertIn("if (!onBike) return;", body)
+
+    def test_an_unrecorded_route_leaves_the_stock_label_alone(self):
+        # VF2RoutedToItem returns false when nothing was recorded, so a
+        # wrapper that cannot tell must not relabel. A real treadmill keeping
+        # its real caption is the safe direction.
+        start = SOURCE.index("static bool VF2RoutedToItem(CVillager &villager, int itemId)")
+        body = SOURCE[start:SOURCE.index("\n}", start)]
+        self.assertIn("gVF2RoutedItemValid", body,
+                      "VF2RoutedToItem must refuse to answer when nothing was "
+                      "recorded rather than defaulting to a match")
+        # And it must belong to THIS villager: the interceptor runs during plan
+        # construction while the wrapper reads after the behaviour returns, so
+        # an unowned global could hand one villager another's route.
+        self.assertIn("gVF2RoutedItemPlans == reinterpret_cast<CVillagerPlans *>(&villager)",
+                      body,
+                      "the recorded route is not tied to the villager reading "
+                      "it, so a plan built for someone else could be used")
+
+    def test_the_ineffective_post_walk_probe_stays_gone(self):
+        # Re-probing after the native call was tried and cannot fire.
+        self.assertNotIn("bikeNow", SOURCE)
+        self.assertNotIn("pingPongNow", SOURCE)
+
+    def test_find_object_is_declared_with_its_const_return(self):
+        """The native symbol is `bool const`, and MSVC mangles that in.
+
+        work/VillagerPlans_symbols.txt:436 records
+          ?FindObject@CContentMap@@QAE?B_NW4EObject@1@AAUldwPoint@@@Z
+          public: bool const __thiscall CContentMap::FindObject(...)
+
+        The ?B is the const qualifier on the RETURN type. Declaring plain
+        `bool` emits a reference to ?FindObject@CContentMap@@QAE_N... which
+        COMPILES to an object and then fails to LINK -- a failure the compile
+        suite cannot see, because it stops at the object file. So this is
+        asserted on the declaration rather than left to a build nobody runs
+        here.
+        """
+        # There are several CContentMap declarations, one per emitted unit.
+        # The one that matters is the behaviours unit's -- the only one that
+        # declares FindObject -- so find it by that member rather than by
+        # taking the first class of that name.
         self.assertIn(
-            "CBehavior::WorkoutTreadmill", handler_body("VF2ExerciseBikeWalk"))
+            "const bool FindObject(EObject object, ldwPoint &outPoint);",
+            SOURCE,
+            "FindObject must be declared with its const-qualified return type "
+            "or the executable link fails unresolved")
 
+    def test_the_routed_placement_is_resolved_by_handle(self):
+        """Point equality cannot name a placement; the handle can.
 
-class BothDonorsAreRetargeted(unittest.TestCase):
-    def test_both_treadmill_donors_have_their_waits_retargeted(self):
-        # Retargeting only WorkoutTreadmill left high-intensity cycling fully
-        # upright while the walking action sat down -- a half-applied fix that
-        # no check looking at a single donor could see.
-        self.assertIn("WorkoutTreadmill seated PlanToWait", SOURCE)
-        self.assertIn("RunningOnTreadmill seated PlanToWait", SOURCE)
-
-    def test_the_wait_retarget_requires_every_callsite(self):
-        # A count check that accepted "at least one" would let most of the
-        # workout stay standing, so an exact count is required.
-        self.assertIn("_VF2PlanToWaitSeatedOnBike", SOURCE)
-        self.assertRegex(SOURCE, r"expected \w+ REL32 wait relocations")
-
-
-class TheOrientationComesFromThePlacement(unittest.TestCase):
-    def test_orientation_is_read_from_the_placement_record(self):
-        # +0x10 is the placement record's orientation. sFurnitureInfo2's
-        # equivalent slot is padding in the declaration this code sees.
+        Two placements sharing a walk-to anchor both match a point compare,
+        and a record whose own query resolves a NEIGHBOURING placement matches
+        on that neighbour's point while the loop returns the current record's
+        item id. Either way a treadmill route could be read as a bike route,
+        which is the very defect this machinery exists to prevent.
+        """
+        start = SOURCE.index("static int VF2ItemIdAtPoint(")
+        body = SOURCE[start:SOURCE.index("\n}", start)]
         self.assertIn(
-            "int orientation = *reinterpret_cast<int *>(record + 0x10);", SOURCE)
-
-    def test_both_orientations_map_to_distinct_seated_poses(self):
-        self.assertIn("eBodyPositionSittingNE = 0x11", SOURCE)
-        self.assertIn("eBodyPositionSittingNW = 0x12", SOURCE)
-        self.assertIn(
-            "orientation == 1 ? eBodyPositionSittingNW : eBodyPositionSittingNE",
-            SOURCE)
-
-    def test_the_pose_belongs_to_the_bike_the_villager_rides(self):
-        # With two bikes placed at different orientations, taking the first
-        # record with a matching id could pose for the wrong one, because the
-        # route picks the NEAREST.
-        window = seated_window()
-        self.assertIn(
-            "VF2FindAddedFurnitureVenue(villager, itemId, object, venue)", window)
-        self.assertIn(
-            "info.point.x != venue.x || info.point.y != venue.y", window)
-
-    def test_a_missing_bike_leaves_the_donor_alone(self):
-        # No bike placed -> no window -> the stock treadmill user is untouched.
-        self.assertIn("return false;", seated_window())
-        for name in HANDLERS:
-            with self.subTest(handler=name):
-                self.assertIn("if (seated)", handler_body(name))
+            "!= info.unknown0", body,
+            "VF2ItemIdAtPoint no longer matches on the placement handle, so "
+            "it can name the wrong machine")
+        self.assertNotIn(
+            "info.point.x != routed.x", body,
+            "the point-equality join is back; it cannot distinguish two "
+            "placements that share a walk-to anchor")
 
 
 if __name__ == "__main__":

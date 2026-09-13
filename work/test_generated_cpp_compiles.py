@@ -24,6 +24,7 @@ from pathlib import Path
 
 import patch_mobile_furniture_pack as patcher
 
+ROOT = Path(patcher.ROOT)
 GENERATED = Path(patcher.PATCHED)
 
 # Where vcvars32.bat lives on a machine that can build this project at all.
@@ -52,6 +53,39 @@ class TestEveryGeneratedUnitCompiles(unittest.TestCase):
         self.sources = sorted(GENERATED.glob("*.cpp"))
         if not self.sources:
             self.skipTest("no generated .cpp files present")
+
+    def test_the_sources_are_not_older_than_the_generator(self):
+        """A green compile of STALE sources says nothing about the generator.
+
+        This suite compiles whatever .cpp files are sitting in the output
+        directory. It does not run the generator, so when those files predate
+        the generator that emits them, every result here describes code that
+        is no longer in the repository.
+
+        That is not hypothetical. Editing the generator and running this suite
+        returned "2 passed, 10 subtests passed" against sources three days
+        old -- twice, for two different changes. One of those changes carried
+        a declaration that would not have linked. The green run was true about
+        the files it compiled and irrelevant to the question being asked.
+
+        Failing rather than skipping is deliberate: a skip here reads as "no
+        toolchain" and gets ignored, which is the same silence that let the
+        stale runs pass unnoticed.
+        """
+        generator = ROOT / "work" / "patch_mobile_furniture_pack.py"
+        if not generator.is_file():
+            self.skipTest("the generator is not present in this checkout")
+        gen_mtime = generator.stat().st_mtime
+        stale = [
+            path.name for path in self.sources
+            if path.stat().st_mtime < gen_mtime
+        ]
+        self.assertEqual(
+            stale, [],
+            "these emitted sources are older than the generator, so compiling "
+            "them proves nothing about the current generator: %s. Re-run the "
+            "generator before trusting this suite."
+            % ", ".join(sorted(stale)[:6]))
 
     def test_each_file_compiles(self):
         """Compile each unit on its own, the way the real build does.
