@@ -7042,13 +7042,22 @@ class MobileIslandEventTextTests(unittest.TestCase):
         # guard above passes and every assertion below fails against a file
         # that was never meant to carry them. That produced two confusing
         # failures which looked like a regression and were not.
-        if not patcher.ENABLE_ISLAND_EVENTS:
-            self.skipTest(
-                "island events are disabled, so vf2_island_events.cpp is the "
-                "deliberate stub; set VF2_ENABLE_ISLAND_EVENTS=1 to exercise "
-                "this")
-
+        # ASK THE ARTIFACT, NOT THE IMPORT-TIME FLAG. Gating on
+        # patcher.ENABLE_ISLAND_EVENTS reads the environment of THIS process,
+        # not the build that wrote the file. After an island-enabled build the
+        # flag returns to its default False while the emitted source and object
+        # are still feature-enabled, so a flag gate would skip the very
+        # artifacts these assertions exist to validate -- the same
+        # existence-for-validity substitution, inverted.
+        #
+        # The stub is a single line under this name, so its own text is the
+        # reliable discriminator.
         source = source_path.read_text(encoding="ascii")
+        if "VF2RegisterMobileIslandEvents(void **) {}" in source:
+            self.skipTest(
+                "vf2_island_events.cpp is the deliberate stub emitted with "
+                "VF2_ENABLE_ISLAND_EVENTS unset; rebuild with it set to "
+                "exercise this")
         self.assertIn(
             "extern __declspec(naked) void VF2MobileIslandEventGetAwardAmount()",
             source,
