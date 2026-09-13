@@ -6988,14 +6988,20 @@ class MobileIslandEventTextTests(unittest.TestCase):
         obj_path = patcher.PATCHED / "vf2_island_events.obj"
         if not obj_path.is_file():
             self.skipTest("fresh Island helper object has not been generated")
-        # Same stub hazard as the sibling test above: with island events
-        # disabled the .cpp is a one-line stub, and an .obj left from an
-        # earlier build lets this run against it.
-        if not patcher.ENABLE_ISLAND_EVENTS:
+        # Same stub hazard as the sibling test above, and the same fix: ask
+        # the emitted SOURCE, not this process's environment. The flag says
+        # how the test run was configured; after an island-enabled build it is
+        # False again while the object is still feature-enabled, so gating on
+        # it would skip a real artifact.
+        source_path = patcher.PATCHED / "vf2_island_events.cpp"
+        if not source_path.is_file():
+            self.skipTest("the Island helper source has not been generated")
+        if ("VF2RegisterMobileIslandEvents(void **) {}"
+                in source_path.read_text(encoding="ascii")):
             self.skipTest(
-                "island events are disabled, so the object is built from the "
-                "deliberate stub; set VF2_ENABLE_ISLAND_EVENTS=1 to exercise "
-                "this")
+                "the object was built from the deliberate stub emitted with "
+                "VF2_ENABLE_ISLAND_EVENTS unset; rebuild with it set to "
+                "exercise this")
         obj = CoffObject(obj_path)
         vtable = obj.symbol("?gVF2MobileIslandEventVtable@@3UVF2MobileIslandEventVtable@@B")
         section = obj.section(vtable.section)
