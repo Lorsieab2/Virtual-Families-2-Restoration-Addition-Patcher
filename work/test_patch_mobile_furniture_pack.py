@@ -6988,6 +6988,14 @@ class MobileIslandEventTextTests(unittest.TestCase):
         obj_path = patcher.PATCHED / "vf2_island_events.obj"
         if not obj_path.is_file():
             self.skipTest("fresh Island helper object has not been generated")
+        # Same stub hazard as the sibling test above: with island events
+        # disabled the .cpp is a one-line stub, and an .obj left from an
+        # earlier build lets this run against it.
+        if not patcher.ENABLE_ISLAND_EVENTS:
+            self.skipTest(
+                "island events are disabled, so the object is built from the "
+                "deliberate stub; set VF2_ENABLE_ISLAND_EVENTS=1 to exercise "
+                "this")
         obj = CoffObject(obj_path)
         vtable = obj.symbol("?gVF2MobileIslandEventVtable@@3UVF2MobileIslandEventVtable@@B")
         section = obj.section(vtable.section)
@@ -7027,6 +7035,18 @@ class MobileIslandEventTextTests(unittest.TestCase):
         obj_path = patcher.PATCHED / "vf2_island_events.obj"
         if not source_path.is_file() or not obj_path.is_file():
             self.skipTest("fresh Island helper source/object has not been generated")
+        # EXISTENCE IS NOT ENOUGH. With VF2_ENABLE_ISLAND_EVENTS unset -- the
+        # default -- the generator writes a one-line STUB under this name, so
+        # the legacy linker response still finds an object. The stub satisfies
+        # is_file(), and if an .obj is left over from an earlier build the
+        # guard above passes and every assertion below fails against a file
+        # that was never meant to carry them. That produced two confusing
+        # failures which looked like a regression and were not.
+        if not patcher.ENABLE_ISLAND_EVENTS:
+            self.skipTest(
+                "island events are disabled, so vf2_island_events.cpp is the "
+                "deliberate stub; set VF2_ENABLE_ISLAND_EVENTS=1 to exercise "
+                "this")
 
         source = source_path.read_text(encoding="ascii")
         self.assertIn(
