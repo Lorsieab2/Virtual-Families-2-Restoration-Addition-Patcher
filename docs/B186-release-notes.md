@@ -119,6 +119,31 @@ mov  [0x70CD84],0          ; the picnic preparer, cleared
 at all, so the text comparison is gone from this path rather than merely
 joined by a serial read.
 
+Across every variant built so far, the count separates exactly along the
+feature gate -- five serial reads in each `behavior_patches` variant, four in
+each variant without it:
+
+```
+behavior_patches                                        5
+cheat_upgrades_behavior_patches                         5
+cheat_upgrades_holiday_ornaments_behavior_patches       5
+holiday_ornaments_behavior_patches                      5
+island_events_behavior_patches                          5
+island_events_cheat_upgrades_behavior_patches           5
+island_events_cheat_upgrades_holiday_ornaments_behavior_patches  5
+core                                                    4
+cheat_upgrades                                          4
+holiday_ornaments                                       4
+island_events                                           4
+island_events_cheat_upgrades                            4
+cheat_upgrades_holiday_ornaments                        4
+island_events_cheat_upgrades_holiday_ornaments          4
+```
+
+That split is itself evidence: the preparer code is gated behind
+`behavior_patches`, so a fix that landed anywhere else -- or that failed to land
+in the gated variants -- would not produce it.
+
 A note on the numbers: an earlier draft said seven sites rising to twelve. That
 count came from a loose byte-pattern match that caught extra encodings. The
 figures above come from decoding ModRM properly and are the ones to trust.
