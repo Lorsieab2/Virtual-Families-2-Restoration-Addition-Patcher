@@ -82,6 +82,9 @@ MOBILE_FURNITURE_AUTONOMOUS_SELECTOR_SYMBOL = (
     "_VF2TryStartMobileFurnitureAutonomous"
 )
 MOBILE_PATIO_PROP_HELPER_SYMBOL = "@VF2PatioSetPropAndTrack@12"
+# __fastcall(CFurnitureManager *, void *, int) -- this in ecx, the unused
+# edx slot, and the element index on the stack, so 12 bytes.
+MOBILE_TABLE_PROP_PAINT_HELPER_SYMBOL = "@VF2FurniturePaintAndTableProps@12"
 MOBILE_CHAISE_ITEM_IDS = tuple(range(0x2DE, 0x2E2))
 MOBILE_CHAISE_OBJECT = 0x95
 MOBILE_CHAISE_PC_CELL_VALUE = 0x2000A800
@@ -26103,6 +26106,17 @@ public:
     CVillager *GetRandomVillager(EAgeSelecter, EGender, int *);
 };
 
+// CSceneManager::Draw is the engine's IMMEDIATE world-space blit -- the one
+// CFurnitureManager::Draw(int) itself calls to paint a table. Declared here so
+// the table props can be painted the same way, inside the paint phase, instead
+// of being queued as decals that paint before the scene even opens.
+class ldwImageGrid;
+class CSceneManager {
+public:
+    void Draw(ldwImageGrid *grid, ldwPoint point, int frame, float alpha) const;
+};
+extern CSceneManager SceneManager;
+
 class CFurnitureManager;
 int __cdecl VF2PtOnFurnitureIndex(CFurnitureManager &, ldwPoint);
 
@@ -26125,6 +26139,9 @@ public:
         bool,
         int,
         bool);
+    // The PAINT function, dispatched from CSceneManager::EndScene once per
+    // sorted furniture element. Distinct from Draw(bool), which only enqueues.
+    void Draw(int);
 };
 
 class CFoodStore {
@@ -26238,6 +26255,14 @@ static bool gVF2PicnicPropPlaced = false;
 static int gVF2PatioPropX = 0;
 static int gVF2PatioPropY = 0;
 static bool gVF2PatioPropPlaced = false;
+// The furniture array slot each prop's table occupies. EndScene hands
+// that same index to CFurnitureManager::Draw(int), so the prop can be
+// painted immediately after its own table rather than at an arbitrary
+// point in the sorted list.
+static int gVF2PicnicPropSlot = -1;
+static int gVF2PatioPropSlot = -1;
+static int gVF2PicnicPropHandle = -1;
+static int gVF2PatioPropHandle = -1;
 
 static void VF2ClearPatioDrinks()
 {
@@ -26391,9 +26416,13 @@ static void VF2CaptureTableProp(
     int &outX,
     int &outY,
     int *outOrientation,
-    bool &outPlaced)
+    bool &outPlaced,
+    int &outSlot,
+    int &outHandle)
 {
     outPlaced = false;
+    outSlot = -1;
+    outHandle = -1;
     if (preparer == 0) return;
     sFurnitureInfo2 info = {};
     if (!FurnitureManager.FindFurniture(
@@ -26426,6 +26455,17 @@ static void VF2CaptureTableProp(
         if (outOrientation != 0) {
             *outOrientation = *(int *)(record + 0x10);
         }
+        // The SLOT is what CFurnitureManager::Draw(int) is given for this
+        // table, so recording it lets the prop paint with its own table's
+        // element rather than at some arbitrary point in the sorted list.
+        outSlot = slot;
+        // The HANDLE is what makes the slot trustworthy later.
+        // CFurnitureManager::RearrangeFurnitureList compacts the placement
+        // array when furniture is moved or sold, so a slot captured now can
+        // refer to a different item by the time the prop paints. The handle
+        // is per-placement and survives compaction, so the paint re-checks it
+        // and draws nothing rather than drawing the wrong thing.
+        outHandle = *(int *)(record + 0x04);
         outPlaced = true;
         return;
     }
@@ -26455,44 +26495,88 @@ static void VF2DrawTableProp(
     if (graphics == 0) return;
     ldwImageGrid *grid = graphics->GetImageGrid((EImage)imageId);
     if (grid == 0) return;
-    // BOUND THE ARRAY OURSELVES before calling.
+    // PAINT IMMEDIATELY, IN WORLD SPACE. Do not enqueue a decal.
     //
-    // Both AddDecal overloads walk the same free-slot scan, stepping 0x18
-    // bytes per record until they find a zero occupancy byte. The
-    // FIVE-argument form then guards with `cmp edx,0x100 / jg` and skips
-    // the write when the array is full; the FOUR-argument form has no
-    // comparison against any bound and writes wherever the scan stopped.
+    // Reported from live play twice: the props render behind the table. The
+    // cause is not a decal slot or a frame index, and it is not the order of
+    // the calls in theMainScene::DrawScene. That list is a REGISTRATION pass,
+    // not a paint order -- CFurnitureManager::Draw(bool) contains nothing but
+    // `push 9 / call CSceneManager::AddElement`, and so do pets, environment,
+    // collectables and weather. All of it paints later, inside
+    // CSceneManager::EndScene, which insertion-sorts on
+    // (priority << 16) + y and then dispatches.
     //
-    // Gating the callers on a prop being placed does NOT make that safe. It
-    // bounds how many EXTRA decals this feature adds, not how many are
-    // already present: if the stock refresh has filled all 256 slots, the
-    // very first of our calls walks past the end of the array and writes
-    // there.
+    // CDecal::DrawDecals paints IMMEDIATELY at DrawScene+0x3E -- before
+    // BeginScene at +0x61 has even opened that display list. So every decal
+    // is underneath everything the scene manager later sorts and paints,
+    // which is why two previous fixes were inert: one reordered within the
+    // decal array, the other moved the AddDecal call later. Both were
+    // rearranging things that are all beneath the furniture layer.
     //
-    // Switching to the five-argument overload is not the fix either. Its
-    // extra argument is a per-decal value RefreshProps reads from its own
-    // object -- [edi+0x1940] indexed by the current prop, at +0x25BB8 --
-    // and there is no correct constant to substitute for it. Passing a
-    // guessed layer would write a wrong value into the slot field.
+    // The engine's own prop array cannot carry these two ids either. It is
+    // CEnvironment + prop*16, and BOTH bounds agree that it ends at 0x54:
+    // SetProp at Environment.obj+0xab33 is `cmp edi,54h / ja`, and Update at
+    // +0xce4f is `cmp edi,55h / jl`, whose `jl` makes 0x55 the loop's
+    // exclusive terminator rather than a free slot. ePropPicnicReady (0x55)
+    // and ePropPatioDrinks (0x56) are past the end of both.
     //
-    // So the same bound is applied here, against the same array, using the
-    // same scan the engine uses. A full array means our prop is not drawn,
-    // which is what the guarded overload does too.
-    unsigned char *decals = (unsigned char *)&Decal;
-    int used = 0;
-    while (used < 0x100 && decals[used * 0x18] != 0) ++used;
-    if (used >= 0x100) return;
-    Decal.AddDecal(grid, x, y, 1.0f);
+    // CSceneManager::Draw is the immediate blit CFurnitureManager::Draw(int)
+    // itself uses to paint a table, and it is reached from inside EndScene,
+    // so calling it from a paint-phase hook puts the prop in the same space
+    // and the same phase as the furniture it sits on.
+    ldwPoint at;
+    at.x = x;
+    at.y = y;
+    SceneManager.Draw(grid, at, 0, 1.0f);
 }
 
-// Called after the stock prop pass, so our two draw on top of it rather than
-// in place of it.
-extern "C" void __cdecl VF2DrawMobileTableProps()
+// Does the captured slot still hold the table the prop was captured against?
+//
+// CFurnitureManager::RearrangeFurnitureList compacts the placement array when
+// furniture is moved or sold, so a slot recorded when the prop was activated
+// can point at a DIFFERENT item by the time the prop paints. The placement
+// handle at record+0x04 is per-placement and survives compaction, so comparing
+// it is what makes the cached slot safe to use.
+//
+// Returning false paints nothing, which is the right outcome: a prop drawn
+// after whichever furniture inherited the index, at the old table's
+// coordinates, would appear somewhere arbitrary.
+static bool VF2SlotStillHoldsHandle(int slot, int handle)
 {
+    if (slot < 0 || handle < 0) return false;
+    unsigned char *manager = reinterpret_cast<unsigned char *>(&FurnitureManager);
+    int count = *reinterpret_cast<int *>(manager + 0x1004);
+    if (count < 0 || count > 0x200) return false;
+    if (slot >= count) return false;
+    unsigned char *record = manager + 0x1008 + slot * 0x40;
+    if ((*reinterpret_cast<unsigned int *>(record + 0x0C) & 1) == 0) return false;
+    return *reinterpret_cast<int *>(record + 0x04) == handle;
+}
+
+// PAINT EACH PROP WITH ITS OWN TABLE.
+//
+// CSceneManager::EndScene sorts every registered element on
+// (priority << 16) + y and then dispatches each one to its subsystem's
+// Draw(int). For furniture that is ?Draw@CFurnitureManager@@QAEXH@Z, called
+// once per placed item with the item's array slot.
+//
+// Wrapping it lets the prop paint immediately after the table it belongs to:
+// same phase, same world space, correct depth relative to everything else in
+// the scene. Painting once per element instead would redraw the props dozens
+// of times a frame and would place them before tables that sort later, so the
+// slot recorded by VF2CaptureTableProp is what gates each one.
+extern "C" void __fastcall VF2FurniturePaintAndTableProps(
+    CFurnitureManager *self, void *, int index)
+{
+    self->Draw(index);
     if (gVF2MobileFurnitureBehaviors == 0) return;
-    if (VF2PicnicReadyActive() && gVF2PicnicPropPlaced) {
+    if (index < 0) return;
+    if (gVF2PicnicPropPlaced && index == gVF2PicnicPropSlot &&
+        VF2SlotStillHoldsHandle(index, gVF2PicnicPropHandle) &&
+        VF2PicnicReadyActive()) {
         // Mobile ships mealSE and mealSW as a pair, which is what establishes
-        // the prop sits ON the table: the sprite has to face the way the
+        // that the behaviour activates a prop ON the table rather than the
+        // table swapping to a different image: the sprite faces the way the
         // table does.
         VF2DrawTableProp(
             gVF2PicnicPropOrientation == 1
@@ -26501,7 +26585,9 @@ extern "C" void __cdecl VF2DrawMobileTableProps()
             gVF2PicnicPropX,
             gVF2PicnicPropY);
     }
-    if (VF2PatioDrinksActive() && gVF2PatioPropPlaced) {
+    if (gVF2PatioPropPlaced && index == gVF2PatioPropSlot &&
+        VF2SlotStillHoldsHandle(index, gVF2PatioPropHandle) &&
+        VF2PatioDrinksActive()) {
         // A single sprite: the drinks stand reads the same from either side.
         VF2DrawTableProp(
             __VF2_PROP_IMAGE_PATIO_DRINKS__,
@@ -26546,7 +26632,11 @@ extern "C" void __fastcall VF2RefreshPropsAndTableProps(CDecal *self, void *)
     // find room, and our two decals would then push the stock pass past
     // the 256-slot end.
     self->RefreshProps();
-    VF2DrawMobileTableProps();
+    // The table props are no longer drawn here. Decals paint at
+    // DrawScene+0x3E, before CSceneManager::BeginScene has opened the display
+    // list, so anything added on this path is underneath every sorted element
+    // including the tables. They are painted in the paint phase instead, by
+    // VF2FurniturePaintAndTableProps.
 }
 
 extern "C" void __fastcall VF2PatioSetPropAndTrack(
@@ -26572,7 +26662,8 @@ extern "C" void __fastcall VF2PatioSetPropAndTrack(
         VF2CaptureTableProp(
             gVF2PicnicPreparer, CContentMap::eObjectPicnicTable,
             gVF2PicnicPropX, gVF2PicnicPropY,
-            &gVF2PicnicPropOrientation, gVF2PicnicPropPlaced);
+            &gVF2PicnicPropOrientation, gVF2PicnicPropPlaced,
+            gVF2PicnicPropSlot, gVF2PicnicPropHandle);
         gVF2PicnicPreparer = 0;
         gVF2PicnicReadyOn = 1;
         gVF2PicnicReadyDeadline = GameTime.Seconds() + 240;
@@ -26580,7 +26671,8 @@ extern "C" void __fastcall VF2PatioSetPropAndTrack(
         VF2CaptureTableProp(
             gVF2PatioDrinksPreparer, CContentMap::eObjectPatioTable,
             gVF2PatioPropX, gVF2PatioPropY,
-            0, gVF2PatioPropPlaced);
+            0, gVF2PatioPropPlaced,
+            gVF2PatioPropSlot, gVF2PatioPropHandle);
         gVF2PatioDrinksPreparer = 0;
         gVF2PatioDrinksOn = 1;
         gVF2PatioDrinksDeadline = GameTime.Seconds() + 240;
@@ -30089,6 +30181,81 @@ def patch_mobile_furniture_behavior_macros(manifest):
         "status": "final runtime-gated constructor retargets",
         "changed": changed,
         "stock_fallback_preserved": True,
+    }
+
+
+def patch_mobile_table_prop_paint(manifest):
+    """Paint the table props in the paint phase, beside the table they sit on.
+
+    The owner reported twice that the patio and picnic props render behind the
+    table. Two previous fixes were inert because both worked on the decal
+    layer, and the decal layer is not a layer at all: CDecal::DrawDecals paints
+    IMMEDIATELY at theMainScene::DrawScene+0x3E, before CSceneManager::BeginScene
+    at +0x61 has opened the display list. Everything the scene manager later
+    sorts and paints goes over the top of it.
+
+    The calls between +0x61 and +0xC7 are not a paint order either. They are a
+    REGISTRATION pass -- CFurnitureManager::Draw(bool) contains nothing but
+    `push 9 / call CSceneManager::AddElement`. All painting happens inside
+    CSceneManager::EndScene at +0xD1, which insertion-sorts on
+    (priority << 16) + y and dispatches each element to its subsystem.
+
+    The engine's own prop array cannot carry these ids: SetProp at
+    Environment.obj+0xab33 is `cmp edi,54h / ja` and Update at +0xce4f is
+    `cmp edi,55h / jl`, so both end at 0x54 and the props are 0x55 and 0x56.
+
+    So the hook goes on EndScene's own dispatch to the furniture paint, and the
+    prop is drawn immediately after the table whose array slot it was captured
+    against -- same phase, same world space, correct depth.
+    """
+    obj_path = PATCHED / "SceneManager.obj"
+    obj = CoffObject(obj_path)
+    end_scene = obj.symbol("?EndScene@CSceneManager@@QAEXXZ")
+    sec = obj.section(end_scene.section)
+    # The single REL32 in EndScene targeting the furniture paint. Pinned by
+    # symbol rather than by offset so a recompiled EndScene still matches.
+    expected_target = "?Draw@CFurnitureManager@@QAEXH@Z"
+    matches = []
+    for index in range(sec.nreloc):
+        vaddr, symbol_index, rtype = struct.unpack_from(
+            "<IIH", obj.buf, sec.reloc_ptr + index * 10
+        )
+        if rtype != IMAGE_REL_I386_REL32:
+            continue
+        if obj.symbol_by_index[symbol_index].name == expected_target:
+            matches.append(vaddr)
+    if len(matches) != 1:
+        raise RuntimeError(
+            "EndScene furniture-paint relocation drifted: expected one REL32 "
+            f"to {expected_target}, found {len(matches)}"
+        )
+
+    helper = obj.append_undefined_symbol(MOBILE_TABLE_PROP_PAINT_HELPER_SYMBOL)
+    obj.retarget_relocation(
+        sec.index,
+        matches[0],
+        helper,
+        IMAGE_REL_I386_REL32,
+    )
+    obj.write(obj_path)
+    manifest["MobileTablePropPaint"] = {
+        "status": "table props painted in the paint phase beside their own table",
+        "caller": "CSceneManager::EndScene",
+        "relocation_offset": hex(matches[0]),
+        "original_target": expected_target,
+        "replacement": MOBILE_TABLE_PROP_PAINT_HELPER_SYMBOL,
+        "abi": "__fastcall(CFurnitureManager *, void *, int)",
+        "why": (
+            "Decals paint at DrawScene+0x3E, before BeginScene opens the "
+            "display list, so the decal path can never appear above furniture. "
+            "The prop is gated on the furniture array slot recorded by "
+            "VF2CaptureTableProp so it paints once, with its own table."
+        ),
+        "engine_prop_array_unavailable": {
+            "SetProp_bound": "Environment.obj+0xab33 cmp edi,54h / ja",
+            "Update_bound": "Environment.obj+0xce4f cmp edi,55h / jl",
+            "prop_ids": ["0x55 ePropPicnicReady", "0x56 ePropPatioDrinks"],
+        },
     }
 
 
@@ -37019,6 +37186,7 @@ def main():
     # dispatchers can preserve those wrappers as their build-specific fallback.
     patch_mobile_furniture_behavior_macros(manifest)
     patch_mobile_patio_prop_execution(manifest)
+    patch_mobile_table_prop_paint(manifest)
     patch_maximum_resource_achievement_callsites(manifest)
     validate_custom_achievement_award_hook_objects(manifest)
     if ENABLE_DEBUGGER_FEATURES:
