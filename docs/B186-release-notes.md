@@ -59,15 +59,42 @@ praise does not then fail.
 
 **Present in the compiled build, and decoded rather than inferred.** Counting
 how often a field offset appears as an immediate proves very little on its own,
-since these offsets occur hundreds of times across the engine. Decoding actual
-instructions instead: `mov reg,[reg+0x1BBA4]` -- a real read of the behaviour
-serial -- appears at **7** sites in the build that predates this fix and at
-**12** in this one. Label-text references are unchanged at 473, so the engine's
-own use of `+0x1BBA8` was not disturbed.
+since these offsets occur hundreds of times across the engine. Decoding the
+instruction stream instead, `mov r32,[r32+0x1BBA4]` -- a real read of the
+behaviour serial -- appears at three sites in the build that predates this fix
+and at five in this one:
 
-The tracker itself does not appear as a standalone function in the image
-because `/O2` inlines it into its two callers, which is why the evidence is
-stated as instruction sites rather than as a located symbol.
+```
+pre-fix:  0046673B  00467D6E  004BA421
+this one: 0046673B  00467D6E  004B5C12  004B5DBD  004BAA41
+```
+
+The two added sites are the fix, inlined. `/O2` inlines the tracker into its
+two callers -- one for drinks, one for picnics -- so there is no standalone
+symbol to locate, and both copies decode to the source:
+
+```
+mov esi,[eax+0x1BBA0]      ; behaviorId
+mov ecx,[eax+0x1BBA4]      ; behaviorSerial
+mov ebx,[eax+0x6B48]       ; praisedBehaviorId
+mov edx,[eax+0x6B4C]       ; praiseCount
+cmp esi,[0x70CD9C]         ; behaviorId != recordedBehavior -> reject
+mov eax,[0x70CD98]
+cmp ecx,eax                ; serial == *recordedSerial -> accept
+inc eax
+cmp ecx,eax                ; serial == *recordedSerial + 1
+cmp ebx,esi                ; praisedBehaviorId == behaviorId
+cmp edx,[0x70CDA0]         ; praiseCount != *recordedPraise
+mov [0x70CD98],ecx         ; *recordedSerial = behaviorSerial
+```
+
+That last store is the praise writeback, which is the part most easily lost and
+the part that makes a second praise work. Label-text references are unchanged
+at 473, so the engine's own use of `+0x1BBA8` was not disturbed.
+
+A note on the numbers: an earlier draft said seven sites rising to twelve. That
+count came from a loose byte-pattern match that caught extra encodings. The
+figures above come from decoding ModRM properly and are the ones to trust.
 
 **Not yet confirmed in play.** None of the above shows a villager finishing a
 drink. It shows the fix compiled into the shipped executable. Whether the
