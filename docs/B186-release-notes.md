@@ -132,6 +132,39 @@ function contained no reference to the routed-item machinery. The existing test
 pinned probe-*before*-native ordering, and ordering was never what was wrong,
 so it stayed green over the defect. The property itself is now pinned.
 
+**Decoded in the shipped executable.** In the build that predates this fix, the
+wrapper consulted nothing but the stale probe:
+
+```
+call 0x4BA700          ; the native behaviour
+test al,al
+je   done
+test bl,bl             ; bl is the pre-probe, and nothing else is consulted
+je   done
+```
+
+In this build it asks the interceptor first, and falls back to the probe only
+when nothing was recorded:
+
+```
+cmp  byte [0x70ECFD],0      ; gVF2RoutedItemValid -- was a route recorded?
+je   use_probe
+cmp  dword [0x70FD3C],esi   ; ...and does it belong to THIS villager?
+jne  reject
+cmp  dword [0x70FD38],0x32E ; ...and was it the ping-pong table?
+jne  reject
+mov  bl,1                   ; onPingPong = true
+```
+
+The villager-ownership check is the part that matters beyond the headline: the
+interceptor runs during plan construction while the wrapper reads after the
+behaviour returns, so an unowned global could otherwise hand one villager
+another villager's route.
+
+Counting `push 0x32E` would have shown two sites in BOTH builds and proved
+nothing -- the fix passes the id to a compare, not a push. Another reason the
+immediate-census approach had to go.
+
 ## The other four audited items were correct as written
 
 Reported here because "we checked and found nothing" is worth recording:
