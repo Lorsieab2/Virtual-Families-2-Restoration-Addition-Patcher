@@ -26204,7 +26204,13 @@ static unsigned int gVF2PatioDrinksDeadline = 0;
 static unsigned char gVF2PicnicReadyOn = 0;
 static unsigned int gVF2PicnicReadyDeadline = 0;
 static CVillager *gVF2PatioDrinksPreparer = 0;
+static unsigned int gVF2PatioDrinksPreparerSerial = 0;
+static int gVF2PatioDrinksPreparerBehavior = 0;
+static unsigned int gVF2PatioDrinksPreparerPraise = 0;
 static CVillager *gVF2PicnicPreparer = 0;
+static unsigned int gVF2PicnicPreparerSerial = 0;
+static int gVF2PicnicPreparerBehavior = 0;
+static unsigned int gVF2PicnicPreparerPraise = 0;
 
 // Where to draw each prop, and which way its table faces.
 //
@@ -26231,20 +26237,82 @@ static void VF2ClearPatioDrinks()
     gVF2PatioDrinksDeadline = 0;
 }
 
+// Identify the preparing villager by the BEHAVIOUR SERIAL at +0x1BBA4, not by
+// the action-label text at +0x1BBA8.
+//
+// The label cannot carry patch-owned state. CVillagerPlans::ForgetPlans blanks
+// it (strncpy of a zero-length string at ForgetPlans+0x165), and
+// VF2StartAutonomousPreparingDrinks calls ForgetPlans on itself immediately
+// before VF2RunMobilePreparingDrinks -- so the tracker was cleared mid-plan and
+// the prop never activated. That is the reported defect: the villager changes
+// behaviour on ARRIVING at the kitchen. Restoring the text would not fix it
+// either; the field is written from five modules (401 sites in Behavior alone,
+// plus CVillagerAI::Update, which runs every frame), so a text-keyed tracker is
+// unfixable in principle rather than merely broken today.
+//
+// +0x1BBA4 is the right identity: CVillager's constructor zeroes it and
+// CVillager::NewBehavior increments it, and nothing else in any disassembled
+// module writes it. The engine's own CFurnitureManager READS it after
+// GetVillager to ask this same "is this still the same activity" question.
+//
+// The praise allowance mirrors VF2BehaviorLabelSlotIsCurrentFor: a praise
+// re-rolls the label and bumps the serial by exactly one while the activity
+// continues, so a bare equality test would drop the preparer on praise and
+// reintroduce the same defect through a different door. Accepting a praise
+// ADOPTS it as the new baseline, because the allowance is measured against the
+// recorded serial -- leaving it at N makes a second praise arrive at N+2 and be
+// rejected.
 static bool VF2VillagerStillPreparing(
     CVillager *villager,
-    char const *label)
+    unsigned int *recordedSerial,
+    int recordedBehavior,
+    unsigned int *recordedPraise)
 {
     if (!villager) return false;
-    char const *current = reinterpret_cast<char const *>(villager) + 0x1BBA8;
-    return strncmp(current, label, 0x27) == 0;
+    unsigned char *data = reinterpret_cast<unsigned char *>(villager);
+    int behaviorId = *reinterpret_cast<int *>(data + 0x1BBA0);
+    unsigned int behaviorSerial =
+        *reinterpret_cast<unsigned int *>(data + 0x1BBA4);
+    int praisedBehaviorId = *reinterpret_cast<int *>(data + 0x6B48);
+    unsigned int praiseCount =
+        *reinterpret_cast<unsigned int *>(data + 0x6B4C);
+    if (behaviorId != recordedBehavior) {
+        return false;
+    }
+    if (behaviorSerial == *recordedSerial) {
+        *recordedPraise = praiseCount;
+        return true;
+    }
+    if (behaviorSerial == *recordedSerial + 1 &&
+        praisedBehaviorId == behaviorId &&
+        praiseCount != *recordedPraise) {
+        *recordedSerial = behaviorSerial;
+        *recordedPraise = praiseCount;
+        return true;
+    }
+    return false;
+}
+
+// Record the identity of a villager beginning a preparation.
+static void VF2RememberPreparer(
+    CVillager &villager,
+    unsigned int *serial,
+    int *behavior,
+    unsigned int *praise)
+{
+    unsigned char *data = reinterpret_cast<unsigned char *>(&villager);
+    *behavior = *reinterpret_cast<int *>(data + 0x1BBA0);
+    *serial = *reinterpret_cast<unsigned int *>(data + 0x1BBA4);
+    *praise = *reinterpret_cast<unsigned int *>(data + 0x6B4C);
 }
 
 static bool VF2PatioDrinksPreparationActive()
 {
     if (!VF2VillagerStillPreparing(
             gVF2PatioDrinksPreparer,
-            "Getting some drinks")) {
+            &gVF2PatioDrinksPreparerSerial,
+            gVF2PatioDrinksPreparerBehavior,
+            &gVF2PatioDrinksPreparerPraise)) {
         gVF2PatioDrinksPreparer = 0;
         return false;
     }
@@ -26273,7 +26341,9 @@ static bool VF2PicnicPreparationActive()
 {
     if (!VF2VillagerStillPreparing(
             gVF2PicnicPreparer,
-            "Preparing a picnic")) {
+            &gVF2PicnicPreparerSerial,
+            gVF2PicnicPreparerBehavior,
+            &gVF2PicnicPreparerPraise)) {
         gVF2PicnicPreparer = 0;
         return false;
     }
@@ -26731,6 +26801,11 @@ static bool VF2RunMobilePreparingDrinks(CVillager &villager)
         return true;
     }
     gVF2PatioDrinksPreparer = &villager;
+    VF2RememberPreparer(
+        villager,
+        &gVF2PatioDrinksPreparerSerial,
+        &gVF2PatioDrinksPreparerBehavior,
+        &gVF2PatioDrinksPreparerPraise);
 
     plans->PlanToGo(
         CContentMap::eObjectKitchenDrinkSource,
@@ -26861,6 +26936,11 @@ static bool VF2RunMobilePreparingPicnic(CVillager &villager)
         return true;
     }
     gVF2PicnicPreparer = &villager;
+    VF2RememberPreparer(
+        villager,
+        &gVF2PicnicPreparerSerial,
+        &gVF2PicnicPreparerBehavior,
+        &gVF2PicnicPreparerPraise);
 
     plans->PlanToGo(
         CContentMap::eObjectKitchenDrinkSource,
