@@ -57,10 +57,21 @@ praise — the same bug through a different door. That case is handled
 explicitly, and accepting a praise adopts it as the new baseline so a *second*
 praise does not then fail.
 
-**Not yet confirmed in play.** The generator change is present in the compiled
-build and the regression tests fail against the old implementation, but whether
-a villager now walks to the kitchen and finishes the drink is what the playtest
-is for.
+**Present in the compiled build, and decoded rather than inferred.** Counting
+how often a field offset appears as an immediate proves very little on its own,
+since these offsets occur hundreds of times across the engine. Decoding actual
+instructions instead: `mov reg,[reg+0x1BBA4]` -- a real read of the behaviour
+serial -- appears at **7** sites in the build that predates this fix and at
+**12** in this one. Label-text references are unchanged at 473, so the engine's
+own use of `+0x1BBA8` was not disturbed.
+
+The tracker itself does not appear as a standalone function in the image
+because `/O2` inlines it into its two callers, which is why the evidence is
+stated as instruction sites rather than as a located symbol.
+
+**Not yet confirmed in play.** None of the above shows a villager finishing a
+drink. It shows the fix compiled into the shipped executable. Whether the
+behaviour is right is what the playtest is for.
 
 ## A stock pool table could be captioned "Playing ping-pong"
 
@@ -142,11 +153,15 @@ alone; rewriting those would make the log lie about the past.
 There was no CI. Every regression had to be caught by someone running pytest
 locally, or by a playtest reaching the owner.
 
-The portable suite — 209 tests and 90 subtests, about 35 seconds — now runs on
+The portable suite — 212 tests and 91 subtests, about 35 seconds — now runs on
 GitHub Actions for every push and pull request. Subtests are reported
 **individually** rather than collapsed into one result per method: the JUnit
-report carries 299 entries instead of 209, so a single failing subtest is
+report carries 303 entries instead of 212, so a single failing subtest is
 visible in the run summary and annotated on the line in a pull request.
+
+(An earlier draft of these notes said 209 tests and 299 entries. That census was
+measured before the three `EveryPatchDefaultsOn` tests landed and is
+superseded; the figures above are the current measured output.)
 
 The larger `work/` suite is deliberately not run there. Those tests read build
 inputs that are gitignored, so on a runner they would either fail spuriously or
