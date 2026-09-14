@@ -86,7 +86,13 @@ class TestTheWrapperIsInstalled(unittest.TestCase):
             r"VF2RandomPooltableLabel\(CVillager &villager\)\n\{(.*?)\n\}",
             src, re.S,
         ).group(1)
-        self.assertIn("if (!pingPong)", body)
+        # The guard reads onPingPong, which prefers the table the engine's
+        # route actually chose and falls back to the pingPong pre-probe when
+        # nothing was recorded. It was a bare "if (!pingPong)" before that
+        # correction; the property pinned here -- a stock pool table returns
+        # before any label is applied -- is unchanged, and is now reached on
+        # the routed answer rather than on a stale nearest-match.
+        self.assertIn("if (!onPingPong)", body)
         # The early return must come before any label is applied.
         #
         # Found by matching the CALL SHAPE rather than one helper's name.
@@ -95,7 +101,7 @@ class TestTheWrapperIsInstalled(unittest.TestCase):
         # behaviour it protects was completely unchanged. The property is
         # that a stock table returns before ANY label is applied, and which
         # helper applies it is not what this test is for.
-        refuse = body.index("if (!pingPong)")
+        refuse = body.index("if (!onPingPong)")
         applications = [
             match.start()
             for match in re.finditer(r"\bVF2Apply\w*Label\w*\(", body)
@@ -240,6 +246,66 @@ class TestTheFurnitureProbe(unittest.TestCase):
         """
         text = re.search(PROBE_BODY, _source(), re.S).group(1)
         self.assertIn("count < 0 || count > 0x200", text)
+
+
+class TheCaptionFollowsTheTableTheRouteChose(unittest.TestCase):
+    """The label must follow the table the ENGINE routed to, not the nearest one.
+
+    VF2RandomPooltableLabel is bound to the STOCK PlayingPooltable behaviour, so
+    no venue is forced and the engine picks the destination. The pre-probe
+    VF2LinkedFurnitureItemIs is a nearest-match from the villager's feet taken
+    before the plan runs: it answers "which 0x36 table is nearest right now",
+    which is not "which table will the route pick".
+
+    With both tables placed, a villager standing nearer the ping-pong table but
+    routed to the pool table was captioned "Playing ping-pong" on a STOCK pool
+    table, and the mirror case kept "Playing pool" on the ping-pong table.
+
+    This is the identical defect already fixed for the exercise bike, which
+    shares EObject 0x04 with the stock treadmill exactly as these two tables
+    share 0x36. That fix is pinned by
+    TheCaptionFollowsTheMachineTheRouteChose in work/test_exercise_bike_pose.py;
+    this class is its ping-pong sibling.
+
+    It is pinned separately because the gap survived a commit whose message
+    claimed to close it: the existing probe-ordering test stays green over the
+    defect, since ordering was never what was wrong.
+    """
+
+    def wrapper_body(self):
+        source = _source()
+        start = source.index(
+            'extern "C" void __cdecl VF2RandomPooltableLabel(CVillager &villager)\n{')
+        return source[start:source.index('\nextern "C"', start)]
+
+    def test_the_wrapper_prefers_the_routed_table(self):
+        body = self.wrapper_body()
+        self.assertIn(
+            "VF2RoutedToItem(villager, __VF2_PING_PONG_TABLE_ITEM_ID__)", body,
+            "VF2RandomPooltableLabel still decides from the stale pre-probe "
+            "alone, which is the defect: a ping-pong caption on a stock pool "
+            "table when the route disagrees with the nearest table")
+        self.assertIn("if (!onPingPong) {", body)
+
+    def test_the_probe_remains_as_the_fallback(self):
+        """The probe is the answer when nothing was recorded, not dead code.
+
+        Removing it would leave the wrapper with no answer at all on paths the
+        interceptor never saw, and relabelling on no evidence is the unsafe
+        direction -- a stock pool table keeping its stock caption is correct.
+        """
+        body = self.wrapper_body()
+        self.assertIn("gVF2RoutedItemValid", body)
+        self.assertIn(": pingPong;", body)
+
+    def test_the_routed_answer_is_read_after_the_behaviour_runs(self):
+        """The interceptor records during plan construction, so the read must
+        come after the native behaviour, not beside the pre-probe."""
+        body = self.wrapper_body()
+        self.assertLess(
+            body.index("VF2RunNativeBehaviorAndChangedLabel"),
+            body.index("gVF2RoutedItemValid"),
+            "the routed item is read before the plan that records it has run")
 
 
 if __name__ == "__main__":
