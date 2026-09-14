@@ -6988,6 +6988,20 @@ class MobileIslandEventTextTests(unittest.TestCase):
         obj_path = patcher.PATCHED / "vf2_island_events.obj"
         if not obj_path.is_file():
             self.skipTest("fresh Island helper object has not been generated")
+        # Same stub hazard as the sibling test above, and the same fix: ask
+        # the emitted SOURCE, not this process's environment. The flag says
+        # how the test run was configured; after an island-enabled build it is
+        # False again while the object is still feature-enabled, so gating on
+        # it would skip a real artifact.
+        source_path = patcher.PATCHED / "vf2_island_events.cpp"
+        if not source_path.is_file():
+            self.skipTest("the Island helper source has not been generated")
+        if ("VF2RegisterMobileIslandEvents(void **) {}"
+                in source_path.read_text(encoding="ascii")):
+            self.skipTest(
+                "the object was built from the deliberate stub emitted with "
+                "VF2_ENABLE_ISLAND_EVENTS unset; rebuild with it set to "
+                "exercise this")
         obj = CoffObject(obj_path)
         vtable = obj.symbol("?gVF2MobileIslandEventVtable@@3UVF2MobileIslandEventVtable@@B")
         section = obj.section(vtable.section)
@@ -7027,8 +7041,29 @@ class MobileIslandEventTextTests(unittest.TestCase):
         obj_path = patcher.PATCHED / "vf2_island_events.obj"
         if not source_path.is_file() or not obj_path.is_file():
             self.skipTest("fresh Island helper source/object has not been generated")
-
+        # EXISTENCE IS NOT ENOUGH. With VF2_ENABLE_ISLAND_EVENTS unset -- the
+        # default -- the generator writes a one-line STUB under this name, so
+        # the legacy linker response still finds an object. The stub satisfies
+        # is_file(), and if an .obj is left over from an earlier build the
+        # guard above passes and every assertion below fails against a file
+        # that was never meant to carry them. That produced two confusing
+        # failures which looked like a regression and were not.
+        # ASK THE ARTIFACT, NOT THE IMPORT-TIME FLAG. Gating on
+        # patcher.ENABLE_ISLAND_EVENTS reads the environment of THIS process,
+        # not the build that wrote the file. After an island-enabled build the
+        # flag returns to its default False while the emitted source and object
+        # are still feature-enabled, so a flag gate would skip the very
+        # artifacts these assertions exist to validate -- the same
+        # existence-for-validity substitution, inverted.
+        #
+        # The stub is a single line under this name, so its own text is the
+        # reliable discriminator.
         source = source_path.read_text(encoding="ascii")
+        if "VF2RegisterMobileIslandEvents(void **) {}" in source:
+            self.skipTest(
+                "vf2_island_events.cpp is the deliberate stub emitted with "
+                "VF2_ENABLE_ISLAND_EVENTS unset; rebuild with it set to "
+                "exercise this")
         self.assertIn(
             "extern __declspec(naked) void VF2MobileIslandEventGetAwardAmount()",
             source,
