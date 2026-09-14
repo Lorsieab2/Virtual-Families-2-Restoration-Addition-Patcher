@@ -82,9 +82,6 @@ MOBILE_FURNITURE_AUTONOMOUS_SELECTOR_SYMBOL = (
     "_VF2TryStartMobileFurnitureAutonomous"
 )
 MOBILE_PATIO_PROP_HELPER_SYMBOL = "@VF2PatioSetPropAndTrack@12"
-# __fastcall(CFurnitureManager *, void *, bool) -- this in ecx, the unused
-# edx slot, and the stock bool argument on the stack, so 12 bytes.
-MOBILE_TABLE_PROP_DRAW_HELPER_SYMBOL = "@VF2DrawFurnitureAndTableProps@12"
 MOBILE_CHAISE_ITEM_IDS = tuple(range(0x2DE, 0x2E2))
 MOBILE_CHAISE_OBJECT = 0x95
 MOBILE_CHAISE_PC_CELL_VALUE = 0x2000A800
@@ -26128,13 +26125,7 @@ public:
         bool,
         int,
         bool);
-    // theMainScene::DrawScene calls this at +0xB3, AFTER DrawDecals at +0x3E.
-    // The table-prop wrapper needs it so it can run the stock furniture pass
-    // and then draw the props on top of it.
-    void Draw(bool);
 };
-
-extern CFurnitureManager FurnitureManager;
 
 class CFoodStore {
 public:
@@ -26555,42 +26546,6 @@ extern "C" void __fastcall VF2RefreshPropsAndTableProps(CDecal *self, void *)
     // find room, and our two decals would then push the stock pass past
     // the 256-slot end.
     self->RefreshProps();
-    // The table props are NOT drawn here any more. See
-    // VF2DrawFurnitureAndTableProps below: theMainScene::DrawScene calls
-    // DrawDecals at +0x3E and CFurnitureManager::Draw at +0xB3, so anything
-    // emitted during the decal pass is painted over by the tables themselves.
-}
-
-// DRAW THE PROPS AFTER THE FURNITURE, NOT DURING THE DECAL PASS.
-//
-// Reported from live play, twice: "the props for the patio table and picnic
-// table still render BEHIND/UNDER the furniture graphics."
-//
-// This is a Z-ORDER problem, not a decal-slot problem, which is why the
-// earlier frame-index attempt was inert and was reverted. Decoding
-// theMainScene::DrawScene shows the two passes are 117 bytes of calls apart:
-//
-//     +0x34  CWorldMap::Draw
-//     +0x3E  CDecal::DrawDecals          <- the props were emitted here
-//     +0x61  CSceneManager::BeginScene
-//     +0x89  CEnvironment::Draw
-//     +0xB3  CFurnitureManager::Draw     <- the tables are drawn here
-//     +0xD1  CSceneManager::EndScene
-//
-// The picnic and patio tables are FURNITURE. No ordering within the decal
-// array can put a decal above them, because the whole decal layer is painted
-// before the furniture layer. Tuning which slot or which frame the prop
-// occupies is tuning the order of things that are all underneath.
-//
-// So the draw moves to a wrapper on the furniture call itself: run the stock
-// furniture pass, then draw the props. Same retarget-an-existing-relocation
-// idiom as VF2PatioSetPropAndTrack and VF2RefreshPropsAndTableProps -- one
-// REL32 at theMainScene.obj DrawScene+0xB4, no trampoline, no cave, no
-// section growth.
-extern "C" void __fastcall VF2DrawFurnitureAndTableProps(
-    CFurnitureManager *self, void *, bool flag)
-{
-    self->Draw(flag);
     VF2DrawMobileTableProps();
 }
 
@@ -30134,82 +30089,6 @@ def patch_mobile_furniture_behavior_macros(manifest):
         "status": "final runtime-gated constructor retargets",
         "changed": changed,
         "stock_fallback_preserved": True,
-    }
-
-
-def patch_mobile_table_prop_draw_order(manifest):
-    """Draw the table props AFTER the furniture, not during the decal pass.
-
-    The owner reported twice that the patio and picnic props render behind the
-    table graphics. It is a Z-ORDER defect: theMainScene::DrawScene calls
-    CDecal::DrawDecals at +0x3E and CFurnitureManager::Draw at +0xB3, so every
-    decal is painted before every piece of furniture. The tables ARE furniture,
-    so a prop emitted during the decal pass can never appear above them, and no
-    choice of decal slot or frame index changes that. An earlier attempt tuned
-    the frame index, did nothing, and was reverted -- it was reordering things
-    that are all underneath.
-
-    Retargets the existing REL32 on the furniture-draw call so the wrapper runs
-    the stock pass first and then draws the props. No trampoline, no cave, no
-    section growth.
-    """
-    obj_path = PATCHED / "theMainScene.obj"
-    obj = CoffObject(obj_path)
-    draw_scene_name = "?DrawScene@theMainScene@@MAEXXZ"
-    draw_scene = obj.symbol(draw_scene_name)
-    sec = obj.section(draw_scene.section)
-    call_offset = draw_scene.value + 0xB3
-    relocation_offset = draw_scene.value + 0xB4
-    # push 0 / mov ecx, FurnitureManager / call Draw -- pinned so a shifted
-    # DrawScene fails the build instead of retargeting an unrelated call.
-    expected_bytes = bytes.fromhex(
-        "6A00"            # push 0        (the bool argument)
-        "B900000000"      # mov ecx, FurnitureManager
-        "E800000000"      # call CFurnitureManager::Draw
-    )
-    raw = sec.raw_ptr + draw_scene.value + 0xAC
-    if bytes(obj.buf[raw : raw + len(expected_bytes)]) != expected_bytes:
-        raise RuntimeError("DrawScene furniture-draw block drifted")
-
-    relocation = None
-    for index in range(sec.nreloc):
-        vaddr, symbol_index, rtype = struct.unpack_from(
-            "<IIH", obj.buf, sec.reloc_ptr + index * 10
-        )
-        if vaddr == relocation_offset:
-            relocation = (obj.symbol_by_index[symbol_index].name, rtype)
-            break
-    expected_target = "?Draw@CFurnitureManager@@QAEX_N@Z"
-    if relocation != (expected_target, IMAGE_REL_I386_REL32):
-        raise RuntimeError(
-            f"DrawScene furniture-draw relocation drifted: {relocation}"
-        )
-
-    helper = obj.append_undefined_symbol(MOBILE_TABLE_PROP_DRAW_HELPER_SYMBOL)
-    obj.retarget_relocation(
-        sec.index,
-        relocation_offset,
-        helper,
-        IMAGE_REL_I386_REL32,
-    )
-    obj.write(obj_path)
-    manifest["MobileTablePropDrawOrder"] = {
-        "status": "table props draw after CFurnitureManager::Draw, not during the decal pass",
-        "caller": "theMainScene::DrawScene",
-        "call_offset": hex(call_offset - draw_scene.value),
-        "relocation_offset": hex(relocation_offset - draw_scene.value),
-        "original_target": expected_target,
-        "replacement": MOBILE_TABLE_PROP_DRAW_HELPER_SYMBOL,
-        "abi": "__fastcall(CFurnitureManager *, void *, bool)",
-        "draw_scene_order": {
-            "DrawDecals": "0x3e",
-            "CEnvironment::Draw": "0x89",
-            "CFurnitureManager::Draw": "0xb3",
-        },
-        "reason": (
-            "Decals are painted before furniture, so a prop emitted during the "
-            "decal pass is always covered by the table. Reported in play twice."
-        ),
     }
 
 
@@ -37140,7 +37019,6 @@ def main():
     # dispatchers can preserve those wrappers as their build-specific fallback.
     patch_mobile_furniture_behavior_macros(manifest)
     patch_mobile_patio_prop_execution(manifest)
-    patch_mobile_table_prop_draw_order(manifest)
     patch_maximum_resource_achievement_callsites(manifest)
     validate_custom_achievement_award_hook_objects(manifest)
     if ENABLE_DEBUGGER_FEATURES:
