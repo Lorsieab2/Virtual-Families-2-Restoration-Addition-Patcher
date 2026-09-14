@@ -1,0 +1,89 @@
+name: Tests
+
+# Runs the portable part of the suite on every push and pull request, so a
+# regression is caught by the PR that introduces it rather than by a playtest.
+#
+# WHAT THIS RUNS, AND WHY ONLY THIS
+#
+# tests/ is the portable suite: it needs nothing but the repository itself.
+# work/test_*.py is the much larger suite (55 files), but most of those tests
+# read build inputs that are deliberately gitignored -- work/vanilla_runtime_payload
+# (1835 files) and outputs/ (~290 entries). On a runner those directories are
+# absent, so those tests either fail spuriously or, worse, pass while checking a
+# fraction of their assertions. Running them here would make the badge lie.
+# They stay a local-clone gate, run in C:\vf2w\vf2 before release.
+#
+# Subtest results are surfaced individually rather than collapsed into one dot
+# per test method: the suite leans on unittest subTest heavily (91 subtests in
+# tests/ alone), and a subtest failure is otherwise easy to miss in the log.
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # A newer push to the same branch supersedes an in-flight run.
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pytest:
+    name: pytest (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # windows-latest is the platform the patcher actually ships on and the
+        # only one where the Tkinter GUI tests are meaningful. ubuntu-latest is
+        # kept as a cheap cross-check that nothing has grown a hidden
+        # dependency on Windows path handling.
+        os: [windows-latest, ubuntu-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install test dependencies
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest pytest-subtests
+          if [ -f requirements-build.txt ]; then
+            python -m pip install -r requirements-build.txt
+          fi
+
+      - name: Run portable test suite
+        shell: bash
+        # -rs reports skipped tests with their reason, so a test that silently
+        # stops running because its guard started matching is visible here
+        # instead of looking like a pass.
+        run: python -m pytest tests/ -v -rs --junitxml=junit-${{ matrix.os }}.xml
+
+      - name: Upload test results
+        # Upload on failure too -- that is when the XML is most worth having.
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.os }}
+          path: junit-${{ matrix.os }}.xml
+          if-no-files-found: warn
+
+      - name: Publish test summary
+        if: always()
+        uses: mikepenz/action-junit-report@v4
+        with:
+          report_paths: junit-${{ matrix.os }}.xml
+          # Individual subtest rows land in the run summary and, on a pull
+          # request, as annotations on the failing line.
+          detailed_summary: true
+          include_passed: false
+          fail_on_failure: true
+          require_tests: true
