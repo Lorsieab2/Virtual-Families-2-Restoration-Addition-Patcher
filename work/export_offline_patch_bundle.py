@@ -41,9 +41,23 @@ FINAL_PLAYTEST_DEFAULT_ON_SETTINGS = frozenset({
     "cheat_upgrades",
     "ai_generated_bathroom2_renovations",
 })
-FINAL_PLAYTEST_EXPLICITLY_DEFAULT_OFF_SETTINGS = frozenset({
-    "no_ai_icons",
-})
+# Empty by design. The owner's standing instruction is that a playtest ships
+# with every patch on -- "make sure your playtests ship and compile with every
+# single patch on. you have wasted too much of my life giving me playtests that
+# have the stuff I need tested OFF and not even present in the playtest build."
+#
+# no_ai_icons used to be forced off here, from the B158 packaging profile that
+# predates that instruction. It is an optional VISUAL REPLACEMENT rather than a
+# feature -- it swaps the late Special Upgrade icon PNGs for non-AI artwork and
+# restores the generated icons when switched off -- so forcing it off did not
+# protect any functionality; it just meant the all-enabled playtest was not
+# all-enabled.
+#
+# The sequencing exception in SETTINGS is deliberately NOT duplicated here.
+# This set exists to override the table for the playtest profile, and the
+# invisible-furniture swap must stay off in BOTH, so it belongs in the table's
+# own exception list and not in this override.
+FINAL_PLAYTEST_EXPLICITLY_DEFAULT_OFF_SETTINGS = frozenset()
 FINAL_PLAYTEST_NATIVE_REQUIRES = [
     "core_executable",
     "behavior_patches",
@@ -308,21 +322,21 @@ SETTINGS = [
         "id": "custom_couches_ldw_posters",
         "label": "Add Custom Couches and LDW Posters",
         "description": "Adds Colorful Couches and LDW Posters/Paintings mods to the game. Credit to Lorsieab2 on LDWForums.",
-        "default": False,
+        "default": True,
         "category": "optional",
     },
     {
         "id": "vf3_furniture",
         "label": "Virtual Families 3 Furniture",
         "description": "Implements furniture from Virtual Families 3, including Plaid Loveseat through Flowered Loveseat.",
-        "default": False,
+        "default": True,
         "category": "optional",
     },
     {
         "id": "invisible_furniture_visible_graphics",
         "label": "Add Invisible Furniture - Visible Graphics",
         "description": "Adds invisible furniture for decoration and gameplay purposes. Graphics use the visible base-game furniture versions. **Enable this first so you can place them in-game!**",
-        "default": False,
+        "default": True,
         "category": "optional",
     },
     {
@@ -357,7 +371,7 @@ SETTINGS = [
         "id": "holiday_ornaments_collection",
         "label": "Add Holiday Ornaments collection",
         "description": "Adds the fully linked mobile Holiday Ornament collection: 12 yard collectibles, six Collections Chest pages/72 total items, Ornamentologist and six-family collection goals, save/load support, Lucky Rock rarity odds, and The Collector offer/sell handling. B151 removes the non-mobile launch-crash hooks and uses tracked canonical artwork. Manual gameplay verification is still recommended.",
-        "default": False,
+        "default": True,
         "category": "optional",
     },
     {
@@ -371,21 +385,21 @@ SETTINGS = [
         "id": "allow_older_pregnancies",
         "label": "Allow Older Pregnancies",
         "description": "Optional patch: preserves normal fertility behavior below age 50, then allows a small pregnancy chance when either parent is 50 or older. The older parent caps the chance from 10.0% at age 50 down to a permanent 0.1% floor at age 69+. Failed attempts involving an age-50+ parent do not start the stock try-for-baby cooldown. The stock Next Generation flow also becomes available when the oldest living person reaches age 60, provided there is a surviving child.",
-        "default": False,
+        "default": True,
         "category": "optional",
     },
     {
         "id": "same_sex_marriage",
         "label": "Allow Same-Sex Marriage",
-        "description": "Optional patch: installs the default-off same-sex marriage support. When the in-game Enable Same-Sex Marriage Special Upgrade is enabled, only the spawned marriage candidate's gender field is flipped; the native proposal scene remains intact. Same-sex spouses retain the native private-romantic-time sequence, never become pregnant, and do not take refusal or argument outcomes.",
-        "default": False,
+        "description": "Optional patch: installs same-sex marriage support. When the in-game Enable Same-Sex Marriage Special Upgrade is enabled, only the spawned marriage candidate's gender field is flipped; the native proposal scene remains intact. Same-sex spouses retain the native private-romantic-time sequence, never become pregnant, and do not take refusal or argument outcomes.",
+        "default": True,
         "category": "optional",
     },
     {
         "id": "older_villager_mortality",
         "label": "Older Villager Mortality Curve",
         "description": "Optional patch: replaces only the annual old-age death roll with a full-game calibrated chance that increases with effective age and accelerates after effective age 110. The stock threshold and 0-4 active-food-group age bonus remain. Old-age death never becomes certain and there is no hard maximum age; reaching 110 should take multiple 60-adult games and reaching 122 is exceptionally rare. All stock mortality remains active when disabled.",
-        "default": False,
+        "default": True,
         "category": "optional",
     },
     {
@@ -399,7 +413,7 @@ SETTINGS = [
         "id": "mobile_renovations",
         "label": "Add mobile room renovations",
         "description": "Optional patch: overlays 15 verified mobile renovation images (5 Bathroom 1 styles, 3 kitchen, 5 office, and 2 workshop) at their exact 1:1 room-map positions, with their store icons and shower-curtain variants. Bathroom 2 styles are AI-generated and ship under their own setting instead. The stock map remains unchanged when this setting is disabled.",
-        "default": False,
+        "default": True,
         "category": "optional",
     },
     {
@@ -409,7 +423,7 @@ SETTINGS = [
         "Warning: These Bathroom 2 renovation images are AI-generated based on the Bathroom 1's mobile renovations art, "
         "but manually edited by me. (Sorry, I'm too lazy to hand-make the art myself. I'm busy with other stuff, but feel "
         "free to make some yourself and open an Issue on the Github if you want to change it- Lorsieab2)",
-        "default": False,
+        "default": True,
         "category": "optional",
     },
     {
@@ -423,91 +437,91 @@ SETTINGS = [
         "id": "island_events",
         "label": "Add mobile-exclusive Island Events",
         "description": "Optional patch: adds all 25 authenticated mobile-exclusive Island Event records, including mobile-only email events, with bundled event text and choice/result dialogs. Twenty-three events use recovered native firing/award/impact routes; two retain mobile CanFire=false. Static and linked validation are complete; live player QA remains.",
-        "default": False,
+        "default": True,
         "category": "optional",
     },
     {
         "id": "custom_lorsieab2_map_images",
         "label": "Lorsieab2's Custom Map Images",
         "description": "Visual only. Replaces Images/MapX*Y*.jpg with OptionalVisualMods/Custom Lorsieab2 Map Images.",
-        "default": False,
+        "default": True,
         "category": "optional",
     },
     {
         "id": "transparent_menu_bar",
         "label": "Transparent Menu Bar",
         "description": "Makes the bottom menu bars transparent. Credit to swedane on LDWForums.",
-        "default": False,
+        "default": True,
         "category": "optional",
     },
     {
         "id": "transparent_store_bar",
         "label": "Transparent Store Bar",
         "description": "Makes the bottom store bar transparent. Credit to Corylea on LDWForums.",
-        "default": False,
+        "default": True,
         "category": "optional",
     },
     {
         "id": "white_birds",
         "label": "White Birds",
         "description": "Alters the yard parrots to be white birds instead.",
-        "default": False,
+        "default": True,
         "category": "optional",
     },
     {
         "id": "store_scroll_bar",
         "label": "Store Scroll Bar",
-        "description": "Adds a scroll bar to the store screen. Default off.",
-        "default": False,
+        "description": "Adds a scroll bar to the store screen.",
+        "default": True,
         "category": "optional",
     },
     {
         "id": "invisible_upgrades_graphics",
         "label": "Invisible Workspace Upgrades",
         "description": "Optional visual mod. Replaces Images/Upgrades workspace graphics with bundled invisible upgrade graphics. Uncheck it and click Enable/Disable Patches to restore bundled vanilla upgrade graphics.",
-        "default": False,
+        "default": True,
         "category": "optional",
     },
     {
         "id": "transparent_decor_tab",
         "label": "Transparent Decor Tab",
         "description": "Makes the purple Decor tab transparent. Credit to swedane on LDWForums.",
-        "default": False,
+        "default": True,
         "category": "optional",
     },
     {
         "id": "optional_visual_mod_graphics",
         "label": "Add loose optional visual mod graphics",
         "description": "Adds loose OptionalVisualMods image files. Furniture graphics go in Images/Furniture; future Workshop, Kitchen, and Office upgrade graphics go in Images/Upgrades; animation strips and other images go in Images.",
-        "default": False,
+        "default": True,
         "category": "optional",
     },
     {
         "id": "optional_song_mods",
         "label": "Add optional song mods",
         "description": "Adds both Virtual Families 1 and 2 songs to the game. When unchecked, click Enable/Disable Patches again to rebuild the modded folder with the original vanilla songs.",
-        "default": False,
+        "default": True,
         "category": "optional",
     },
     {
         "id": "misc_graphics_fixes",
         "label": "Misc Graphics Fixes",
         "description": "Fixes various graphics bugs, including the Super Fridge ice maker position.",
-        "default": False,
+        "default": True,
         "category": "optional",
     },
     {
         "id": "glowing_collectibles",
         "label": "Glowing Collectibles",
         "description": "Adds a white glow around grabbable objects for easier visibility.",
-        "default": False,
+        "default": True,
         "category": "optional",
     },
     {
         "id": "cheat_upgrades",
         "label": "Cheat Upgrades",
         "description": "Enables the cheat-only executable overlay. Adds function-grouped money, food, achievement/puzzle/collection, price, and malfunction rows, including Trigger all house malfunctions and Fix all house malfunctions. Trigger makes the Router offline and Fix returns it online; Fix clears all 11 malfunction props without resetting ants. The Dryer lint fire remains a legitimate native random malfunction and requires a Dryer. Price modes affect every purchase routed through the store price calculator; Reset Price Multiplier restores original calculated prices. Rebuying Maid/Gardener fires that worker; rebuying an owned house renovation `0xE1-0xEA` returns it and rebuilds the native content map so the renovation can be purchased again. Anti-Spam Software and Rockhound Certificate are independently repurchaseable in every patched executable, including saves where the effect flag is already cleared; buying an active row removes its state at zero price. Other B150 cheat behavior remains absent when this setting is disabled.",
-        "default": False,
+        "default": True,
         "category": "optional",
     },
     {
@@ -518,7 +532,7 @@ SETTINGS = [
             "sourced from other LDW games, online art sources, or custom-made artwork. Disabling restores the "
             "current Cheat Upgrades icons."
         ),
-        "default": False,
+        "default": True,
         "category": "optional",
     },
 ]
@@ -3618,8 +3632,8 @@ def write_transparency_log(bundle_dir: Path, manifest: dict[str, Any]) -> str:
         "- OptionalVisualMods/, Original Virtual Families 2 Assets/, and OptionalSongMods/ are source-only payload folders. They are not copied wholesale into the game.",
         "- Optional song mod records copy payload/OptionalSongMods/*.ogg to Sounds/*.ogg only when enabled; unchecking then clicking Enable/Disable Patches rebuilds the modded output with vanilla Sounds/*.ogg.",
         "- Optional visual records copy source graphics to runtime folders: furniture graphics to Images/Furniture, future Workshop/Kitchen/Office upgrade graphics to Images/Upgrades, and animation strips or other images to Images.",
-        "- Feature-specific payloads for optional visual mods and Invisible Furniture are tied to their default-off settings, so unchecked settings leave those files unused and omitted from refreshed modded output folders.",
-        "- Custom Couches and LDW Posters/Paintings payload files are tied to their own default-off setting. Current native store-row support still comes from the full modded EXE payload until those native table edits are split into per-feature patch records.",
+        "- Feature-specific payloads for optional visual mods and Invisible Furniture are tied to their own settings, so unchecked settings leave those files unused and omitted from refreshed modded output folders.",
+        "- Custom Couches and LDW Posters/Paintings payload files are tied to their own setting. Current native store-row support still comes from the full modded EXE payload until those native table edits are split into per-feature patch records.",
         f"- Payload file count in this bundle: {len(payload_files)}",
         f"- Duplicate payload files removed during export: {summary.get('payload_deduplication', {}).get('removed_file_count', 0)} ({summary.get('payload_deduplication', {}).get('removed_bytes', 0)} bytes)",
         f"- Unreachable payload files pruned during export: {summary.get('payload_pruning', {}).get('removed_file_count', 0)} ({summary.get('payload_pruning', {}).get('removed_bytes', 0)} bytes)",
@@ -3666,9 +3680,9 @@ def write_transparency_log(bundle_dir: Path, manifest: dict[str, Any]) -> str:
         "- Dryer lint fire remains a stock random malfunction gated on Dryer object 0x48; native repair clears prop 0x21 and advances Handyman.",
         "- The six-page/72-item collection and Holiday-aware count require holiday_ornaments_collection. Brokerage 11% wording follows mobile_purchases.",
         "- Holiday Furniture goals 0x6D-0x7F use an exact-SHA .vf2goal post-asset byte enabled only with core_executable plus holiday_furniture.",
-        "- Allow Older Pregnancies is a default-off exact-SHA post-asset toggle of the dormant .vf2preg byte; age-50+ failed attempts skip the stock cooldown deadline write. The same byte permits the native Next Generation flow when the oldest active living non-departed villager reaches age 60 while still requiring a surviving child. Native StartNextGeneration and its 30-record MakeRoomInTree rollover remain unchanged. The setting does not add another executable overlay dimension.",
+        "- Allow Older Pregnancies is an exact-SHA post-asset toggle of the dormant .vf2preg byte; age-50+ failed attempts skip the stock cooldown deadline write. The same byte permits the native Next Generation flow when the oldest active living non-departed villager reaches age 60 while still requiring a surviving child. Native StartNextGeneration and its 30-record MakeRoomInTree rollover remain unchanged. The setting does not add another executable overlay dimension.",
         "- Same-sex marriage support is linked behind the default-zero .vf2same byte. When enabled, only the post-spawn marriage candidate gender field is flipped; the proposal scene keeps native Accept, Reject, close, proposal-state, parent-storage, and selector behavior. Same-sex spouse drops use the native private-romantic-time sequence, TryToMakeBaby returns before pregnancy, and refusal/argument routes are not used for the established same-sex spouse pair.",
-        "- Older Villager Mortality Curve is a default-off exact-SHA post-asset toggle of the dormant .vf2mort byte; flag-off resumes the stock old-age block and it does not add another executable overlay dimension.",
+        "- Older Villager Mortality Curve is an exact-SHA post-asset toggle of the dormant .vf2mort byte; flag-off resumes the stock old-age block and it does not add another executable overlay dimension.",
         "- F5 enables and toggles the native debugger overlay; Up/Down change pages, F6 selects Waypoint Editor, F7 selects Light Source Editor, and F4 exits an editor. B153 recognizes VF2's internal key codes as well as Win32/SDL fallbacks.",
     ]
     )
