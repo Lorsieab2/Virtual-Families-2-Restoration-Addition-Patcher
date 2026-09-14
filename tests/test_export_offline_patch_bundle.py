@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import json
+import re
 import shutil
 import hashlib
 import subprocess
@@ -170,6 +171,82 @@ class EveryPatchDefaultsOn(unittest.TestCase):
                 self.assertIn(
                     sid, ids,
                     "the documented exception no longer names a real setting")
+
+
+class TheDocumentedDefaultsMatchTheSettingsTable(unittest.TestCase):
+    """docs/offline-patcher.md must not tell players a default the build does not have.
+
+    This exists because the documentation drifted exactly that way. After the
+    defaults were flipped on, the "## Toggleable Settings" list -- the section a
+    player consults to learn what a fresh apply changes -- still described
+    thirteen settings as "Default off", among them no_ai_icons,
+    store_scroll_bar, custom_lorsieab2_map_images and
+    ai_generated_bathroom2_renovations. A player reading it was told their
+    build lacks features it ships with.
+
+    EveryPatchDefaultsOn could not catch that: it asserts over
+    exporter.SETTINGS and never opens the document, so reverting the prose
+    alone left the suite green.
+
+    Scoped to the CURRENT settings list on purpose. The historical B121, B133,
+    B150 and B156 build notes further down the same file record what those
+    releases actually did, and rewriting them would make the transparency log
+    lie about the past.
+    """
+
+    DOC = ROOT / "docs" / "offline-patcher.md"
+    SECTION = "## Toggleable Settings"
+
+    def current_settings_section(self):
+        text = self.DOC.read_text(encoding="utf-8")
+        start = text.index(self.SECTION)
+        # Stop at the next top-level heading so historical build-note sections
+        # are never examined.
+        nxt = text.find("\n## ", start + len(self.SECTION))
+        return text[start:nxt if nxt != -1 else len(text)]
+
+    def test_no_setting_is_described_as_default_off_unless_it_is(self):
+        section = self.current_settings_section()
+        defaults = {row["id"]: row["default"] for row in exporter.SETTINGS}
+        current = None
+        offenders = []
+        for line in section.splitlines():
+            match = re.match(r"- `([a-z0-9_]+)`", line)
+            if match:
+                current = match.group(1)
+            if current is None or current not in defaults:
+                continue
+            if re.search(r"default off", line, re.IGNORECASE) and defaults[current]:
+                offenders.append(current)
+        self.assertEqual(
+            sorted(set(offenders)), [],
+            "these settings ship ENABLED but the settings list still calls "
+            "them default off, so a player is told their build lacks features "
+            "it has: %s" % sorted(set(offenders)))
+
+    def test_the_sequencing_exception_is_still_documented_as_off(self):
+        """The reverse failure: the one genuinely-off setting must keep saying so.
+
+        Without this, deleting every "Default off" mention would satisfy the
+        test above while stripping the placement-first warning that the
+        invisible furniture actually depends on.
+        """
+        exception = "invisible_furniture_transparent_graphics"
+        by_id = {row["id"]: row for row in exporter.SETTINGS}
+        self.assertFalse(
+            by_id[exception]["default"],
+            "the sequencing exception now defaults ON; this test needs "
+            "rewriting deliberately rather than relaxing")
+        section = self.current_settings_section()
+        # Anchor on the LIST ENTRY, not the first mention: the supersession
+        # note above the list names this setting too, and matching that would
+        # check the wrong text.
+        start = section.index("- `%s`" % exception)
+        entry = section[start:start + 400]
+        self.assertRegex(
+            entry, r"(?i)default off",
+            "the one setting that genuinely ships disabled no longer says so, "
+            "so a player will place invisible furniture they cannot see")
 
 
 class ExportOfflinePatchBundleTests(unittest.TestCase):
