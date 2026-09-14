@@ -25983,7 +25983,15 @@ enum EBodyPosition {
     eBodyPositionChaise = 0x17
 };
 enum EDirection { eDirectionUmbrella = 3 };
-enum EHeadDirection { eHeadDirectionUmbrella = 3 };
+// NE = 1 and NW = 7 are the native head-direction values, the same ones the
+// hammock route uses in vf2_plan_logger.cpp. They are declared here too
+// because this is a separate translation unit and the spa lounger needs them
+// to face a reclining villager along the furniture.
+enum EHeadDirection {
+    eHeadDirectionNE = 1,
+    eHeadDirectionUmbrella = 3,
+    eHeadDirectionNW = 7,
+};
 enum ECarrying {
     eCarryingDrink = 0x21,
     eCarryingBook = 0x31,
@@ -26732,7 +26740,14 @@ static bool VF2HandleMobileChaise(CVillager &villager)
     // pose it has always used here. Changing that would alter base-game
     // furniture, which is the owner's call and not this fix's.
     if (info.orientation == 1 || VF2SpaLoungerHasHandle(info.unknown0)) {
-        plans->PlanToWait(duration, eBodyPositionChaise);
+        // Plan the pose WITH a head direction. eBodyPositionChaise carries
+        // no facing of its own, so a two-argument wait leaves the villager
+        // pointing wherever they walked in from -- which is the "lying
+        // across the lounger" the owner reported. The hammock route
+        // already does it this way and lines up correctly.
+        plans->PlanToWait(
+            duration, eBodyPositionChaise,
+            (info.orientation == 1) ? eHeadDirectionNW : eHeadDirectionNE);
     } else {
         plans->PlanToLieDown(duration);
     }
@@ -28815,7 +28830,14 @@ static void VF2PlanLinkedChaiseAction(
     // pose it has always used here. Changing that would alter base-game
     // furniture, which is the owner's call and not this fix's.
     if (info.orientation == 1 || VF2SpaLoungerHasHandle(info.unknown0)) {
-        plans->PlanToWait(duration, eBodyPositionChaise);
+        // Plan the pose WITH a head direction. eBodyPositionChaise carries
+        // no facing of its own, so a two-argument wait leaves the villager
+        // pointing wherever they walked in from -- which is the "lying
+        // across the lounger" the owner reported. The hammock route
+        // already does it this way and lines up correctly.
+        plans->PlanToWait(
+            duration, eBodyPositionChaise,
+            (info.orientation == 1) ? eHeadDirectionNW : eHeadDirectionNE);
     } else {
         plans->PlanToLieDown(duration);
     }
@@ -29013,7 +29035,22 @@ static void VF2PlanSpaTreatment(
     // the SleepNW / SleepNE animation below is what carries the facing. So the
     // pose is now the same in both branches and only the animation differs,
     // which is what the two furniture frames actually distinguish.
-    plans->PlanToWait(settle, eBodyPositionChaise);
+    // THE POSE NEEDS A HEAD DIRECTION, OR IT KEEPS THE OLD FACING.
+    //
+    // Reported from live play a second time: the villager still does not lie
+    // along the lounger. The previous fix corrected the POSE -- chaise rather
+    // than the flat lying pose -- and that part was right, but it left the
+    // three-argument PlanToWait unused, so the body kept whichever facing the
+    // villager walked in with. eBodyPositionChaise being orientation-agnostic
+    // is exactly why that matters: nothing else in the wait supplies a facing.
+    //
+    // The hammock route in this same file already does it correctly and is the
+    // pattern copied here: LinkPeepToFurniture reports the placed orientation,
+    // and the pose is planned WITH the matching head direction so the body
+    // lines up with the furniture before the sleep strip starts.
+    EHeadDirection loungerHead =
+        (info.orientation == 1) ? eHeadDirectionNW : eHeadDirectionNE;
+    plans->PlanToWait(settle, eBodyPositionChaise, loungerHead);
     if (info.orientation == 1) {
         plans->PlanToPlayAnim(total - settle, "SleepNW", false, 0.02f);
     } else {
@@ -34504,7 +34541,14 @@ extern "C" void __cdecl VF2RandomPooltableLabel(CVillager &villager)
     // This is the same correction the two treadmill wrappers already carry
     // for the exercise bike, which shares EObject 0x04 with the stock
     // treadmill exactly as these two tables share 0x36.
-    bool const onPingPong = gVF2RoutedItemValid
+    // Same per-villager gate as the treadmill wrappers: gVF2RoutedItemValid is
+    // global, so another villager's recorded route would push this one into
+    // the routed branch and then fail the ownership check inside
+    // VF2RoutedToItem, losing the ping-pong caption for a genuine player.
+    bool const routeIsOurs =
+        gVF2RoutedItemValid &&
+        gVF2RoutedItemPlans == reinterpret_cast<CVillagerPlans *>(&villager);
+    bool const onPingPong = routeIsOurs
         ? VF2RoutedToItem(villager, __VF2_PING_PONG_TABLE_ITEM_ID__)
         : pingPong;
     if (!onPingPong) {
@@ -34542,7 +34586,22 @@ extern "C" void __cdecl VF2RandomTreadmillWalkLabel(CVillager &villager)
     // interceptor on PlanToGo(object, ...) records the placement the engine's
     // own resolver chose; prefer that, and fall back to the probe only when
     // nothing was recorded.
-    bool const onBike = gVF2RoutedItemValid
+    // GATE ON THIS VILLAGER'S OWN ROUTE, NOT ON THE GLOBAL FLAG.
+    //
+    // gVF2RoutedItemValid is global and survives whoever set it last. Gating
+    // on it alone means that when ANOTHER villager's route is still recorded,
+    // this villager takes the routed branch, VF2RoutedToItem rejects it on the
+    // ownership check, and onBike comes out false -- so a genuine bike user
+    // silently loses the bike caption. Reported in play as the treadmill still
+    // showing bike captions, which is the mirror of the same confusion.
+    //
+    // VF2RoutedToItem already verifies gVF2RoutedItemPlans belongs to this
+    // villager, so ask whether THIS villager has a recorded route and only
+    // fall back to the feet-probe when they do not.
+    bool const routeIsOurs =
+        gVF2RoutedItemValid &&
+        gVF2RoutedItemPlans == reinterpret_cast<CVillagerPlans *>(&villager);
+    bool const onBike = routeIsOurs
         ? VF2RoutedToItem(villager, __VF2_EXERCISE_BIKE_ITEM_ID__)
         : bike;
     if (!onBike) return;
@@ -34568,7 +34627,22 @@ extern "C" void __cdecl VF2RandomTreadmillRunLabel(CVillager &villager)
     // interceptor on PlanToGo(object, ...) records the placement the engine's
     // own resolver chose; prefer that, and fall back to the probe only when
     // nothing was recorded.
-    bool const onBike = gVF2RoutedItemValid
+    // GATE ON THIS VILLAGER'S OWN ROUTE, NOT ON THE GLOBAL FLAG.
+    //
+    // gVF2RoutedItemValid is global and survives whoever set it last. Gating
+    // on it alone means that when ANOTHER villager's route is still recorded,
+    // this villager takes the routed branch, VF2RoutedToItem rejects it on the
+    // ownership check, and onBike comes out false -- so a genuine bike user
+    // silently loses the bike caption. Reported in play as the treadmill still
+    // showing bike captions, which is the mirror of the same confusion.
+    //
+    // VF2RoutedToItem already verifies gVF2RoutedItemPlans belongs to this
+    // villager, so ask whether THIS villager has a recorded route and only
+    // fall back to the feet-probe when they do not.
+    bool const routeIsOurs =
+        gVF2RoutedItemValid &&
+        gVF2RoutedItemPlans == reinterpret_cast<CVillagerPlans *>(&villager);
+    bool const onBike = routeIsOurs
         ? VF2RoutedToItem(villager, __VF2_EXERCISE_BIKE_ITEM_ID__)
         : bike;
     if (!onBike) return;
