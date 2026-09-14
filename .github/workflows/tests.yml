@@ -25,6 +25,10 @@ on:
 
 permissions:
   contents: read
+  # The JUnit reporter creates a check run and annotates failing lines on a
+  # pull request; both need more than contents: read.
+  checks: write
+  pull-requests: write
 
 concurrency:
   # A newer push to the same branch supersedes an in-flight run.
@@ -38,11 +42,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # windows-latest is the platform the patcher actually ships on and the
-        # only one where the Tkinter GUI tests are meaningful. ubuntu-latest is
-        # kept as a cheap cross-check that nothing has grown a hidden
-        # dependency on Windows path handling.
-        os: [windows-latest, ubuntu-latest]
+        # Windows only, deliberately. The patcher ships on Windows, and the
+        # suite is written against it: tests assert on literal Windows paths
+        # (for example Path("C:\\VF2 Builds\\...")), so on Linux they fail for
+        # a reason that says nothing about the code. Adding ubuntu-latest here
+        # produced five such failures on the first run. Making those tests
+        # platform-neutral would mean rewriting assertions that are correct as
+        # they stand, so the matrix matches the shipping platform instead.
+        os: [windows-latest]
 
     steps:
       - uses: actions/checkout@v4

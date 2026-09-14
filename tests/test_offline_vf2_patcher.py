@@ -364,7 +364,13 @@ class OfflineVF2PatcherTests(unittest.TestCase):
             args.progress_callback = lambda _message: None
 
             def write_icons(target, captured):
-                self.assertEqual(target, output_dir / output_name)
+                # resolve() both sides: the patcher resolves the output path it
+                # writes to, and on a GitHub Windows runner TemporaryDirectory
+                # hands back the 8.3 short form (C:/Users/RUNNER~1/...) while
+                # the resolved path is the long one (C:/Users/runneradmin/...).
+                # Same file, different spelling, so a literal compare fails
+                # there and nowhere else.
+                self.assertEqual(target.resolve(), (output_dir / output_name).resolve())
                 self.assertEqual(target.read_bytes(), b"FLAG\x00DATA")
                 self.assertEqual(captured, resources)
                 target.write_bytes(target.read_bytes() + b"|stock-icons")
@@ -511,7 +517,9 @@ class OfflineVF2PatcherTests(unittest.TestCase):
             args.progress_callback = lambda _message: None
 
             def read_icons(source):
-                self.assertEqual(source, existing_exe)
+                # See the note on write_icons: compare resolved paths so an 8.3
+                # short temp path does not read as a different file.
+                self.assertEqual(source.resolve(), existing_exe.resolve())
                 self.assertEqual(source.read_bytes(), b"existing icon-bearing modded executable")
                 return resources
 
