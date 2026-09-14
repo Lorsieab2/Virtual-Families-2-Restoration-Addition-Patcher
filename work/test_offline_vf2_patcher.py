@@ -11,10 +11,10 @@ from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "work"))
+sys.path.insert(0, str(ROOT / "src"))
 import offline_vf2_patcher as patcher_mod  # noqa: E402
 
-PATCHER = ROOT / "work" / "offline_vf2_patcher.py"
+PATCHER = ROOT / "src" / "offline_vf2_patcher.py"
 
 
 def sha256_bytes(data):
@@ -364,7 +364,13 @@ class OfflineVF2PatcherTests(unittest.TestCase):
             args.progress_callback = lambda _message: None
 
             def write_icons(target, captured):
-                self.assertEqual(target, output_dir / output_name)
+                # resolve() both sides: the patcher resolves the output path it
+                # writes to, and on a GitHub Windows runner TemporaryDirectory
+                # hands back the 8.3 short form (C:/Users/RUNNER~1/...) while
+                # the resolved path is the long one (C:/Users/runneradmin/...).
+                # Same file, different spelling, so a literal compare fails
+                # there and nowhere else.
+                self.assertEqual(target.resolve(), (output_dir / output_name).resolve())
                 self.assertEqual(target.read_bytes(), b"FLAG\x00DATA")
                 self.assertEqual(captured, resources)
                 target.write_bytes(target.read_bytes() + b"|stock-icons")
@@ -380,7 +386,12 @@ class OfflineVF2PatcherTests(unittest.TestCase):
             ) as write_icon_resources:
                 patcher_mod.apply_manifest(args)
 
-            read_icons.assert_called_once_with(game_file)
+            # Compare the recorded call's path resolved, for the same 8.3
+            # short-path reason: assert_called_once_with would compare the
+            # WindowsPath objects literally.
+            read_icons.assert_called_once()
+            (called_with,), _ = read_icons.call_args
+            self.assertEqual(Path(called_with).resolve(), game_file.resolve())
             write_icon_resources.assert_called_once()
             self.assertEqual((output_dir / output_name).read_bytes(), b"FLAG\x01DATA|stock-icons")
             self.assertEqual(game_file.read_bytes(), b"vanilla executable")
@@ -470,7 +481,12 @@ class OfflineVF2PatcherTests(unittest.TestCase):
             ) as write_icon_resources:
                 patcher_mod.apply_manifest(args)
 
-            read_icons.assert_called_once_with(game_file)
+            # Compare the recorded call's path resolved, for the same 8.3
+            # short-path reason: assert_called_once_with would compare the
+            # WindowsPath objects literally.
+            read_icons.assert_called_once()
+            (called_with,), _ = read_icons.call_args
+            self.assertEqual(Path(called_with).resolve(), game_file.resolve())
             write_icon_resources.assert_not_called()
             self.assertFalse(output_dir.exists())
             self.assertEqual(game_file.read_bytes(), b"vanilla executable")
@@ -511,12 +527,16 @@ class OfflineVF2PatcherTests(unittest.TestCase):
             args.progress_callback = lambda _message: None
 
             def read_icons(source):
-                self.assertEqual(source, existing_exe)
+                # See the note on write_icons: compare resolved paths so an 8.3
+                # short temp path does not read as a different file.
+                self.assertEqual(source.resolve(), existing_exe.resolve())
                 self.assertEqual(source.read_bytes(), b"existing icon-bearing modded executable")
                 return resources
 
             def write_icons(target, captured):
-                self.assertEqual(target, existing_exe)
+                # See the note on read_icons above: resolve both sides so an
+                # 8.3 short temp path does not read as a different file.
+                self.assertEqual(target.resolve(), existing_exe.resolve())
                 self.assertEqual(target.read_bytes(), b"FLAG\x00DATA")
                 self.assertEqual(captured, resources)
                 target.write_bytes(target.read_bytes() + b"|stock-icons")
