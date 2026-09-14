@@ -57,10 +57,100 @@ praise — the same bug through a different door. That case is handled
 explicitly, and accepting a praise adopts it as the new baseline so a *second*
 praise does not then fail.
 
-**Not yet confirmed in play.** The generator change is present in the compiled
-build and the regression tests fail against the old implementation, but whether
-a villager now walks to the kitchen and finishes the drink is what the playtest
-is for.
+**Present in the compiled build, and decoded rather than inferred.** Counting
+how often a field offset appears as an immediate proves very little on its own,
+since these offsets occur hundreds of times across the engine. Decoding the
+instruction stream instead, `mov r32,[r32+0x1BBA4]` -- a real read of the
+behaviour serial -- appears at three sites in the build that predates this fix
+and at five in this one:
+
+```
+pre-fix:  0046673B  00467D6E  004BA421
+this one: 0046673B  00467D6E  004B5C12  004B5DBD  004BAA41
+```
+
+The two added sites are the fix, inlined. `/O2` inlines the tracker into its
+two callers -- one for drinks, one for picnics -- so there is no standalone
+symbol to locate, and both copies decode to the source:
+
+```
+mov esi,[eax+0x1BBA0]      ; behaviorId
+mov ecx,[eax+0x1BBA4]      ; behaviorSerial
+mov ebx,[eax+0x6B48]       ; praisedBehaviorId
+mov edx,[eax+0x6B4C]       ; praiseCount
+cmp esi,[0x70CD9C]         ; behaviorId != recordedBehavior -> reject
+mov eax,[0x70CD98]
+cmp ecx,eax                ; serial == *recordedSerial -> accept
+inc eax
+cmp ecx,eax                ; serial == *recordedSerial + 1
+cmp ebx,esi                ; praisedBehaviorId == behaviorId
+cmp edx,[0x70CDA0]         ; praiseCount != *recordedPraise
+mov [0x70CD98],ecx         ; *recordedSerial = behaviorSerial
+```
+
+That last store is the praise writeback, which is the part most easily lost and
+the part that makes a second praise work. Label-text references are unchanged
+at 473, so the engine's own use of `+0x1BBA8` was not disturbed.
+
+A count of serial reads alone would still not settle it: other inlined paths in
+this translation unit read `+0x1BBA4` too, so five could in principle be five of
+something else while the old tracker survived. What identifies these two as the
+PREPARER tracker is the globals they touch. Each copy reaches a disjoint
+six-global set, one per preparer:
+
+```
+drinks copy: 70CD79 70CD80 70CD94 70CD98 70CD9C 70CDA0
+picnic copy: 70CD78 70CD7C 70CD84 70CD88 70CD8C 70CD90
+```
+
+Those sets match the source field-for-field -- preparer pointer, serial,
+behaviour id, praise count -- and are confirmed as the preparer globals by
+their write sites elsewhere in the image:
+
+```
+call 0x468A20              ; GameTime.Seconds()
+add  eax,0xF0              ; + 240
+mov  [0x70CD80],eax        ; the drinks prop deadline
+...
+mov  [0x70CD84],0          ; the picnic preparer, cleared
+```
+
+`0xF0` is 240, the prop lifetime this code sets. Neither copy reads `+0x1BBA8`
+at all, so the text comparison is gone from this path rather than merely
+joined by a serial read.
+
+Across every variant built so far, the count separates exactly along the
+feature gate -- five serial reads in each `behavior_patches` variant, four in
+each variant without it:
+
+```
+behavior_patches                                        5
+cheat_upgrades_behavior_patches                         5
+cheat_upgrades_holiday_ornaments_behavior_patches       5
+holiday_ornaments_behavior_patches                      5
+island_events_behavior_patches                          5
+island_events_cheat_upgrades_behavior_patches           5
+island_events_cheat_upgrades_holiday_ornaments_behavior_patches  5
+core                                                    4
+cheat_upgrades                                          4
+holiday_ornaments                                       4
+island_events                                           4
+island_events_cheat_upgrades                            4
+cheat_upgrades_holiday_ornaments                        4
+island_events_cheat_upgrades_holiday_ornaments          4
+```
+
+That split is itself evidence: the preparer code is gated behind
+`behavior_patches`, so a fix that landed anywhere else -- or that failed to land
+in the gated variants -- would not produce it.
+
+A note on the numbers: an earlier draft said seven sites rising to twelve. That
+count came from a loose byte-pattern match that caught extra encodings. The
+figures above come from decoding ModRM properly and are the ones to trust.
+
+**Not yet confirmed in play.** None of the above shows a villager finishing a
+drink. It shows the fix compiled into the shipped executable. Whether the
+behaviour is right is what the playtest is for.
 
 ## A stock pool table could be captioned "Playing ping-pong"
 
@@ -93,6 +183,39 @@ applied to ping-pong vs pool table." That was not true of the code — the
 function contained no reference to the routed-item machinery. The existing test
 pinned probe-*before*-native ordering, and ordering was never what was wrong,
 so it stayed green over the defect. The property itself is now pinned.
+
+**Decoded in the shipped executable.** In the build that predates this fix, the
+wrapper consulted nothing but the stale probe:
+
+```
+call 0x4BA700          ; the native behaviour
+test al,al
+je   done
+test bl,bl             ; bl is the pre-probe, and nothing else is consulted
+je   done
+```
+
+In this build it asks the interceptor first, and falls back to the probe only
+when nothing was recorded:
+
+```
+cmp  byte [0x70ECFD],0      ; gVF2RoutedItemValid -- was a route recorded?
+je   use_probe
+cmp  dword [0x70FD3C],esi   ; ...and does it belong to THIS villager?
+jne  reject
+cmp  dword [0x70FD38],0x32E ; ...and was it the ping-pong table?
+jne  reject
+mov  bl,1                   ; onPingPong = true
+```
+
+The villager-ownership check is the part that matters beyond the headline: the
+interceptor runs during plan construction while the wrapper reads after the
+behaviour returns, so an unowned global could otherwise hand one villager
+another villager's route.
+
+Counting `push 0x32E` would have shown two sites in BOTH builds and proved
+nothing -- the fix passes the id to a compare, not a push. Another reason the
+immediate-census approach had to go.
 
 ## The other four audited items were correct as written
 
@@ -142,11 +265,15 @@ alone; rewriting those would make the log lie about the past.
 There was no CI. Every regression had to be caught by someone running pytest
 locally, or by a playtest reaching the owner.
 
-The portable suite — 209 tests and 90 subtests, about 35 seconds — now runs on
+The portable suite — 212 tests and 91 subtests, about 35 seconds — now runs on
 GitHub Actions for every push and pull request. Subtests are reported
 **individually** rather than collapsed into one result per method: the JUnit
-report carries 299 entries instead of 209, so a single failing subtest is
+report carries 303 entries instead of 212, so a single failing subtest is
 visible in the run summary and annotated on the line in a pull request.
+
+(An earlier draft of these notes said 209 tests and 299 entries. That census was
+measured before the three `EveryPatchDefaultsOn` tests landed and is
+superseded; the figures above are the current measured output.)
 
 The larger `work/` suite is deliberately not run there. Those tests read build
 inputs that are gitignored, so on a runner they would either fail spuriously or
