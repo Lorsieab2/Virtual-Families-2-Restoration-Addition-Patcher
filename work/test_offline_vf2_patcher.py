@@ -386,7 +386,12 @@ class OfflineVF2PatcherTests(unittest.TestCase):
             ) as write_icon_resources:
                 patcher_mod.apply_manifest(args)
 
-            read_icons.assert_called_once_with(game_file)
+            # Compare the recorded call's path resolved, for the same 8.3
+            # short-path reason: assert_called_once_with would compare the
+            # WindowsPath objects literally.
+            read_icons.assert_called_once()
+            (called_with,), _ = read_icons.call_args
+            self.assertEqual(Path(called_with).resolve(), game_file.resolve())
             write_icon_resources.assert_called_once()
             self.assertEqual((output_dir / output_name).read_bytes(), b"FLAG\x01DATA|stock-icons")
             self.assertEqual(game_file.read_bytes(), b"vanilla executable")
@@ -476,7 +481,12 @@ class OfflineVF2PatcherTests(unittest.TestCase):
             ) as write_icon_resources:
                 patcher_mod.apply_manifest(args)
 
-            read_icons.assert_called_once_with(game_file)
+            # Compare the recorded call's path resolved, for the same 8.3
+            # short-path reason: assert_called_once_with would compare the
+            # WindowsPath objects literally.
+            read_icons.assert_called_once()
+            (called_with,), _ = read_icons.call_args
+            self.assertEqual(Path(called_with).resolve(), game_file.resolve())
             write_icon_resources.assert_not_called()
             self.assertFalse(output_dir.exists())
             self.assertEqual(game_file.read_bytes(), b"vanilla executable")
@@ -524,7 +534,9 @@ class OfflineVF2PatcherTests(unittest.TestCase):
                 return resources
 
             def write_icons(target, captured):
-                self.assertEqual(target, existing_exe)
+                # See the note on read_icons above: resolve both sides so an
+                # 8.3 short temp path does not read as a different file.
+                self.assertEqual(target.resolve(), existing_exe.resolve())
                 self.assertEqual(target.read_bytes(), b"FLAG\x00DATA")
                 self.assertEqual(captured, resources)
                 target.write_bytes(target.read_bytes() + b"|stock-icons")
