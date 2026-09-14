@@ -532,6 +532,22 @@ external `originalimages` source folder.
 
 ## Toggleable Settings
 
+**A note on defaults, recorded rather than quietly swapped.** Most entries in
+this list previously read "Default off", and that is no longer true: 37 of the
+38 settings now default ON, per the standing rule that every patch ships
+enabled in builds and in the patcher alike. Those "Default off" claims were
+correct when written and are superseded, not mistaken in their own time -- the
+historical B121/B133/B150/B156 build notes further down deliberately keep their
+original wording for the same reason.
+
+The single exception is `invisible_furniture_transparent_graphics`, which is
+still off and says so below.
+
+`TheDocumentedDefaultsMatchTheSettingsTable` in
+work/test_export_offline_patch_bundle.py pins this list against the SETTINGS
+table, so a stale claim cannot drift back in unnoticed.
+
+
 Settings let a release manifest expose optional components before patching, such
 as:
 
