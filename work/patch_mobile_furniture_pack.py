@@ -82,6 +82,9 @@ MOBILE_FURNITURE_AUTONOMOUS_SELECTOR_SYMBOL = (
     "_VF2TryStartMobileFurnitureAutonomous"
 )
 MOBILE_PATIO_PROP_HELPER_SYMBOL = "@VF2PatioSetPropAndTrack@12"
+# __fastcall(CFurnitureManager *, void *, bool) -- this in ecx, the unused
+# edx slot, and the stock bool argument on the stack, so 12 bytes.
+MOBILE_TABLE_PROP_DRAW_HELPER_SYMBOL = "@VF2DrawFurnitureAndTableProps@12"
 MOBILE_CHAISE_ITEM_IDS = tuple(range(0x2DE, 0x2E2))
 MOBILE_CHAISE_OBJECT = 0x95
 MOBILE_CHAISE_PC_CELL_VALUE = 0x2000A800
@@ -25983,7 +25986,15 @@ enum EBodyPosition {
     eBodyPositionChaise = 0x17
 };
 enum EDirection { eDirectionUmbrella = 3 };
-enum EHeadDirection { eHeadDirectionUmbrella = 3 };
+// NE = 1 and NW = 7 are the native head-direction values, the same ones the
+// hammock route uses in vf2_plan_logger.cpp. They are declared here too
+// because this is a separate translation unit and the spa lounger needs them
+// to face a reclining villager along the furniture.
+enum EHeadDirection {
+    eHeadDirectionNE = 1,
+    eHeadDirectionUmbrella = 3,
+    eHeadDirectionNW = 7,
+};
 enum ECarrying {
     eCarryingDrink = 0x21,
     eCarryingBook = 0x31,
@@ -26117,7 +26128,13 @@ public:
         bool,
         int,
         bool);
+    // theMainScene::DrawScene calls this at +0xB3, AFTER DrawDecals at +0x3E.
+    // The table-prop wrapper needs it so it can run the stock furniture pass
+    // and then draw the props on top of it.
+    void Draw(bool);
 };
+
+extern CFurnitureManager FurnitureManager;
 
 class CFoodStore {
 public:
@@ -26538,6 +26555,42 @@ extern "C" void __fastcall VF2RefreshPropsAndTableProps(CDecal *self, void *)
     // find room, and our two decals would then push the stock pass past
     // the 256-slot end.
     self->RefreshProps();
+    // The table props are NOT drawn here any more. See
+    // VF2DrawFurnitureAndTableProps below: theMainScene::DrawScene calls
+    // DrawDecals at +0x3E and CFurnitureManager::Draw at +0xB3, so anything
+    // emitted during the decal pass is painted over by the tables themselves.
+}
+
+// DRAW THE PROPS AFTER THE FURNITURE, NOT DURING THE DECAL PASS.
+//
+// Reported from live play, twice: "the props for the patio table and picnic
+// table still render BEHIND/UNDER the furniture graphics."
+//
+// This is a Z-ORDER problem, not a decal-slot problem, which is why the
+// earlier frame-index attempt was inert and was reverted. Decoding
+// theMainScene::DrawScene shows the two passes are 117 bytes of calls apart:
+//
+//     +0x34  CWorldMap::Draw
+//     +0x3E  CDecal::DrawDecals          <- the props were emitted here
+//     +0x61  CSceneManager::BeginScene
+//     +0x89  CEnvironment::Draw
+//     +0xB3  CFurnitureManager::Draw     <- the tables are drawn here
+//     +0xD1  CSceneManager::EndScene
+//
+// The picnic and patio tables are FURNITURE. No ordering within the decal
+// array can put a decal above them, because the whole decal layer is painted
+// before the furniture layer. Tuning which slot or which frame the prop
+// occupies is tuning the order of things that are all underneath.
+//
+// So the draw moves to a wrapper on the furniture call itself: run the stock
+// furniture pass, then draw the props. Same retarget-an-existing-relocation
+// idiom as VF2PatioSetPropAndTrack and VF2RefreshPropsAndTableProps -- one
+// REL32 at theMainScene.obj DrawScene+0xB4, no trampoline, no cave, no
+// section growth.
+extern "C" void __fastcall VF2DrawFurnitureAndTableProps(
+    CFurnitureManager *self, void *, bool flag)
+{
+    self->Draw(flag);
     VF2DrawMobileTableProps();
 }
 
@@ -26732,7 +26785,14 @@ static bool VF2HandleMobileChaise(CVillager &villager)
     // pose it has always used here. Changing that would alter base-game
     // furniture, which is the owner's call and not this fix's.
     if (info.orientation == 1 || VF2SpaLoungerHasHandle(info.unknown0)) {
-        plans->PlanToWait(duration, eBodyPositionChaise);
+        // Plan the pose WITH a head direction. eBodyPositionChaise carries
+        // no facing of its own, so a two-argument wait leaves the villager
+        // pointing wherever they walked in from -- which is the "lying
+        // across the lounger" the owner reported. The hammock route
+        // already does it this way and lines up correctly.
+        plans->PlanToWait(
+            duration, eBodyPositionChaise,
+            (info.orientation == 1) ? eHeadDirectionNW : eHeadDirectionNE);
     } else {
         plans->PlanToLieDown(duration);
     }
@@ -28815,7 +28875,14 @@ static void VF2PlanLinkedChaiseAction(
     // pose it has always used here. Changing that would alter base-game
     // furniture, which is the owner's call and not this fix's.
     if (info.orientation == 1 || VF2SpaLoungerHasHandle(info.unknown0)) {
-        plans->PlanToWait(duration, eBodyPositionChaise);
+        // Plan the pose WITH a head direction. eBodyPositionChaise carries
+        // no facing of its own, so a two-argument wait leaves the villager
+        // pointing wherever they walked in from -- which is the "lying
+        // across the lounger" the owner reported. The hammock route
+        // already does it this way and lines up correctly.
+        plans->PlanToWait(
+            duration, eBodyPositionChaise,
+            (info.orientation == 1) ? eHeadDirectionNW : eHeadDirectionNE);
     } else {
         plans->PlanToLieDown(duration);
     }
@@ -29013,7 +29080,22 @@ static void VF2PlanSpaTreatment(
     // the SleepNW / SleepNE animation below is what carries the facing. So the
     // pose is now the same in both branches and only the animation differs,
     // which is what the two furniture frames actually distinguish.
-    plans->PlanToWait(settle, eBodyPositionChaise);
+    // THE POSE NEEDS A HEAD DIRECTION, OR IT KEEPS THE OLD FACING.
+    //
+    // Reported from live play a second time: the villager still does not lie
+    // along the lounger. The previous fix corrected the POSE -- chaise rather
+    // than the flat lying pose -- and that part was right, but it left the
+    // three-argument PlanToWait unused, so the body kept whichever facing the
+    // villager walked in with. eBodyPositionChaise being orientation-agnostic
+    // is exactly why that matters: nothing else in the wait supplies a facing.
+    //
+    // The hammock route in this same file already does it correctly and is the
+    // pattern copied here: LinkPeepToFurniture reports the placed orientation,
+    // and the pose is planned WITH the matching head direction so the body
+    // lines up with the furniture before the sleep strip starts.
+    EHeadDirection loungerHead =
+        (info.orientation == 1) ? eHeadDirectionNW : eHeadDirectionNE;
+    plans->PlanToWait(settle, eBodyPositionChaise, loungerHead);
     if (info.orientation == 1) {
         plans->PlanToPlayAnim(total - settle, "SleepNW", false, 0.02f);
     } else {
@@ -30052,6 +30134,82 @@ def patch_mobile_furniture_behavior_macros(manifest):
         "status": "final runtime-gated constructor retargets",
         "changed": changed,
         "stock_fallback_preserved": True,
+    }
+
+
+def patch_mobile_table_prop_draw_order(manifest):
+    """Draw the table props AFTER the furniture, not during the decal pass.
+
+    The owner reported twice that the patio and picnic props render behind the
+    table graphics. It is a Z-ORDER defect: theMainScene::DrawScene calls
+    CDecal::DrawDecals at +0x3E and CFurnitureManager::Draw at +0xB3, so every
+    decal is painted before every piece of furniture. The tables ARE furniture,
+    so a prop emitted during the decal pass can never appear above them, and no
+    choice of decal slot or frame index changes that. An earlier attempt tuned
+    the frame index, did nothing, and was reverted -- it was reordering things
+    that are all underneath.
+
+    Retargets the existing REL32 on the furniture-draw call so the wrapper runs
+    the stock pass first and then draws the props. No trampoline, no cave, no
+    section growth.
+    """
+    obj_path = PATCHED / "theMainScene.obj"
+    obj = CoffObject(obj_path)
+    draw_scene_name = "?DrawScene@theMainScene@@MAEXXZ"
+    draw_scene = obj.symbol(draw_scene_name)
+    sec = obj.section(draw_scene.section)
+    call_offset = draw_scene.value + 0xB3
+    relocation_offset = draw_scene.value + 0xB4
+    # push 0 / mov ecx, FurnitureManager / call Draw -- pinned so a shifted
+    # DrawScene fails the build instead of retargeting an unrelated call.
+    expected_bytes = bytes.fromhex(
+        "6A00"            # push 0        (the bool argument)
+        "B900000000"      # mov ecx, FurnitureManager
+        "E800000000"      # call CFurnitureManager::Draw
+    )
+    raw = sec.raw_ptr + draw_scene.value + 0xAC
+    if bytes(obj.buf[raw : raw + len(expected_bytes)]) != expected_bytes:
+        raise RuntimeError("DrawScene furniture-draw block drifted")
+
+    relocation = None
+    for index in range(sec.nreloc):
+        vaddr, symbol_index, rtype = struct.unpack_from(
+            "<IIH", obj.buf, sec.reloc_ptr + index * 10
+        )
+        if vaddr == relocation_offset:
+            relocation = (obj.symbol_by_index[symbol_index].name, rtype)
+            break
+    expected_target = "?Draw@CFurnitureManager@@QAEX_N@Z"
+    if relocation != (expected_target, IMAGE_REL_I386_REL32):
+        raise RuntimeError(
+            f"DrawScene furniture-draw relocation drifted: {relocation}"
+        )
+
+    helper = obj.append_undefined_symbol(MOBILE_TABLE_PROP_DRAW_HELPER_SYMBOL)
+    obj.retarget_relocation(
+        sec.index,
+        relocation_offset,
+        helper,
+        IMAGE_REL_I386_REL32,
+    )
+    obj.write(obj_path)
+    manifest["MobileTablePropDrawOrder"] = {
+        "status": "table props draw after CFurnitureManager::Draw, not during the decal pass",
+        "caller": "theMainScene::DrawScene",
+        "call_offset": hex(call_offset - draw_scene.value),
+        "relocation_offset": hex(relocation_offset - draw_scene.value),
+        "original_target": expected_target,
+        "replacement": MOBILE_TABLE_PROP_DRAW_HELPER_SYMBOL,
+        "abi": "__fastcall(CFurnitureManager *, void *, bool)",
+        "draw_scene_order": {
+            "DrawDecals": "0x3e",
+            "CEnvironment::Draw": "0x89",
+            "CFurnitureManager::Draw": "0xb3",
+        },
+        "reason": (
+            "Decals are painted before furniture, so a prop emitted during the "
+            "decal pass is always covered by the table. Reported in play twice."
+        ),
     }
 
 
@@ -34504,7 +34662,14 @@ extern "C" void __cdecl VF2RandomPooltableLabel(CVillager &villager)
     // This is the same correction the two treadmill wrappers already carry
     // for the exercise bike, which shares EObject 0x04 with the stock
     // treadmill exactly as these two tables share 0x36.
-    bool const onPingPong = gVF2RoutedItemValid
+    // Same per-villager gate as the treadmill wrappers: gVF2RoutedItemValid is
+    // global, so another villager's recorded route would push this one into
+    // the routed branch and then fail the ownership check inside
+    // VF2RoutedToItem, losing the ping-pong caption for a genuine player.
+    bool const routeIsOurs =
+        gVF2RoutedItemValid &&
+        gVF2RoutedItemPlans == reinterpret_cast<CVillagerPlans *>(&villager);
+    bool const onPingPong = routeIsOurs
         ? VF2RoutedToItem(villager, __VF2_PING_PONG_TABLE_ITEM_ID__)
         : pingPong;
     if (!onPingPong) {
@@ -34542,7 +34707,22 @@ extern "C" void __cdecl VF2RandomTreadmillWalkLabel(CVillager &villager)
     // interceptor on PlanToGo(object, ...) records the placement the engine's
     // own resolver chose; prefer that, and fall back to the probe only when
     // nothing was recorded.
-    bool const onBike = gVF2RoutedItemValid
+    // GATE ON THIS VILLAGER'S OWN ROUTE, NOT ON THE GLOBAL FLAG.
+    //
+    // gVF2RoutedItemValid is global and survives whoever set it last. Gating
+    // on it alone means that when ANOTHER villager's route is still recorded,
+    // this villager takes the routed branch, VF2RoutedToItem rejects it on the
+    // ownership check, and onBike comes out false -- so a genuine bike user
+    // silently loses the bike caption. Reported in play as the treadmill still
+    // showing bike captions, which is the mirror of the same confusion.
+    //
+    // VF2RoutedToItem already verifies gVF2RoutedItemPlans belongs to this
+    // villager, so ask whether THIS villager has a recorded route and only
+    // fall back to the feet-probe when they do not.
+    bool const routeIsOurs =
+        gVF2RoutedItemValid &&
+        gVF2RoutedItemPlans == reinterpret_cast<CVillagerPlans *>(&villager);
+    bool const onBike = routeIsOurs
         ? VF2RoutedToItem(villager, __VF2_EXERCISE_BIKE_ITEM_ID__)
         : bike;
     if (!onBike) return;
@@ -34568,7 +34748,22 @@ extern "C" void __cdecl VF2RandomTreadmillRunLabel(CVillager &villager)
     // interceptor on PlanToGo(object, ...) records the placement the engine's
     // own resolver chose; prefer that, and fall back to the probe only when
     // nothing was recorded.
-    bool const onBike = gVF2RoutedItemValid
+    // GATE ON THIS VILLAGER'S OWN ROUTE, NOT ON THE GLOBAL FLAG.
+    //
+    // gVF2RoutedItemValid is global and survives whoever set it last. Gating
+    // on it alone means that when ANOTHER villager's route is still recorded,
+    // this villager takes the routed branch, VF2RoutedToItem rejects it on the
+    // ownership check, and onBike comes out false -- so a genuine bike user
+    // silently loses the bike caption. Reported in play as the treadmill still
+    // showing bike captions, which is the mirror of the same confusion.
+    //
+    // VF2RoutedToItem already verifies gVF2RoutedItemPlans belongs to this
+    // villager, so ask whether THIS villager has a recorded route and only
+    // fall back to the feet-probe when they do not.
+    bool const routeIsOurs =
+        gVF2RoutedItemValid &&
+        gVF2RoutedItemPlans == reinterpret_cast<CVillagerPlans *>(&villager);
+    bool const onBike = routeIsOurs
         ? VF2RoutedToItem(villager, __VF2_EXERCISE_BIKE_ITEM_ID__)
         : bike;
     if (!onBike) return;
@@ -36945,6 +37140,7 @@ def main():
     # dispatchers can preserve those wrappers as their build-specific fallback.
     patch_mobile_furniture_behavior_macros(manifest)
     patch_mobile_patio_prop_execution(manifest)
+    patch_mobile_table_prop_draw_order(manifest)
     patch_maximum_resource_achievement_callsites(manifest)
     validate_custom_achievement_award_hook_objects(manifest)
     if ENABLE_DEBUGGER_FEATURES:
