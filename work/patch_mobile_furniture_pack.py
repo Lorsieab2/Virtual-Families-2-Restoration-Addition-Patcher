@@ -26261,6 +26261,8 @@ static bool gVF2PatioPropPlaced = false;
 // point in the sorted list.
 static int gVF2PicnicPropSlot = -1;
 static int gVF2PatioPropSlot = -1;
+static int gVF2PicnicPropHandle = -1;
+static int gVF2PatioPropHandle = -1;
 
 static void VF2ClearPatioDrinks()
 {
@@ -26415,10 +26417,12 @@ static void VF2CaptureTableProp(
     int &outY,
     int *outOrientation,
     bool &outPlaced,
-    int &outSlot)
+    int &outSlot,
+    int &outHandle)
 {
     outPlaced = false;
     outSlot = -1;
+    outHandle = -1;
     if (preparer == 0) return;
     sFurnitureInfo2 info = {};
     if (!FurnitureManager.FindFurniture(
@@ -26455,6 +26459,13 @@ static void VF2CaptureTableProp(
         // table, so recording it lets the prop paint with its own table's
         // element rather than at some arbitrary point in the sorted list.
         outSlot = slot;
+        // The HANDLE is what makes the slot trustworthy later.
+        // CFurnitureManager::RearrangeFurnitureList compacts the placement
+        // array when furniture is moved or sold, so a slot captured now can
+        // refer to a different item by the time the prop paints. The handle
+        // is per-placement and survives compaction, so the paint re-checks it
+        // and draws nothing rather than drawing the wrong thing.
+        outHandle = *(int *)(record + 0x04);
         outPlaced = true;
         return;
     }
@@ -26519,6 +26530,29 @@ static void VF2DrawTableProp(
     SceneManager.Draw(grid, at, 0, 1.0f);
 }
 
+// Does the captured slot still hold the table the prop was captured against?
+//
+// CFurnitureManager::RearrangeFurnitureList compacts the placement array when
+// furniture is moved or sold, so a slot recorded when the prop was activated
+// can point at a DIFFERENT item by the time the prop paints. The placement
+// handle at record+0x04 is per-placement and survives compaction, so comparing
+// it is what makes the cached slot safe to use.
+//
+// Returning false paints nothing, which is the right outcome: a prop drawn
+// after whichever furniture inherited the index, at the old table's
+// coordinates, would appear somewhere arbitrary.
+static bool VF2SlotStillHoldsHandle(int slot, int handle)
+{
+    if (slot < 0 || handle < 0) return false;
+    unsigned char *manager = reinterpret_cast<unsigned char *>(&FurnitureManager);
+    int count = *reinterpret_cast<int *>(manager + 0x1004);
+    if (count < 0 || count > 0x200) return false;
+    if (slot >= count) return false;
+    unsigned char *record = manager + 0x1008 + slot * 0x40;
+    if ((*reinterpret_cast<unsigned int *>(record + 0x0C) & 1) == 0) return false;
+    return *reinterpret_cast<int *>(record + 0x04) == handle;
+}
+
 // PAINT EACH PROP WITH ITS OWN TABLE.
 //
 // CSceneManager::EndScene sorts every registered element on
@@ -26538,6 +26572,7 @@ extern "C" void __fastcall VF2FurniturePaintAndTableProps(
     if (gVF2MobileFurnitureBehaviors == 0) return;
     if (index < 0) return;
     if (gVF2PicnicPropPlaced && index == gVF2PicnicPropSlot &&
+        VF2SlotStillHoldsHandle(index, gVF2PicnicPropHandle) &&
         VF2PicnicReadyActive()) {
         // Mobile ships mealSE and mealSW as a pair, which is what establishes
         // that the behaviour activates a prop ON the table rather than the
@@ -26551,6 +26586,7 @@ extern "C" void __fastcall VF2FurniturePaintAndTableProps(
             gVF2PicnicPropY);
     }
     if (gVF2PatioPropPlaced && index == gVF2PatioPropSlot &&
+        VF2SlotStillHoldsHandle(index, gVF2PatioPropHandle) &&
         VF2PatioDrinksActive()) {
         // A single sprite: the drinks stand reads the same from either side.
         VF2DrawTableProp(
@@ -26627,7 +26663,7 @@ extern "C" void __fastcall VF2PatioSetPropAndTrack(
             gVF2PicnicPreparer, CContentMap::eObjectPicnicTable,
             gVF2PicnicPropX, gVF2PicnicPropY,
             &gVF2PicnicPropOrientation, gVF2PicnicPropPlaced,
-            gVF2PicnicPropSlot);
+            gVF2PicnicPropSlot, gVF2PicnicPropHandle);
         gVF2PicnicPreparer = 0;
         gVF2PicnicReadyOn = 1;
         gVF2PicnicReadyDeadline = GameTime.Seconds() + 240;
@@ -26636,7 +26672,7 @@ extern "C" void __fastcall VF2PatioSetPropAndTrack(
             gVF2PatioDrinksPreparer, CContentMap::eObjectPatioTable,
             gVF2PatioPropX, gVF2PatioPropY,
             0, gVF2PatioPropPlaced,
-            gVF2PatioPropSlot);
+            gVF2PatioPropSlot, gVF2PatioPropHandle);
         gVF2PatioDrinksPreparer = 0;
         gVF2PatioDrinksOn = 1;
         gVF2PatioDrinksDeadline = GameTime.Seconds() + 240;

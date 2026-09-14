@@ -248,35 +248,36 @@ class PropDrawRespectsTheDecalBound(unittest.TestCase):
     with the same stride the engine uses.
     """
 
-    def test_the_draw_checks_the_bound_before_adding(self):
+    def test_the_draw_paints_immediately_instead_of_queueing(self):
+        """SUPERSEDED ROUTE. The decal bound no longer applies.
+
+        This class used to pin a capacity check on the decal array, because
+        the props were drawn with the four-argument AddDecal overload, which
+        carries no bounds check of its own. That route is gone.
+
+        Decals paint at theMainScene::DrawScene+0x3E, BEFORE
+        CSceneManager::BeginScene at +0x61 opens the display list, so nothing
+        added there can ever appear above furniture -- which is the defect the
+        owner reported twice. The props are now painted with
+        CSceneManager::Draw, the same immediate world-space blit
+        CFurnitureManager::Draw(int) uses for the table itself.
+
+        There is no queue and so no bound to respect. What has to be pinned
+        instead is that the draw does not go back to queueing.
+        """
         source = SOURCE.read_text(encoding="utf-8")
         start = source.index("static void VF2DrawTableProp(")
         body = source[start:source.index("\n}\n", start)]
-        # STRIP COMMENTS FIRST. The explanation above the guard mentions
-        # both 0x100 and 0x18, so matching the raw slice stayed green with
-        # the actual scan and early return deleted -- which restores the
-        # out-of-bounds write this test exists to prevent.
         code = NL.join(line.split("//")[0] for line in body.split(NL))
         self.assertIn(
-            "0x100", code,
-            "the draw does not bound the decal array in CODE, so a full "
-            "array means AddDecal writes past its end",
+            "SceneManager.Draw(", code,
+            "the prop draw no longer paints immediately; a queued draw cannot "
+            "appear above the furniture layer",
         )
-        self.assertIn(
-            "0x18", code,
-            "the scan does not use the engine's 0x18 record stride, so it "
-            "counts the wrong thing",
-        )
-        self.assertIn(
-            "return", code,
-            "there is no early return, so a full array is detected and then "
-            "drawn into anyway",
-        )
-        guard = code.index("0x100")
-        call = code.index("Decal.AddDecal")
-        self.assertLess(
-            guard, call,
-            "the bound is checked after the draw, which is no bound at all",
+        self.assertNotIn(
+            "AddDecal", code,
+            "the prop draw queues a decal again, which paints before "
+            "BeginScene opens the display list and so lands under the table",
         )
 
 
@@ -403,18 +404,27 @@ class PropDrawRunsAfterTheStockPass(unittest.TestCase):
     stock pass. The wrapper calls RefreshProps and then draws.
     """
 
-    def test_the_wrapper_calls_the_stock_pass_before_drawing(self):
+    def test_the_paint_wrapper_runs_the_stock_paint_first(self):
+        """SUPERSEDED ROUTE, replaced by the paint-phase wrapper.
+
+        This used to pin that the decal wrapper called RefreshProps before
+        drawing. The props are no longer drawn on the decal path at all --
+        decals paint at DrawScene+0x3E, before BeginScene opens the display
+        list, so nothing added there can appear above furniture.
+
+        The equivalent ordering property still matters and is pinned here: the
+        paint wrapper must run the stock furniture paint BEFORE painting a
+        prop, or the prop is covered by the very table it sits on.
+        """
         source = SOURCE.read_text(encoding="utf-8")
-        start = source.index("VF2RefreshPropsAndTableProps(CDecal *self")
+        start = source.index("VF2FurniturePaintAndTableProps(")
         body = source[start:source.index("\n}\n", start)]
-        stock = body.index("self->RefreshProps()")
-        ours = body.index("VF2DrawMobileTableProps()")
+        stock = body.index("self->Draw(index)")
+        ours = body.index("VF2DrawTableProp(")
         self.assertLess(
             stock, ours,
-            "the added props are drawn BEFORE the stock pass, so the decal "
-            "capacity check runs against an array the stock pass has not "
-            "filled yet -- it would always find room and the stock decals "
-            "would overflow instead",
+            "the prop is painted before the stock furniture paint, so the "
+            "table is drawn over the top of it",
         )
 
     def test_it_does_not_wrap_initdecals(self):
