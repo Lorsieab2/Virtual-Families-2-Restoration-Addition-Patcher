@@ -92,6 +92,33 @@ That last store is the praise writeback, which is the part most easily lost and
 the part that makes a second praise work. Label-text references are unchanged
 at 473, so the engine's own use of `+0x1BBA8` was not disturbed.
 
+A count of serial reads alone would still not settle it: other inlined paths in
+this translation unit read `+0x1BBA4` too, so five could in principle be five of
+something else while the old tracker survived. What identifies these two as the
+PREPARER tracker is the globals they touch. Each copy reaches a disjoint
+six-global set, one per preparer:
+
+```
+drinks copy: 70CD79 70CD80 70CD94 70CD98 70CD9C 70CDA0
+picnic copy: 70CD78 70CD7C 70CD84 70CD88 70CD8C 70CD90
+```
+
+Those sets match the source field-for-field -- preparer pointer, serial,
+behaviour id, praise count -- and are confirmed as the preparer globals by
+their write sites elsewhere in the image:
+
+```
+call 0x468A20              ; GameTime.Seconds()
+add  eax,0xF0              ; + 240
+mov  [0x70CD80],eax        ; the drinks prop deadline
+...
+mov  [0x70CD84],0          ; the picnic preparer, cleared
+```
+
+`0xF0` is 240, the prop lifetime this code sets. Neither copy reads `+0x1BBA8`
+at all, so the text comparison is gone from this path rather than merely
+joined by a serial read.
+
 A note on the numbers: an earlier draft said seven sites rising to twelve. That
 count came from a loose byte-pattern match that caught extra encodings. The
 figures above come from decoding ModRM properly and are the ones to trust.
