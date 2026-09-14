@@ -316,7 +316,7 @@ and all four WAV-to-OGG route records. This is static package evidence only;
 it does not establish FMOD decoding, audible parity, gameplay behavior, or
 runtime crash-freedom.
 
-The `Add Custom Couches and LDW Posters` setting is default off. Its asset
+The `Add Custom Couches and LDW Posters` setting ships enabled. Its asset
 routing covers `CouchNeonPurpleStd`, `CouchBrownColorfulStd`,
 `CouchGoldColorfulStd`, `CouchAquaStd`, `CouchPinkColorfulStd`,
 `CouchVioletStd`, `CouchLimeGreenStd`, `LDWModernPainting4`,
@@ -543,7 +543,7 @@ as:
 - `unused_pets` - Add the unused Turtle and Hamster pet store entries. Default
   on.
 - `invisible_furniture_visible_graphics` - Add Invisible Furniture with visible
-  base-game-style placement graphics. Default off. Enable this first so the
+  base-game-style placement graphics. Enable this first so the
   furniture can be placed in game.
 - `invisible_furniture_transparent_graphics` - Swap placed Invisible Furniture
   graphics to transparent versions. Default off, and requires the visible
@@ -563,36 +563,36 @@ as:
   `Images/CollectionOrnaments/*` payloads, baked-placeholder frame background,
   and replacement `Images/collectables_small.png`.
 - `custom_lorsieab2_map_images` - Optional visual-only map image swap from
-  `OptionalVisualMods/Custom Lorsieab2 Map Images`. Default off.
+  `OptionalVisualMods/Custom Lorsieab2 Map Images`.
 - `transparent_menu_bar` - Optional transparent bottom menu bar visual swap.
-  Default off. Credit to swedane on LDWForums.
+ Credit to swedane on LDWForums.
 - `transparent_store_bar` - Optional transparent bottom store bar visual swap.
-  Default off. Credit to Corylea on LDWForums.
+ Credit to Corylea on LDWForums.
 - `white_birds` - Optional visual swap that copies bundled white-bird
-  `bird.png` and `bird_shadow.png` assets to `Images/`. Default off.
-- `store_scroll_bar` - Optional store-screen scroll bar setting. Default off.
+  `bird.png` and `bird_shadow.png` assets to `Images/`.
+- `store_scroll_bar` - Optional store-screen scroll bar setting.
   Current native draw/mouse support is bundled in the core modded executable;
   full native on/off behavior still requires future byte/table record splitting.
 - `invisible_upgrades_graphics` - Optional visual swap that copies bundled
-  Invisible Upgrades PNGs to `Images/Upgrades`. Default off. Disabling it and
+  Invisible Upgrades PNGs to `Images/Upgrades`. Disabling it and
   clicking Enable/Disable Patches refreshes the modded folder from vanilla
   upgrade graphics.
 - `transparent_decor_tab` - Optional transparent purple Decor tab visual swap.
-  Default off. Credit to swedane on LDWForums.
+ Credit to swedane on LDWForums.
 - `optional_visual_mod_graphics` - Optional loose `OptionalVisualMods` image
   swaps. Furniture graphics target `Images/Furniture`; future Workshop,
   Kitchen, and Office upgrade graphics target `Images/Upgrades`; other loose
-  images target `Images`. Default off.
+  images target `Images`.
 - `optional_song_mods` - Optional song swap that copies
-  `payload/OptionalSongMods/*.ogg` into `Sounds/*.ogg`. Default off.
-- `no_ai_icons` - **No AI Icons**, default off and dependent on
+  `payload/OptionalSongMods/*.ogg` into `Sounds/*.ogg`.
+- `no_ai_icons` - **No AI Icons** and dependent on
   `cheat_upgrades`. Replaces only the late Special Upgrade icon PNGs with
   replacement images sourced from other LDW games, online art sources, or
   custom-made artwork. The bundled current Cheat Upgrades icon is recorded as
   the restore source, so disabling the setting restores the current icon set;
   disabling Cheat Upgrades still removes its late icon payloads.
 - `ai_generated_bathroom2_renovations` - **2nd Bathroom Mobile-Style
-  Renovations (AI-Generated Art Warning)**, default off. It stages only the
+  Renovations (AI-Generated Art Warning)**. It stages only the
   five tracked AI-generated source variants, normalized to the vanilla north
   Bathroom 2 crop size and the measured native room-apex anchor. The native
   second-bathroom renovation route remains disabled/hiatus; the exact warning
