@@ -624,8 +624,24 @@ For the final all-working playtest bundle, the exporter supports
 Island Events, Holiday Ornaments, Behavior Patches, Mobile Renovations,
 Mobile Sound Assets, Mobile Furniture Behaviors, Cheat Upgrades, and the
 separate AI Bathroom 2 visual overlay default-on in that bundle manifest. It
-does not change the general `SETTINGS` defaults; No AI Icons and unrelated
-visual options remain default-off.
+does not change the general `SETTINGS` defaults.
+
+No AI Icons is no longer forced off by this profile. It was, from the B158
+packaging rule that predates the owner's instruction that every patch defaults
+on in builds and in the patcher alike -- so an "all-enabled" artifact shipped
+with it disabled no matter what the table said. It is an optional visual
+replacement for the late Special Upgrade icons rather than a feature, so
+forcing it off protected nothing. `FINAL_PLAYTEST_EXPLICITLY_DEFAULT_OFF_SETTINGS`
+is now empty, kept rather than deleted so a future deliberate exception has an
+obvious home.
+
+Settings the profile does not name keep their base default, which is now ON for
+all but one. The single exception lives in the `SETTINGS` table itself, not in
+this profile: `invisible_furniture_transparent_graphics` stays off because the
+two invisible-furniture settings are sequential -- their own descriptions say
+"Enable this first so you can place them in-game", then "Once you have placed
+them, enable this to make them fully invisible" -- so defaulting the swap on
+would make the furniture invisible before it could be placed.
 
 Patch records, asset records, and target-file checks can include `requires`,
 `settings`, or `setting`. A record is active only when all required settings
@@ -657,7 +673,7 @@ sequential operation rather than a transaction: an interruption or later
 post-asset failure can leave a partial output until the user runs the manual
 `restore` command against the verified backup.
 
-The default-off `mobile_sound_assets` setting stages all 67 hash-pinned mobile
+The `mobile_sound_assets` setting stages all 67 hash-pinned mobile
 behavior sound payloads. Four PC sound-table filename routes are changed from
 WAV names to their mobile OGG names; disabling the setting removes those four
 additive files and restores the other 63 same-name PC payloads from the bundled
@@ -1072,7 +1088,7 @@ flags can override those defaults:
 Patch logs include the available, enabled, and disabled settings used for the
 run.
 
-allow_older_pregnancies is a default-off Optional option. It uses an
+allow_older_pregnancies is an Optional option. It uses an
 exact-SHA post-asset byte toggle in the selected executable rather than a
 separate executable overlay, so it does not expand the Island/Cheat/Holiday/
 Behavior matrix.
