@@ -146,12 +146,19 @@ class EveryPatchDefaultsOn(unittest.TestCase):
     def test_the_documented_exception_is_still_the_only_one(self):
         # If the exception list grows, that is a decision the owner makes,
         # not something that should slip in with a new feature.
+        #
+        # EQUALITY, not subset. A subset assertion passes when actual_off is
+        # EMPTY, so flipping invisible_furniture_transparent_graphics on would
+        # have satisfied it and left the placement-first sequencing unpinned --
+        # the one thing this class exists to protect in that direction.
         actual_off = {
             row["id"] for row in exporter.SETTINGS if not row["default"]
         }
-        self.assertLessEqual(
-            actual_off, self.SEQUENCING_EXCEPTIONS,
-            "an undocumented setting defaults off")
+        self.assertEqual(
+            actual_off, set(self.SEQUENCING_EXCEPTIONS),
+            "the set of default-off settings must be exactly the documented "
+            "sequencing exception -- no undocumented setting may default off, "
+            "and the exception itself must not be flipped on")
 
     def test_the_exception_still_exists_as_a_setting(self):
         # Guards the reverse failure: if the named exception is renamed or
@@ -240,12 +247,11 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             "7ACFEA13C00BCC46141C5ECE8F4A3D0448D39BF5F8F063F16839D9D0197FB3B6",
         )
 
-    def test_final_playtest_profile_is_manifest_local_and_keeps_no_ai_off(self):
+    def test_final_playtest_profile_is_manifest_local_and_reaches_only_what_it_names(self):
         self.assertNotIn("same_sex_marriage", exporter.FINAL_PLAYTEST_DEFAULT_ON_SETTINGS)
         original_defaults = {row["id"]: row["default"] for row in exporter.SETTINGS}
         available = set(exporter.FINAL_PLAYTEST_DEFAULT_ON_SETTINGS) | {"core_executable"}
         settings = [dict(row) for row in exporter.SETTINGS]
-        next(row for row in settings if row["id"] == "no_ai_icons")["default"] = True
         updated = exporter.apply_final_playtest_defaults(settings, available)
         updated_by_id = {row["id"]: row for row in updated}
         for setting_id in exporter.FINAL_PLAYTEST_DEFAULT_ON_SETTINGS:
@@ -261,9 +267,20 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             updated_by_id["same_sex_marriage"]["default"],
             original_defaults["same_sex_marriage"],
             "the profile changed a setting it neither enables nor disables")
-        # no_ai_icons IS in the explicit off-list, so it must be forced off
-        # even though the test set it True above and the base default is on.
-        self.assertFalse(updated_by_id["no_ai_icons"]["default"])
+        # no_ai_icons is no longer forced off. The owner's instruction is that
+        # a playtest ships with every patch on -- "make sure your playtests
+        # ship and compile with every single patch on" -- and this setting is
+        # an optional VISUAL REPLACEMENT for the late Special Upgrade icons,
+        # not a feature, so forcing it off protected nothing and only made the
+        # all-enabled playtest not all-enabled. It now follows its base
+        # default like any setting the profile does not name.
+        self.assertEqual(
+            updated_by_id["no_ai_icons"]["default"],
+            original_defaults["no_ai_icons"],
+            "no_ai_icons must follow its base default in the playtest profile")
+        self.assertTrue(
+            updated_by_id["no_ai_icons"]["default"],
+            "the all-enabled playtest must ship No AI Icons enabled")
         for setting_id in (
             "custom_lorsieab2_map_images",
             "transparent_menu_bar",

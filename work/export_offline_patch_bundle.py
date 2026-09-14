@@ -41,9 +41,23 @@ FINAL_PLAYTEST_DEFAULT_ON_SETTINGS = frozenset({
     "cheat_upgrades",
     "ai_generated_bathroom2_renovations",
 })
-FINAL_PLAYTEST_EXPLICITLY_DEFAULT_OFF_SETTINGS = frozenset({
-    "no_ai_icons",
-})
+# Empty by design. The owner's standing instruction is that a playtest ships
+# with every patch on -- "make sure your playtests ship and compile with every
+# single patch on. you have wasted too much of my life giving me playtests that
+# have the stuff I need tested OFF and not even present in the playtest build."
+#
+# no_ai_icons used to be forced off here, from the B158 packaging profile that
+# predates that instruction. It is an optional VISUAL REPLACEMENT rather than a
+# feature -- it swaps the late Special Upgrade icon PNGs for non-AI artwork and
+# restores the generated icons when switched off -- so forcing it off did not
+# protect any functionality; it just meant the all-enabled playtest was not
+# all-enabled.
+#
+# The sequencing exception in SETTINGS is deliberately NOT duplicated here.
+# This set exists to override the table for the playtest profile, and the
+# invisible-furniture swap must stay off in BOTH, so it belongs in the table's
+# own exception list and not in this override.
+FINAL_PLAYTEST_EXPLICITLY_DEFAULT_OFF_SETTINGS = frozenset()
 FINAL_PLAYTEST_NATIVE_REQUIRES = [
     "core_executable",
     "behavior_patches",
@@ -377,7 +391,7 @@ SETTINGS = [
     {
         "id": "same_sex_marriage",
         "label": "Allow Same-Sex Marriage",
-        "description": "Optional patch: installs the default-off same-sex marriage support. When the in-game Enable Same-Sex Marriage Special Upgrade is enabled, only the spawned marriage candidate's gender field is flipped; the native proposal scene remains intact. Same-sex spouses retain the native private-romantic-time sequence, never become pregnant, and do not take refusal or argument outcomes.",
+        "description": "Optional patch: installs same-sex marriage support. When the in-game Enable Same-Sex Marriage Special Upgrade is enabled, only the spawned marriage candidate's gender field is flipped; the native proposal scene remains intact. Same-sex spouses retain the native private-romantic-time sequence, never become pregnant, and do not take refusal or argument outcomes.",
         "default": True,
         "category": "optional",
     },
@@ -457,7 +471,7 @@ SETTINGS = [
     {
         "id": "store_scroll_bar",
         "label": "Store Scroll Bar",
-        "description": "Adds a scroll bar to the store screen. Default off.",
+        "description": "Adds a scroll bar to the store screen.",
         "default": True,
         "category": "optional",
     },
@@ -3618,8 +3632,8 @@ def write_transparency_log(bundle_dir: Path, manifest: dict[str, Any]) -> str:
         "- OptionalVisualMods/, Original Virtual Families 2 Assets/, and OptionalSongMods/ are source-only payload folders. They are not copied wholesale into the game.",
         "- Optional song mod records copy payload/OptionalSongMods/*.ogg to Sounds/*.ogg only when enabled; unchecking then clicking Enable/Disable Patches rebuilds the modded output with vanilla Sounds/*.ogg.",
         "- Optional visual records copy source graphics to runtime folders: furniture graphics to Images/Furniture, future Workshop/Kitchen/Office upgrade graphics to Images/Upgrades, and animation strips or other images to Images.",
-        "- Feature-specific payloads for optional visual mods and Invisible Furniture are tied to their default-off settings, so unchecked settings leave those files unused and omitted from refreshed modded output folders.",
-        "- Custom Couches and LDW Posters/Paintings payload files are tied to their own default-off setting. Current native store-row support still comes from the full modded EXE payload until those native table edits are split into per-feature patch records.",
+        "- Feature-specific payloads for optional visual mods and Invisible Furniture are tied to their own settings, so unchecked settings leave those files unused and omitted from refreshed modded output folders.",
+        "- Custom Couches and LDW Posters/Paintings payload files are tied to their own setting. Current native store-row support still comes from the full modded EXE payload until those native table edits are split into per-feature patch records.",
         f"- Payload file count in this bundle: {len(payload_files)}",
         f"- Duplicate payload files removed during export: {summary.get('payload_deduplication', {}).get('removed_file_count', 0)} ({summary.get('payload_deduplication', {}).get('removed_bytes', 0)} bytes)",
         f"- Unreachable payload files pruned during export: {summary.get('payload_pruning', {}).get('removed_file_count', 0)} ({summary.get('payload_pruning', {}).get('removed_bytes', 0)} bytes)",
@@ -3666,9 +3680,9 @@ def write_transparency_log(bundle_dir: Path, manifest: dict[str, Any]) -> str:
         "- Dryer lint fire remains a stock random malfunction gated on Dryer object 0x48; native repair clears prop 0x21 and advances Handyman.",
         "- The six-page/72-item collection and Holiday-aware count require holiday_ornaments_collection. Brokerage 11% wording follows mobile_purchases.",
         "- Holiday Furniture goals 0x6D-0x7F use an exact-SHA .vf2goal post-asset byte enabled only with core_executable plus holiday_furniture.",
-        "- Allow Older Pregnancies is a default-off exact-SHA post-asset toggle of the dormant .vf2preg byte; age-50+ failed attempts skip the stock cooldown deadline write. The same byte permits the native Next Generation flow when the oldest active living non-departed villager reaches age 60 while still requiring a surviving child. Native StartNextGeneration and its 30-record MakeRoomInTree rollover remain unchanged. The setting does not add another executable overlay dimension.",
+        "- Allow Older Pregnancies is an exact-SHA post-asset toggle of the dormant .vf2preg byte; age-50+ failed attempts skip the stock cooldown deadline write. The same byte permits the native Next Generation flow when the oldest active living non-departed villager reaches age 60 while still requiring a surviving child. Native StartNextGeneration and its 30-record MakeRoomInTree rollover remain unchanged. The setting does not add another executable overlay dimension.",
         "- Same-sex marriage support is linked behind the default-zero .vf2same byte. When enabled, only the post-spawn marriage candidate gender field is flipped; the proposal scene keeps native Accept, Reject, close, proposal-state, parent-storage, and selector behavior. Same-sex spouse drops use the native private-romantic-time sequence, TryToMakeBaby returns before pregnancy, and refusal/argument routes are not used for the established same-sex spouse pair.",
-        "- Older Villager Mortality Curve is a default-off exact-SHA post-asset toggle of the dormant .vf2mort byte; flag-off resumes the stock old-age block and it does not add another executable overlay dimension.",
+        "- Older Villager Mortality Curve is an exact-SHA post-asset toggle of the dormant .vf2mort byte; flag-off resumes the stock old-age block and it does not add another executable overlay dimension.",
         "- F5 enables and toggles the native debugger overlay; Up/Down change pages, F6 selects Waypoint Editor, F7 selects Light Source Editor, and F4 exits an editor. B153 recognizes VF2's internal key codes as well as Win32/SDL fallbacks.",
     ]
     )
