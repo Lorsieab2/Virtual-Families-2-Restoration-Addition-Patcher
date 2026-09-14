@@ -101,6 +101,70 @@ def minimal_pe_bytes(
     return bytes(data)
 
 
+class EveryPatchDefaultsOn(unittest.TestCase):
+    """The owner's standing rule, pinned as a property rather than per setting.
+
+        "from now on, all builds have all patches on by default. even for the
+        patcher. so we never have stupidity like missing features."
+
+    Written as ONE test over the whole SETTINGS table instead of an assertion
+    per setting, because the failure this guards against is a NEW setting
+    being added with default False -- and a per-setting test cannot see a
+    setting nobody wrote a test for. Flipping any existing default back to
+    False also fails here, which a per-setting test would only catch for the
+    settings it happened to name.
+
+    Verified against a known-bad: reverting cheat_upgrades to default False
+    passed all 77 tests in this file before this existed.
+    """
+
+    # The single documented exception. Not an opinion about the feature: the
+    # two invisible-furniture settings are SEQUENTIAL and their own
+    # descriptions say so --
+    #   visible      "Enable this first so you can place them in-game!"
+    #   transparent  "Once you have placed the invisible furniture how you
+    #                 like, enable this to make it fully invisible."
+    # Defaulting the swap on would make the furniture invisible BEFORE the
+    # player can place it, which is worse than one unticked box. If this ever
+    # changes, change it here deliberately rather than by adding a second
+    # exception somewhere else.
+    SEQUENCING_EXCEPTIONS = frozenset({
+        "invisible_furniture_transparent_graphics",
+    })
+
+    def test_every_setting_defaults_on(self):
+        off = sorted(
+            row["id"] for row in exporter.SETTINGS
+            if not row["default"]
+            and row["id"] not in self.SEQUENCING_EXCEPTIONS
+        )
+        self.assertEqual(
+            off, [],
+            "these settings default OFF, but every patch must default ON in "
+            "builds and in the patcher alike: %s" % off)
+
+    def test_the_documented_exception_is_still_the_only_one(self):
+        # If the exception list grows, that is a decision the owner makes,
+        # not something that should slip in with a new feature.
+        actual_off = {
+            row["id"] for row in exporter.SETTINGS if not row["default"]
+        }
+        self.assertLessEqual(
+            actual_off, self.SEQUENCING_EXCEPTIONS,
+            "an undocumented setting defaults off")
+
+    def test_the_exception_still_exists_as_a_setting(self):
+        # Guards the reverse failure: if the named exception is renamed or
+        # removed, the exemption above would silently start excusing nothing
+        # and this class would keep passing while the rule went unchecked.
+        ids = {row["id"] for row in exporter.SETTINGS}
+        for sid in self.SEQUENCING_EXCEPTIONS:
+            with self.subTest(setting=sid):
+                self.assertIn(
+                    sid, ids,
+                    "the documented exception no longer names a real setting")
+
+
 class ExportOfflinePatchBundleTests(unittest.TestCase):
     def test_default_settings_expose_linked_behavior_overlay_for_player_qa(self):
         available = set(exporter.SOURCE_BACKED_OPTIONAL_SETTINGS) | {"core_executable"}
@@ -186,7 +250,19 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
         updated_by_id = {row["id"]: row for row in updated}
         for setting_id in exporter.FINAL_PLAYTEST_DEFAULT_ON_SETTINGS:
             self.assertTrue(updated_by_id[setting_id]["default"], setting_id)
-        self.assertFalse(updated_by_id["same_sex_marriage"]["default"])
+        # same_sex_marriage is NOT in the profile's on-list and NOT in its
+        # off-list, so the profile leaves it at the base default. That base is
+        # now ON, per the owner's standing rule that every patch defaults on
+        # in builds and in the patcher alike. The property this line is really
+        # guarding is that the profile does not REACH settings it does not
+        # name -- so assert it is untouched rather than that it is off, which
+        # was only ever true because the base happened to be off.
+        self.assertEqual(
+            updated_by_id["same_sex_marriage"]["default"],
+            original_defaults["same_sex_marriage"],
+            "the profile changed a setting it neither enables nor disables")
+        # no_ai_icons IS in the explicit off-list, so it must be forced off
+        # even though the test set it True above and the base default is on.
         self.assertFalse(updated_by_id["no_ai_icons"]["default"])
         for setting_id in (
             "custom_lorsieab2_map_images",
@@ -195,7 +271,15 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             "transparent_decor_tab",
             "optional_visual_mod_graphics",
         ):
-            self.assertFalse(updated_by_id[setting_id]["default"], setting_id)
+            # None of these is in the profile's on-list or its off-list, so
+            # the profile must leave each at its base default. That base is
+            # now ON. Asserting "still off" only ever worked because the base
+            # happened to be off; the real property is that the profile does
+            # not reach settings it does not name.
+            self.assertEqual(
+                updated_by_id[setting_id]["default"],
+                original_defaults[setting_id],
+                setting_id)
         self.assertEqual(
             original_defaults,
             {row["id"]: row["default"] for row in exporter.SETTINGS},
@@ -312,14 +396,18 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             Path("Images") / "curtain_closed_southb.png",
         )
 
-    def test_ai_bathroom2_setting_is_default_off_with_exact_provenance(self):
+    def test_ai_bathroom2_setting_is_default_on_with_exact_provenance(self):
         settings_by_id = {row["id"]: row for row in exporter.SETTINGS}
         setting = settings_by_id["ai_generated_bathroom2_renovations"]
         self.assertEqual(
             setting["label"],
             "2nd Bathroom Mobile-Style Renovations (AI-Generated Art Warning)",
         )
-        self.assertFalse(setting["default"])
+        # Default ON, per the owner's standing rule that every patch defaults
+        # on in builds and in the patcher alike. The AI-art warning stays in
+        # the description -- the warning is what informs the choice, and the
+        # default is not the place to hide a feature behind.
+        self.assertTrue(setting["default"])
         self.assertEqual(setting["category"], "optional")
         self.assertIn("AI-generated", setting["description"])
         self.assertIn("Bathroom 1's mobile renovations art", setting["description"])
@@ -415,11 +503,13 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
                 self.assertIn(setting_id, by_id)
                 self.assertTrue(by_id[setting_id]["default"])
 
-    def test_no_ai_icons_setting_is_default_off_and_cheat_gated(self):
+    def test_no_ai_icons_setting_is_default_on_and_cheat_gated(self):
         settings_by_id = {row["id"]: row for row in exporter.SETTINGS}
         setting = settings_by_id["no_ai_icons"]
         self.assertEqual(setting["label"], "No AI Icons")
-        self.assertFalse(setting["default"])
+        # Default ON: the owner requires every patch enabled by default,
+        # in built executables and in the patcher's own settings alike.
+        self.assertTrue(setting["default"])
         self.assertEqual(setting["category"], "optional")
         self.assertIn("other LDW games", setting["description"])
         self.assertIn("online art sources", setting["description"])
@@ -918,7 +1008,9 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             setting = {
                 row["id"]: row for row in manifest["settings"]
             }["allow_older_pregnancies"]
-            self.assertFalse(setting["default"])
+            # Default ON: every patch defaults on in builds and in
+            # the patcher alike, per the owner's standing rule.
+            self.assertTrue(setting["default"])
             self.assertEqual(setting["category"], "optional")
             self.assertEqual(len(manifest["post_asset_patches"]), 4)
             records = {
@@ -980,6 +1072,15 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
                 str(disabled_output),
                 "--manifest",
                 str(manifest_path),
+                # DISABLE EXPLICITLY. This case exists to prove the patcher
+                # writes 0 into a runtime flag when a setting is off, and it
+                # used to get that for free because the defaults were off.
+                # The defaults are now ON for every patch, so relying on them
+                # made this assert the opposite of its own name. Naming the
+                # settings keeps it testing the disable path rather than
+                # whatever the defaults happen to be.
+                "--disable",
+                "allow_older_pregnancies,older_villager_mortality,same_sex_marriage",
             )
             disabled_installed = (
                 disabled_output / manifest["output"]["default_exe_name"]
@@ -998,6 +1099,16 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
                 str(manifest_path),
                 "--enable",
                 "allow_older_pregnancies",
+                # NAME THE OFF SETTINGS TOO. This case proves each runtime
+                # flag is written independently -- one on, one off, one on,
+                # one off -- and it used to get the OFF half for free from
+                # the defaults. Every patch now defaults ON, so relying on
+                # that would make the mixed pattern collapse to all-on and
+                # the test would stop proving independence. Naming both
+                # halves keeps it testing the patcher rather than the
+                # defaults.
+                "--disable",
+                "older_villager_mortality,same_sex_marriage",
             )
             installed = output / manifest["output"]["default_exe_name"]
             self.assertTrue(installed.is_file())
@@ -1013,8 +1124,13 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
                 str(all_disabled_output),
                 "--manifest",
                 str(manifest_path),
+                # The "everything off" case. It named only holiday_furniture
+                # and got the rest from the defaults being off; with every
+                # patch defaulting ON it has to name them, or it stops being
+                # an all-disabled case at all.
                 "--disable",
-                "holiday_furniture",
+                "holiday_furniture,allow_older_pregnancies,"
+                "older_villager_mortality,same_sex_marriage",
             )
             all_disabled = (
                 all_disabled_output / manifest["output"]["default_exe_name"]
@@ -1338,18 +1454,18 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             self.assertNotIn("behavior_patches", settings.stdout)
             self.assertNotIn("text_fixes", settings.stdout)
             self.assertNotIn("store_scroll_bar", settings.stdout)
-            self.assertIn("custom_couches_ldw_posters [default off]", settings.stdout)
-            self.assertIn("vf3_furniture [default off]", settings.stdout)
-            self.assertIn("misc_graphics_fixes [default off]", settings.stdout)
-            self.assertIn("glowing_collectibles [default off]", settings.stdout)
+            self.assertIn("custom_couches_ldw_posters [default on]", settings.stdout)
+            self.assertIn("vf3_furniture [default on]", settings.stdout)
+            self.assertIn("misc_graphics_fixes [default on]", settings.stdout)
+            self.assertIn("glowing_collectibles [default on]", settings.stdout)
             self.assertNotIn("holiday_ornaments_collection", settings.stdout)
             self.assertNotIn("settings_evict_button", settings.stdout)
             self.assertNotIn("unused_pets", settings.stdout)
             self.assertNotIn("mobile_purchases", settings.stdout)
             self.assertNotIn("island_events", settings.stdout)
             self.assertIn("body field sync", settings.stdout)
-            self.assertNotIn("transparent_store_bar [default off]", settings.stdout)
-            self.assertIn("optional_song_mods [default off]", settings.stdout)
+            self.assertNotIn("transparent_store_bar", settings.stdout)
+            self.assertIn("optional_song_mods [default on]", settings.stdout)
             settings_by_id = {row["id"]: row for row in manifest["settings"]}
             self.assertEqual(settings_by_id["holiday_furniture"]["category"], "main")
             self.assertEqual(settings_by_id["custom_couches_ldw_posters"]["category"], "optional")
@@ -2677,7 +2793,8 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             self.assertTrue((out / "payload" / "OptionalVisualMods" / "Invisible Workspace Upgrades" / "original images" / "toolwall.png").is_file())
             settings_by_id = {row["id"]: row for row in manifest["settings"]}
             self.assertEqual(settings_by_id["invisible_upgrades_graphics"]["category"], "optional")
-            self.assertFalse(settings_by_id["invisible_upgrades_graphics"]["default"])
+            # Default ON, per the owner's standing rule.
+            self.assertTrue(settings_by_id["invisible_upgrades_graphics"]["default"])
 
     def test_disable_all_refreshes_existing_modded_output_to_vanilla(self):
         with tempfile.TemporaryDirectory() as tmp:
