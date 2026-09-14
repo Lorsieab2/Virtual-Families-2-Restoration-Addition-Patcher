@@ -34484,7 +34484,30 @@ extern "C" void __cdecl VF2RandomPooltableLabel(CVillager &villager)
     bool pingPong = VF2LinkedFurnitureItemIs(
         villager, 0x36, __VF2_PING_PONG_TABLE_ITEM_ID__);
     if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::PlayingPooltable)) return;
-    if (!pingPong) {
+    // WHICH TABLE DID THE ROUTE PICK?
+    //
+    // The pre-probe above is a nearest-match from the villager's feet taken
+    // before the behaviour runs, so it answers "which 0x36 table is nearest
+    // right now", not "which table will the route pick". With both tables
+    // placed, a villager standing nearer the ping-pong table but routed by
+    // the engine to the pool table was captioned "Playing ping-pong" while
+    // playing on a stock pool table -- a stock item wearing a modded label.
+    // The mirror case silently kept "Playing pool" on the ping-pong table.
+    //
+    // The interceptor on PlanToGo(object, ...) records the placement the
+    // engine's own resolver chose, and PlayingPooltable's two object PlanToGo
+    // callsites are already retargeted to it, so the answer is already being
+    // recorded on this path -- it was simply never read. Prefer it, and fall
+    // back to the probe only when nothing was recorded, which leaves the
+    // stock label alone rather than guessing.
+    //
+    // This is the same correction the two treadmill wrappers already carry
+    // for the exercise bike, which shares EObject 0x04 with the stock
+    // treadmill exactly as these two tables share 0x36.
+    bool const onPingPong = gVF2RoutedItemValid
+        ? VF2RoutedToItem(villager, __VF2_PING_PONG_TABLE_ITEM_ID__)
+        : pingPong;
+    if (!onPingPong) {
         // A stock pool table: leave the native label exactly as it was.
         return;
     }
