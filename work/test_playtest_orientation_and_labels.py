@@ -369,31 +369,54 @@ class EveryPatchDefaultsOnInTheGenerator(unittest.TestCase):
             "these feature gates still default OFF, so a plain generator run "
             "omits them: %s" % sorted(offenders))
 
-    def test_the_runtime_gates_default_to_enabled(self):
-        """Compile-time gates are not enough: two RUNTIME bytes also gate this.
+    def test_the_runtime_gates_stay_dormant_for_the_exporter(self):
+        """The .vf2beh / .vf2scrl bytes must ship 0, and that is correct.
 
-        Every mobile furniture route -- the manual drop dispatch, the autonomous
-        candidates, the table-prop drawing -- is gated on
-        gVF2MobileFurnitureBehaviors, and the store scroll bar on
-        gVF2StoreScrollbar. Both initialised to 0, so flipping only the
-        environment-backed compile gates produced an executable with every
-        feature compiled in and ALL OF THEM INERT. Only the offline exporter's
-        post-link .vf2beh / .vf2scrl write ever turned them on.
+        This test previously asserted they default to 1, on the theory that a
+        0 meant the features shipped "compiled in but inert". That was wrong,
+        and the export proved it: work/export_offline_patch_bundle.py asserts
+        the shipped default is 00 (runtime_flag_variant_for_exe), so a 1 here
+        aborts the whole bundle with ".vf2beh default byte mismatch".
 
-        That is exactly the failure this project keeps hitting: the code is
-        present, it compiles, every static check passes, and nothing happens in
-        play. Both bytes now default to 1; the exporter still rewrites them, so
-        unchecking either patcher setting still disables the feature.
+        The real contract is that the linked EXE carries each byte DORMANT and
+        the exporter emits an exact-SHA post-asset patch rewriting 00 -> 01
+        when the player's setting is enabled. Both settings already default to
+        True, so the features are on by default in the artifact players
+        install -- which is what the owner asked for. Whether a gated feature
+        is on by default is decided by the setting default plus that toggle,
+        NOT by the byte in the linked EXE.
         """
         text = source_text()
         self.assertIn(
-            "volatile unsigned char gVF2MobileFurnitureBehaviors = 1;", text)
-        self.assertIn(
-            "volatile unsigned char gVF2StoreScrollbar = 1;", text)
-        self.assertNotIn(
             "volatile unsigned char gVF2MobileFurnitureBehaviors = 0;", text)
-        self.assertNotIn(
+        self.assertIn(
             "volatile unsigned char gVF2StoreScrollbar = 0;", text)
+        self.assertNotIn(
+            "volatile unsigned char gVF2MobileFurnitureBehaviors = 1;", text)
+        self.assertNotIn(
+            "volatile unsigned char gVF2StoreScrollbar = 1;", text)
+
+    def test_the_exporter_settings_that_drive_those_bytes_default_on(self):
+        """The byte is dormant, so THIS is what makes the features ship on.
+
+        The owner asked for a patcher where all patches are on by default,
+        with the invisible transparent furniture graphics as the single
+        exception. For .vf2beh and .vf2scrl the linked EXE deliberately ships
+        0, so the only thing that decides what a player gets is the exporter
+        setting default plus its post-asset toggle. Nothing pinned that, which
+        is how a 1 in the generator came to look like the fix.
+        """
+        import sys
+        sys.path.insert(0, str(ROOT / "work"))
+        import export_offline_patch_bundle as exporter
+        settings = {s["id"]: s for s in exporter.SETTINGS}
+        for setting in ("behavior_patches", "mobile_furniture"):
+            self.assertIn(setting, settings,
+                          "no %s setting in the exporter" % setting)
+            self.assertTrue(
+                settings[setting]["default"],
+                "%s no longer defaults on, so the patcher would ship it off "
+                "even though the dormant runtime byte relies on it" % setting)
 
     def test_the_transparent_graphics_setting_still_ships_disabled(self):
         """The reverse failure. Turning this on by default would leave a player

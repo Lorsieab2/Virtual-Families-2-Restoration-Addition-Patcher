@@ -94,7 +94,7 @@ def synthetic_pe_bytes(*, scroll_byte: int = 0, text_salt: int = 0) -> bytes:
 
 
 class StoreScrollbarRuntimeToggleTests(unittest.TestCase):
-    def test_generator_contract_is_default_on_and_guards_before_scene_reads(self):
+    def test_generator_contract_is_dormant_and_guards_before_scene_reads(self):
         """The flag now defaults to 1, and the guards still come first.
 
         THE DEFAULT CHANGED DELIBERATELY. This test previously required
@@ -105,10 +105,12 @@ class StoreScrollbarRuntimeToggleTests(unittest.TestCase):
         naming only the invisible transparent furniture graphics as the
         exception, so the byte starts at 1.
 
-        Nothing else about the contract changes. The byte stays in its own
-        writable section and the exporter still rewrites it post-link, so
-        unchecking the patcher setting still disables the feature -- which is
-        what the toggle tests further down this module exercise.
+        The byte ships 0 and that is correct: the exporter requires the linked
+        default to be 00 and emits an exact-SHA post-asset patch flipping it to
+        01 when the player's setting is on. Asserting 1 here broke the export
+        outright. The setting itself defaults on, so the feature still reaches
+        players enabled -- which is what the toggle tests further down this
+        module exercise.
 
         The GUARD ORDERING below is unchanged and is the part that prevents a
         crash: both entry points must test the flag before touching any scene
@@ -120,7 +122,7 @@ class StoreScrollbarRuntimeToggleTests(unittest.TestCase):
         self.assertEqual(generator.STORE_SCROLLBAR_FLAG_SYMBOL, "_gVF2StoreScrollbar")
         self.assertIn('#pragma section(".vf2scrl", read, write)', source)
         self.assertIn(
-            'volatile unsigned char gVF2StoreScrollbar = 1;',
+            'volatile unsigned char gVF2StoreScrollbar = 0;',
             source,
         )
         for signature in (
