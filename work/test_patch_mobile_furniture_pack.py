@@ -1980,11 +1980,24 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                     "sFurnitureInfo2 padding again",
                 )
                 self.assertNotIn("marker == 0x53 || marker == 0x54", picnic_helper)
+                # The selection now asks VF2FurnitureFacesNorthWest rather than
+                # testing `== 1` inline. The intent of this assertion is
+                # unchanged and still enforced: the orientation must come from
+                # info.orientation alone, never from struct padding.
+                #
+                # The literal `== 1` was itself wrong. EFurnitureOrientation is
+                # SE=0, SW=1, NE=2, NW=3 (CodeView LF_ENUMERATE records,
+                # identical in FurnitureManager.obj at 0x52e0 and Behavior.obj
+                # at 0x9cfb), so it named SW alone: it missed NW entirely and
+                # answered true for SW. Reported in play with a screenshot --
+                # a picnic table facing NE seated its villagers facing away.
                 self.assertIn(
-                    'info.orientation == 1 ? "Sit In Chair NW" : "Sit In Chair NE"',
+                    "VF2FurnitureFacesNorthWest(info.orientation)",
                     picnic_helper,
                     "orientation must come from info.orientation alone",
                 )
+                self.assertIn('"Sit In Chair NW"', picnic_helper)
+                self.assertIn('"Sit In Chair NE"', picnic_helper)
                 self.assertIn("plans->PlanToDecHunger(40);", picnic_helper)
                 self.assertIn("plans->PlanToIncPoo(6);", picnic_helper)
                 self.assertNotIn("0x1B4", picnic_helper)
@@ -6484,9 +6497,33 @@ class MobileIslandEventTextTests(unittest.TestCase):
             source,
         )
         self.assertIn('"no current exact-build WER or dump"', source)
-        self.assertIn(
-            'ENABLE_ISLAND_EVENTS = os.environ.get("VF2_ENABLE_ISLAND_EVENTS", "0") == "1"',
+        # The gate must stay environment-controlled, but its DEFAULT is no
+        # longer pinned to opt-in here.
+        #
+        # Worth stating plainly, because this text is about a CRASH: the
+        # manifest wording above is retained verbatim and still classifies the
+        # evidence as "historical runtime reports plus prior static storage
+        # defect; no current exact-build WER or dump". That classification is
+        # what this test exists to protect, and it is untouched.
+        #
+        # What changed is only which way the default points, and it now matches
+        # what the patcher already shipped: `island_events` is default=True in
+        # the exporter's SETTINGS table, so every player applying the patcher
+        # already receives these events. The generator was the outlier -- a
+        # plain run produced a build without them while the settings list told
+        # the player they were enabled. The owner asked for the default
+        # generator to have all patches on, naming only the invisible
+        # transparent furniture graphics as the exception.
+        #
+        # The disabled branch is still reachable by setting the variable to 0,
+        # and still emits the same stub and the same manifest status, so the
+        # held-out path remains available if a current dump ever appears.
+        self.assertRegex(
             source,
+            r'ENABLE_ISLAND_EVENTS = os\.environ\.get\(\s*'
+            r'"VF2_ENABLE_ISLAND_EVENTS",\s*"[01]"\s*\)\s*(?:==|!=)\s*"[01]"',
+            "the island-events gate is no longer environment controlled, so "
+            "the held-out build can no longer be produced",
         )
 
     def test_proven_mobile_event_outcomes_are_exact_generated_routes(self):
@@ -8685,9 +8722,20 @@ class MobileSpecialUpgradeContractTests(unittest.TestCase):
 class OutfitStoreMappingTests(unittest.TestCase):
     def test_behavior_patch_mutations_are_all_inside_compile_time_gate(self):
         source = Path(patcher.__file__).read_text(encoding="utf-8")
-        self.assertIn(
-            'ENABLE_BEHAVIOR_PATCHES = os.environ.get("VF2_ENABLE_BEHAVIOR_PATCHES", "0") == "1"',
+        # The gate must exist and be environment-controlled. Its DEFAULT is
+        # deliberately not pinned here: the owner asked for the default
+        # generator to produce a build with all patches on, so this now reads
+        #   os.environ.get("VF2_ENABLE_BEHAVIOR_PATCHES", "1") != "0"
+        # rather than the previous opt-in form. What this test actually guards
+        # is the AST check below -- that every behaviour-patch mutation sits
+        # inside the gate, so setting the variable to 0 still yields a stock
+        # build. That property is independent of which way the default points.
+        self.assertRegex(
             source,
+            r'ENABLE_BEHAVIOR_PATCHES = os\.environ\.get\(\s*'
+            r'"VF2_ENABLE_BEHAVIOR_PATCHES",\s*"[01]"\s*\)\s*(?:==|!=)\s*"[01]"',
+            "the behavior-patch compile-time gate is no longer environment "
+            "controlled, so its mutations cannot be turned off",
         )
         tree = ast.parse(source)
         main = next(
@@ -13183,20 +13231,52 @@ class HolidayOrnamentGateTests(unittest.TestCase):
         finally:
             patcher.PATCHED = old_patched
 
-    def test_holiday_ornaments_are_an_optional_patcher_overlay(self):
-        self.assertFalse(patcher.ENABLE_HOLIDAY_ORNAMENTS)
+    def test_holiday_ornaments_remain_a_toggleable_patcher_overlay(self):
+        """They are ON by default now, and must still be switchable OFF.
 
-    def test_mobile_island_events_are_opt_in_for_normal_build_stability(self):
-        self.assertFalse(patcher.ENABLE_ISLAND_EVENTS)
+        This previously asserted the gate was FALSE. The owner asked for the
+        default generator to produce a build with all patches enabled, naming
+        only the invisible transparent furniture graphics as the exception, so
+        the default flipped. It now matches what the patcher already shipped:
+        holiday_ornaments is default=True in the exporter's SETTINGS table.
+
+        What still matters, and is what this test now pins, is that the overlay
+        remains OPTIONAL -- an environment variable can still produce a build
+        without it, so the patcher's unchecked state is still buildable.
+        """
+        self.assertTrue(patcher.ENABLE_HOLIDAY_ORNAMENTS)
+        source = Path(patcher.__file__).read_text(encoding="utf-8")
+        self.assertRegex(
+            source,
+            r'ENABLE_HOLIDAY_ORNAMENTS = os\.environ\.get\(\s*'
+            r'"VF2_ENABLE_HOLIDAY_ORNAMENTS",\s*"[01]"\s*\)\s*(?:==|!=)\s*"[01]"',
+            "the holiday-ornament overlay is no longer switchable, so the "
+            "unchecked patcher setting cannot be built",
+        )
+
+    def test_mobile_island_events_remain_switchable(self):
+        """Also ON by default now, for the same reason and with the same proviso.
+
+        The manifest still records the held-out rationale verbatim, and the
+        disabled branch still emits its stub, so a build without these events
+        can still be produced if a current crash dump ever appears. See
+        test_island_disabled_gate_distinguishes_historical_reports_from_runtime_proof,
+        which pins that wording.
+        """
+        self.assertTrue(patcher.ENABLE_ISLAND_EVENTS)
+        source = Path(patcher.__file__).read_text(encoding="utf-8")
+        self.assertRegex(
+            source,
+            r'ENABLE_ISLAND_EVENTS = os\.environ\.get\(\s*'
+            r'"VF2_ENABLE_ISLAND_EVENTS",\s*"[01]"\s*\)\s*(?:==|!=)\s*"[01]"',
+            "the island-events gate is no longer switchable")
 
     def test_native_contract_reports_mobile_collection_table_for_normal_builds(self):
         contract = patcher.build_native_array_contract()
 
-        self.assertFalse(contract["holiday_ornaments"]["enabled"])
-        self.assertIn(
-            "optional patch not selected",
-            contract["holiday_ornaments"]["status"],
-        )
+        # Enabled by default now; the achievement wiring below is what this
+        # test exists to pin and is unchanged either way.
+        self.assertTrue(contract["holiday_ornaments"]["enabled"])
         self.assertEqual(contract["holiday_ornaments"]["achievement"], "0x5f")
         self.assertEqual(contract["holiday_ornaments"]["achievement_target"], 12)
         self.assertEqual(contract["holiday_ornaments"]["goal_collector_target"], 13)
