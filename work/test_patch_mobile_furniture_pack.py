@@ -2986,7 +2986,14 @@ class MobileRenovationArtTests(unittest.TestCase):
     def test_mobile_renovations_are_only_in_native_house_renovation_category(self):
         old_patched = patcher.PATCHED
         old_enabled = patcher.ENABLE_MOBILE_RENOVATIONS
+        # The AI Bathroom 2 overlay adds five more gHomeList rows, so this test
+        # must pin it too or its row counts measure two features at once. It
+        # used to default off and needed no isolation; it defaults on now, so
+        # the isolation is made explicit -- the same shape the feature-
+        # combination test above already uses.
+        old_bathroom2 = patcher.ENABLE_AI_GENERATED_BATHROOM2
         try:
+            patcher.ENABLE_AI_GENERATED_BATHROOM2 = False
             with tempfile.TemporaryDirectory() as tmp:
                 temp = Path(tmp)
                 shutil.copy2(
@@ -3029,12 +3036,23 @@ class MobileRenovationArtTests(unittest.TestCase):
                     renovation_ids
                     & {row["item_id"] for row in services["added_items"]}
                 )
+                # Only the cheat upgrades that are not Details-screen-only get a
+                # row on gServicesList, so the derived count must apply the same
+                # details_only filter the patcher applies. While the cheat gate
+                # defaulted off this term was zero and the filter never showed;
+                # with the gate on by default the unfiltered length overcounts.
                 self.assertEqual(
                     services["new_count"],
                     6
                     + len(patcher.MOBILE_SPECIAL_UPGRADE_ITEM_IDS)
                     + (
-                        len(patcher.CHEAT_UPGRADE_ITEMS)
+                        len(
+                            [
+                                item
+                                for item in patcher.CHEAT_UPGRADE_ITEMS
+                                if not item.get("details_only")
+                            ]
+                        )
                         if patcher.ENABLE_CHEAT_UPGRADES
                         else 0
                     ),
@@ -3072,6 +3090,7 @@ class MobileRenovationArtTests(unittest.TestCase):
         finally:
             patcher.PATCHED = old_patched
             patcher.ENABLE_MOBILE_RENOVATIONS = old_enabled
+            patcher.ENABLE_AI_GENERATED_BATHROOM2 = old_bathroom2
 
     def test_ai_bathroom2_rows_work_without_first_bathroom_toggle(self):
         old_patched = patcher.PATCHED
@@ -4790,10 +4809,17 @@ class MobileRenovationArtTests(unittest.TestCase):
 
     def test_native_mobile_renovation_purchase_and_load_routes_match_contract(self):
         old_patched = patcher.PATCHED
+        # The contract asserted below is the renderer-disabled one: the point is
+        # that the stock condemned-area map path survives when the optional
+        # room-art renderer is not linked. That used to be the default; now that
+        # mobile renovations default on, the gate is pinned off explicitly so the
+        # test keeps measuring the disabled route it was written for.
+        old_enabled = patcher.ENABLE_MOBILE_RENOVATIONS
         try:
             with tempfile.TemporaryDirectory() as tmp:
                 temp = Path(tmp)
                 patcher.PATCHED = temp
+                patcher.ENABLE_MOBILE_RENOVATIONS = False
                 shutil.copy2(patcher.SRC_OBJS / "ScrollingStoreScene.obj", temp / "ScrollingStoreScene.obj")
                 shutil.copy2(patcher.SRC_OBJS / "theGameState.obj", temp / "theGameState.obj")
                 rows, _load_order = patcher._mobile_renovation_native_contract()
@@ -4819,6 +4845,7 @@ class MobileRenovationArtTests(unittest.TestCase):
                 patcher.validate_native_mobile_renovation_contract(manifest)
         finally:
             patcher.PATCHED = old_patched
+            patcher.ENABLE_MOBILE_RENOVATIONS = old_enabled
         contract = manifest["mobile_renovation_native_behavior"]
         self.assertEqual(contract["status"], "validated_and_preserved")
         self.assertEqual(contract["item_range"], "0xE1-0xEA")
@@ -4891,10 +4918,18 @@ class MobileRenovationArtTests(unittest.TestCase):
         old_enabled = patcher.ENABLE_MOBILE_RENOVATIONS
         old_patched = patcher.PATCHED
         old_out = patcher.OUT
+        # This test pins the mobile-renovation art hashes, not the AI Bathroom 2
+        # overlay, and the hand-built manifest below deliberately carries only
+        # the mobile-renovation records. With Bathroom 2 on by default the
+        # validator would also demand its world top-lefts and runtime art, so
+        # the unrelated gate is pinned off; the enabled Bathroom 2 renderer has
+        # its own dedicated tests.
+        old_bathroom2 = patcher.ENABLE_AI_GENERATED_BATHROOM2
         try:
             with tempfile.TemporaryDirectory() as tmp:
                 root = Path(tmp)
                 patcher.ENABLE_MOBILE_RENOVATIONS = True
+                patcher.ENABLE_AI_GENERATED_BATHROOM2 = False
                 patcher.PATCHED = root / "patched"
                 patcher.OUT = root / "out"
                 patcher.PATCHED.mkdir()
@@ -4955,6 +4990,7 @@ class MobileRenovationArtTests(unittest.TestCase):
                     patcher.validate_mobile_renovation_renderer_contract(manifest)
         finally:
             patcher.ENABLE_MOBILE_RENOVATIONS = old_enabled
+            patcher.ENABLE_AI_GENERATED_BATHROOM2 = old_bathroom2
             patcher.PATCHED = old_patched
             patcher.OUT = old_out
     def test_mobile_renovation_style_catalog_matches_pinned_contract(self):
@@ -5009,12 +5045,20 @@ class MobileRenovationArtTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             old_out = patcher.OUT
+            # This half of the test is specifically the staged-only, renderer-
+            # disabled payload: nothing is copied into Images and the art lands
+            # under OptionalVisualMods instead. The runtime-copy behavior of the
+            # enabled gate has its own test below, so pin the gate off here now
+            # that mobile renovations default on.
+            old_enabled = patcher.ENABLE_MOBILE_RENOVATIONS
             try:
                 patcher.OUT = Path(tmp)
+                patcher.ENABLE_MOBILE_RENOVATIONS = False
                 manifest = {}
                 patcher.sync_mobile_renovation_art_sources(manifest)
             finally:
                 patcher.OUT = old_out
+                patcher.ENABLE_MOBILE_RENOVATIONS = old_enabled
             record = manifest["mobile_renovation_art_sources"]
             self.assertEqual(record["status"], "staged_optional_payload_renderer_disabled")
             self.assertEqual(record["native_item_range"], "0xE1-0xEA")
@@ -5107,10 +5151,17 @@ class MobileRenovationArtTests(unittest.TestCase):
     def test_ai_bathroom2_visual_payload_is_default_off_and_deterministically_normalized(self):
         old_out = patcher.OUT
         old_enabled = patcher.ENABLE_AI_GENERATED_BATHROOM2
+        # AI_BATHROOM2_CURTAIN_RUNTIME_ENABLED is derived from the gate once, at
+        # import time, so setting ENABLE_AI_GENERATED_BATHROOM2 alone no longer
+        # turns the whole feature off: the curtain payload would still be written
+        # under Images/AIGeneratedBathroom2. This test measures the gate-off
+        # payload, so it pins the derived flag to match.
+        old_curtain_enabled = patcher.AI_BATHROOM2_CURTAIN_RUNTIME_ENABLED
         try:
             with tempfile.TemporaryDirectory() as tmp:
                 patcher.OUT = Path(tmp)
                 patcher.ENABLE_AI_GENERATED_BATHROOM2 = False
+                patcher.AI_BATHROOM2_CURTAIN_RUNTIME_ENABLED = False
                 manifest = {}
                 patcher.sync_ai_generated_bathroom2_assets(manifest)
                 contract = manifest["ai_generated_bathroom2_renovations"]
@@ -5177,6 +5228,7 @@ class MobileRenovationArtTests(unittest.TestCase):
         finally:
             patcher.OUT = old_out
             patcher.ENABLE_AI_GENERATED_BATHROOM2 = old_enabled
+            patcher.AI_BATHROOM2_CURTAIN_RUNTIME_ENABLED = old_curtain_enabled
 
     def test_ai_bathroom2_visual_payload_runtime_copy_is_separate_from_native_route(self):
         old_out = patcher.OUT
@@ -14673,8 +14725,17 @@ class HolidayOrnamentGateTests(unittest.TestCase):
                     # One row per defined achievement; derived so adding a
                     # goal moves it instead of failing this contract.
                     "physical_row_count": patcher.CUSTOM_ACHIEVEMENT_LAST_ID + 1,
-                    "visible_count_flag_0": 123,
-                    "visible_count_flag_1": 142,
+                    # Derived, because the visible count includes the 28
+                    # behaviour goals only when Behavior Patches are compiled
+                    # in. These literals were written while that gate defaulted
+                    # OFF, so the term was zero and invisible; the owner's
+                    # all-patches-on change makes it contribute. Deriving it
+                    # keeps the expectation exact either way, and flag_1 keeps
+                    # its documented +19 relationship to flag_0.
+                    "visible_count_flag_0": (
+                        123 + (28 if patcher.ENABLE_BEHAVIOR_PATCHES else 0)),
+                    "visible_count_flag_1": (
+                        142 + (28 if patcher.ENABLE_BEHAVIOR_PATCHES else 0)),
                     "notify_queue_bound": 0x5F,
                 },
             )
