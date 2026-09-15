@@ -14949,8 +14949,17 @@ extern "C" __declspec(naked) void VF2DrawGenerationLock() {{
     )
     (PATCHED / "vf2_store_scrollbar.cpp").write_text(
         r"""
+// Default ON, for the same reason as gVF2MobileFurnitureBehaviors: this byte
+// gates the store scroll bar at runtime, so leaving it 0 made a plain
+// generator-and-link build ship the feature compiled-in but inert. The
+// exporter still rewrites it post-link, so unchecking the patcher setting
+// still turns the scroll bar off.
+//
+// The pragma and the declaration must stay on CONSECUTIVE lines:
+// validate_store_scrollbar_runtime_contract matches them as one string, so a
+// comment between them reads as drift.
 #pragma section(".vf2scrl", read, write)
-extern "C" __declspec(allocate(".vf2scrl")) volatile unsigned char gVF2StoreScrollbar = 0;
+extern "C" __declspec(allocate(".vf2scrl")) volatile unsigned char gVF2StoreScrollbar = 1;
 
 struct ldwRect {
     int left;
@@ -25925,7 +25934,21 @@ extern "C" void __cdecl VF2ApplySitDownLabelVariants(CVillager &);
     }
 '''.strip("\n")
     helper_source = r'''#pragma section(".vf2beh", read, write)
-extern "C" __declspec(allocate(".vf2beh")) volatile unsigned char gVF2MobileFurnitureBehaviors = 0;
+// THE RUNTIME GATE DEFAULTS TO ON.
+//
+// Every mobile furniture route in this file -- the manual drop dispatch, the
+// autonomous candidates, and the table-prop drawing -- is gated on this byte.
+// It initialised to 0, so a plain generator-and-link build produced an
+// executable in which all of them were inert, even with every compile-time
+// feature gate enabled. Only the offline exporter's post-link .vf2beh write
+// (or build_playtest.ps1) ever flipped it.
+//
+// The owner asked that the default generator produce a build with all patches
+// ON, so the default is now 1. The byte remains in its own writable .vf2beh
+// section and is still rewritten post-link by the exporter, so the patcher
+// setting continues to turn the feature off when a player unchecks it --
+// nothing about that contract changes, only which value it starts from.
+extern "C" __declspec(allocate(".vf2beh")) volatile unsigned char gVF2MobileFurnitureBehaviors = 1;
 
 struct ldwPoint { int x; int y; };
 struct SBehaviorData;
@@ -30824,8 +30847,13 @@ def validate_mobile_furniture_runtime_bindings(manifest):
     if not helper_path.is_file():
         raise RuntimeError("Missing generated mobile furniture behavior helper")
     helper_text = helper_path.read_text(encoding="ascii")
+    # Default ON. See the declaration's own comment: this byte gates every
+    # mobile furniture route, and initialising it to 0 made a plain
+    # generator-and-link build inert regardless of the compile-time gates.
+    # The exporter still rewrites the byte post-link, so unchecking the
+    # patcher setting still disables the feature.
     flag_declaration = (
-        "volatile unsigned char gVF2MobileFurnitureBehaviors = 0;"
+        "volatile unsigned char gVF2MobileFurnitureBehaviors = 1;"
     )
     if helper_text.count(flag_declaration) != 1:
         raise RuntimeError("Mobile furniture behavior flag declaration drifted")
@@ -31297,7 +31325,7 @@ def validate_store_scrollbar_runtime_contract(manifest):
     declaration = (
         '#pragma section(".vf2scrl", read, write)\n'
         'extern "C" __declspec(allocate(".vf2scrl")) '
-        "volatile unsigned char gVF2StoreScrollbar = 0;"
+        "volatile unsigned char gVF2StoreScrollbar = 1;"
     )
     if helper_text.count(declaration) != 1:
         raise RuntimeError("Store scrollbar runtime flag declaration drifted")

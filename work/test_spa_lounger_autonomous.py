@@ -559,7 +559,10 @@ class TestOnlyReceivingIsAutonomous(unittest.TestCase):
         body = src[start:src.index("\n}", start)]
         self.assertIn("ldwGameState::GetRandom(11) + 55", body) # about one real minute
         self.assertIn("PlanToLieDown", body)                    # the nap's posture
-        self.assertIn("info.orientation == 1", body)            # chosen per lounger
+        # Chosen per lounger. This now pins the CORRECTED question, because
+        # `info.orientation == 1` was itself the defect: EFurnitureOrientation
+        # is SE=0, SW=1, NE=2, NW=3, so `== 1` is SW alone and missed NW.
+        self.assertIn("VF2FurnitureFacesNorthWest(info.orientation)", body)
         self.assertIn("static_cast<ESound>(0x101)", body)       # gulpahh_01.ogg
 
     def test_receiving_uses_sleep_animation_and_preserves_total_duration(self):
@@ -977,9 +980,20 @@ class TheTreatmentPoseFollowsTheLounger(unittest.TestCase):
         body = self._treatment_body()
         self.assertIn("SleepNW", body)
         self.assertIn("SleepNE", body)
-        self.assertIn("info.orientation == 1", body,
+        # The orientation must still select between the two sleep animations --
+        # that is what this test guards, and that intent is unchanged. What
+        # changed is the QUESTION asked: `info.orientation == 1` is SW alone and
+        # missed NW, so both the settle pose and the sleep strip now derive from
+        # a single VF2FurnitureFacesNorthWest call, which additionally makes it
+        # impossible for the two to disagree with each other -- the exact split
+        # the owner reported on the hammock, where the lie-down faced wrong
+        # while the sleep that followed it looked right.
+        self.assertIn("VF2FurnitureFacesNorthWest(info.orientation)", body,
                       "the orientation no longer selects between the two "
                       "sleep animations, so one facing will look wrong")
+        self.assertIn('"SleepNW"', body)
+        self.assertIn('"SleepNE"', body,
+                      "both sleep animations must remain reachable")
 
 
 if __name__ == "__main__":

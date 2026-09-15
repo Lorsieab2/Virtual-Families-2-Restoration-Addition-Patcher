@@ -81,30 +81,94 @@ class TheDecodedEnumValuesStillMatchTheGameObjects(unittest.TestCase):
             self.enumerator_value("FurnitureManager.obj", "eFurniture_YogaGearStd"),
             0x220)
 
-    def test_head_direction_names_run_ne_se_sw_nw(self):
-        """Northeast..Northwest must be four consecutive entries in that order.
+    def head_direction_set(self, compass):
+        """The VALUES in one sc_eHeadDirections array, decoded from the obj.
 
-        This is what establishes NE = 0 and NW = 3, and therefore that the old
-        constants (NE = 1, NW = 7) named Southeast and UpNE1 instead.
+        Unlike EFurnitureOrientation, EHeadDirection has NO CodeView
+        LF_ENUMERATE records anywhere in these objs -- I checked all 164, and
+        the enumerator names in theAlignVillagerScene.obj are plain strings in a
+        pointer table with no values beside them. So the values cannot be read
+        off a debug record and must come from data that USES them.
+
+        AnimManager.obj holds four static arrays naming the head directions
+        legal for each compass quarter. Those are stored as literal ints, which
+        is real value evidence rather than name ordering.
         """
-        data = (OBJS / "theAlignVillagerScene.obj").read_bytes()
-        found = [
-            m.group().decode("ascii")
-            for m in re.finditer(rb"eHeadDirection_[A-Za-z0-9]+", data)
-        ]
-        ordered = [
-            "eHeadDirection_Northeast",
-            "eHeadDirection_Southeast",
-            "eHeadDirection_Southwest",
-            "eHeadDirection_Northwest",
-        ]
-        for name in ordered:
-            self.assertIn(name, found)
-        positions = [found.index(name) for name in ordered]
+        import struct
+        data = (OBJS / "AnimManager.obj").read_bytes()
+        opt = struct.unpack_from("<H", data, 16)[0]
+        symoff = struct.unpack_from("<I", data, 8)[0]
+        nsym = struct.unpack_from("<I", data, 12)[0]
+        strtab = symoff + nsym * 18
+
+        def symbol_name(off):
+            raw = data[off:off + 8]
+            if raw[:4] == b"\0\0\0\0":
+                base = struct.unpack_from("<I", raw, 4)[0]
+                end = data.index(b"\0", strtab + base)
+                return data[strtab + base:end].decode("ascii", "replace")
+            return raw.rstrip(b"\0").decode("ascii", "replace")
+
+        wanted = "sc_eHeadDirections@?1??Random%sHeadDirection" % compass
+        for i in range(nsym):
+            off = symoff + i * 18
+            name = symbol_name(off)
+            if wanted not in name:
+                continue
+            value, section = struct.unpack_from("<IH", data, off + 8)
+            if section == 0:
+                continue
+            sh = 20 + opt + (section - 1) * 40
+            praw = struct.unpack_from("<I", data, sh + 20)[0]
+            raw = data[praw + value:praw + value + 16]
+            return [int.from_bytes(raw[k:k + 4], "little") for k in range(0, 16, 4)]
+        self.skipTest("no sc_eHeadDirections array for %s" % compass)
+
+    def test_head_direction_values_put_northeast_at_0_and_northwest_at_3(self):
+        """Decode the VALUES, not the order the names happen to appear in.
+
+        An earlier version of this test only checked that four symbol names
+        occurred in ascending address order, which would still pass if the
+        whole enum were shifted -- exactly the objection Codex raised, and it
+        was right. The constants are now derived from arrays of literal values.
+
+        The north array is the decisive one: it contains precisely the two
+        north-facing directions. Whichever of them also appears in the west
+        array is Northwest, and whichever appears in the east array is
+        Northeast. No name ordering is consulted at all.
+        """
+        north = self.head_direction_set("North")
+        east = self.head_direction_set("East")
+        west = self.head_direction_set("West")
+
         self.assertEqual(
-            positions, sorted(positions),
-            "the head-direction enumerators are no longer in NE, SE, SW, NW "
-            "order, so the decoded values NE=0 and NW=3 need re-deriving")
+            sorted(north[:2]), [0, 3],
+            "RandomNorthHeadDirection no longer holds {0, 3}, so NE=0 and NW=3 "
+            "must be re-derived before trusting the patcher's constants")
+
+        northwest = [v for v in north[:2] if v in west]
+        northeast = [v for v in north[:2] if v in east]
+        self.assertEqual(
+            northwest, [3],
+            "the north direction that is also legal facing west is not 3")
+        self.assertEqual(
+            northeast, [0],
+            "the north direction that is also legal facing east is not 0")
+
+    def test_the_patcher_constants_match_the_decoded_values(self):
+        """Close the loop: the decoded values must be what the source declares.
+
+        Without this the decode above and the source assertions elsewhere in
+        this module never meet, and each could drift independently.
+        """
+        north = self.head_direction_set("North")
+        east = self.head_direction_set("East")
+        west = self.head_direction_set("West")
+        northeast = [v for v in north[:2] if v in east][0]
+        northwest = [v for v in north[:2] if v in west][0]
+        text = source_text()
+        self.assertIn("eHeadDirectionNE = %d" % northeast, text)
+        self.assertIn("eHeadDirectionNW = %d" % northwest, text)
 
 
 class TheHeadDirectionConstantsAreCorrect(unittest.TestCase):
@@ -304,6 +368,32 @@ class EveryPatchDefaultsOnInTheGenerator(unittest.TestCase):
             sorted(offenders), [],
             "these feature gates still default OFF, so a plain generator run "
             "omits them: %s" % sorted(offenders))
+
+    def test_the_runtime_gates_default_to_enabled(self):
+        """Compile-time gates are not enough: two RUNTIME bytes also gate this.
+
+        Every mobile furniture route -- the manual drop dispatch, the autonomous
+        candidates, the table-prop drawing -- is gated on
+        gVF2MobileFurnitureBehaviors, and the store scroll bar on
+        gVF2StoreScrollbar. Both initialised to 0, so flipping only the
+        environment-backed compile gates produced an executable with every
+        feature compiled in and ALL OF THEM INERT. Only the offline exporter's
+        post-link .vf2beh / .vf2scrl write ever turned them on.
+
+        That is exactly the failure this project keeps hitting: the code is
+        present, it compiles, every static check passes, and nothing happens in
+        play. Both bytes now default to 1; the exporter still rewrites them, so
+        unchecking either patcher setting still disables the feature.
+        """
+        text = source_text()
+        self.assertIn(
+            "volatile unsigned char gVF2MobileFurnitureBehaviors = 1;", text)
+        self.assertIn(
+            "volatile unsigned char gVF2StoreScrollbar = 1;", text)
+        self.assertNotIn(
+            "volatile unsigned char gVF2MobileFurnitureBehaviors = 0;", text)
+        self.assertNotIn(
+            "volatile unsigned char gVF2StoreScrollbar = 0;", text)
 
     def test_the_transparent_graphics_setting_still_ships_disabled(self):
         """The reverse failure. Turning this on by default would leave a player
