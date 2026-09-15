@@ -28,6 +28,8 @@ import pathlib
 import re
 import unittest
 
+import patch_mobile_furniture_pack as patcher
+
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 GENERATOR = ROOT / "work" / "patch_mobile_furniture_pack.py"
 SOURCE = GENERATOR.read_text(encoding="utf-8", errors="replace")
@@ -178,6 +180,20 @@ class OrientationComesFromTheOrientationField(unittest.TestCase):
                       "the chaise facing no longer follows the furniture")
         self.assertIn("eHeadDirectionNE = 0", SOURCE)
         self.assertIn("eHeadDirectionNW = 3", SOURCE)
+
+    def test_resting_body_targets_all_four_colored_loungers(self):
+        chaise = next(
+            spec for spec in patcher.MOBILE_FURNITURE_MANUAL_BINDING_SPECS
+            if spec["name"] == "chaise"
+        )
+        self.assertEqual(
+            chaise["item_ids"],
+            tuple(patcher.MOBILE_CHAISE_ITEM_IDS)
+            + (patcher.INVISIBLE_LOUNGER_ITEM_ID,),
+        )
+        self.assertIn("extern \"C\" void __cdecl VF2MobileRestingBody", SOURCE)
+        self.assertIn("VF2TryLinkMobileChaise(villager, info)", SOURCE)
+        self.assertIn("VF2PlanLinkedChaiseAction", SOURCE)
 
 
 if __name__ == "__main__":

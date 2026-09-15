@@ -48,15 +48,18 @@ class TestAddedFurnitureContract(unittest.TestCase):
             self.assertIn("VF2ApplyVenueLabel", body)
             self.assertIn("if (!", body)
 
-    def test_missing_venue_falls_back_to_native_donor(self):
+    def test_missing_venue_does_not_run_the_shared_donor(self):
         src = source()
         start = src.index("static void VF2RunOwnFurnitureActionEx(")
         body = src[start:src.index("extern \"C\" void __cdecl VF2ExerciseBikeWalk", start)]
         self.assertIn("bool const hasVenue", body)
         self.assertIn("VF2RunNativeBehaviorAndChangedLabel", body)
-        self.assertIn("VF2EndAddedFurnitureVenue(villager);", body)
         self.assertIn("if (!hasVenue)", body)
-        self.assertIn("leave its stock label untouched", body)
+        missing = body[body.index("if (!hasVenue)"):body.index("VF2BeginAddedFurnitureVenue", body.index("if (!hasVenue)"))]
+        self.assertIn("added-furniture candidate", missing)
+        self.assertIn("VF2VillagerIsDroppedOnAddedFurniture", missing)
+        dropped = missing[missing.index("if (VF2VillagerIsDroppedOnAddedFurniture"):]
+        self.assertIn("VF2RunNativeBehaviorAndChangedLabel", dropped)
 
     def test_shared_donor_objects_are_explicit_and_separate(self):
         src = source()
@@ -95,6 +98,28 @@ class TestAddedFurnitureContract(unittest.TestCase):
         ):
             self.assertIn(f"candidate == {item}", body)
             self.assertIn(f"{handler}(villager)", body)
+
+    def test_orientation_routes_include_the_invisible_counterparts(self):
+        routes = {
+            spec["name"]: tuple(spec["item_ids"])
+            for spec in patcher.MOBILE_FURNITURE_MANUAL_BINDING_SPECS
+        }
+        self.assertEqual(
+            routes["invisible_spa_lounger"],
+            (patcher.INVISIBLE_SPA_LOUNGER_ITEM_ID, patcher.SPA_LOUNGER_ITEM_ID),
+        )
+        self.assertEqual(
+            routes["picnic_table"],
+            (patcher.MOBILE_PICNIC_TABLE_ITEM_ID,
+             patcher.INVISIBLE_PICNIC_TABLE_ITEM_ID),
+        )
+        self.assertEqual(
+            routes["patio_table"],
+            (patcher.MOBILE_PATIO_TABLE_ITEM_ID,
+             patcher.INVISIBLE_PATIO_TABLE_ITEM_ID),
+        )
+        self.assertIn('"name": "InvisibleYogaEquipment"', source())
+        self.assertIn("__VF2_YOGA_EQUIPMENT_ITEM_ID__", source())
 
     def test_exact_identity_uses_placement_handle_not_anchor(self):
         src = source()
