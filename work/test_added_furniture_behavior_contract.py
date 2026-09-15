@@ -147,6 +147,37 @@ class TestAddedFurnitureContract(unittest.TestCase):
             self.assertIn(donor + " FindFurniture", src,
                           donor + " no longer has its furniture lookup "
                           "constrained to the resolved venue")
+
+    def test_the_findfurniture_wrapper_forwards_every_stack_word(self):
+        """The naked wrapper must forward SEVEN words and clean 28 bytes.
+
+        FindFurniture(EObject, ldwPoint, sFurnitureInfo2 &, bool, int, bool) is
+        __thiscall: `this` arrives in ecx and the rest are pushed. ldwPoint is
+        PASSED BY VALUE and is {int x; int y;}, so it occupies TWO words, not
+        one -- 1 + 2 + 1 + 1 + 1 + 1 = 7 words = 28 bytes.
+
+        Caught by review on the first revision, which forwarded six words and
+        used `add esp, 28 / ret 24`. That makes the helper read the wrapper's
+        own return address as its final bool and leaves the donor's stack four
+        bytes out of position at every retargeted callsite -- a corruption, not
+        a cosmetic slip. Pinned because the arithmetic is invisible at a glance.
+        """
+        src = source()
+        start = src.index("void VF2FindFurnitureAtAddedFurniture()")
+        body = src[start:src.index("}", src.index("__asm", start)) + 1]
+        self.assertEqual(
+            body.count("push dword ptr [esp+28]"), 7,
+            "the wrapper must forward seven stack words; ldwPoint is two")
+        self.assertIn("push ecx", body, "`this` must be forwarded")
+        self.assertIn("add esp, 32", body,
+                      "seven forwarded words plus ecx is 32 bytes to clean")
+        self.assertIn("ret 28", body,
+                      "the callee-cleanup must match the 28 bytes of "
+                      "arguments the caller pushed")
+        # The old, wrong arithmetic must not come back.
+        self.assertNotIn("push dword ptr [esp+24]", body)
+        self.assertNotIn("add esp, 28", body)
+        self.assertNotIn("ret 24", body)
         self.assertIn("fallback\": \"native donor behavior remains unchanged", src)
 
     def test_plan_to_go_wrappers_forward_thiscall_stack_cleanup(self):

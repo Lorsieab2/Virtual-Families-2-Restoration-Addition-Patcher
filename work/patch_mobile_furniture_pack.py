@@ -34815,19 +34815,38 @@ static bool __cdecl VF2FindFurnitureAtAddedFurnitureImpl(
     return manager->FindFurniture(object, point, *info, a, b, c);
 }
 
+// SEVEN stack words, not six. ldwPoint is PASSED BY VALUE and is
+// {int x; int y;} -- EIGHT bytes, so it occupies TWO words, not one:
+//
+//   EObject object          1 word
+//   ldwPoint point          2 words   <-- the one that is easy to miscount
+//   sFurnitureInfo2 &info   1 word
+//   bool a                  1 word
+//   int b                   1 word
+//   bool c                  1 word
+//                           = 7 words = 28 bytes, plus `this` in ecx
+//
+// An earlier revision of this wrapper forwarded only six and used
+// `add esp, 28 / ret 24`. That is not a cosmetic slip: the helper would read
+// the wrapper's own RETURN ADDRESS as its final bool argument, and would
+// leave the donor's stack four bytes out of position on every retargeted
+// callsite. The existing VF2PlanToGoAtAddedFurniture wrapper is the model --
+// it forwards four words for PlanToGo(ldwPoint, ESpeed, EPriority), which is
+// point(2) + speed + priority, and confirms the two-word point.
 extern "C" __declspec(naked) void VF2FindFurnitureAtAddedFurniture()
 {
     __asm {
-        push dword ptr [esp+24]
-        push dword ptr [esp+24]
-        push dword ptr [esp+24]
-        push dword ptr [esp+24]
-        push dword ptr [esp+24]
-        push dword ptr [esp+24]
+        push dword ptr [esp+28]
+        push dword ptr [esp+28]
+        push dword ptr [esp+28]
+        push dword ptr [esp+28]
+        push dword ptr [esp+28]
+        push dword ptr [esp+28]
+        push dword ptr [esp+28]
         push ecx
         call VF2FindFurnitureAtAddedFurnitureImpl
-        add esp, 28
-        ret 24
+        add esp, 32
+        ret 28
     }
 }
 
