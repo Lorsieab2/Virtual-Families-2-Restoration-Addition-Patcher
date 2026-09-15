@@ -12,6 +12,8 @@ A stock Pool Table must keep its stock label untouched.
 import re
 import unittest
 
+NL = chr(10)
+
 import patch_mobile_furniture_pack as patcher
 
 
@@ -248,64 +250,77 @@ class TestTheFurnitureProbe(unittest.TestCase):
         self.assertIn("count < 0 || count > 0x200", text)
 
 
-class TheCaptionFollowsTheTableTheRouteChose(unittest.TestCase):
-    """The label must follow the table the ENGINE routed to, not the nearest one.
+class TheCaptionFollowsTheTableTheVillagerIsAt(unittest.TestCase):
+    """The label must follow the table this villager is actually at.
 
     VF2RandomPooltableLabel is bound to the STOCK PlayingPooltable behaviour, so
-    no venue is forced and the engine picks the destination. The pre-probe
-    VF2LinkedFurnitureItemIs is a nearest-match from the villager's feet taken
-    before the plan runs: it answers "which 0x36 table is nearest right now",
-    which is not "which table will the route pick".
+    no venue is forced and the engine picks the destination. Both tables answer
+    EObject 0x36, exactly as the treadmill and the exercise bike share 0x04.
 
-    With both tables placed, a villager standing nearer the ping-pong table but
-    routed to the pool table was captioned "Playing ping-pong" on a STOCK pool
-    table, and the mirror case kept "Playing pool" on the ping-pong table.
+    THIS CLASS PREVIOUSLY PINNED A FIX THAT DID NOT WORK, and the history
+    matters because the same reasoning was applied to both pairs of furniture.
 
-    This is the identical defect already fixed for the exercise bike, which
-    shares EObject 0x04 with the stock treadmill exactly as these two tables
-    share 0x36. That fix is pinned by
-    TheCaptionFollowsTheMachineTheRouteChose in work/test_exercise_bike_pose.py;
-    this class is its ping-pong sibling.
+    It required the wrapper to prefer a route recorded by intercepting PlanToGo
+    and asking CContentMap::FindObject which placement the route resolved to.
+    But that function takes only an object enum and an out-point -- no villager
+    and no position -- so it is a global query that answers identically for
+    every villager. With two placements sharing one object id, whichever one it
+    returned classified every user of either. The owner reported exactly that
+    outcome for the treadmill after the sibling fix shipped.
 
-    It is pinned separately because the gap survived a commit whose message
-    claimed to close it: the existing probe-ordering test stays green over the
-    defect, since ordering was never what was wrong.
+    ?PlayingPooltable@CBehavior@@ (Behavior.obj section 488) carries exactly ONE
+    furniture relocation, ?FindFurniture@CFurnitureManager@@, and references
+    neither LinkPeepToFurniture nor CContentMap::FindObject -- the same shape as
+    both treadmill behaviours. So the wrapper's own probe already makes the
+    identical call the native code makes, with identical arguments, at the
+    identical moment: before the behaviour runs, from the villager's feet. It
+    was correct, and the recorded route could only override a right answer with
+    a position-blind one.
+
+    The sibling pin is TheCaptionFollowsTheMachineTheVillagerIsAt in
+    work/test_exercise_bike_pose.py, which carries the disassembly in full.
     """
 
     def wrapper_body(self):
         source = _source()
         start = source.index(
-            'extern "C" void __cdecl VF2RandomPooltableLabel(CVillager &villager)\n{')
-        return source[start:source.index('\nextern "C"', start)]
+            'extern "C" void __cdecl VF2RandomPooltableLabel(CVillager &villager)'
+            + NL + '{')
+        return source[start:source.index(NL + 'extern "C"', start)]
 
-    def test_the_wrapper_prefers_the_routed_table(self):
+    def test_the_wrapper_decides_from_its_own_probe(self):
         body = self.wrapper_body()
         self.assertIn(
-            "VF2RoutedToItem(villager, __VF2_PING_PONG_TABLE_ITEM_ID__)", body,
-            "VF2RandomPooltableLabel still decides from the stale pre-probe "
-            "alone, which is the defect: a ping-pong caption on a stock pool "
-            "table when the route disagrees with the nearest table")
+            "VF2LinkedFurnitureItemIs(" + NL
+            + "        villager, 0x36, __VF2_PING_PONG_TABLE_ITEM_ID__)", body,
+            "the wrapper no longer asks the same question PlayingPooltable "
+            "asks, so it cannot agree with the table the engine picks")
+        self.assertIn("bool const onPingPong = pingPong;", body)
         self.assertIn("if (!onPingPong) {", body)
 
-    def test_the_probe_remains_as_the_fallback(self):
-        """The probe is the answer when nothing was recorded, not dead code.
-
-        Removing it would leave the wrapper with no answer at all on paths the
-        interceptor never saw, and relabelling on no evidence is the unsafe
-        direction -- a stock pool table keeping its stock caption is correct.
-        """
-        body = self.wrapper_body()
-        self.assertIn("gVF2RoutedItemValid", body)
-        self.assertIn(": pingPong;", body)
-
-    def test_the_routed_answer_is_read_after_the_behaviour_runs(self):
-        """The interceptor records during plan construction, so the read must
-        come after the native behaviour, not beside the pre-probe."""
+    def test_the_probe_runs_before_the_native_behaviour(self):
+        """PlayingPooltable samples FeetPos and captions before PlanToGo, so a
+        probe taken afterwards would sample a different moment."""
         body = self.wrapper_body()
         self.assertLess(
+            body.index("VF2LinkedFurnitureItemIs"),
             body.index("VF2RunNativeBehaviorAndChangedLabel"),
-            body.index("gVF2RoutedItemValid"),
-            "the routed item is read before the plan that records it has run")
+            "the probe must be taken before the native behaviour runs")
+
+    def test_the_position_blind_route_machinery_is_gone(self):
+        """It cannot answer a per-villager question, so it must not return.
+
+        Comments are stripped first: the explanation above names these symbols
+        deliberately, and a raw search would match the documentation of the
+        defect rather than the defect itself.
+        """
+        source = _source()
+        code = NL.join(
+            line for line in source.splitlines()
+            if not line.lstrip().startswith("//"))
+        for symbol in ("gVF2RoutedItemValid", "VF2RoutedToItem", "routeIsOurs"):
+            with self.subTest(symbol=symbol):
+                self.assertNotIn(symbol, code)
 
 
 if __name__ == "__main__":

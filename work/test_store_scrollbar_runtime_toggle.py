@@ -94,7 +94,29 @@ def synthetic_pe_bytes(*, scroll_byte: int = 0, text_salt: int = 0) -> bytes:
 
 
 class StoreScrollbarRuntimeToggleTests(unittest.TestCase):
-    def test_generator_contract_is_default_off_and_guards_before_scene_reads(self):
+    def test_generator_contract_is_dormant_and_guards_before_scene_reads(self):
+        """The flag now defaults to 1, and the guards still come first.
+
+        THE DEFAULT CHANGED DELIBERATELY. This test previously required
+        `gVF2StoreScrollbar = 0`, which made a plain generator-and-link build
+        ship the scroll bar compiled in but INERT -- only the offline
+        exporter's post-link .vf2scrl write ever turned it on. The owner asked
+        for the default generator to produce a build with all patches enabled,
+        naming only the invisible transparent furniture graphics as the
+        exception, so the byte starts at 1.
+
+        The byte ships 0 and that is correct: the exporter requires the linked
+        default to be 00 and emits an exact-SHA post-asset patch flipping it to
+        01 when the player's setting is on. Asserting 1 here broke the export
+        outright. The setting itself defaults on, so the feature still reaches
+        players enabled -- which is what the toggle tests further down this
+        module exercise.
+
+        The GUARD ORDERING below is unchanged and is the part that prevents a
+        crash: both entry points must test the flag before touching any scene
+        field, or a build with the feature off would still dereference scene
+        state.
+        """
         source = (ROOT / "work" / "patch_mobile_furniture_pack.py").read_text(encoding="utf-8")
         self.assertEqual(generator.STORE_SCROLLBAR_FLAG_SECTION, ".vf2scrl")
         self.assertEqual(generator.STORE_SCROLLBAR_FLAG_SYMBOL, "_gVF2StoreScrollbar")

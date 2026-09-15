@@ -527,7 +527,17 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
         patcher.patch_mobile_furniture_external_autonomous_selection(manifest)
         patcher.patch_mobile_furniture_behavior_macros(manifest)
         patcher.patch_mobile_patio_prop_execution(manifest)
-        manifest["BehaviorPatchesGate"] = {"enabled": False}
+        # The gate recorded here must match the gate the SOURCES above were
+        # generated under, or validate_mobile_furniture_runtime_bindings
+        # compares a manifest built one way against helpers emitted the other
+        # and reports a cross-apply drift that does not exist.
+        #
+        # This used to be hardcoded False, which was correct while
+        # ENABLE_BEHAVIOR_PATCHES defaulted off. It now follows the real gate,
+        # so the fixture stays honest whichever way the default points.
+        manifest["BehaviorPatchesGate"] = {
+            "enabled": bool(patcher.ENABLE_BEHAVIOR_PATCHES)
+        }
         return manifest, old_patched
 
     def test_mobile_furniture_runtime_bindings_cover_every_behavior_row(self):
@@ -577,19 +587,36 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
         self.assertEqual(len(contract["rejected_scope"]["rendered_only_unproven"]), 24)
         self.assertTrue(contract["stock_off_gate"]["manual_dispatch"])
         self.assertTrue(contract["stock_off_gate"]["autonomous_selector"])
+        # Gate-aware, not pinned to one build.
+        #
+        # This block used to hardcode the behaviour-patches-OFF shape, which
+        # was correct while ENABLE_BEHAVIOR_PATCHES defaulted off. The owner
+        # asked for the default generator to have all patches on, so the shape
+        # now follows the gate -- and the point of the assertion is unchanged:
+        # every field must agree with the build the helpers were emitted for,
+        # so a mismatch between manifest and sources is still caught.
+        gated = bool(patcher.ENABLE_BEHAVIOR_PATCHES)
         self.assertEqual(
             contract["seating_behavior_cross_apply"],
             {
-                "canonical_sit_down_variant_helper": None,
-                "manual_chaise_needs_to_sit_down": False,
-                "autonomous_chaise_needs_to_sit_down": False,
-                "resting_body_stock_fallback": "CBehavior::RestingBody",
-                "couch_chair_sit_down_route": "CBehavior::UseCouch (0x189)",
+                "canonical_sit_down_variant_helper": (
+                    "_VF2ApplySitDownLabelVariants" if gated else None),
+                "manual_chaise_needs_to_sit_down": gated,
+                "autonomous_chaise_needs_to_sit_down": gated,
+                "resting_body_stock_fallback": (
+                    "_VF2RandomRestingBodyLabel" if gated
+                    else "CBehavior::RestingBody"),
+                "couch_chair_sit_down_route": (
+                    "CBehavior::UseCouch (0x189) -> _VF2RandomUseCouchLabel"
+                    if gated else "CBehavior::UseCouch (0x189)"),
                 "resting_body_native_label_family": {
                     "behavior": "CBehavior::RestingBody (0x127)",
                     "string_ids": ["0x17d", "0x17e", "0x17f"],
                     "texts": ["Resting", "Resting legs", "Resting tired feet"],
-                    "shared_pool_condition": "native RestingBody labels remain untouched",
+                    "shared_pool_condition": (
+                        "native RestingBody changed to one of these labels"
+                        if gated
+                        else "native RestingBody labels remain untouched"),
                 },
                 "resting_body_route_matrix": {
                     "behavior_patches_off_mobile_flag_off": "CBehavior::RestingBody",
@@ -710,11 +737,26 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
             try:
                 helper_path = temp / "vf2_mobile_furniture_behaviors.cpp"
                 helper = helper_path.read_text(encoding="ascii")
-                helper = helper.replace(
+                # The dispatcher emits one of TWO stock-hotspot forms, chosen
+                # by the behaviour-patches gate. This used to delete only the
+                # first, which silently removed nothing once the gate defaulted
+                # on -- so the validator had nothing to complain about and the
+                # test failed with "RuntimeError not raised" while appearing to
+                # be about dispatch ordering.
+                #
+                # Remove whichever form is actually present, and assert that
+                # one of them was, so this can never again pass vacuously or
+                # fail for the wrong reason.
+                markers = (
                     "    if (HandleDropOnHotSpot(villager)) return true;\n",
-                    "",
-                    1,
+                    "    bool handled = HandleDropOnHotSpot(villager);\n",
                 )
+                present = [m for m in markers if m in helper]
+                self.assertEqual(
+                    len(present), 1,
+                    "expected exactly one stock-hotspot form in the generated "
+                    "dispatcher, found %d" % len(present))
+                helper = helper.replace(present[0], "", 1)
                 helper_path.write_text(helper, encoding="ascii")
                 with self.assertRaisesRegex(RuntimeError, "stock hotspot handling"):
                     patcher.validate_mobile_furniture_runtime_bindings(manifest)
@@ -1578,8 +1620,24 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                 wrapper = helper.split(
                     "bool const theMainScene::VF2HandleDropOnMobileFurniture", 1
                 )[1]
+                # STOCK FIRST. That ordering is the point of this assertion and
+                # is unchanged: the stock hotspot must be consulted before the
+                # mobile gate, so a build with the gate off behaves exactly
+                # like the base game.
+                #
+                # The dispatcher emits one of two stock-hotspot forms depending
+                # on the behaviour-patches gate, so find whichever is present
+                # rather than hardcoding the one the old default produced.
+                stock_forms = (
+                    "if (HandleDropOnHotSpot(villager)) return true;",
+                    "bool handled = HandleDropOnHotSpot(villager);",
+                )
+                stock_at = [wrapper.index(f) for f in stock_forms if f in wrapper]
+                self.assertEqual(
+                    len(stock_at), 1,
+                    "expected exactly one stock-hotspot form in the dispatcher")
                 self.assertLess(
-                    wrapper.index("if (HandleDropOnHotSpot(villager)) return true;"),
+                    stock_at[0],
                     wrapper.index("if (gVF2MobileFurnitureBehaviors == 0) return false;"),
                 )
                 self.assertIn("sample.y -= 10;", wrapper)
@@ -1980,11 +2038,24 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                     "sFurnitureInfo2 padding again",
                 )
                 self.assertNotIn("marker == 0x53 || marker == 0x54", picnic_helper)
+                # The selection now asks VF2FurnitureFacesNorthWest rather than
+                # testing `== 1` inline. The intent of this assertion is
+                # unchanged and still enforced: the orientation must come from
+                # info.orientation alone, never from struct padding.
+                #
+                # The literal `== 1` was itself wrong. EFurnitureOrientation is
+                # SE=0, SW=1, NE=2, NW=3 (CodeView LF_ENUMERATE records,
+                # identical in FurnitureManager.obj at 0x52e0 and Behavior.obj
+                # at 0x9cfb), so it named SW alone: it missed NW entirely and
+                # answered true for SW. Reported in play with a screenshot --
+                # a picnic table facing NE seated its villagers facing away.
                 self.assertIn(
-                    'info.orientation == 1 ? "Sit In Chair NW" : "Sit In Chair NE"',
+                    "VF2FurnitureFacesNorthWest(info.orientation)",
                     picnic_helper,
                     "orientation must come from info.orientation alone",
                 )
+                self.assertIn('"Sit In Chair NW"', picnic_helper)
+                self.assertIn('"Sit In Chair NE"', picnic_helper)
                 self.assertIn("plans->PlanToDecHunger(40);", picnic_helper)
                 self.assertIn("plans->PlanToIncPoo(6);", picnic_helper)
                 self.assertNotIn("0x1B4", picnic_helper)
@@ -2915,7 +2986,14 @@ class MobileRenovationArtTests(unittest.TestCase):
     def test_mobile_renovations_are_only_in_native_house_renovation_category(self):
         old_patched = patcher.PATCHED
         old_enabled = patcher.ENABLE_MOBILE_RENOVATIONS
+        # The AI Bathroom 2 overlay adds five more gHomeList rows, so this test
+        # must pin it too or its row counts measure two features at once. It
+        # used to default off and needed no isolation; it defaults on now, so
+        # the isolation is made explicit -- the same shape the feature-
+        # combination test above already uses.
+        old_bathroom2 = patcher.ENABLE_AI_GENERATED_BATHROOM2
         try:
+            patcher.ENABLE_AI_GENERATED_BATHROOM2 = False
             with tempfile.TemporaryDirectory() as tmp:
                 temp = Path(tmp)
                 shutil.copy2(
@@ -2958,12 +3036,23 @@ class MobileRenovationArtTests(unittest.TestCase):
                     renovation_ids
                     & {row["item_id"] for row in services["added_items"]}
                 )
+                # Only the cheat upgrades that are not Details-screen-only get a
+                # row on gServicesList, so the derived count must apply the same
+                # details_only filter the patcher applies. While the cheat gate
+                # defaulted off this term was zero and the filter never showed;
+                # with the gate on by default the unfiltered length overcounts.
                 self.assertEqual(
                     services["new_count"],
                     6
                     + len(patcher.MOBILE_SPECIAL_UPGRADE_ITEM_IDS)
                     + (
-                        len(patcher.CHEAT_UPGRADE_ITEMS)
+                        len(
+                            [
+                                item
+                                for item in patcher.CHEAT_UPGRADE_ITEMS
+                                if not item.get("details_only")
+                            ]
+                        )
                         if patcher.ENABLE_CHEAT_UPGRADES
                         else 0
                     ),
@@ -3001,6 +3090,7 @@ class MobileRenovationArtTests(unittest.TestCase):
         finally:
             patcher.PATCHED = old_patched
             patcher.ENABLE_MOBILE_RENOVATIONS = old_enabled
+            patcher.ENABLE_AI_GENERATED_BATHROOM2 = old_bathroom2
 
     def test_ai_bathroom2_rows_work_without_first_bathroom_toggle(self):
         old_patched = patcher.PATCHED
@@ -4719,10 +4809,17 @@ class MobileRenovationArtTests(unittest.TestCase):
 
     def test_native_mobile_renovation_purchase_and_load_routes_match_contract(self):
         old_patched = patcher.PATCHED
+        # The contract asserted below is the renderer-disabled one: the point is
+        # that the stock condemned-area map path survives when the optional
+        # room-art renderer is not linked. That used to be the default; now that
+        # mobile renovations default on, the gate is pinned off explicitly so the
+        # test keeps measuring the disabled route it was written for.
+        old_enabled = patcher.ENABLE_MOBILE_RENOVATIONS
         try:
             with tempfile.TemporaryDirectory() as tmp:
                 temp = Path(tmp)
                 patcher.PATCHED = temp
+                patcher.ENABLE_MOBILE_RENOVATIONS = False
                 shutil.copy2(patcher.SRC_OBJS / "ScrollingStoreScene.obj", temp / "ScrollingStoreScene.obj")
                 shutil.copy2(patcher.SRC_OBJS / "theGameState.obj", temp / "theGameState.obj")
                 rows, _load_order = patcher._mobile_renovation_native_contract()
@@ -4748,6 +4845,7 @@ class MobileRenovationArtTests(unittest.TestCase):
                 patcher.validate_native_mobile_renovation_contract(manifest)
         finally:
             patcher.PATCHED = old_patched
+            patcher.ENABLE_MOBILE_RENOVATIONS = old_enabled
         contract = manifest["mobile_renovation_native_behavior"]
         self.assertEqual(contract["status"], "validated_and_preserved")
         self.assertEqual(contract["item_range"], "0xE1-0xEA")
@@ -4820,10 +4918,18 @@ class MobileRenovationArtTests(unittest.TestCase):
         old_enabled = patcher.ENABLE_MOBILE_RENOVATIONS
         old_patched = patcher.PATCHED
         old_out = patcher.OUT
+        # This test pins the mobile-renovation art hashes, not the AI Bathroom 2
+        # overlay, and the hand-built manifest below deliberately carries only
+        # the mobile-renovation records. With Bathroom 2 on by default the
+        # validator would also demand its world top-lefts and runtime art, so
+        # the unrelated gate is pinned off; the enabled Bathroom 2 renderer has
+        # its own dedicated tests.
+        old_bathroom2 = patcher.ENABLE_AI_GENERATED_BATHROOM2
         try:
             with tempfile.TemporaryDirectory() as tmp:
                 root = Path(tmp)
                 patcher.ENABLE_MOBILE_RENOVATIONS = True
+                patcher.ENABLE_AI_GENERATED_BATHROOM2 = False
                 patcher.PATCHED = root / "patched"
                 patcher.OUT = root / "out"
                 patcher.PATCHED.mkdir()
@@ -4884,6 +4990,7 @@ class MobileRenovationArtTests(unittest.TestCase):
                     patcher.validate_mobile_renovation_renderer_contract(manifest)
         finally:
             patcher.ENABLE_MOBILE_RENOVATIONS = old_enabled
+            patcher.ENABLE_AI_GENERATED_BATHROOM2 = old_bathroom2
             patcher.PATCHED = old_patched
             patcher.OUT = old_out
     def test_mobile_renovation_style_catalog_matches_pinned_contract(self):
@@ -4938,12 +5045,20 @@ class MobileRenovationArtTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             old_out = patcher.OUT
+            # This half of the test is specifically the staged-only, renderer-
+            # disabled payload: nothing is copied into Images and the art lands
+            # under OptionalVisualMods instead. The runtime-copy behavior of the
+            # enabled gate has its own test below, so pin the gate off here now
+            # that mobile renovations default on.
+            old_enabled = patcher.ENABLE_MOBILE_RENOVATIONS
             try:
                 patcher.OUT = Path(tmp)
+                patcher.ENABLE_MOBILE_RENOVATIONS = False
                 manifest = {}
                 patcher.sync_mobile_renovation_art_sources(manifest)
             finally:
                 patcher.OUT = old_out
+                patcher.ENABLE_MOBILE_RENOVATIONS = old_enabled
             record = manifest["mobile_renovation_art_sources"]
             self.assertEqual(record["status"], "staged_optional_payload_renderer_disabled")
             self.assertEqual(record["native_item_range"], "0xE1-0xEA")
@@ -5036,10 +5151,17 @@ class MobileRenovationArtTests(unittest.TestCase):
     def test_ai_bathroom2_visual_payload_is_default_off_and_deterministically_normalized(self):
         old_out = patcher.OUT
         old_enabled = patcher.ENABLE_AI_GENERATED_BATHROOM2
+        # AI_BATHROOM2_CURTAIN_RUNTIME_ENABLED is derived from the gate once, at
+        # import time, so setting ENABLE_AI_GENERATED_BATHROOM2 alone no longer
+        # turns the whole feature off: the curtain payload would still be written
+        # under Images/AIGeneratedBathroom2. This test measures the gate-off
+        # payload, so it pins the derived flag to match.
+        old_curtain_enabled = patcher.AI_BATHROOM2_CURTAIN_RUNTIME_ENABLED
         try:
             with tempfile.TemporaryDirectory() as tmp:
                 patcher.OUT = Path(tmp)
                 patcher.ENABLE_AI_GENERATED_BATHROOM2 = False
+                patcher.AI_BATHROOM2_CURTAIN_RUNTIME_ENABLED = False
                 manifest = {}
                 patcher.sync_ai_generated_bathroom2_assets(manifest)
                 contract = manifest["ai_generated_bathroom2_renovations"]
@@ -5106,6 +5228,7 @@ class MobileRenovationArtTests(unittest.TestCase):
         finally:
             patcher.OUT = old_out
             patcher.ENABLE_AI_GENERATED_BATHROOM2 = old_enabled
+            patcher.AI_BATHROOM2_CURTAIN_RUNTIME_ENABLED = old_curtain_enabled
 
     def test_ai_bathroom2_visual_payload_runtime_copy_is_separate_from_native_route(self):
         old_out = patcher.OUT
@@ -6484,9 +6607,33 @@ class MobileIslandEventTextTests(unittest.TestCase):
             source,
         )
         self.assertIn('"no current exact-build WER or dump"', source)
-        self.assertIn(
-            'ENABLE_ISLAND_EVENTS = os.environ.get("VF2_ENABLE_ISLAND_EVENTS", "0") == "1"',
+        # The gate must stay environment-controlled, but its DEFAULT is no
+        # longer pinned to opt-in here.
+        #
+        # Worth stating plainly, because this text is about a CRASH: the
+        # manifest wording above is retained verbatim and still classifies the
+        # evidence as "historical runtime reports plus prior static storage
+        # defect; no current exact-build WER or dump". That classification is
+        # what this test exists to protect, and it is untouched.
+        #
+        # What changed is only which way the default points, and it now matches
+        # what the patcher already shipped: `island_events` is default=True in
+        # the exporter's SETTINGS table, so every player applying the patcher
+        # already receives these events. The generator was the outlier -- a
+        # plain run produced a build without them while the settings list told
+        # the player they were enabled. The owner asked for the default
+        # generator to have all patches on, naming only the invisible
+        # transparent furniture graphics as the exception.
+        #
+        # The disabled branch is still reachable by setting the variable to 0,
+        # and still emits the same stub and the same manifest status, so the
+        # held-out path remains available if a current dump ever appears.
+        self.assertRegex(
             source,
+            r'ENABLE_ISLAND_EVENTS = os\.environ\.get\(\s*'
+            r'"VF2_ENABLE_ISLAND_EVENTS",\s*"[01]"\s*\)\s*(?:==|!=)\s*"[01]"',
+            "the island-events gate is no longer environment controlled, so "
+            "the held-out build can no longer be produced",
         )
 
     def test_proven_mobile_event_outcomes_are_exact_generated_routes(self):
@@ -8685,9 +8832,20 @@ class MobileSpecialUpgradeContractTests(unittest.TestCase):
 class OutfitStoreMappingTests(unittest.TestCase):
     def test_behavior_patch_mutations_are_all_inside_compile_time_gate(self):
         source = Path(patcher.__file__).read_text(encoding="utf-8")
-        self.assertIn(
-            'ENABLE_BEHAVIOR_PATCHES = os.environ.get("VF2_ENABLE_BEHAVIOR_PATCHES", "0") == "1"',
+        # The gate must exist and be environment-controlled. Its DEFAULT is
+        # deliberately not pinned here: the owner asked for the default
+        # generator to produce a build with all patches on, so this now reads
+        #   os.environ.get("VF2_ENABLE_BEHAVIOR_PATCHES", "1") != "0"
+        # rather than the previous opt-in form. What this test actually guards
+        # is the AST check below -- that every behaviour-patch mutation sits
+        # inside the gate, so setting the variable to 0 still yields a stock
+        # build. That property is independent of which way the default points.
+        self.assertRegex(
             source,
+            r'ENABLE_BEHAVIOR_PATCHES = os\.environ\.get\(\s*'
+            r'"VF2_ENABLE_BEHAVIOR_PATCHES",\s*"[01]"\s*\)\s*(?:==|!=)\s*"[01]"',
+            "the behavior-patch compile-time gate is no longer environment "
+            "controlled, so its mutations cannot be turned off",
         )
         tree = ast.parse(source)
         main = next(
@@ -13183,20 +13341,52 @@ class HolidayOrnamentGateTests(unittest.TestCase):
         finally:
             patcher.PATCHED = old_patched
 
-    def test_holiday_ornaments_are_an_optional_patcher_overlay(self):
-        self.assertFalse(patcher.ENABLE_HOLIDAY_ORNAMENTS)
+    def test_holiday_ornaments_remain_a_toggleable_patcher_overlay(self):
+        """They are ON by default now, and must still be switchable OFF.
 
-    def test_mobile_island_events_are_opt_in_for_normal_build_stability(self):
-        self.assertFalse(patcher.ENABLE_ISLAND_EVENTS)
+        This previously asserted the gate was FALSE. The owner asked for the
+        default generator to produce a build with all patches enabled, naming
+        only the invisible transparent furniture graphics as the exception, so
+        the default flipped. It now matches what the patcher already shipped:
+        holiday_ornaments is default=True in the exporter's SETTINGS table.
+
+        What still matters, and is what this test now pins, is that the overlay
+        remains OPTIONAL -- an environment variable can still produce a build
+        without it, so the patcher's unchecked state is still buildable.
+        """
+        self.assertTrue(patcher.ENABLE_HOLIDAY_ORNAMENTS)
+        source = Path(patcher.__file__).read_text(encoding="utf-8")
+        self.assertRegex(
+            source,
+            r'ENABLE_HOLIDAY_ORNAMENTS = os\.environ\.get\(\s*'
+            r'"VF2_ENABLE_HOLIDAY_ORNAMENTS",\s*"[01]"\s*\)\s*(?:==|!=)\s*"[01]"',
+            "the holiday-ornament overlay is no longer switchable, so the "
+            "unchecked patcher setting cannot be built",
+        )
+
+    def test_mobile_island_events_remain_switchable(self):
+        """Also ON by default now, for the same reason and with the same proviso.
+
+        The manifest still records the held-out rationale verbatim, and the
+        disabled branch still emits its stub, so a build without these events
+        can still be produced if a current crash dump ever appears. See
+        test_island_disabled_gate_distinguishes_historical_reports_from_runtime_proof,
+        which pins that wording.
+        """
+        self.assertTrue(patcher.ENABLE_ISLAND_EVENTS)
+        source = Path(patcher.__file__).read_text(encoding="utf-8")
+        self.assertRegex(
+            source,
+            r'ENABLE_ISLAND_EVENTS = os\.environ\.get\(\s*'
+            r'"VF2_ENABLE_ISLAND_EVENTS",\s*"[01]"\s*\)\s*(?:==|!=)\s*"[01]"',
+            "the island-events gate is no longer switchable")
 
     def test_native_contract_reports_mobile_collection_table_for_normal_builds(self):
         contract = patcher.build_native_array_contract()
 
-        self.assertFalse(contract["holiday_ornaments"]["enabled"])
-        self.assertIn(
-            "optional patch not selected",
-            contract["holiday_ornaments"]["status"],
-        )
+        # Enabled by default now; the achievement wiring below is what this
+        # test exists to pin and is unchanged either way.
+        self.assertTrue(contract["holiday_ornaments"]["enabled"])
         self.assertEqual(contract["holiday_ornaments"]["achievement"], "0x5f")
         self.assertEqual(contract["holiday_ornaments"]["achievement_target"], 12)
         self.assertEqual(contract["holiday_ornaments"]["goal_collector_target"], 13)
@@ -14535,8 +14725,17 @@ class HolidayOrnamentGateTests(unittest.TestCase):
                     # One row per defined achievement; derived so adding a
                     # goal moves it instead of failing this contract.
                     "physical_row_count": patcher.CUSTOM_ACHIEVEMENT_LAST_ID + 1,
-                    "visible_count_flag_0": 123,
-                    "visible_count_flag_1": 142,
+                    # Derived, because the visible count includes the 28
+                    # behaviour goals only when Behavior Patches are compiled
+                    # in. These literals were written while that gate defaulted
+                    # OFF, so the term was zero and invisible; the owner's
+                    # all-patches-on change makes it contribute. Deriving it
+                    # keeps the expectation exact either way, and flag_1 keeps
+                    # its documented +19 relationship to flag_0.
+                    "visible_count_flag_0": (
+                        123 + (28 if patcher.ENABLE_BEHAVIOR_PATCHES else 0)),
+                    "visible_count_flag_1": (
+                        142 + (28 if patcher.ENABLE_BEHAVIOR_PATCHES else 0)),
                     "notify_queue_bound": 0x5F,
                 },
             )

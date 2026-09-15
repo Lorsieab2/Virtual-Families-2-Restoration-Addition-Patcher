@@ -25,7 +25,21 @@ sys.path.insert(0, str(WORK))
 import patch_mobile_furniture_pack as patcher
 OBJS = WORK / "patched_mobile_furniture_pack_objs"
 
-CHAIR = 'info.orientation == 1 ? "Sit In Chair NW" : "Sit In Chair NE"'
+# The chair sites now ask VF2FurnitureFacesNorthWest(info.orientation) rather
+# than testing `info.orientation == 1` inline. That old expression was itself
+# the defect: EFurnitureOrientation is SE=0, SW=1, NE=2, NW=3 (CodeView
+# LF_ENUMERATE records, identical in FurnitureManager.obj at 0x52e0 and
+# Behavior.obj at 0x9cfb), so `== 1` named SW alone -- it missed NW entirely
+# and answered true for SW. Reported in play with a screenshot: a picnic table
+# facing NE seated its villagers facing the other way.
+#
+# THIS MODULE'S PURPOSE IS UNCHANGED and is the reason the constant is updated
+# rather than the test relaxed. Every other orientation test reads the
+# generator SOURCE, so all of them pass even if the block stops being emitted
+# or a stale helper is compiled. This one reads the EMITTED unit, and the class
+# below reads the compiled object's own bytes -- the difference between "the
+# fix is written" and "players get the fix".
+CHAIR = 'VF2FurnitureFacesNorthWest(info.orientation)'
 
 
 def emitted_sources():

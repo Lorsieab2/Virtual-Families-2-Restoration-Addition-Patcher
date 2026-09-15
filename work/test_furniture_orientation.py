@@ -32,6 +32,18 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 GENERATOR = ROOT / "work" / "patch_mobile_furniture_pack.py"
 SOURCE = GENERATOR.read_text(encoding="utf-8", errors="replace")
 
+# SOURCE with C++ line comments removed.
+#
+# The emitted C++ carries long explanatory comments, several of which QUOTE the
+# old defective expressions deliberately so the reason for each fix survives in
+# the code. A test that searches raw SOURCE therefore matches the documentation
+# of a bug and reports it as the bug -- and, worse, a comment sitting between
+# `chairAnim =` and its expression lands inside an unanchored regex capture.
+# Every test below that inspects an EXPRESSION uses this view; tests that check
+# for the presence of a whole construct may still use SOURCE.
+CODE = "\n".join(
+    line for line in SOURCE.splitlines() if not line.lstrip().startswith("//"))
+
 
 def governing_declaration(site_marker):
     """The sFurnitureInfo2 declaration that actually governs a call site.
@@ -42,22 +54,37 @@ def governing_declaration(site_marker):
     the one the chair handlers are emitted with -- so a layout test written
     that way validates a struct the changed code never sees.
     """
-    site = SOURCE.find(site_marker)
+    site = CODE.find(site_marker)
     if site < 0:
         return None
-    starts = [i for i in range(len(SOURCE))
-              if SOURCE.startswith("struct sFurnitureInfo2 {", i)]
+    # Offsets must all come from the SAME string. Mixing CODE offsets with
+    # SOURCE offsets silently compares positions in two different texts and
+    # selects the wrong declaration.
+    starts = [i for i in range(len(CODE))
+              if CODE.startswith("struct sFurnitureInfo2 {", i)]
     owning = [i for i in starts if i < site]
     if not owning:
         return None
     start = max(owning)
-    end = SOURCE.index("};", start)
-    body = SOURCE[start + len("struct sFurnitureInfo2 {"):end]
+    end = CODE.index("};", start)
+    body = CODE[start + len("struct sFurnitureInfo2 {"):end]
     return [ln.strip() for ln in body.splitlines() if ln.strip()]
 
 
 class OrientationComesFromTheOrientationField(unittest.TestCase):
-    CHAIR_SITE = 'info.orientation == 1 ? "Sit In Chair NW"'
+    # The chair sites now ask VF2FurnitureFacesNorthWest(info.orientation)
+    # instead of `info.orientation == 1`. That old expression was the BUG:
+    # EFurnitureOrientation is SE=0, SW=1, NE=2, NW=3 (CodeView LF_ENUMERATE
+    # records, identical in FurnitureManager.obj at 0x52e0 and Behavior.obj at
+    # 0x9cfb), so `== 1` is SW alone -- it missed NW entirely and answered true
+    # for SW. Reported in play: a picnic table facing NE seated its villagers
+    # facing the other way.
+    #
+    # What this module actually guards is unchanged and still pinned below --
+    # that the field is read BY NAME rather than at a raw offset that lands in
+    # padding, and that the declaration governing these sites keeps orientation
+    # as its second field.
+    CHAIR_SITE = 'VF2FurnitureFacesNorthWest(info.orientation)'
 
     def test_there_really_are_several_declarations(self):
         # If this ever becomes one declaration, the scoping below is
@@ -96,7 +123,7 @@ class OrientationComesFromTheOrientationField(unittest.TestCase):
                 "layout by hand before doing so")
 
     def test_the_chair_animation_reads_the_named_field(self):
-        m = re.search(r'char const \*chairAnim =(.*?);', SOURCE, re.S)
+        m = re.search(r'char const \*chairAnim =(.*?);', CODE, re.S)
         self.assertIsNotNone(m, "the chair animation selection is gone")
         expr = m.group(1)
         self.assertIn("info.orientation", expr,
@@ -117,7 +144,7 @@ class OrientationComesFromTheOrientationField(unittest.TestCase):
         # A fix that always picks one branch would 'work' for whichever
         # orientation was tested and be wrong for the other. Both names must
         # appear, on opposite sides of the same conditional.
-        m = re.search(r'char const \*chairAnim =(.*?);', SOURCE, re.S)
+        m = re.search(r'char const \*chairAnim =(.*?);', CODE, re.S)
         expr = m.group(1)
         self.assertRegex(
             expr.replace("\n", " "),
@@ -128,8 +155,29 @@ class OrientationComesFromTheOrientationField(unittest.TestCase):
     def test_the_chaise_handler_still_reads_the_same_field(self):
         # The correct form this fix was modelled on. If it ever changes to a
         # raw offset, the same class of defect has been reintroduced there.
-        self.assertIn("if (info.orientation == 1) {", SOURCE,
+        #
+        # Note this particular `== 1` is deliberately NOT the corrected facing
+        # test. It is the GATE selecting the chaise pose over the flat lying
+        # pose, and changing it would alter which pose a stock chaise gets --
+        # out of scope for the reported bug. The FACING inside that branch is
+        # what was wrong, and it is pinned by the test below.
+        self.assertIn("if (info.orientation == 1 || VF2SpaLoungerHasHandle",
+                      SOURCE,
                       "the chaise handler no longer reads info.orientation")
+
+    def test_the_chaise_facing_follows_the_furniture(self):
+        """The head direction inside the chaise branch must follow the lounger.
+
+        Reported in play twice: villagers on spa loungers were oriented wrongly.
+        Two separate things were wrong. The test asked `info.orientation == 1`,
+        which is SW alone and missed NW; and both head-direction constants were
+        wrong -- eHeadDirectionNE was declared 1, which is really Southeast, and
+        eHeadDirectionNW was declared 7, which is really UpNE1, an upward gaze.
+        """
+        self.assertIn("VF2FurnitureFacesNorthWest(info.orientation)", SOURCE,
+                      "the chaise facing no longer follows the furniture")
+        self.assertIn("eHeadDirectionNE = 0", SOURCE)
+        self.assertIn("eHeadDirectionNW = 3", SOURCE)
 
 
 if __name__ == "__main__":
