@@ -332,8 +332,26 @@ class ThePositionNudgesAreNamedAndScoped(unittest.TestCase):
         it must not move."""
         text = source_text()
         self.assertIn("if (itemId == __VF2_HOME_GYM_ITEM_ID__) {", text)
-        self.assertIn("outPoint.x -= kVF2HomeGymStandNudgeX;", text)
+        self.assertIn("VF2FurnitureFacesEast(foundOrientation)", text)
+        self.assertIn("kVF2HomeGymStandNudgeX", text)
         self.assertIn("outPoint.y += kVF2HomeGymStandNudgeY;", text)
+
+    def test_the_picnic_meal_moves_up_and_toward_each_table_facing(self):
+        text = source_text()
+        self.assertIn("kVF2PicnicMealNudgeX", text)
+        self.assertIn("kVF2PicnicMealNudgeY", text)
+        self.assertIn("VF2FurnitureFacesEast(gVF2PicnicPropOrientation)", text)
+        self.assertIn("gVF2PicnicPropY - kVF2PicnicMealNudgeY", text)
+
+    def test_yoga_uses_the_orientation_aware_native_workout_route(self):
+        text = source_text()
+        start = text.rindex('extern "C" void __cdecl VF2YogaEquipmentWorkout')
+        end = text.index('extern "C" void __cdecl VF2PingPongPlay', start)
+        body = text[start:end]
+        self.assertIn("VF2RunOwnFurnitureActionVaried", body)
+        self.assertIn("CBehavior::WorkingOut", text)
+        self.assertIn("FindFurniture", text)
+        self.assertIn("VF2VillagerIsDroppedOnAddedFurniture", text)
 
 
 class EveryPatchDefaultsOnInTheGenerator(unittest.TestCase):

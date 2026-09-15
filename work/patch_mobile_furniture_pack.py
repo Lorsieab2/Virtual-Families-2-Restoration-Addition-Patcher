@@ -26368,6 +26368,12 @@ static bool gVF2PicnicPropPlaced = false;
 // VF2SpaTreatmentPoint already nudges in with `point.y -= 4`. Kept small and
 // named so it is one number to retune if the next playtest wants more or less.
 static int const kVF2PatioDrinksNudgeX = 6;
+// The mobile meal sprite is authored at the table centre. The PC table
+// artwork needs a small screen-space correction: upward, then toward the
+// table's NE/NW side. Keep the placement record untouched and apply this
+// only when the prop is painted.
+static int const kVF2PicnicMealNudgeX = 4;
+static int const kVF2PicnicMealNudgeY = 4;
 
 static int gVF2PatioPropX = 0;
 static int gVF2PatioPropY = 0;
@@ -26380,6 +26386,11 @@ static int gVF2PicnicPropSlot = -1;
 static int gVF2PatioPropSlot = -1;
 static int gVF2PicnicPropHandle = -1;
 static int gVF2PatioPropHandle = -1;
+
+static bool VF2FurnitureFacesEast(int orientation)
+{
+    return orientation == 0 /* SE */ || orientation == 2 /* NE */;
+}
 
 static void VF2ClearPatioDrinks()
 {
@@ -26712,8 +26723,11 @@ extern "C" void __fastcall VF2FurniturePaintAndTableProps(
              gVF2PicnicPropOrientation == 2 /* NE */)
                 ? __VF2_PROP_IMAGE_MEAL_SE__
                 : __VF2_PROP_IMAGE_MEAL_SW__,
-            gVF2PicnicPropX,
-            gVF2PicnicPropY);
+            gVF2PicnicPropX +
+                (VF2FurnitureFacesEast(gVF2PicnicPropOrientation)
+                    ? kVF2PicnicMealNudgeX
+                    : -kVF2PicnicMealNudgeX),
+            gVF2PicnicPropY - kVF2PicnicMealNudgeY);
     }
     if (gVF2PatioPropPlaced && index == gVF2PatioPropSlot &&
         VF2SlotStillHoldsHandle(index, gVF2PatioPropHandle) &&
@@ -33207,6 +33221,23 @@ int __cdecl VF2BehaviorPtOnFurnitureIndex(CFurnitureManager &manager, ldwPoint p
     return manager.PtOnFurniture(point);
 }
 
+// These helpers are emitted in this translation unit as well as the mobile
+// furniture unit. The spontaneous-behaviour wrappers use them for the exact
+// dropped-item check and the orientation-aware Home Gym destination; keeping
+// them local avoids relying on another .cpp's static symbols.
+static int VF2FurnitureItemAtPoint(ldwPoint point)
+{
+    int const slot = VF2BehaviorPtOnFurnitureIndex(FurnitureManager, point);
+    if (slot < 0) return -1;
+    unsigned char *manager = reinterpret_cast<unsigned char *>(&FurnitureManager);
+    return *reinterpret_cast<int *>(manager + 0x1008 + slot * 0x40);
+}
+
+static bool VF2FurnitureFacesEast(int orientation)
+{
+    return orientation == 0 /* SE */ || orientation == 2 /* NE */;
+}
+
 static bool AnyHammockInWorld()
 {
     return FurnitureManager.IsInWorld((EInventoryItem)0x1E1) ||
@@ -34401,6 +34432,16 @@ static bool VF2AddedFurnitureHandleIsItem(int handle, int itemId)
     return false;
 }
 
+static bool VF2VillagerIsDroppedOnAddedFurniture(
+    CVillager &villager, int itemId, int altItemId)
+{
+    ldwPoint sample = villager.FeetPos();
+    sample.y -= 10;
+    int const candidate = VF2FurnitureItemAtPoint(sample);
+    return candidate == itemId ||
+        (altItemId >= 0 && candidate == altItemId);
+}
+
 // How far the Home Gym's villager moves from the borrowed yoga-mat hotspot,
 // in world pixels -- toward the cubby the gym art provides.
 //
@@ -34435,6 +34476,7 @@ static bool VF2FindAddedFurnitureVenueEx(
     ldwPoint feet = villager.FeetPos();
     long bestDistance = 0x7FFFFFFF;
     bool found = false;
+    int foundOrientation = 0;
     for (int slot = 0; slot < count; ++slot) {
         unsigned char *record = manager + 0x1008 + slot * 0x40;
         if ((*reinterpret_cast<unsigned int *>(record + 0x0C) & 1) == 0) continue;
@@ -34454,6 +34496,7 @@ static bool VF2FindAddedFurnitureVenueEx(
         if (!found || distance < bestDistance) {
             bestDistance = distance;
             outPoint = info.point;
+            foundOrientation = *reinterpret_cast<int *>(record + 0x10);
             found = true;
         }
     }
@@ -34475,7 +34518,9 @@ static bool VF2FindAddedFurnitureVenueEx(
     // Scoped to the Home Gym by item id on purpose: the Yoga Equipment shares
     // this fmap and its villagers stand correctly, so it must not move.
     if (itemId == __VF2_HOME_GYM_ITEM_ID__) {
-        outPoint.x -= kVF2HomeGymStandNudgeX;
+        outPoint.x += VF2FurnitureFacesEast(foundOrientation)
+            ? kVF2HomeGymStandNudgeX
+            : -kVF2HomeGymStandNudgeX;
         outPoint.y += kVF2HomeGymStandNudgeY;
     }
     return true;
@@ -34678,10 +34723,20 @@ static void VF2RunOwnFurnitureActionEx(
     bool const hasVenue = VF2FindAddedFurnitureVenueEx(
         villager, itemId, altItemId, object, venue);
     if (!hasVenue) {
-        // The added candidate is additive. If its placement cannot be linked,
-        // run the original donor and leave its stock label untouched; this is
-        // the explicit fallback for an absent or unavailable matching item.
-        VF2RunNativeBehaviorAndChangedLabel(villager, donorBehavior);
+        // This handler belongs to an added-furniture candidate. Running the
+        // donor here would make an Exercise Bike action run on a Treadmill or
+        // a Ping-Pong action run on a Pool Table when the added item is absent.
+        // The donor remains available through its own stock candidate; this
+        // candidate must simply decline when its exact venue is unavailable.
+        // A manual drop is the one safe fallback: if the villager is visibly
+        // standing on the exact added item, the donor's own FindFurniture call
+        // will read that item's orientation before it queues its animation.
+        // This preserves the requested Yoga drop behavior without reopening
+        // the autonomous cross-target bug.
+        if (VF2VillagerIsDroppedOnAddedFurniture(
+                villager, itemId, altItemId)) {
+            VF2RunNativeBehaviorAndChangedLabel(villager, donorBehavior);
+        }
         return;
     }
     VF2BeginAddedFurnitureVenue(villager, venue);
