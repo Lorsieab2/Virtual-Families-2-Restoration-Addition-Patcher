@@ -26367,13 +26367,20 @@ static bool gVF2PicnicPropPlaced = false;
 // "a little positioning adjustment to the right". World pixels, the same units
 // VF2SpaTreatmentPoint already nudges in with `point.y -= 4`. Kept small and
 // named so it is one number to retune if the next playtest wants more or less.
-static int const kVF2PatioDrinksNudgeX = 6;
+// Raised on owner report: "move the drink props to the right so they're
+// centered on the table." The previous 6 did not reach the centre.
+static int const kVF2PatioDrinksNudgeX = 13;
 // The mobile meal sprite is authored at the table centre. The PC table
 // artwork needs a small screen-space correction: upward, then toward the
 // table's NE/NW side. Keep the placement record untouched and apply this
 // only when the prop is painted.
-static int const kVF2PicnicMealNudgeX = 4;
-static int const kVF2PicnicMealNudgeY = 4;
+// Raised on owner report: "nudge the meal prop a little bit more upwards and
+// NE for the NE picnic table, and NW for the NW orientation." The X nudge is
+// applied TOWARD the table's own facing side by the draw below (east half
+// {SE, NE} positive, west half {SW, NW} negative), so one magnitude serves
+// both directions; Y is always upward on screen.
+static int const kVF2PicnicMealNudgeX = 7;
+static int const kVF2PicnicMealNudgeY = 9;
 
 static int gVF2PatioPropX = 0;
 static int gVF2PatioPropY = 0;
@@ -27001,11 +27008,26 @@ static bool VF2HandleMobileChaise(CVillager &villager)
         // The test was wrong too: `orientation == 1` is SW alone, missing NW.
         // This reaches the INVISIBLE Spa Lounger as well -- it is the same
         // item with different art and shares this route.
+        // THE SPLIT IS THE EAST/WEST AXIS, NOT NW ALONE.
+        //
+        // Reported in play again: "spa lounger villager orientation has no
+        // change". VF2FurnitureFacesNorthWest is `orientation == 3`, so SE(0),
+        // SW(1) and NE(2) ALL took eHeadDirectionNE and only NW(3) differed --
+        // three of the four placements produced an IDENTICAL pose, which is
+        // exactly what "no change" looks like when the lounger is rotated.
+        //
+        // EFurnitureOrientation is SE=0, SW=1, NE=2, NW=3. The two head
+        // directions are an east/west pair, so the split is the east half
+        // {SE(0), NE(2)} against the west half {SW(1), NW(3)} -- the same
+        // grouping the picnic meal sprite already uses via
+        // VF2FurnitureFacesEast. Reaches the INVISIBLE Spa Lounger too:
+        // VF2SpaLoungerHasHandle matches both item ids and both share this
+        // route.
         plans->PlanToWait(
             duration, eBodyPositionChaise,
-            VF2FurnitureFacesNorthWest(info.orientation)
-                ? eHeadDirectionNW
-                : eHeadDirectionNE);
+            VF2FurnitureFacesEast(info.orientation)
+                ? eHeadDirectionNE
+                : eHeadDirectionNW);
     } else {
         plans->PlanToLieDown(duration);
     }
@@ -27111,6 +27133,77 @@ static bool VF2RunMobilePreparingDrinks(CVillager &villager)
     return true;
 }
 
+// WHICH SIDE OF THE TABLE DID THIS VILLAGER GET SEATED ON?
+//
+// Reported in play with screenshots for BOTH tables: at the picnic table the
+// villagers on the right side face the wrong way, and at the patio table one
+// chair seats correctly while the other does not.
+//
+// THE CAUSE. LinkPeepToFurniture fills ONE sFurnitureInfo2 per PLACEMENT, so
+// info.orientation is a property of the TABLE, not of the seat. Choosing the
+// sit animation from info.orientation alone therefore gives EVERY seat at a
+// table the SAME facing -- which cannot be right for a table whose seats sit
+// on opposite sides. That is exactly the screenshot: one side correct, the
+// other reversed.
+//
+// THE DATA ALREADY CARRIES THE ANSWER, confirmed against the mobile original.
+// Decoding the owner's APK (1.7.16, main.43 OBB) shows the PC fmaps preserve
+// the mobile seat markers EXACTLY: the APK-vs-PC difference is a constant per
+// table (0x03AC0000 picnic, 0x01B40000 patio), which is only the mobile
+// room/hotspot id the PC port strips.
+//
+//   Picnic_table.png.fmap  4 seats  (5,9) (8,11) (15,12) (17,10)
+//   Patio_table.png.fmap   2 seats  (3,8) (13,8)
+//
+// So no fmap edit is needed; the seat data is already APK-correct.
+//
+// HOW THE SIDE IS RECOVERED AT RUNTIME. info.point is the position of the SEAT
+// the link assigned -- the placement position plus that seat's hotspot offset,
+// the same property the table-prop capture already relies on. The placement
+// record at +0x14/+0x18 holds the TABLE's own world position. The sign of the
+// seat's offset from the table therefore says which side the villager was
+// seated on, without re-reading the fmap at runtime.
+static bool VF2SeatIsOnEastSide(sFurnitureInfo2 const &info, bool &known)
+{
+    known = false;
+    unsigned char *manager = reinterpret_cast<unsigned char *>(&FurnitureManager);
+    int count = *reinterpret_cast<int *>(manager + 0x1004);
+    if (count < 0 || count > 0x200) return false;
+    for (int slot = 0; slot < count; ++slot) {
+        unsigned char *record = manager + 0x1008 + slot * 0x40;
+        if ((*reinterpret_cast<unsigned int *>(record + 0x0C) & 1) == 0) continue;
+        if (*reinterpret_cast<int *>(record + 0x04) != info.unknown0) continue;
+        int const tableX = *reinterpret_cast<int *>(record + 0x14);
+        known = true;
+        return info.point.x >= tableX;
+    }
+    return false;
+}
+
+// The sit animation for ONE seat at a table.
+//
+// Combines the two facts that each carry half the answer: the FURNITURE's
+// orientation (which way the table is turned) and WHICH SEAT of that table the
+// villager was linked to. Neither alone is sufficient -- orientation alone
+// gives every seat the same facing, and the seat alone ignores the rotation.
+//
+// A villager sits facing ACROSS the table, so the two sides take opposite
+// animations. When the side cannot be determined the result falls back to the
+// furniture orientation alone, which is the previous behaviour and no worse.
+static char const *VF2SeatChairAnim(sFurnitureInfo2 const &info)
+{
+    bool sideKnown = false;
+    bool const seatEast = VF2SeatIsOnEastSide(info, sideKnown);
+    bool const tableFacesEast = VF2FurnitureFacesEast(info.orientation);
+    if (!sideKnown) {
+        return tableFacesEast ? "Sit In Chair NE" : "Sit In Chair NW";
+    }
+    // Rotating the table swaps which physical side is which, so the table's
+    // own facing selects between the two mappings.
+    bool const useNE = tableFacesEast ? seatEast : !seatEast;
+    return useNE ? "Sit In Chair NE" : "Sit In Chair NW";
+}
+
 static bool VF2RunMobileDrinkAtPatioChair(CVillager &villager)
 {
     CVillagerPlans *plans = reinterpret_cast<CVillagerPlans *>(&villager);
@@ -27162,9 +27255,10 @@ static bool VF2RunMobileDrinkAtPatioChair(CVillager &villager)
         // it seats villagers through this very line. `orientation == 1` is SW
         // alone, which misses NW (3) and wrongly claims SW; only NW takes the
         // NW animation. A villager follows the furniture.
-        VF2FurnitureFacesNorthWest(info.orientation)
-            ? "Sit In Chair NW"
-            : "Sit In Chair NE";
+        // PER-SEAT, NOT PER-TABLE. See VF2SeatChairAnim: info.orientation is a
+        // property of the placement, so using it alone gave every seat at this
+        // table the same facing and reversed whichever side did not match.
+        VF2SeatChairAnim(info);
     plans->PlanToPlayAnim(
         ldwGameState::GetRandom(8) + 10, chairAnim, false, 0.02f);
     plans->PlanToPlaySound(
@@ -27317,9 +27411,10 @@ static bool VF2RunMobileEatAtPicnicTable(CVillager &villager)
         // table placed NE reached the NE arm only by accident of the else, and
         // a table placed SW wrongly took the NW art. EFurnitureOrientation is
         // SE=0, SW=1, NE=2, NW=3, and only NW takes the NW animation.
-        VF2FurnitureFacesNorthWest(info.orientation)
-            ? "Sit In Chair NW"
-            : "Sit In Chair NE";
+        // PER-SEAT, NOT PER-TABLE. See VF2SeatChairAnim: info.orientation is a
+        // property of the placement, so using it alone gave every seat at this
+        // table the same facing and reversed whichever side did not match.
+        VF2SeatChairAnim(info);
     for (int round = 0; round < 3; ++round) {
         plans->PlanToPlaySound(
             static_cast<ESound>(ldwGameState::GetRandom(3) + 0x6A),
@@ -29123,11 +29218,26 @@ static void VF2PlanLinkedChaiseAction(
         // The test was wrong too: `orientation == 1` is SW alone, missing NW.
         // This reaches the INVISIBLE Spa Lounger as well -- it is the same
         // item with different art and shares this route.
+        // THE SPLIT IS THE EAST/WEST AXIS, NOT NW ALONE.
+        //
+        // Reported in play again: "spa lounger villager orientation has no
+        // change". VF2FurnitureFacesNorthWest is `orientation == 3`, so SE(0),
+        // SW(1) and NE(2) ALL took eHeadDirectionNE and only NW(3) differed --
+        // three of the four placements produced an IDENTICAL pose, which is
+        // exactly what "no change" looks like when the lounger is rotated.
+        //
+        // EFurnitureOrientation is SE=0, SW=1, NE=2, NW=3. The two head
+        // directions are an east/west pair, so the split is the east half
+        // {SE(0), NE(2)} against the west half {SW(1), NW(3)} -- the same
+        // grouping the picnic meal sprite already uses via
+        // VF2FurnitureFacesEast. Reaches the INVISIBLE Spa Lounger too:
+        // VF2SpaLoungerHasHandle matches both item ids and both share this
+        // route.
         plans->PlanToWait(
             duration, eBodyPositionChaise,
-            VF2FurnitureFacesNorthWest(info.orientation)
-                ? eHeadDirectionNW
-                : eHeadDirectionNE);
+            VF2FurnitureFacesEast(info.orientation)
+                ? eHeadDirectionNE
+                : eHeadDirectionNW);
     } else {
         plans->PlanToLieDown(duration);
     }
@@ -29357,8 +29467,14 @@ static void VF2PlanSpaTreatment(
     //
     // This route serves the INVISIBLE Spa Lounger too -- it is the same item
     // with different art and shares this handler.
+    // SAME EAST/WEST CORRECTION AS THE OTHER TWO LOUNGER POSES.
+    //
+    // `orientation == 3` collapsed SE(0), SW(1) and NE(2) onto one pose and
+    // one sleep strip. The pair is east/west: {SE(0), NE(2)} east,
+    // {SW(1), NW(3)} west. This drives BOTH the settle head direction and the
+    // SleepNW/SleepNE animation, so the two stay in agreement.
     bool const loungerFacesNorthWest =
-        VF2FurnitureFacesNorthWest(info.orientation);
+        !VF2FurnitureFacesEast(info.orientation);
     EHeadDirection loungerHead =
         loungerFacesNorthWest ? eHeadDirectionNW : eHeadDirectionNE;
     plans->PlanToWait(settle, eBodyPositionChaise, loungerHead);
@@ -34414,6 +34530,10 @@ static bool VF2LinkedFurnitureItemIs(
 static CVillagerPlans *gVF2AddedFurnitureVenuePlans = 0;
 static ldwPoint gVF2AddedFurnitureVenuePoint = {};
 static bool gVF2AddedFurnitureVenueActive = false;
+// The villager the open venue belongs to. FindFurniture is a CFurnitureManager
+// method and receives no villager, so the window records its owner here for
+// the lookup interceptor to match against.
+static CVillager *gVF2AddedFurnitureVenueVillager = 0;
 
 
 
@@ -34454,8 +34574,17 @@ static bool VF2VillagerIsDroppedOnAddedFurniture(
 // the magnitudes are a first estimate, not a measured value. If the next
 // playtest shows the villager moved the wrong way or too far, these are the two
 // numbers to change, and the x sign is the first thing to suspect.
-static int const kVF2HomeGymStandNudgeX = 8;
-static int const kVF2HomeGymStandNudgeY = 6;
+// The yoga mat's stand block is three cells wide by two deep and the derived
+// hotspot sits at its edge, so the villager is moved toward the block centre.
+static int const kVF2YogaMatCentreNudgeX = 10;
+static int const kVF2YogaMatCentreNudgeY = 5;
+// Raised on repeat owner report: "put the hotspot so villagers stand on the
+// bottom in the little corner of the gym, respecting the orientation of the
+// furniture item." The previous 8/6 left the villager short of the cubby. X is
+// applied toward the gym's own facing side by the caller, so one magnitude
+// serves both rotations; Y is always downward, toward the bottom.
+static int const kVF2HomeGymStandNudgeX = 14;
+static int const kVF2HomeGymStandNudgeY = 12;
 
 // altItemId lets ONE behaviour serve two item ids. The Yoga Equipment needs it:
 // the stock item (0x220) and the invisible copy (0x32A) are the same thing with
@@ -34523,6 +34652,32 @@ static bool VF2FindAddedFurnitureVenueEx(
             : -kVF2HomeGymStandNudgeX;
         outPoint.y += kVF2HomeGymStandNudgeY;
     }
+    // THE YOGA MAT: STAND ON IT, NOT BESIDE IT.
+    //
+    // Reported in play with a screenshot: doing yoga, the villager stands off
+    // the blue mat's right edge on bare floor. Owner requirement: "villagers
+    // should stand on the blue yoga mat's center when doing yoga".
+    //
+    // The fmap is NOT at fault and needs no edit. Decoding the owner's APK
+    // (1.7.16, main.43 OBB) shows assets/YogaGearStd.png.fmap is BYTE
+    // IDENTICAL to both shipped PC maps -- YogaGearStd.png.fmap and
+    // InvisibleYogaEquipment.png.fmap -- including its stand block 0x0203A800
+    // over the six cells (3,2) (4,2) (5,2) (3,3) (4,3) (5,3) on an 11x6 grid.
+    // The hotspot the engine derives from it lands at that block's EDGE rather
+    // than its middle, so the walk-to destination takes the same narrow
+    // correction the Home Gym already uses: move the destination only, leaving
+    // the placement record and the collision cells untouched.
+    //
+    // 0x220 is the STOCK Yoga Equipment; __VF2_YOGA_EQUIPMENT_ITEM_ID__
+    // substitutes to InvisibleYogaEquipment (0x32A). Both stand on this same
+    // borrowed mat, so both take the correction, and it is orientation-aware
+    // per the owner's standing rule.
+    if (itemId == 0x220 || itemId == __VF2_YOGA_EQUIPMENT_ITEM_ID__) {
+        outPoint.x += VF2FurnitureFacesEast(foundOrientation)
+            ? kVF2YogaMatCentreNudgeX
+            : -kVF2YogaMatCentreNudgeX;
+        outPoint.y += kVF2YogaMatCentreNudgeY;
+    }
     return true;
 }
 
@@ -34537,6 +34692,7 @@ static bool VF2FindAddedFurnitureVenue(
 static void VF2BeginAddedFurnitureVenue(CVillager &villager, ldwPoint point)
 {
     gVF2AddedFurnitureVenuePlans = reinterpret_cast<CVillagerPlans *>(&villager);
+    gVF2AddedFurnitureVenueVillager = &villager;
     gVF2AddedFurnitureVenuePoint = point;
     gVF2AddedFurnitureVenueActive = true;
 }
@@ -34545,6 +34701,7 @@ static void VF2EndAddedFurnitureVenue(CVillager &villager)
 {
     if (gVF2AddedFurnitureVenuePlans == reinterpret_cast<CVillagerPlans *>(&villager)) {
         gVF2AddedFurnitureVenuePlans = 0;
+        gVF2AddedFurnitureVenueVillager = 0;
         gVF2AddedFurnitureVenueActive = false;
     }
 }
@@ -34604,6 +34761,73 @@ extern "C" __declspec(naked) void VF2PlanToWaitSeatedOnBike()
         call VF2PlanToWaitSeatedOnBikeImpl
         add esp, 12
         ret 8
+    }
+}
+
+// CONSTRAIN THE DONOR'S OWN FURNITURE LOOKUP, NOT JUST ITS ROUTE.
+//
+// Reported in play repeatedly, and the reason the earlier fixes did not take:
+//
+//   "villagers do 'High intensity cycling' and 'using the exercise bike' on
+//    the treadmill when they're not supposed to"
+//   "Villagers still target the pingpong table to play pool autonomously"
+//
+// THE MECHANISM. Decoded from Behavior.obj and recorded by the caption
+// wrappers further down, each donor's prologue is:
+//
+//   FeetPos(); FindFurniture(object, feet, info, ...); strncpy(caption);
+//   PlanToGo(...)
+//
+// FindFurniture runs FIRST and is a nearest-match from the villager's PRE-WALK
+// position. The venue window previously intercepted only PlanToGo, so it
+// rewrote the DESTINATION while leaving the donor bound to whichever 0x04 or
+// 0x36 placement happened to be nearest -- the Treadmill instead of the
+// Exercise Bike, the Pool Table instead of the Ping-Pong Table. Relabelling
+// afterwards cannot undo that: the villager is already bound to the wrong
+// machine, with its animations and its orientation.
+//
+// So the window now covers FindFurniture as well. While a venue is open for
+// this villager the search ORIGIN becomes the resolved venue point, which sits
+// on the intended item, so the engine's own nearest-match lands on that item's
+// placement. The engine fills the info struct exactly as the donor expects,
+// and no record walk is duplicated here.
+//
+// Outside the window nothing changes: a stock Treadmill or Pool Table user
+// never opens one, so the native nearest-match answers unmodified. This is
+// also what makes a manual drop behave -- a villager dropped on the Treadmill
+// never matches the bike's item id, so the bike candidate declines and the
+// stock treadmill behaviour runs with its own labels.
+static bool __cdecl VF2FindFurnitureAtAddedFurnitureImpl(
+    CFurnitureManager *manager,
+    CContentMap::EObject object,
+    ldwPoint point,
+    sFurnitureInfo2 *info,
+    bool a,
+    int b,
+    bool c)
+{
+    if (gVF2AddedFurnitureVenueActive &&
+        gVF2AddedFurnitureVenueVillager != 0 &&
+        gVF2AddedFurnitureVenuePlans ==
+            reinterpret_cast<CVillagerPlans *>(gVF2AddedFurnitureVenueVillager)) {
+        point = gVF2AddedFurnitureVenuePoint;
+    }
+    return manager->FindFurniture(object, point, *info, a, b, c);
+}
+
+extern "C" __declspec(naked) void VF2FindFurnitureAtAddedFurniture()
+{
+    __asm {
+        push dword ptr [esp+24]
+        push dword ptr [esp+24]
+        push dword ptr [esp+24]
+        push dword ptr [esp+24]
+        push dword ptr [esp+24]
+        push dword ptr [esp+24]
+        push ecx
+        call VF2FindFurnitureAtAddedFurnitureImpl
+        add esp, 28
+        ret 24
     }
 }
 
@@ -36258,6 +36482,22 @@ def patch_added_furniture_venue_callsites(manifest):
 
     point_helper = obj.append_undefined_symbol("_VF2PlanToGoAtAddedFurniture")
     object_helper = obj.append_undefined_symbol("_VF2PlanToGoObjectAtAddedFurniture")
+    # The donor's OWN furniture lookup, which runs before its PlanToGo and
+    # picks the nearest placement from the villager's pre-walk feet. Without
+    # this the bike and ping-pong wrappers bound the donor to the Treadmill or
+    # the Pool Table and only the destination was corrected -- reported in play
+    # as bike actions running on the treadmill and pool being played on the
+    # ping-pong table. See VF2FindFurnitureAtAddedFurnitureImpl.
+    # NOTE the trailing "3" rather than a second "_N": MSVC back-references the
+    # repeated bool parameter. Verified by extracting the symbol from
+    # Behavior.obj itself rather than hand-mangling it -- the hand-written form
+    # ...AAUsFurnitureInfo2@@_NH_N@Z matches NOTHING and would have retargeted
+    # zero relocations while reporting success.
+    find_furniture = (
+        "?FindFurniture@CFurnitureManager@@QAE_NW4EObject@CContentMap@@"
+        "UldwPoint@@AAUsFurnitureInfo2@@_NH3@Z"
+    )
+    find_helper = obj.append_undefined_symbol("_VF2FindFurnitureAtAddedFurniture")
     # The Exercise Bike rides seated. WorkoutTreadmill enqueues three
     # PlanToPlayAnim + PlanToWait cycles and each wait carries a STANDING body
     # position, so a pose appended after the donor leaves the villager jogging
@@ -36272,6 +36512,13 @@ def patch_added_furniture_venue_callsites(manifest):
         ("?WorkoutTreadmill@CBehavior@@CAXAAVCVillager@@@Z", object_plan, object_helper, "WorkoutTreadmill object PlanToGo"),
         ("?RunningOnTreadmill@CBehavior@@CAXAAVCVillager@@@Z", object_plan, object_helper, "RunningOnTreadmill object PlanToGo"),
         ("?PlayingPooltable@CBehavior@@CAXAAVCVillager@@@Z", object_plan, object_helper, "PlayingPooltable object PlanToGo"),
+        # Bind each donor to the item its wrapper resolved. These are the three
+        # whose venue shares an EObject with a stock item: WorkoutTreadmill and
+        # RunningOnTreadmill on 0x04 with the Treadmill, PlayingPooltable on
+        # 0x36 with the Pool Table.
+        ("?WorkoutTreadmill@CBehavior@@CAXAAVCVillager@@@Z", find_furniture, find_helper, "WorkoutTreadmill FindFurniture"),
+        ("?RunningOnTreadmill@CBehavior@@CAXAAVCVillager@@@Z", find_furniture, find_helper, "RunningOnTreadmill FindFurniture"),
+        ("?PlayingPooltable@CBehavior@@CAXAAVCVillager@@@Z", find_furniture, find_helper, "PlayingPooltable FindFurniture"),
         # SEATED POSE REMOVED AT THE OWNER'S INSTRUCTION.
         #
         # "for the exercise bike animations just use the base-game treadmill
@@ -36305,6 +36552,17 @@ def patch_added_furniture_venue_callsites(manifest):
                     f"{label} expected six REL32 wait relocations, found "
                     f"{len(matches)}"
                 )
+        elif target == find_furniture:
+            # Each of these three donors carries EXACTLY ONE FindFurniture
+            # relocation -- the decode recorded in the caption wrappers states
+            # this for all three. Asserting the count means a future toolchain
+            # that inlines or duplicates the call fails the build rather than
+            # silently constraining only part of the lookup.
+            if len(matches) != 1:
+                raise RuntimeError(
+                    f"{label} expected one REL32 FindFurniture relocation, "
+                    f"found {len(matches)}"
+                )
         elif not matches or (not is_pool and len(matches) != 1):
             raise RuntimeError(f"{label} expected one (or all pool-table) REL32 relocations, found {len(matches)}")
         for match in matches:
@@ -36313,7 +36571,7 @@ def patch_added_furniture_venue_callsites(manifest):
 
     obj.write(PATCHED / "Behavior.obj")
     manifest["added_furniture_venue_routing"] = {
-        "status": "donor PlanToGo callsites retain the selected placed-item destination",
+        "status": "donor PlanToGo and FindFurniture callsites retain the selected placed-item venue",
         "callsites": patched,
         "ownership_gate": False,
         "fmap_or_object_identity_changed": False,

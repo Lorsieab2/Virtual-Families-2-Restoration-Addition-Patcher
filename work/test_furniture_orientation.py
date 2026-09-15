@@ -86,7 +86,13 @@ class OrientationComesFromTheOrientationField(unittest.TestCase):
     # that the field is read BY NAME rather than at a raw offset that lands in
     # padding, and that the declaration governing these sites keeps orientation
     # as its second field.
-    CHAIR_SITE = 'VF2FurnitureFacesNorthWest(info.orientation)'
+    # The chair sites now call VF2SeatChairAnim(info), which reads
+    # info.orientation AND the seat's own side. Using the furniture
+    # orientation alone gave every seat at one table the same facing,
+    # which is why the right-hand side of both tables was reversed in
+    # play: LinkPeepToFurniture fills one sFurnitureInfo2 per
+    # PLACEMENT, so a table's two sides cannot be told apart by it.
+    CHAIR_SITE = 'static char const *VF2SeatChairAnim('
 
     def test_there_really_are_several_declarations(self):
         # If this ever becomes one declaration, the scoping below is
@@ -125,13 +131,57 @@ class OrientationComesFromTheOrientationField(unittest.TestCase):
                 "layout by hand before doing so")
 
     def test_the_chair_animation_reads_the_named_field(self):
-        m = re.search(r'char const \*chairAnim =(.*?);', CODE, re.S)
+        m = re.search(
+            r'static char const \*VF2SeatChairAnim\(.*?\n\}', CODE, re.S)
         self.assertIsNotNone(m, "the chair animation selection is gone")
-        expr = m.group(1)
+        expr = m.group(0)
         self.assertIn("info.orientation", expr,
                       "the animation is not chosen from info.orientation")
         self.assertIn("Sit In Chair NW", expr)
         self.assertIn("Sit In Chair NE", expr)
+
+    def test_the_chair_animation_is_chosen_per_seat_not_per_table(self):
+        """The defect this replaced: one facing for every seat at a table.
+
+        Reported in play with screenshots for both tables -- the villagers on
+        the right side faced the wrong way while the left side was correct.
+        info.orientation is a property of the PLACEMENT, so it cannot
+        distinguish two seats of one table; the seat's own side must take part.
+        """
+        m = re.search(
+            r'static char const \*VF2SeatChairAnim\(.*?\n\}', CODE, re.S)
+        self.assertIsNotNone(m)
+        body = m.group(0)
+        self.assertIn("VF2SeatIsOnEastSide", body,
+                      "the seat's own side is no longer consulted, so every "
+                      "seat at a table would take the same facing again")
+        self.assertIn("VF2FurnitureFacesEast(info.orientation)", body,
+                      "the furniture orientation is no longer consulted")
+        # Both call sites must go through it rather than re-deriving a facing.
+        self.assertEqual(
+            CODE.count("VF2SeatChairAnim(info);"), 2,
+            "both the picnic and the patio chair handlers must use the "
+            "per-seat selection")
+
+    def test_the_seat_side_comes_from_the_placement_record(self):
+        """The side is recovered by comparing the seat point to the table.
+
+        info.point is the SEAT's position (placement + that seat's hotspot
+        offset); record+0x14 is the TABLE's own world position. The sign of the
+        difference is the side. Pinned because a future edit that compares
+        against info.point itself would always answer the same way.
+        """
+        m = re.search(
+            r'static bool VF2SeatIsOnEastSide\(.*?\n\}', CODE, re.S)
+        self.assertIsNotNone(m, "the seat-side helper is gone")
+        body = m.group(0)
+        self.assertIn("record + 0x14", body,
+                      "the table's own position is no longer read from the "
+                      "placement record")
+        self.assertIn("info.point.x >= tableX", body)
+        # Identify by placement handle, never by point (AGENTS.md rule).
+        self.assertIn("record + 0x04) != info.unknown0", body,
+                      "the record must be identified by placement handle")
 
     def test_no_raw_offset_read_of_the_info_struct_for_orientation(self):
         # The specific defect: a byte offset into sFurnitureInfo2 that lands in
@@ -145,12 +195,14 @@ class OrientationComesFromTheOrientationField(unittest.TestCase):
     def test_both_orientations_are_still_reachable(self):
         # A fix that always picks one branch would 'work' for whichever
         # orientation was tested and be wrong for the other. Both names must
-        # appear, on opposite sides of the same conditional.
-        m = re.search(r'char const \*chairAnim =(.*?);', CODE, re.S)
-        expr = m.group(1)
+        # remain reachable as the two arms of a conditional.
+        m = re.search(
+            r'static char const \*VF2SeatChairAnim\(.*?\n\}', CODE, re.S)
+        self.assertIsNotNone(m)
+        expr = m.group(0).replace("\n", " ")
         self.assertRegex(
-            expr.replace("\n", " "),
-            r"\?\s*\"Sit In Chair NW\"\s*:\s*\"Sit In Chair NE\"",
+            expr,
+            r"\?\s*\"Sit In Chair NE\"\s*:\s*\"Sit In Chair NW\"",
             "the two orientations are no longer the two arms of one "
             "conditional")
 
@@ -176,10 +228,36 @@ class OrientationComesFromTheOrientationField(unittest.TestCase):
         wrong -- eHeadDirectionNE was declared 1, which is really Southeast, and
         eHeadDirectionNW was declared 7, which is really UpNE1, an upward gaze.
         """
-        self.assertIn("VF2FurnitureFacesNorthWest(info.orientation)", SOURCE,
+        # The facing now splits on the EAST/WEST axis rather than on NW
+        # alone. VF2FurnitureFacesNorthWest is `orientation == 3`, so SE(0),
+        # SW(1) and NE(2) all took eHeadDirectionNE and only NW(3) differed --
+        # three of four placements produced an IDENTICAL pose, reported in play
+        # a third time as "spa lounger villager orientation has no change".
+        self.assertIn("VF2FurnitureFacesEast(info.orientation)", SOURCE,
                       "the chaise facing no longer follows the furniture")
         self.assertIn("eHeadDirectionNE = 0", SOURCE)
         self.assertIn("eHeadDirectionNW = 3", SOURCE)
+
+    def test_the_lounger_facing_does_not_collapse_three_orientations(self):
+        """Every lounger pose must split east/west, not on NW alone.
+
+        This is the specific regression: `orientation == 3` maps SE, SW and NE
+        onto one head direction, so rotating the lounger changes nothing for
+        three of the four placements. Both PlanToWait poses and the spa
+        settle/sleep strip must use the east/west split.
+        """
+        self.assertEqual(
+            SOURCE.count("VF2FurnitureFacesEast(info.orientation)\n"
+                         "                ? eHeadDirectionNE\n"
+                         "                : eHeadDirectionNW"), 2,
+            "both chaise poses must use the east/west split")
+        self.assertIn("!VF2FurnitureFacesEast(info.orientation)", SOURCE,
+                      "the spa settle/sleep strip must use the same split")
+        # The sleep strip and the settle pose must agree, so they come from
+        # one test rather than two.
+        self.assertIn("if (loungerFacesNorthWest) {", SOURCE)
+        self.assertIn('"SleepNW"', SOURCE)
+        self.assertIn('"SleepNE"', SOURCE)
 
     def test_resting_body_targets_all_four_colored_loungers(self):
         chaise = next(

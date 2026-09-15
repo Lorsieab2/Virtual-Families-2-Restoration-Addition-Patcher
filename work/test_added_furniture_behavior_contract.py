@@ -133,7 +133,20 @@ class TestAddedFurnitureContract(unittest.TestCase):
         src = source()
         self.assertIn("_VF2PlanToGoAtAddedFurniture", src)
         self.assertIn("_VF2PlanToGoObjectAtAddedFurniture", src)
-        self.assertIn("donor PlanToGo callsites retain the selected placed-item destination", src)
+        self.assertIn("donor PlanToGo and FindFurniture callsites retain the selected placed-item venue", src)
+        # The donor's OWN furniture lookup must be constrained too.
+        # FindFurniture runs BEFORE PlanToGo, from the villager's
+        # pre-walk feet, so intercepting only the route left the donor
+        # bound to whichever shared-EObject placement was nearest --
+        # the Treadmill instead of the Exercise Bike, the Pool Table
+        # instead of the Ping-Pong Table. Reported in play repeatedly.
+        self.assertIn("_VF2FindFurnitureAtAddedFurniture", src)
+        self.assertIn("VF2FindFurnitureAtAddedFurnitureImpl", src)
+        for donor in ("WorkoutTreadmill", "RunningOnTreadmill",
+                      "PlayingPooltable"):
+            self.assertIn(donor + " FindFurniture", src,
+                          donor + " no longer has its furniture lookup "
+                          "constrained to the resolved venue")
         self.assertIn("fallback\": \"native donor behavior remains unchanged", src)
 
     def test_plan_to_go_wrappers_forward_thiscall_stack_cleanup(self):
