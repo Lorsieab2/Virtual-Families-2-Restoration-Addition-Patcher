@@ -527,7 +527,17 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
         patcher.patch_mobile_furniture_external_autonomous_selection(manifest)
         patcher.patch_mobile_furniture_behavior_macros(manifest)
         patcher.patch_mobile_patio_prop_execution(manifest)
-        manifest["BehaviorPatchesGate"] = {"enabled": False}
+        # The gate recorded here must match the gate the SOURCES above were
+        # generated under, or validate_mobile_furniture_runtime_bindings
+        # compares a manifest built one way against helpers emitted the other
+        # and reports a cross-apply drift that does not exist.
+        #
+        # This used to be hardcoded False, which was correct while
+        # ENABLE_BEHAVIOR_PATCHES defaulted off. It now follows the real gate,
+        # so the fixture stays honest whichever way the default points.
+        manifest["BehaviorPatchesGate"] = {
+            "enabled": bool(patcher.ENABLE_BEHAVIOR_PATCHES)
+        }
         return manifest, old_patched
 
     def test_mobile_furniture_runtime_bindings_cover_every_behavior_row(self):
@@ -577,19 +587,36 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
         self.assertEqual(len(contract["rejected_scope"]["rendered_only_unproven"]), 24)
         self.assertTrue(contract["stock_off_gate"]["manual_dispatch"])
         self.assertTrue(contract["stock_off_gate"]["autonomous_selector"])
+        # Gate-aware, not pinned to one build.
+        #
+        # This block used to hardcode the behaviour-patches-OFF shape, which
+        # was correct while ENABLE_BEHAVIOR_PATCHES defaulted off. The owner
+        # asked for the default generator to have all patches on, so the shape
+        # now follows the gate -- and the point of the assertion is unchanged:
+        # every field must agree with the build the helpers were emitted for,
+        # so a mismatch between manifest and sources is still caught.
+        gated = bool(patcher.ENABLE_BEHAVIOR_PATCHES)
         self.assertEqual(
             contract["seating_behavior_cross_apply"],
             {
-                "canonical_sit_down_variant_helper": None,
-                "manual_chaise_needs_to_sit_down": False,
-                "autonomous_chaise_needs_to_sit_down": False,
-                "resting_body_stock_fallback": "CBehavior::RestingBody",
-                "couch_chair_sit_down_route": "CBehavior::UseCouch (0x189)",
+                "canonical_sit_down_variant_helper": (
+                    "_VF2ApplySitDownLabelVariants" if gated else None),
+                "manual_chaise_needs_to_sit_down": gated,
+                "autonomous_chaise_needs_to_sit_down": gated,
+                "resting_body_stock_fallback": (
+                    "_VF2RandomRestingBodyLabel" if gated
+                    else "CBehavior::RestingBody"),
+                "couch_chair_sit_down_route": (
+                    "CBehavior::UseCouch (0x189) -> _VF2RandomUseCouchLabel"
+                    if gated else "CBehavior::UseCouch (0x189)"),
                 "resting_body_native_label_family": {
                     "behavior": "CBehavior::RestingBody (0x127)",
                     "string_ids": ["0x17d", "0x17e", "0x17f"],
                     "texts": ["Resting", "Resting legs", "Resting tired feet"],
-                    "shared_pool_condition": "native RestingBody labels remain untouched",
+                    "shared_pool_condition": (
+                        "native RestingBody changed to one of these labels"
+                        if gated
+                        else "native RestingBody labels remain untouched"),
                 },
                 "resting_body_route_matrix": {
                     "behavior_patches_off_mobile_flag_off": "CBehavior::RestingBody",
@@ -710,11 +737,26 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
             try:
                 helper_path = temp / "vf2_mobile_furniture_behaviors.cpp"
                 helper = helper_path.read_text(encoding="ascii")
-                helper = helper.replace(
+                # The dispatcher emits one of TWO stock-hotspot forms, chosen
+                # by the behaviour-patches gate. This used to delete only the
+                # first, which silently removed nothing once the gate defaulted
+                # on -- so the validator had nothing to complain about and the
+                # test failed with "RuntimeError not raised" while appearing to
+                # be about dispatch ordering.
+                #
+                # Remove whichever form is actually present, and assert that
+                # one of them was, so this can never again pass vacuously or
+                # fail for the wrong reason.
+                markers = (
                     "    if (HandleDropOnHotSpot(villager)) return true;\n",
-                    "",
-                    1,
+                    "    bool handled = HandleDropOnHotSpot(villager);\n",
                 )
+                present = [m for m in markers if m in helper]
+                self.assertEqual(
+                    len(present), 1,
+                    "expected exactly one stock-hotspot form in the generated "
+                    "dispatcher, found %d" % len(present))
+                helper = helper.replace(present[0], "", 1)
                 helper_path.write_text(helper, encoding="ascii")
                 with self.assertRaisesRegex(RuntimeError, "stock hotspot handling"):
                     patcher.validate_mobile_furniture_runtime_bindings(manifest)
@@ -1578,8 +1620,24 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                 wrapper = helper.split(
                     "bool const theMainScene::VF2HandleDropOnMobileFurniture", 1
                 )[1]
+                # STOCK FIRST. That ordering is the point of this assertion and
+                # is unchanged: the stock hotspot must be consulted before the
+                # mobile gate, so a build with the gate off behaves exactly
+                # like the base game.
+                #
+                # The dispatcher emits one of two stock-hotspot forms depending
+                # on the behaviour-patches gate, so find whichever is present
+                # rather than hardcoding the one the old default produced.
+                stock_forms = (
+                    "if (HandleDropOnHotSpot(villager)) return true;",
+                    "bool handled = HandleDropOnHotSpot(villager);",
+                )
+                stock_at = [wrapper.index(f) for f in stock_forms if f in wrapper]
+                self.assertEqual(
+                    len(stock_at), 1,
+                    "expected exactly one stock-hotspot form in the dispatcher")
                 self.assertLess(
-                    wrapper.index("if (HandleDropOnHotSpot(villager)) return true;"),
+                    stock_at[0],
                     wrapper.index("if (gVF2MobileFurnitureBehaviors == 0) return false;"),
                 )
                 self.assertIn("sample.y -= 10;", wrapper)
