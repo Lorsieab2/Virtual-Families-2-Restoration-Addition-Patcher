@@ -66,8 +66,17 @@ class TestAddedFurnitureContract(unittest.TestCase):
             "__VF2_YOGA_EQUIPMENT_ITEM_ID__": "0x75",
             "__VF2_PING_PONG_TABLE_ITEM_ID__": "0x36",
         }
+        # An optional alternate item id may sit between the item and its
+        # object. VF2RunOwnFurnitureAction* gained that parameter so ONE
+        # behaviour can serve two ids: the Yoga Equipment needs it, because the
+        # stock item (0x220) and the invisible copy are the same thing with
+        # different art and a drop on either must reach the same venue. Callers
+        # with no second id pass -1. The pairing this test guards -- which
+        # donor OBJECT each added item is bound to -- is unchanged.
         for item, obj in expected.items():
-            self.assertRegex(src, rf"{re.escape(item)}, {obj}")
+            self.assertRegex(
+                src, rf"{re.escape(item)}, (?:(?:-1|0x[0-9a-fA-F]+), )?{obj}",
+                f"{item} is no longer bound to donor object {obj}")
         self.assertIn("CBehavior::WorkoutTreadmill", src)
         self.assertIn("CBehavior::RunningOnTreadmill", src)
         self.assertIn("CBehavior::WorkingOut", src)

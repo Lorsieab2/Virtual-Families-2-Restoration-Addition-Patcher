@@ -30,6 +30,10 @@ import os
 import re
 import unittest
 
+# Newline as a name, so a stripping expression inside a test never needs a
+# backslash escape that the surrounding string quoting would fight over.
+NL = chr(10)
+
 ROOT = os.path.dirname(os.path.abspath(__file__))
 GEN = os.path.join(ROOT, "patch_mobile_furniture_pack.py")
 SOURCE = io.open(GEN, encoding="utf-8").read()
@@ -110,136 +114,147 @@ class TheBikeKeepsItsOwnIdentity(unittest.TestCase):
                          handler_body("VF2ExerciseBikeRun"))
 
 
-class TheCaptionFollowsTheMachineTheRouteChose(unittest.TestCase):
+class TheCaptionFollowsTheMachineTheVillagerIsAt(unittest.TestCase):
     """Bike captions must not appear on a stock treadmill.
 
-    Reported from live play. Both machines answer EObject 0x04, so the
-    wrappers on the stock treadmill behaviours cannot tell them apart on
-    their own.
+    Reported from live play, twice. Both machines answer EObject 0x04, so the
+    wrappers on the stock treadmill behaviours cannot tell them apart on their
+    own.
 
-    WHY THE OBVIOUS FIXES DO NOT WORK, both established by measurement:
+    THIS CLASS PREVIOUSLY PINNED A FIX THAT DID NOT WORK, and the history is
+    worth keeping because the reasoning was persuasive and still wrong.
 
-    The PRE-probe is a nearest-match FindFurniture from the villager's feet
-    taken before the behaviour runs. WorkoutTreadmill makes that same query
-    from that same position, so the probe is not wrong -- it just answers
-    "which machine is nearest now", which is not "which machine will the
-    route pick".
+    It required the wrappers to prefer a route recorded by intercepting
+    PlanToGo and asking CContentMap::FindObject which placement the route
+    resolved to. The premise was correct as far as it went -- PlanToGo(EObject,
+    ...) really does route through FindObject, and
+    work/VillagerPlans_patched_disasm.txt:1915 shows the call. But look at what
+    that overload actually passes, at the same site:
 
-    Probing AGAIN after the call cannot help either.
-    VF2RunNativeBehaviorAndChangedLabel only invokes the behaviour
-    constructor and enqueues plans; it does not execute them, so FeetPos()
-    is unchanged and both probes inspect identical state. That version was
-    written, shipped in a PR, and correctly rejected.
+        00000009: lea   eax,[ebp-8]              ; a local ldwPoint
+        0000000C: mov   dword ptr [ebp-8],0      ; zeroed
+        00000013: push  eax                      ; &outPoint
+        00000014: push  dword ptr [ebp+8]        ; the EObject
+        00000020: mov   ecx, offset ContentMap
+        00000025: call  ?FindObject@CContentMap@@QAE?B_NW4EObject@1@AAUldwPoint@@@Z
 
-    WHAT DOES WORK: PlanToGo(EObject, ...) resolves its destination through
-    CContentMap::FindObject -- decoded from VillagerPlans_patched_disasm.txt,
-    where the object overload zeroes a local ldwPoint, passes its address to
-    ?FindObject@CContentMap@@QAE?B_NW4EObject@1@AAUldwPoint@@@Z and routes to
-    what it writes back. The interceptor already wrapping that call asks the
-    same function the same question and records the placement at the answer.
+    Two arguments: an object enum and an out-point. NO VILLAGER AND NO
+    POSITION. FindObject is a global "find an object of this type" query, so it
+    returns the SAME placement for every villager. With a treadmill and a bike
+    both answering 0x04, whichever one it happened to return classified EVERY
+    user of either machine -- which is precisely the reported symptom, and why
+    the owner saw bike captions on the treadmill after that fix shipped.
+
+    A per-villager ownership gate was then added on top, checking that the
+    recorded route belonged to this villager. That could not rescue it either:
+    it verifies WHO recorded the route, never WHICH machine that villager goes
+    to.
+
+    WHAT ACTUALLY WORKS is what the native behaviours themselves do. From
+    Behavior.obj, ?WorkoutTreadmill@ (section 824) and ?RunningOnTreadmill@
+    (section 556) each carry exactly ONE furniture relocation --
+    ?FindFurniture@CFurnitureManager@@ -- and reference neither
+    LinkPeepToFurniture nor CContentMap::FindObject. Their prologue is
+
+        0026  call  ?FeetPos@CVillager@@QBE?BUldwPoint@@XZ
+        002b  push 0 / push 0 / push 1
+        0031  lea   ecx,[ebp-0x24] / push ecx      ; &sFurnitureInfo2
+        0035  push [eax+4] / push [eax]            ; FeetPos.y, FeetPos.x
+        003f  push 4                               ; EObject 0x04
+        0041  call  ?FindFurniture@CFurnitureManager@@
+        004e  push 0x272                           ; the caption string id
+        005d  lea   eax,[esi+0x1bba8] / call strncpy
+        0079  call  PlanToGo                       ; the walk starts AFTER
+
+    So the native code picks its placement from the PRE-WALK position and
+    commits the caption at that same instant. The wrappers' own probe makes the
+    identical call with identical arguments at that identical moment, so it
+    agrees with the native choice by construction rather than by luck. It was
+    correct all along; the recorded route merely overrode it.
+
+    There is also no per-villager alternative to fall back on:
+    LinkPeepToFurniture writes its occupant into the FURNITURE RECORD
+    (record+0x20), never into the CVillager, so no villager -> furniture
+    back-pointer exists to read -- and these two behaviours never call it.
     """
 
-    def intercept_body(self):
-        start = SOURCE.find("static bool __cdecl VF2PlanToGoObjectAtAddedFurnitureImpl(")
-        self.assertNotEqual(start, -1, "the PlanToGo(object) interceptor is gone")
-        end = SOURCE.find('\nextern "C"', start)
-        self.assertNotEqual(end, -1, "no definition follows the interceptor")
-        return SOURCE[start:end]
+    def wrapper_body(self, name):
+        start = SOURCE.index(
+            'extern "C" void __cdecl %s(CVillager &villager)\n{' % name)
+        return SOURCE[start:SOURCE.index('\nextern "C"', start)]
 
-    def test_the_interceptor_asks_the_engines_own_resolver(self):
-        body = self.intercept_body()
-        self.assertIn(
-            "ContentMap.FindObject(object, routed)", body,
-            "the interceptor no longer resolves the destination, so a wrapper "
-            "cannot learn which machine the route picked")
-        self.assertIn("gVF2RoutedItemValid = true;", body)
-
-    def test_the_resolver_runs_only_when_no_venue_is_forced(self):
-        # With a venue active the route is already ours and the recorded item
-        # would be meaningless; the early return must come first.
-        body = self.intercept_body()
-        self.assertLess(
-            body.index("gVF2AddedFurnitureVenueActive"),
-            body.index("ContentMap.FindObject"),
-            "the venue branch must return before the fallback records anything")
-
-    def test_both_treadmill_wrappers_prefer_the_routed_machine(self):
+    def test_both_treadmill_wrappers_use_their_own_probe(self):
+        """The probe decides, with nothing layered over it."""
         for name in ("VF2RandomTreadmillWalkLabel", "VF2RandomTreadmillRunLabel"):
             with self.subTest(wrapper=name):
-                start = SOURCE.index(
-                    'extern "C" void __cdecl %s(CVillager &villager)\n{' % name)
-                body = SOURCE[start:SOURCE.index('\nextern "C"', start)]
+                body = self.wrapper_body(name)
                 self.assertIn(
-                    "VF2RoutedToItem(villager, __VF2_EXERCISE_BIKE_ITEM_ID__)", body,
-                    "%s still decides from the stale pre-probe alone, which is "
-                    "the defect: a bike caption on a treadmill workout" % name)
+                    "VF2LinkedFurnitureItemIs(\n        villager, 0x04, "
+                    "__VF2_EXERCISE_BIKE_ITEM_ID__)", body,
+                    "%s no longer asks the same question the native behaviour "
+                    "asks" % name)
+                self.assertIn("bool const onBike = bike;", body)
                 self.assertIn("if (!onBike) return;", body)
 
-    def test_an_unrecorded_route_leaves_the_stock_label_alone(self):
-        # VF2RoutedToItem returns false when nothing was recorded, so a
-        # wrapper that cannot tell must not relabel. A real treadmill keeping
-        # its real caption is the safe direction.
-        start = SOURCE.index("static bool VF2RoutedToItem(CVillager &villager, int itemId)")
-        body = SOURCE[start:SOURCE.index("\n}", start)]
-        self.assertIn("gVF2RoutedItemValid", body,
-                      "VF2RoutedToItem must refuse to answer when nothing was "
-                      "recorded rather than defaulting to a match")
-        # And it must belong to THIS villager: the interceptor runs during plan
-        # construction while the wrapper reads after the behaviour returns, so
-        # an unowned global could hand one villager another's route.
-        self.assertIn("gVF2RoutedItemPlans == reinterpret_cast<CVillagerPlans *>(&villager)",
-                      body,
-                      "the recorded route is not tied to the villager reading "
-                      "it, so a plan built for someone else could be used")
+    def test_the_probe_runs_before_the_native_behaviour(self):
+        """Timing is the whole point.
+
+        The native code samples FeetPos and commits the caption BEFORE
+        PlanToGo, so a probe taken after the behaviour returns would sample a
+        different moment. It must come first.
+        """
+        for name in ("VF2RandomTreadmillWalkLabel", "VF2RandomTreadmillRunLabel"):
+            with self.subTest(wrapper=name):
+                body = self.wrapper_body(name)
+                self.assertLess(
+                    body.index("VF2LinkedFurnitureItemIs"),
+                    body.index("VF2RunNativeBehaviorAndChangedLabel"),
+                    "the probe must be taken before the native behaviour "
+                    "runs, which is when the native code makes its own choice")
+
+    def test_the_position_blind_route_machinery_is_gone(self):
+        """None of it may come back: it cannot answer a per-villager question.
+
+        Comments are stripped because the explanation above deliberately names
+        these symbols, and a raw search would match the documentation of the
+        defect rather than the defect.
+        """
+        code = NL.join(
+            line for line in SOURCE.splitlines()
+            if not line.lstrip().startswith("//"))
+        for symbol in ("gVF2RoutedItemValid", "gVF2RoutedItemPlans",
+                       "gVF2RoutedItemId", "VF2RoutedToItem",
+                       "VF2ItemIdAtPoint", "routeIsOurs"):
+            with self.subTest(symbol=symbol):
+                self.assertNotIn(
+                    symbol, code,
+                    "%s is back; it derives from CContentMap::FindObject, "
+                    "which takes no villager and no position and therefore "
+                    "answers identically for everyone" % symbol)
+
+    def test_the_interceptor_no_longer_resolves_anything(self):
+        """The PlanToGo interceptor keeps its venue job and nothing else."""
+        start = SOURCE.find(
+            "static bool __cdecl VF2PlanToGoObjectAtAddedFurnitureImpl(")
+        self.assertNotEqual(start, -1, "the PlanToGo(object) interceptor is gone")
+        end = SOURCE.find('\nextern "C"', start)
+        body = SOURCE[start:end]
+        code = NL.join(
+            line for line in body.splitlines()
+            if not line.lstrip().startswith("//"))
+        self.assertIn(
+            "gVF2AddedFurnitureVenueActive", code,
+            "the venue branch is gone; added furniture would lose its venue")
+        self.assertNotIn(
+            "ContentMap.FindObject", code,
+            "the interceptor is resolving destinations again")
 
     def test_the_ineffective_post_walk_probe_stays_gone(self):
-        # Re-probing after the native call was tried and cannot fire.
+        # Re-probing after the native call was tried and cannot fire:
+        # VF2RunNativeBehaviorAndChangedLabel only enqueues plans, so FeetPos
+        # is unchanged and both probes inspect identical state.
         self.assertNotIn("bikeNow", SOURCE)
         self.assertNotIn("pingPongNow", SOURCE)
-
-    def test_find_object_is_declared_with_its_const_return(self):
-        """The native symbol is `bool const`, and MSVC mangles that in.
-
-        work/VillagerPlans_symbols.txt:436 records
-          ?FindObject@CContentMap@@QAE?B_NW4EObject@1@AAUldwPoint@@@Z
-          public: bool const __thiscall CContentMap::FindObject(...)
-
-        The ?B is the const qualifier on the RETURN type. Declaring plain
-        `bool` emits a reference to ?FindObject@CContentMap@@QAE_N... which
-        COMPILES to an object and then fails to LINK -- a failure the compile
-        suite cannot see, because it stops at the object file. So this is
-        asserted on the declaration rather than left to a build nobody runs
-        here.
-        """
-        # There are several CContentMap declarations, one per emitted unit.
-        # The one that matters is the behaviours unit's -- the only one that
-        # declares FindObject -- so find it by that member rather than by
-        # taking the first class of that name.
-        self.assertIn(
-            "const bool FindObject(EObject object, ldwPoint &outPoint);",
-            SOURCE,
-            "FindObject must be declared with its const-qualified return type "
-            "or the executable link fails unresolved")
-
-    def test_the_routed_placement_is_resolved_by_handle(self):
-        """Point equality cannot name a placement; the handle can.
-
-        Two placements sharing a walk-to anchor both match a point compare,
-        and a record whose own query resolves a NEIGHBOURING placement matches
-        on that neighbour's point while the loop returns the current record's
-        item id. Either way a treadmill route could be read as a bike route,
-        which is the very defect this machinery exists to prevent.
-        """
-        start = SOURCE.index("static int VF2ItemIdAtPoint(")
-        body = SOURCE[start:SOURCE.index("\n}", start)]
-        self.assertIn(
-            "!= info.unknown0", body,
-            "VF2ItemIdAtPoint no longer matches on the placement handle, so "
-            "it can name the wrong machine")
-        self.assertNotIn(
-            "info.point.x != routed.x", body,
-            "the point-equality join is back; it cannot distinguish two "
-            "placements that share a walk-to anchor")
 
 
 if __name__ == "__main__":
