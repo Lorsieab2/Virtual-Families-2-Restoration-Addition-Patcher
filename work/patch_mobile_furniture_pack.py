@@ -27225,11 +27225,32 @@ static int VF2LinkedSeatIndex(CVillager &villager, sFurnitureInfo2 const &info)
 // alone gives every seat at a table the same facing -- the reported defect.
 // The seat index says which seat, but ignores how the table is rotated.
 //
-// The seat markers pair up: {0x13, 0x53} against {0x14, 0x54}, differing by
-// 0x40. Seat indices 0 and 2 take the first of each pair, 1 and 3 the second,
-// so the LOW BIT of the index is the side of the table -- which is what the
-// owner's APK confirms independently. Reading assets/Picnic_table.png.fmap and
-// assets/Patio_table.png.fmap out of the mobile OBB:
+// HOW THE INDEX MAPS TO A SIDE, AND WHAT IS STILL INFERENCE.
+//
+// PROVEN from work/FurnitureManager.disasm.txt: FindPeepSlot counts the
+// markers {0x13, 0x14, 0x53, 0x54} in that fixed order to get the seat
+// capacity, then returns a slot ordinal in that same order; the caller writes
+// the villager's peep id into record[+0x20 + ordinal*4]. So the ordinal is
+// real, recoverable, and ordered by the marker list.
+//
+// INFERENCE, NOT PROOF: that {0x13, 0x53} sit on one physical side and
+// {0x14, 0x54} on the other -- which is what makes the ordinal's LOW BIT the
+// side. The markers pair naturally by +0x40, and the owner's APK seat cells
+// split two-and-two either side of the picnic table and one-and-one either
+// side of the patio table, which is consistent with it. But the fmap cell
+// values do not carry the marker byte directly and this repository has no
+// ContentMap disassembly, so HasObject's marker-to-cell mapping could not be
+// decoded. The alternative grouping {0x13, 0x14} against {0x53, 0x54} -- i.e.
+// `seat < 2` rather than `seat & 1` -- is not excluded by anything available
+// here.
+//
+// If the tables still seat a villager on the wrong side in play, THIS LINE IS
+// THE FIRST THING TO TRY: swap `(seat & 1)` for `(seat < 2)`. The rest of the
+// mechanism -- recovering the engine's own ordinal rather than re-deriving a
+// side from coordinates -- is unaffected by which of the two groupings is
+// right.
+//
+// The APK cells that motivate the pairing:
 //
 //   picnic (5,9) 0x98 | (8,11) 0xA0 | (15,12) 0x98+side | (17,10) 0xA0+side
 //   patio  (3,8) 0x98 | (13,8) 0xA0
