@@ -26030,7 +26030,22 @@ enum EBodyPosition {
     eBodyPositionSittingNW = 0x12,
     eBodyPositionChaise = 0x17
 };
-enum EDirection { eDirectionUmbrella = 3 };
+// EDirection, decoded from AnimManager.obj's CodeView LF_ENUMERATE records:
+//   eDirection_Northeast = 0, Southeast = 1, Southwest = 2, Northwest = 3
+// (also None = -128, Random = -384, North = 4, East = 5, South = 6).
+//
+// NOTE this is NOT EFurnitureOrientation, which is SE=0, SW=1, NE=2, NW=3. The
+// two orderings differ, so a furniture orientation must be MAPPED to a
+// direction rather than passed through. eDirectionUmbrella = 3 is Northwest
+// under this enum; it keeps its old name because the umbrella route was
+// written against the literal and changing that name is not this fix's job.
+enum EDirection {
+    eDirectionNortheast = 0,
+    eDirectionSoutheast = 1,
+    eDirectionSouthwest = 2,
+    eDirectionNorthwest = 3,
+    eDirectionUmbrella = 3
+};
 // THE NATIVE EHeadDirection VALUES, DECODED -- the previous ones were wrong.
 //
 // theAlignVillagerScene.obj builds a const char* name table on the stack that
@@ -27028,8 +27043,29 @@ static bool VF2HandleMobileChaise(CVillager &villager)
         // VF2FurnitureFacesEast. Reaches the INVISIBLE Spa Lounger too:
         // VF2SpaLoungerHasHandle matches both item ids and both share this
         // route.
+        // THE BODY NEEDS A DIRECTION, NOT JUST THE HEAD.
+        //
+        // Owner screenshot and report: "they lie across it" -- the villager
+        // lies ACROSS the lounger with limbs off both sides, so the body is not
+        // aligned to the furniture at all. eBodyPositionChaise carries no
+        // facing of its own and the three-argument PlanToWait sets only the
+        // HEAD, so the body kept whatever facing the villager walked in with.
+        //
+        // Three earlier attempts argued about which head direction to pass --
+        // `orientation == 1`, then `orientation == 3`, then an east/west split
+        // -- and every one of them was tuning an argument that was never
+        // controlling the body. That is why the defect survived all three.
+        //
+        // The four-argument overload is real and already linked: it is in the
+        // game's own object file, and the patio umbrella route calls it in
+        // shipped code. EDirection is NE=0, SE=1, SW=2, NW=3, which is a
+        // DIFFERENT ordering from EFurnitureOrientation (SE=0, SW=1, NE=2,
+        // NW=3), so the orientation is mapped rather than passed through.
         plans->PlanToWait(
             duration, eBodyPositionChaise,
+            VF2FurnitureFacesEast(info.orientation)
+                ? eDirectionNortheast
+                : eDirectionNorthwest,
             VF2FurnitureFacesEast(info.orientation)
                 ? eHeadDirectionNE
                 : eHeadDirectionNW);
@@ -29354,8 +29390,29 @@ static void VF2PlanLinkedChaiseAction(
         // VF2FurnitureFacesEast. Reaches the INVISIBLE Spa Lounger too:
         // VF2SpaLoungerHasHandle matches both item ids and both share this
         // route.
+        // THE BODY NEEDS A DIRECTION, NOT JUST THE HEAD.
+        //
+        // Owner screenshot and report: "they lie across it" -- the villager
+        // lies ACROSS the lounger with limbs off both sides, so the body is not
+        // aligned to the furniture at all. eBodyPositionChaise carries no
+        // facing of its own and the three-argument PlanToWait sets only the
+        // HEAD, so the body kept whatever facing the villager walked in with.
+        //
+        // Three earlier attempts argued about which head direction to pass --
+        // `orientation == 1`, then `orientation == 3`, then an east/west split
+        // -- and every one of them was tuning an argument that was never
+        // controlling the body. That is why the defect survived all three.
+        //
+        // The four-argument overload is real and already linked: it is in the
+        // game's own object file, and the patio umbrella route calls it in
+        // shipped code. EDirection is NE=0, SE=1, SW=2, NW=3, which is a
+        // DIFFERENT ordering from EFurnitureOrientation (SE=0, SW=1, NE=2,
+        // NW=3), so the orientation is mapped rather than passed through.
         plans->PlanToWait(
             duration, eBodyPositionChaise,
+            VF2FurnitureFacesEast(info.orientation)
+                ? eDirectionNortheast
+                : eDirectionNorthwest,
             VF2FurnitureFacesEast(info.orientation)
                 ? eHeadDirectionNE
                 : eHeadDirectionNW);
@@ -29598,7 +29655,13 @@ static void VF2PlanSpaTreatment(
         !VF2FurnitureFacesEast(info.orientation);
     EHeadDirection loungerHead =
         loungerFacesNorthWest ? eHeadDirectionNW : eHeadDirectionNE;
-    plans->PlanToWait(settle, eBodyPositionChaise, loungerHead);
+    // Same correction as the two relax poses: eBodyPositionChaise carries no
+    // facing, so the BODY direction has to be supplied or the villager lies
+    // across the lounger rather than along it. Derived from the same test that
+    // picks the head direction and the sleep strip, so all three agree.
+    EDirection loungerBody =
+        loungerFacesNorthWest ? eDirectionNorthwest : eDirectionNortheast;
+    plans->PlanToWait(settle, eBodyPositionChaise, loungerBody, loungerHead);
     if (loungerFacesNorthWest) {
         plans->PlanToPlayAnim(total - settle, "SleepNW", false, 0.02f);
     } else {

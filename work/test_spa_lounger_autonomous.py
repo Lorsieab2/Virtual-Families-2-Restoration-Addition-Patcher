@@ -933,6 +933,70 @@ class TheTreatmentPoseFollowsTheLounger(unittest.TestCase):
             line for line in src[start:end].splitlines()
             if not line.lstrip().startswith("//"))
 
+    def test_the_chaise_pose_supplies_a_body_direction(self):
+        """The villager must lie ALONG the lounger, not across it.
+
+        Owner screenshot and report: "they lie across it" -- limbs off both
+        sides, so the body is not aligned to the furniture at all. That is a
+        different fault from facing the wrong end, and it is why three
+        successive orientation fixes never touched it.
+
+        eBodyPositionChaise carries no facing of its own, and the
+        three-argument PlanToWait sets only the HEAD direction, so the body kept
+        whatever facing the villager walked in with. `orientation == 1`, then
+        `orientation == 3`, then an east/west split were all tuning an argument
+        that was never controlling the body.
+
+        The four-argument overload is real: it is present in the game's own
+        object file beside the other two, and the patio umbrella route already
+        calls it in shipped code.
+        """
+        text = _source()
+        self.assertIn("eDirectionNortheast = 0", text,
+                      "the decoded EDirection values are gone")
+        self.assertIn("eDirectionNorthwest = 3", text)
+        self.assertEqual(
+            text.count("? eDirectionNortheast"), 2,
+            "the two chaise relax poses do not both supply a body direction, "
+            "so the villager keeps the facing they walked in with")
+        self.assertIn(
+            "plans->PlanToWait(settle, eBodyPositionChaise, loungerBody, loungerHead);",
+            text,
+            "the spa settle pose does not supply a body direction")
+
+    def test_the_body_and_head_directions_agree(self):
+        """A body facing NE under a head facing NW would look wrong either way.
+
+        Both come from the SAME orientation test at every site, so they cannot
+        disagree -- the property the settle pose and the sleep strip already
+        share.
+        """
+        text = _source()
+        start = text.index("EDirection loungerBody =")
+        body = text[start:start + 200]
+        self.assertIn(
+            "loungerFacesNorthWest ? eDirectionNorthwest : eDirectionNortheast",
+            body,
+            "the settle body direction is no longer derived from the same test "
+            "as the head direction and the sleep strip")
+
+    def test_edirection_is_not_confused_with_furniture_orientation(self):
+        """The two enums order their values DIFFERENTLY and must not be swapped.
+
+        EDirection             NE=0, SE=1, SW=2, NW=3  (AnimManager.obj)
+        EFurnitureOrientation  SE=0, SW=1, NE=2, NW=3
+
+        Passing a furniture orientation straight into the direction argument
+        would compile and be silently wrong for three of four rotations -- the
+        exact class of bug this route has already produced three times.
+        """
+        text = _source()
+        self.assertIn("NOT EFurnitureOrientation", text,
+                      "the warning that the two enums differ is gone")
+        self.assertNotIn("eBodyPositionChaise,\n            info.orientation,", text,
+                         "a furniture orientation is being passed as a body "
+                         "direction")
+
     def test_the_treatment_never_uses_the_flat_lying_pose(self):
         body = self._treatment_body()
         self.assertNotIn(
