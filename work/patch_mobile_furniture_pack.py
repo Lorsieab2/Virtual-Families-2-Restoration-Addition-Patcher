@@ -34530,6 +34530,11 @@ static bool VF2LinkedFurnitureItemIs(
 static CVillagerPlans *gVF2AddedFurnitureVenuePlans = 0;
 static ldwPoint gVF2AddedFurnitureVenuePoint = {};
 static bool gVF2AddedFurnitureVenueActive = false;
+// The resolved item's OWN PLACEMENT (record +0x14/+0x18), which is the origin
+// the native FindFurniture ranks candidates against. This is NOT the same as
+// the walk-to point: FindFurniture returns info.point as the placement PLUS
+// the furniture map's hotspot offset, so the two differ by that offset.
+static ldwPoint gVF2AddedFurnitureVenuePlacement = {0, 0};
 
 
 
@@ -34588,7 +34593,7 @@ static int const kVF2HomeGymStandNudgeY = 12;
 // there is no second id, which is what every other caller does.
 static bool VF2FindAddedFurnitureVenueEx(
     CVillager &villager, int itemId, int altItemId, int object,
-    ldwPoint &outPoint)
+    ldwPoint &outPoint, ldwPoint *outPlacement)
 {
     // This venue wrapper only needs a destination, not a peep reservation.
     // Do not call LinkPeepToFurniture speculatively: a shared-object stock
@@ -34602,6 +34607,9 @@ static bool VF2FindAddedFurnitureVenueEx(
     long bestDistance = 0x7FFFFFFF;
     bool found = false;
     int foundOrientation = 0;
+    // The winning record's OWN placement, which is what the native lookup
+    // ranks by. Kept separate from outPoint, which is the walk-to anchor.
+    ldwPoint foundPlacement = {0, 0};
     for (int slot = 0; slot < count; ++slot) {
         unsigned char *record = manager + 0x1008 + slot * 0x40;
         if ((*reinterpret_cast<unsigned int *>(record + 0x0C) & 1) == 0) continue;
@@ -34621,11 +34629,13 @@ static bool VF2FindAddedFurnitureVenueEx(
         if (!found || distance < bestDistance) {
             bestDistance = distance;
             outPoint = info.point;
+            foundPlacement = placement;
             foundOrientation = *reinterpret_cast<int *>(record + 0x10);
             found = true;
         }
     }
     if (!found) return false;
+    if (outPlacement != 0) *outPlacement = foundPlacement;
     // THE HOME GYM STANDS ITS VILLAGER IN THE WRONG PLACE.
     //
     // Reported in play with a screenshot: "the villagers in the home gym should
@@ -34682,13 +34692,15 @@ static bool VF2FindAddedFurnitureVenue(
     CVillager &villager, int itemId, int object, ldwPoint &outPoint)
 {
     return VF2FindAddedFurnitureVenueEx(
-        villager, itemId, -1, object, outPoint);
+        villager, itemId, -1, object, outPoint, 0);
 }
 
-static void VF2BeginAddedFurnitureVenue(CVillager &villager, ldwPoint point)
+static void VF2BeginAddedFurnitureVenue(
+    CVillager &villager, ldwPoint point, ldwPoint placement)
 {
     gVF2AddedFurnitureVenuePlans = reinterpret_cast<CVillagerPlans *>(&villager);
     gVF2AddedFurnitureVenuePoint = point;
+    gVF2AddedFurnitureVenuePlacement = placement;
     gVF2AddedFurnitureVenueActive = true;
 }
 
@@ -34821,8 +34833,29 @@ static bool __cdecl VF2FindFurnitureAtAddedFurnitureImpl(
     // with no suspension point in between: the donor's FindFurniture and
     // PlanToGo both run inside that one synchronous call, for that one
     // villager. Nothing else can observe the window open.
+    //
+    // SEARCH FROM THE PLACEMENT, NOT FROM THE WALK-TO POINT.
+    //
+    // Decoded from work/FurnitureManager.disasm.txt. FindFurniture ranks
+    // candidates at 0x52-0x66 by
+    //
+    //     (point.x - record[+0x14])^2 + (point.y - record[+0x18])^2
+    //
+    // i.e. by distance to each record's OWN PLACEMENT. At 0x121-0x137 it then
+    // returns info.point as that placement PLUS the furniture map's hotspot
+    // offset.
+    //
+    // So info.point is NOT the placement, and an earlier revision of this
+    // interceptor fed info.point back in as the search origin. That is off by
+    // exactly one hotspot, and with an added bike or ping-pong table standing
+    // near a stock treadmill or pool table the neighbouring stock record can
+    // be CLOSER to that anchor -- which silently reintroduces the very
+    // cross-targeting this window exists to prevent.
+    //
+    // Supplying the placement makes the winning distance zero for the intended
+    // record, which no other placement can beat.
     if (gVF2AddedFurnitureVenueActive) {
-        point = gVF2AddedFurnitureVenuePoint;
+        point = gVF2AddedFurnitureVenuePlacement;
     }
     return manager->FindFurniture(object, point, *info, a, b, c);
 }
@@ -34975,8 +35008,12 @@ static void VF2RunOwnFurnitureActionEx(
     bool varyLabelEachVisit)
 {
     ldwPoint venue = {};
+    // The item's own placement, kept alongside the walk-to anchor because the
+    // native lookup ranks by placement while the anchor carries a hotspot
+    // offset. See VF2FindFurnitureAtAddedFurnitureImpl.
+    ldwPoint venuePlacement = {};
     bool const hasVenue = VF2FindAddedFurnitureVenueEx(
-        villager, itemId, altItemId, object, venue);
+        villager, itemId, altItemId, object, venue, &venuePlacement);
     if (!hasVenue) {
         // This handler belongs to an added-furniture candidate. Running the
         // donor here would make an Exercise Bike action run on a Treadmill or
@@ -34994,7 +35031,7 @@ static void VF2RunOwnFurnitureActionEx(
         }
         return;
     }
-    VF2BeginAddedFurnitureVenue(villager, venue);
+    VF2BeginAddedFurnitureVenue(villager, venue, venuePlacement);
     // READ THE SLOT SERIAL BEFORE THE RESOLVER RUNS.
     //
     // VF2CurrentLabelInGroup reaches VF2BehaviorLabelSlotIsCurrentFor, whose

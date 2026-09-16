@@ -148,6 +148,42 @@ class TestAddedFurnitureContract(unittest.TestCase):
                           donor + " no longer has its furniture lookup "
                           "constrained to the resolved venue")
 
+    def test_the_venue_lookup_searches_from_the_placement_not_the_anchor(self):
+        """The interceptor must supply the PLACEMENT, not the walk-to point.
+
+        Decoded from work/FurnitureManager.disasm.txt. FindFurniture ranks
+        candidates at 0x52-0x66 by
+
+            (point.x - record[+0x14])^2 + (point.y - record[+0x18])^2
+
+        i.e. by distance to each record's OWN placement, and at 0x121-0x137 it
+        returns info.point as that placement PLUS the furniture map's hotspot
+        offset. The two therefore differ by exactly one hotspot.
+
+        Caught by review: an earlier revision fed info.point back in as the
+        search origin. With an added bike or ping-pong table standing near a
+        stock treadmill or pool table, the neighbouring stock record can be
+        CLOSER to that anchor than the intended item's own placement is --
+        which silently reintroduces the cross-targeting the window exists to
+        prevent. Supplying the placement makes the intended record's distance
+        zero, which nothing else can beat.
+        """
+        src = source()
+        self.assertIn("gVF2AddedFurnitureVenuePlacement", src,
+                      "the window no longer carries the placement origin")
+        start = src.index("VF2FindFurnitureAtAddedFurnitureImpl(")
+        body = src[start:src.index("\n}", start)]
+        self.assertIn("point = gVF2AddedFurnitureVenuePlacement;", body,
+                      "the lookup must search from the placement")
+        self.assertNotIn("point = gVF2AddedFurnitureVenuePoint;", body,
+                         "searching from the walk-to anchor is off by one "
+                         "hotspot and lets a nearer stock record win")
+        # The resolver must actually report the placement it selected, or the
+        # window would carry a zeroed point.
+        self.assertIn("foundPlacement = placement;", src)
+        self.assertIn("if (outPlacement != 0) *outPlacement = foundPlacement;",
+                      src)
+
     def test_the_findfurniture_wrapper_forwards_every_stack_word(self):
         """The naked wrapper must forward SEVEN words and clean 28 bytes.
 
