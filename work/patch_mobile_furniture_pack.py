@@ -27207,6 +27207,22 @@ static int VF2LinkedSeatIndex(CVillager &villager, sFurnitureInfo2 const &info)
         if (*reinterpret_cast<int *>(record + 0x04) != info.unknown0) continue;
         // Four peep slots at +0x20, one dword each, exactly as the link writes
         // them. The first holding this villager is the seat it was given.
+        //
+        // MATCHING ON THE PEEP ID IS THE ENGINE'S OWN TEST, not a guess.
+        // FindPeepSlot at +0xE0 compares record[+0x20 + slot*4] against
+        // CVillager+0x1BB48 to decide "is this villager already in this seat",
+        // which is exactly the comparison below.
+        //
+        // Nor can a stale occupant mislead it. That same walk validates each
+        // occupied slot -- VillagerExists at +0xE8, and the occupant's
+        // +0x1BBA4 against record[+0x30 + slot*4] at +0x10B -- and writes
+        // 0xFFFFFFFF back into the slot at +0x13B when either check fails. A
+        // dead or reassigned villager's id is therefore cleared by the engine
+        // rather than left behind for this scan to find.
+        //
+        // Two villagers at one table hold DIFFERENT slots, because the walk
+        // claims the first free one and writes its occupant in before
+        // returning.
         for (int seat = 0; seat < 4; ++seat) {
             if (*reinterpret_cast<int *>(record + 0x20 + seat * 4) == peepId) {
                 return seat;
@@ -27268,6 +27284,16 @@ static int VF2LinkedSeatIndex(CVillager &villager, sFurnitureInfo2 const &info)
 // each handler serves exactly ONE table, so it is passed as a literal at the
 // call site. Reading it at runtime would mean declaring
 // GetFurnitureContentBlock and HasObject for a value that cannot vary.
+//
+// ONLY EVEN SEAT COUNTS REACH THIS. The halving rule assumes the seats divide
+// evenly between two sides, which both tables do -- 4 and 2. Surveying every
+// .fmap the patcher ships, eight have an ODD seat-marker count, and all eight
+// are single-seat chaises (Chaise_blue / brown / green / red). Those route
+// through VF2HandleMobileChaise, which plans a POSE and a head direction
+// rather than a chair animation, so they never reach this function. Were a
+// one-seat item ever pointed at it, seats/2 is 0 and the sole occupant would
+// always take the far-side arm -- harmless but arbitrary, which is why the
+// absence of such a caller is recorded here rather than assumed.
 
 // The sit animation for ONE seat at a table.
 //
