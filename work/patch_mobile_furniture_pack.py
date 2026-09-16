@@ -26367,9 +26367,14 @@ static bool gVF2PicnicPropPlaced = false;
 // "a little positioning adjustment to the right". World pixels, the same units
 // VF2SpaTreatmentPoint already nudges in with `point.y -= 4`. Kept small and
 // named so it is one number to retune if the next playtest wants more or less.
-// Raised on owner report: "move the drink props to the right so they're
-// centered on the table." The previous 6 did not reach the centre.
-static int const kVF2PatioDrinksNudgeX = 13;
+// Raised twice on owner report. First "move the drink props to the right so
+// they're centered on the table" took it from 6 to 13; after playing that
+// build the owner asked for "a little bit to the right like 5 pixels" more.
+//
+// Screen-space and chosen by eye against the art, like the other prop nudges
+// -- there is no measurable ground truth for it, so it is the owner's judgement
+// that decides when it is centred.
+static int const kVF2PatioDrinksNudgeX = 18;
 // The mobile meal sprite is authored at the table centre. The PC table
 // artwork needs a small screen-space correction: upward, then toward the
 // table's NE/NW side. Keep the placement record untouched and apply this
@@ -34734,8 +34739,17 @@ static bool VF2VillagerIsDroppedOnAddedFurniture(
 // playtest shows the villager moved the wrong way or too far, these are the two
 // numbers to change, and the x sign is the first thing to suspect.
 // The yoga mat's stand block is three cells wide by two deep and the derived
-// hotspot sits at its edge, so the villager is moved toward the block centre.
-static int const kVF2YogaMatCentreNudgeX = 10;
+// hotspot sits at its edge, so the villager is moved off it toward the mat.
+//
+// DIRECTION CHANGED ON OWNER REPORT, not just magnitude. The B187 build moved
+// along X only with a flat +5 on Y, and +Y is DOWN-screen. After playing it the
+// owner asked to "move yoga NE or NW depending on furniture position 5 pixels".
+// NE and NW are diagonals and both travel UP-screen, so Y is now negative and
+// carries the same magnitude as X, while the X sign follows the furniture's own
+// orientation. That is the convention the picnic meal nudge already uses --
+// `x += facesEast ? +X : -X` with `y -= Y` -- and the meal is confirmed
+// correct in play.
+static int const kVF2YogaMatCentreNudgeX = 5;
 static int const kVF2YogaMatCentreNudgeY = 5;
 // Raised on repeat owner report: "put the hotspot so villagers stand on the
 // bottom in the little corner of the gym, respecting the orientation of the
@@ -34850,10 +34864,13 @@ static bool VF2FindAddedFurnitureVenueEx(
     // need. If a future caller passes an altItemId whose nudge should DIFFER
     // from its itemId's, this block is where that assumption breaks.
     if (itemId == 0x220 || itemId == __VF2_YOGA_EQUIPMENT_ITEM_ID__) {
+        // NE for an east-facing mat, NW for a west-facing one. The X sign
+        // picks the side and the negative Y carries both diagonals up-screen,
+        // which is what makes this NE/NW rather than merely east/west.
         outPoint.x += VF2FurnitureFacesEast(foundOrientation)
             ? kVF2YogaMatCentreNudgeX
             : -kVF2YogaMatCentreNudgeX;
-        outPoint.y += kVF2YogaMatCentreNudgeY;
+        outPoint.y -= kVF2YogaMatCentreNudgeY;
     }
     return true;
 }
