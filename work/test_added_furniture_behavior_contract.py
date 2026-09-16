@@ -245,8 +245,11 @@ class TestAddedFurnitureContract(unittest.TestCase):
                       "the position check does not run when a venue resolved, "
                       "which is precisely the reported bug")
         guard = body[body.index("if (hasVenue &&"):]
-        self.assertIn("VF2VillagerIsOnOtherFurniture(villager, itemId, altItemId)",
-                      guard)
+        self.assertIn(
+            "VF2VillagerIsOnOtherFurniture(villager, itemId, altItemId, object)",
+            guard,
+            "the guard no longer receives the donor object, so it cannot tell "
+            "shared-object furniture from an unrelated sofa")
         self.assertLess(
             body.index("if (hasVenue &&"), body.index("VF2BeginAddedFurnitureVenue"),
             "the position check must run BEFORE the venue window opens")
@@ -262,8 +265,17 @@ class TestAddedFurnitureContract(unittest.TestCase):
         src = source()
         start = src.index("static bool VF2VillagerIsOnOtherFurniture(")
         body = src[start:src.index("\n}", start)]
-        self.assertIn("if (candidate < 0) return false;", body,
+        self.assertIn("if (slot < 0) return false;", body,
                       "standing on open floor must not count as other furniture")
+        # NARROWED after review: only furniture answering the SAME donor object
+        # can be stolen from, because the venue window redirects the donor's own
+        # FindFurniture and a donor searches only its own object id. Guarding on
+        # ANY furniture declined an autonomous bike action whenever the villager
+        # stood on a sofa, which is the shape AGENTS.md warns about -- a placed
+        # item changing WHETHER a behaviour is available.
+        self.assertIn("(CContentMap::EObject)object, sample, info", body,
+                      "the guard no longer restricts itself to furniture that "
+                      "shares the donor object")
         self.assertIn("if (candidate == itemId) return false;", body,
                       "standing on the item itself must not count as other")
         self.assertIn("altItemId >= 0 && candidate == altItemId", body,

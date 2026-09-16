@@ -34768,15 +34768,53 @@ static bool VF2VillagerIsStandingOnItem(CVillager &villager, int itemId)
 }
 
 static bool VF2VillagerIsOnOtherFurniture(
-    CVillager &villager, int itemId, int altItemId)
+    CVillager &villager, int itemId, int altItemId, int object)
 {
+    // VF2BehaviorPtOnFurnitureIndex, not VF2FurnitureSlotAtPoint: this helper
+    // is emitted in the spontaneous-behaviours unit, and that slot helper only
+    // exists in the mobile-furniture unit. A function emitted by one generator
+    // is not in scope from another (AGENTS.md 8), and the compile test caught
+    // exactly that.
     ldwPoint sample = villager.FeetPos();
     sample.y -= 10;
-    int const candidate = VF2FurnitureItemAtPoint(sample);
-    if (candidate < 0) return false;          // standing on open floor
+    int const slot = VF2BehaviorPtOnFurnitureIndex(FurnitureManager, sample);
+    if (slot < 0) return false;               // standing on open floor
+    unsigned char *manager = reinterpret_cast<unsigned char *>(&FurnitureManager);
+    int const count = *reinterpret_cast<int *>(manager + 0x1004);
+    if (slot >= count) return false;
+    unsigned char *record = manager + 0x1008 + slot * 0x40;
+    if ((*reinterpret_cast<unsigned int *>(record + 0x0C) & 1) == 0) return false;
+    int const candidate = *reinterpret_cast<int *>(record);
     if (candidate == itemId) return false;    // standing on this very item
     if (altItemId >= 0 && candidate == altItemId) return false;
-    return true;
+    // ONLY FURNITURE SHARING THE DONOR'S OBJECT CAN BE STOLEN FROM.
+    //
+    // Narrowed after review found the unconditional form too broad: it
+    // declined an autonomous Exercise Bike action whenever the villager
+    // happened to be standing on ANY furniture at all -- a sofa, a bed -- even
+    // with the bike placed and reachable. That is the shape AGENTS.md warns
+    // about, where a placed item changes WHETHER a behaviour is available
+    // rather than only where it happens.
+    //
+    // The hijack this guard exists to stop comes from the venue window
+    // redirecting the DONOR's FindFurniture, and a donor only ever searches
+    // its own object id. So the villager is at risk of being walked away only
+    // from furniture answering that SAME object: Treadmill and Exercise Bike
+    // both 0x04, Pool Table and Ping-Pong Table both 0x36. A sofa is not 0x04
+    // and was never at risk.
+    //
+    // CFurnitureManager::FurnitureHasObject would answer this directly but is
+    // PRIVATE (?FurnitureHasObject@CFurnitureManager@@AAE_N...), so the same
+    // question is asked through the public FindFurniture: search for this
+    // object from the villager's own feet and see whether the nearest match is
+    // the very placement they are standing on. Same handle means this
+    // furniture answers that object.
+    sFurnitureInfo2 info = {};
+    if (!FurnitureManager.FindFurniture(
+            (CContentMap::EObject)object, sample, info, true, 0, 0)) {
+        return false;
+    }
+    return info.unknown0 == *reinterpret_cast<int *>(record + 0x04);
 }
 
 static bool VF2VillagerIsDroppedOnAddedFurniture(
@@ -35284,7 +35322,7 @@ static void VF2RunOwnFurnitureActionEx(
     // Standing on open floor returns false, so ordinary autonomous behaviour
     // is untouched: a villager who wanders toward the bike still gets it.
     if (hasVenue &&
-        VF2VillagerIsOnOtherFurniture(villager, itemId, altItemId)) {
+        VF2VillagerIsOnOtherFurniture(villager, itemId, altItemId, object)) {
         return;
     }
     if (!hasVenue) {
