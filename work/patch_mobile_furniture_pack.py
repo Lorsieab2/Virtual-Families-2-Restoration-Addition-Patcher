@@ -34530,10 +34530,6 @@ static bool VF2LinkedFurnitureItemIs(
 static CVillagerPlans *gVF2AddedFurnitureVenuePlans = 0;
 static ldwPoint gVF2AddedFurnitureVenuePoint = {};
 static bool gVF2AddedFurnitureVenueActive = false;
-// The villager the open venue belongs to. FindFurniture is a CFurnitureManager
-// method and receives no villager, so the window records its owner here for
-// the lookup interceptor to match against.
-static CVillager *gVF2AddedFurnitureVenueVillager = 0;
 
 
 
@@ -34692,7 +34688,6 @@ static bool VF2FindAddedFurnitureVenue(
 static void VF2BeginAddedFurnitureVenue(CVillager &villager, ldwPoint point)
 {
     gVF2AddedFurnitureVenuePlans = reinterpret_cast<CVillagerPlans *>(&villager);
-    gVF2AddedFurnitureVenueVillager = &villager;
     gVF2AddedFurnitureVenuePoint = point;
     gVF2AddedFurnitureVenueActive = true;
 }
@@ -34701,7 +34696,6 @@ static void VF2EndAddedFurnitureVenue(CVillager &villager)
 {
     if (gVF2AddedFurnitureVenuePlans == reinterpret_cast<CVillagerPlans *>(&villager)) {
         gVF2AddedFurnitureVenuePlans = 0;
-        gVF2AddedFurnitureVenueVillager = 0;
         gVF2AddedFurnitureVenueActive = false;
     }
 }
@@ -34806,10 +34800,28 @@ static bool __cdecl VF2FindFurnitureAtAddedFurnitureImpl(
     int b,
     bool c)
 {
-    if (gVF2AddedFurnitureVenueActive &&
-        gVF2AddedFurnitureVenueVillager != 0 &&
-        gVF2AddedFurnitureVenuePlans ==
-            reinterpret_cast<CVillagerPlans *>(gVF2AddedFurnitureVenueVillager)) {
+    // WHY THERE IS NO OWNER COMPARISON HERE.
+    //
+    // FindFurniture is a CFurnitureManager method and receives no villager, so
+    // this cannot ask "is this call for the window's owner?" the way the
+    // PlanToGo interceptors do -- they get the CVillagerPlans* as `this`.
+    //
+    // An earlier revision papered over that by recording the owning villager
+    // in a second global and comparing it against
+    // gVF2AddedFurnitureVenuePlans. Both were assigned from the SAME
+    // &villager in VF2BeginAddedFurnitureVenue, so that comparison was a
+    // TAUTOLOGY: it could never be false while the window was open, and it
+    // merely looked like an ownership check. Both the comparison and the
+    // now-unused global are removed rather than left to mislead the next
+    // reader.
+    //
+    // The window is safe without one because of its LIFETIME, not because of
+    // a test. VF2RunOwnFurnitureActionEx opens it immediately before invoking
+    // the donor and VF2EndAddedFurnitureVenue closes it immediately after,
+    // with no suspension point in between: the donor's FindFurniture and
+    // PlanToGo both run inside that one synchronous call, for that one
+    // villager. Nothing else can observe the window open.
+    if (gVF2AddedFurnitureVenueActive) {
         point = gVF2AddedFurnitureVenuePoint;
     }
     return manager->FindFurniture(object, point, *info, a, b, c);
