@@ -27163,44 +27163,96 @@ static bool VF2RunMobilePreparingDrinks(CVillager &villager)
 // record at +0x14/+0x18 holds the TABLE's own world position. The sign of the
 // seat's offset from the table therefore says which side the villager was
 // seated on, without re-reading the fmap at runtime.
-static bool VF2SeatIsOnEastSide(sFurnitureInfo2 const &info, bool &known)
+// WHICH SEAT OF THIS TABLE DID THE LINK ASSIGN?
+//
+// THE PREVIOUS ATTEMPT WAS DEGENERATE, and it is worth recording why because
+// it read as correct. It asked `info.point.x >= tableX`, intending "is this
+// seat on the east half of the table". Decoded from
+// work/FurnitureManager.disasm.txt, LinkPeepToFurniture at +0x261-0x283
+// computes
+//
+//     info.point.x = record[+0x14] + (seatAnchor.x - contentBlock.origin.x)
+//
+// so `info.point.x - tableX` is a column offset measured from the CONTENT
+// BLOCK ORIGIN, which is non-negative for every seat on both tables. The test
+// answered TRUE for all of them, VF2SeatChairAnim collapsed back to one facing
+// per table, and the owner's reported wrong-side seating would have shipped
+// unchanged -- the same one-reachable-answer failure as the spa lounger's
+// `orientation == 3`.
+//
+// THE ENGINE ALREADY PICKS A SEAT BY INDEX. At +0x1FC LinkPeepToFurniture
+// loads the seat-marker array
+//
+//     {0x13, 0x14, 0x53, 0x54}
+//
+// -- the markers docs/discoveries.md records as selecting the exact
+// `Sit In Chair NW` or `Sit In Chair NE` label -- indexes it by the chosen
+// seat index at +0x212, and at +0x1DA writes the villager's peep id
+// (CVillager+0x1BB48) into record[+0x20 + index*4].
+//
+// So the index is recoverable after the link: find the record by placement
+// handle, then find which of its four peep slots holds THIS villager. That is
+// the engine's own choice, not a re-derivation from coordinates.
+static int VF2LinkedSeatIndex(CVillager &villager, sFurnitureInfo2 const &info)
 {
-    known = false;
+    int const peepId =
+        *reinterpret_cast<int *>(
+            reinterpret_cast<unsigned char *>(&villager) + 0x1BB48);
     unsigned char *manager = reinterpret_cast<unsigned char *>(&FurnitureManager);
     int count = *reinterpret_cast<int *>(manager + 0x1004);
-    if (count < 0 || count > 0x200) return false;
+    if (count < 0 || count > 0x200) return -1;
     for (int slot = 0; slot < count; ++slot) {
         unsigned char *record = manager + 0x1008 + slot * 0x40;
         if ((*reinterpret_cast<unsigned int *>(record + 0x0C) & 1) == 0) continue;
         if (*reinterpret_cast<int *>(record + 0x04) != info.unknown0) continue;
-        int const tableX = *reinterpret_cast<int *>(record + 0x14);
-        known = true;
-        return info.point.x >= tableX;
+        // Four peep slots at +0x20, one dword each, exactly as the link writes
+        // them. The first holding this villager is the seat it was given.
+        for (int seat = 0; seat < 4; ++seat) {
+            if (*reinterpret_cast<int *>(record + 0x20 + seat * 4) == peepId) {
+                return seat;
+            }
+        }
+        return -1;
     }
-    return false;
+    return -1;
 }
 
 // The sit animation for ONE seat at a table.
 //
-// Combines the two facts that each carry half the answer: the FURNITURE's
-// orientation (which way the table is turned) and WHICH SEAT of that table the
-// villager was linked to. Neither alone is sufficient -- orientation alone
-// gives every seat the same facing, and the seat alone ignores the rotation.
+// Two facts each carry half the answer and NEITHER IS SUFFICIENT ALONE. The
+// furniture's orientation says which way the table is turned;
+// LinkPeepToFurniture fills one sFurnitureInfo2 per PLACEMENT, so orientation
+// alone gives every seat at a table the same facing -- the reported defect.
+// The seat index says which seat, but ignores how the table is rotated.
+//
+// The seat markers pair up: {0x13, 0x53} against {0x14, 0x54}, differing by
+// 0x40. Seat indices 0 and 2 take the first of each pair, 1 and 3 the second,
+// so the LOW BIT of the index is the side of the table -- which is what the
+// owner's APK confirms independently. Reading assets/Picnic_table.png.fmap and
+// assets/Patio_table.png.fmap out of the mobile OBB:
+//
+//   picnic (5,9) 0x98 | (8,11) 0xA0 | (15,12) 0x98+side | (17,10) 0xA0+side
+//   patio  (3,8) 0x98 | (13,8) 0xA0
+//
+// The patio table's two seats differ by the SEAT BYTE alone -- its side bit is
+// clear for both -- while the picnic table's four use the seat byte within
+// each side. So the index's low bit separates the sides on both tables, which
+// a single fmap field does not.
 //
 // A villager sits facing ACROSS the table, so the two sides take opposite
-// animations. When the side cannot be determined the result falls back to the
-// furniture orientation alone, which is the previous behaviour and no worse.
-static char const *VF2SeatChairAnim(sFurnitureInfo2 const &info)
+// animations, and rotating the table swaps which physical side is which.
+// When the seat cannot be determined this falls back to the furniture
+// orientation alone, which is the previous behaviour and no worse.
+static char const *VF2SeatChairAnim(
+    CVillager &villager, sFurnitureInfo2 const &info)
 {
-    bool sideKnown = false;
-    bool const seatEast = VF2SeatIsOnEastSide(info, sideKnown);
     bool const tableFacesEast = VF2FurnitureFacesEast(info.orientation);
-    if (!sideKnown) {
+    int const seat = VF2LinkedSeatIndex(villager, info);
+    if (seat < 0) {
         return tableFacesEast ? "Sit In Chair NE" : "Sit In Chair NW";
     }
-    // Rotating the table swaps which physical side is which, so the table's
-    // own facing selects between the two mappings.
-    bool const useNE = tableFacesEast ? seatEast : !seatEast;
+    bool const seatOnFarSide = (seat & 1) != 0;
+    bool const useNE = tableFacesEast ? !seatOnFarSide : seatOnFarSide;
     return useNE ? "Sit In Chair NE" : "Sit In Chair NW";
 }
 
@@ -27258,7 +27310,7 @@ static bool VF2RunMobileDrinkAtPatioChair(CVillager &villager)
         // PER-SEAT, NOT PER-TABLE. See VF2SeatChairAnim: info.orientation is a
         // property of the placement, so using it alone gave every seat at this
         // table the same facing and reversed whichever side did not match.
-        VF2SeatChairAnim(info);
+        VF2SeatChairAnim(villager, info);
     plans->PlanToPlayAnim(
         ldwGameState::GetRandom(8) + 10, chairAnim, false, 0.02f);
     plans->PlanToPlaySound(
@@ -27414,7 +27466,7 @@ static bool VF2RunMobileEatAtPicnicTable(CVillager &villager)
         // PER-SEAT, NOT PER-TABLE. See VF2SeatChairAnim: info.orientation is a
         // property of the placement, so using it alone gave every seat at this
         // table the same facing and reversed whichever side did not match.
-        VF2SeatChairAnim(info);
+        VF2SeatChairAnim(villager, info);
     for (int round = 0; round < 3; ++round) {
         plans->PlanToPlaySound(
             static_cast<ESound>(ldwGameState::GetRandom(3) + 0x6A),

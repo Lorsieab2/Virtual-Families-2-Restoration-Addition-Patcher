@@ -152,37 +152,127 @@ class OrientationComesFromTheOrientationField(unittest.TestCase):
             r'static char const \*VF2SeatChairAnim\(.*?\n\}', CODE, re.S)
         self.assertIsNotNone(m)
         body = m.group(0)
-        self.assertIn("VF2SeatIsOnEastSide", body,
-                      "the seat's own side is no longer consulted, so every "
-                      "seat at a table would take the same facing again")
+        self.assertIn("VF2LinkedSeatIndex", body,
+                      "the seat is no longer consulted, so every seat at "
+                      "a table would take the same facing again")
         self.assertIn("VF2FurnitureFacesEast(info.orientation)", body,
                       "the furniture orientation is no longer consulted")
         # Both call sites must go through it rather than re-deriving a facing.
         self.assertEqual(
-            CODE.count("VF2SeatChairAnim(info);"), 2,
+            CODE.count("VF2SeatChairAnim(villager, info);"), 2,
             "both the picnic and the patio chair handlers must use the "
             "per-seat selection")
 
-    def test_the_seat_side_comes_from_the_placement_record(self):
-        """The side is recovered by comparing the seat point to the table.
+    def test_the_seat_comes_from_the_engines_own_index(self):
+        """The side must come from the ENGINE's seat choice, not coordinates.
 
-        info.point is the SEAT's position (placement + that seat's hotspot
-        offset); record+0x14 is the TABLE's own world position. The sign of the
-        difference is the side. Pinned because a future edit that compares
-        against info.point itself would always answer the same way.
+        SUPERSEDED APPROACH, recorded rather than deleted (AGENTS.md 11): this
+        previously asserted the helper compared info.point.x against the
+        table's record[+0x14]. That predicate was DEGENERATE. Decoded from
+        work/FurnitureManager.disasm.txt, LinkPeepToFurniture at +0x261-0x283
+        computes
+
+            info.point.x = record[+0x14] + (seatAnchor.x - block.origin.x)
+
+        so the difference is a column offset from the content block origin and
+        is non-negative for EVERY seat. The test answered true for all of them
+        and the wrong-side seating would have shipped unchanged.
+
+        The engine picks a seat by index and writes the villager's peep id into
+        record[+0x20 + index*4], so the index is recoverable and is the
+        engine's own choice.
         """
-        m = re.search(
-            r'static bool VF2SeatIsOnEastSide\(.*?\n\}', CODE, re.S)
-        self.assertIsNotNone(m, "the seat-side helper is gone")
-        body = m.group(0)
-        self.assertIn("record + 0x14", body,
-                      "the table's own position is no longer read from the "
-                      "placement record")
-        self.assertIn("info.point.x >= tableX", body)
+        src = CODE
+        self.assertIn("static int VF2LinkedSeatIndex(", src,
+                      "the seat index helper is gone")
+        start = src.index("static int VF2LinkedSeatIndex(")
+        body = src[start:src.index("\n}", start)]
+        self.assertIn("0x1BB48", body,
+                      "the villager's peep id is no longer read")
+        self.assertIn("record + 0x20 + seat * 4", body,
+                      "the peep slots the link writes are no longer scanned")
         # Identify by placement handle, never by point (AGENTS.md rule).
         self.assertIn("record + 0x04) != info.unknown0", body,
                       "the record must be identified by placement handle")
+        # The degenerate comparison must not come back.
+        self.assertNotIn("info.point.x >= tableX", src,
+                         "the column-offset comparison is degenerate: it is "
+                         "true for every seat on both tables")
 
+    def test_the_seat_predicate_actually_discriminates(self):
+        """Both animations must be reachable across the real seat data.
+
+        This is the assertion the previous round of tests lacked, and its
+        absence is why a predicate with ONE reachable answer passed review. A
+        structural test -- "the helper is called", "both strings appear" --
+        cannot tell a working conditional from a constant one.
+
+        VF2SeatChairAnim is evaluated here as pure logic over the actual inputs:
+        four seat indices against the four furniture orientations. The result
+        must not be constant for either, and each table's two sides must
+        disagree with each other.
+        """
+        # Mirror of the shipped expression. EFurnitureOrientation SE=0, SW=1,
+        # NE=2, NW=3; VF2FurnitureFacesEast is {SE, NE}.
+        def faces_east(o):
+            return o in (0, 2)
+
+        def anim(seat, orientation):
+            table_east = faces_east(orientation)
+            if seat < 0:
+                return "NE" if table_east else "NW"
+            far = (seat & 1) != 0
+            use_ne = (not far) if table_east else far
+            return "NE" if use_ne else "NW"
+
+        # 1. For a fixed table orientation, the four seats must not all agree.
+        for orientation in range(4):
+            got = {anim(s, orientation) for s in range(4)}
+            self.assertEqual(
+                got, {"NE", "NW"},
+                "orientation %d gives every seat the same facing (%s); the "
+                "predicate is degenerate" % (orientation, got))
+
+        # 2. For a fixed seat, rotating the table must change the facing.
+        for seat in range(4):
+            got = {anim(seat, o) for o in range(4)}
+            self.assertEqual(
+                got, {"NE", "NW"},
+                "seat %d ignores the furniture orientation (%s)"
+                % (seat, got))
+
+        # 3. Adjacent seats sit on opposite sides and must disagree.
+        for orientation in range(4):
+            self.assertNotEqual(
+                anim(0, orientation), anim(1, orientation),
+                "seats 0 and 1 are on opposite sides but take the same "
+                "animation at orientation %d" % orientation)
+
+        # 4. The documented fallback: with no seat, orientation alone decides,
+        #    and it must still distinguish east from west.
+        self.assertNotEqual(anim(-1, 0), anim(-1, 1),
+                            "the no-seat fallback ignores orientation")
+
+    def test_the_seat_side_is_the_index_low_bit(self):
+        """Pins the mapping the APK and the engine marker array agree on.
+
+        The engine's marker array is {0x13, 0x14, 0x53, 0x54}: the pairs
+        {0x13, 0x53} and {0x14, 0x54} differ by 0x40, so seat indices 0/2 take
+        one side and 1/3 the other -- the index's LOW BIT.
+
+        The owner's APK corroborates this and shows why no single fmap field
+        would do. Picnic seats carry 0x98/0xA0 within each side, distinguished
+        additionally by a side bit; the patio table's two seats have the side
+        bit CLEAR for both and differ by the seat byte alone.
+        """
+        src = CODE
+        start = src.index("static char const *VF2SeatChairAnim(")
+        body = src[start:src.index("\n}", start)]
+        self.assertIn("(seat & 1)", body,
+                      "the side is no longer taken from the seat index")
+        self.assertIn("VF2FurnitureFacesEast(info.orientation)", body,
+                      "the furniture orientation is no longer consulted")
+        self.assertIn("VF2LinkedSeatIndex(villager, info)", body)
     def test_no_raw_offset_read_of_the_info_struct_for_orientation(self):
         # The specific defect: a byte offset into sFurnitureInfo2 that lands in
         # padding. Any reappearance of this shape is the bug returning.

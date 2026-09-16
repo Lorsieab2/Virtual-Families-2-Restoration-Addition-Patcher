@@ -39,7 +39,18 @@ OBJS = WORK / "patched_mobile_furniture_pack_objs"
 # or a stale helper is compiled. This one reads the EMITTED unit, and the class
 # below reads the compiled object's own bytes -- the difference between "the
 # fix is written" and "players get the fix".
-CHAIR = 'VF2FurnitureFacesNorthWest(info.orientation)'
+# The per-seat chair selection, as it appears in the EMITTED unit.
+#
+# SUPERSEDED, recorded rather than deleted (AGENTS.md 11): this was
+# 'VF2FurnitureFacesNorthWest(info.orientation)', and before that an inline
+# `== 1`. Both were wrong, and the second was wrong twice over -- it is
+# `orientation == 3`, which collapses SE(0), SW(1) and NE(2) onto one answer,
+# and it was applied per TABLE when the defect the owner reported is per SEAT.
+#
+# What this module guards is unchanged: that the selection actually reaches an
+# emitted translation unit rather than existing only in the generator, which is
+# the exact failure mode where "the code is there" and the feature ships dead.
+CHAIR = 'VF2SeatChairAnim(villager, info)' 
 
 
 def emitted_sources():
