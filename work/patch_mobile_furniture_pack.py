@@ -27225,54 +27225,71 @@ static int VF2LinkedSeatIndex(CVillager &villager, sFurnitureInfo2 const &info)
 // alone gives every seat at a table the same facing -- the reported defect.
 // The seat index says which seat, but ignores how the table is rotated.
 //
-// HOW THE INDEX MAPS TO A SIDE, AND WHAT IS STILL INFERENCE.
+// HOW THE ORDINAL MAPS TO A SIDE -- now decoded, not inferred.
 //
-// PROVEN from work/FurnitureManager.disasm.txt: FindPeepSlot counts the
-// markers {0x13, 0x14, 0x53, 0x54} in that fixed order to get the seat
-// capacity, then returns a slot ordinal in that same order; the caller writes
-// the villager's peep id into record[+0x20 + ordinal*4]. So the ordinal is
-// real, recoverable, and ordered by the marker list.
+// A previous revision of this comment recorded the pairing {0x13, 0x53}
+// against {0x14, 0x54} as a reasonable inference. IT WAS WRONG, and the object
+// ids settle it.
 //
-// INFERENCE, NOT PROOF: that {0x13, 0x53} sit on one physical side and
-// {0x14, 0x54} on the other -- which is what makes the ordinal's LOW BIT the
-// side. The markers pair naturally by +0x40, and the owner's APK seat cells
-// split two-and-two either side of the picnic table and one-and-one either
-// side of the patio table, which is consistent with it. But the fmap cell
-// values do not carry the marker byte directly and this repository has no
-// ContentMap disassembly, so HasObject's marker-to-cell mapping could not be
-// decoded. The alternative grouping {0x13, 0x14} against {0x53, 0x54} -- i.e.
-// `seat < 2` rather than `seat & 1` -- is not excluded by anything available
-// here.
+// CContentMap::FindObject (ContentMap.obj +0x5E-0x71) extracts a cell's object
+// id from the furniture map:
 //
-// If the tables still seat a villager on the wrong side in play, THIS LINE IS
-// THE FIRST THING TO TRY: swap `(seat & 1)` for `(seat < 2)`. The rest of the
-// mechanism -- recovering the engine's own ordinal rather than re-deriving a
-// side from coordinates -- is unaffected by which of the two groupings is
-// right.
+//     ecx = (cell >> 11) & 0x40000
+//     edx =  cell        & 0x3F800
+//     id  = (ecx | edx) >> 11
 //
-// The APK cells that motivate the pairing:
+// Applied to the owner's APK maps (1.7.16, main.43 OBB):
 //
-//   picnic (5,9) 0x98 | (8,11) 0xA0 | (15,12) 0x98+side | (17,10) 0xA0+side
-//   patio  (3,8) 0x98 | (13,8) 0xA0
+//     Picnic_table   (5,9)=0x13 west    (8,11)=0x14 west
+//                    (15,12)=0x53 EAST  (17,10)=0x54 EAST
+//     Patio_table    (3,8)=0x13 west    (13,8)=0x14 EAST
 //
-// The patio table's two seats differ by the SEAT BYTE alone -- its side bit is
-// clear for both -- while the picnic table's four use the seat byte within
-// each side. So the index's low bit separates the sides on both tables, which
-// a single fmap field does not.
+// The patio table carries NO 0x53/0x54 at all, and 0x14 is WEST on the picnic
+// table but EAST on the patio table. So there is no global marker-to-side
+// rule, and any fixed grouping of the four markers is wrong on one table or
+// the other.
+//
+// WHAT DOES HOLD ON BOTH. FindPeepSlot enumerates the markers the block
+// actually has, in the fixed order {0x13, 0x14, 0x53, 0x54}, so a table's
+// ordinals run 0..seats-1 through its own present markers. Each map puts the
+// first half of that enumeration on one side and the second half on the other:
+//
+//     picnic, 4 seats: ordinals {0,1} | {2,3}
+//     patio,  2 seats: ordinal  {0}   | {1}
+//
+// which is `ordinal >= seats / 2` in both cases.
+//
+// The previous `(seat & 1)` grouped {0,2} against {1,3}. That is correct for
+// the two-seat patio table and WRONG for the four-seat picnic table, where it
+// puts one west and one east seat into each group -- so two of the four face
+// the wrong way, which is exactly the owner's screenshot.
+//
+// The seat count is a fixed property of the table, not of the placement, and
+// each handler serves exactly ONE table, so it is passed as a literal at the
+// call site. Reading it at runtime would mean declaring
+// GetFurnitureContentBlock and HasObject for a value that cannot vary.
+
+// The sit animation for ONE seat at a table.
+//
+// Two facts each carry half the answer and NEITHER IS SUFFICIENT ALONE.
+// LinkPeepToFurniture fills one sFurnitureInfo2 per PLACEMENT, so
+// info.orientation alone gives every seat at a table the same facing -- the
+// reported defect. The seat ordinal alone says which seat but ignores how the
+// table is turned.
 //
 // A villager sits facing ACROSS the table, so the two sides take opposite
-// animations, and rotating the table swaps which physical side is which.
-// When the seat cannot be determined this falls back to the furniture
-// orientation alone, which is the previous behaviour and no worse.
+// animations, and rotating the table swaps which physical side is which. When
+// the seat cannot be determined this falls back to the furniture orientation
+// alone, which is the previous behaviour and no worse.
 static char const *VF2SeatChairAnim(
-    CVillager &villager, sFurnitureInfo2 const &info)
+    CVillager &villager, sFurnitureInfo2 const &info, int seatCount)
 {
     bool const tableFacesEast = VF2FurnitureFacesEast(info.orientation);
     int const seat = VF2LinkedSeatIndex(villager, info);
     if (seat < 0) {
         return tableFacesEast ? "Sit In Chair NE" : "Sit In Chair NW";
     }
-    bool const seatOnFarSide = (seat & 1) != 0;
+    bool const seatOnFarSide = seat >= (seatCount / 2);
     bool const useNE = tableFacesEast ? !seatOnFarSide : seatOnFarSide;
     return useNE ? "Sit In Chair NE" : "Sit In Chair NW";
 }
@@ -27331,7 +27348,7 @@ static bool VF2RunMobileDrinkAtPatioChair(CVillager &villager)
         // PER-SEAT, NOT PER-TABLE. See VF2SeatChairAnim: info.orientation is a
         // property of the placement, so using it alone gave every seat at this
         // table the same facing and reversed whichever side did not match.
-        VF2SeatChairAnim(villager, info);
+        VF2SeatChairAnim(villager, info, 2);
     plans->PlanToPlayAnim(
         ldwGameState::GetRandom(8) + 10, chairAnim, false, 0.02f);
     plans->PlanToPlaySound(
@@ -27487,7 +27504,7 @@ static bool VF2RunMobileEatAtPicnicTable(CVillager &villager)
         // PER-SEAT, NOT PER-TABLE. See VF2SeatChairAnim: info.orientation is a
         // property of the placement, so using it alone gave every seat at this
         // table the same facing and reversed whichever side did not match.
-        VF2SeatChairAnim(villager, info);
+        VF2SeatChairAnim(villager, info, 4);
     for (int round = 0; round < 3; ++round) {
         plans->PlanToPlaySound(
             static_cast<ESound>(ldwGameState::GetRandom(3) + 0x6A),

@@ -50,7 +50,7 @@ OBJS = WORK / "patched_mobile_furniture_pack_objs"
 # What this module guards is unchanged: that the selection actually reaches an
 # emitted translation unit rather than existing only in the generator, which is
 # the exact failure mode where "the code is there" and the feature ships dead.
-CHAIR = 'VF2SeatChairAnim(villager, info)' 
+CHAIR = 'VF2SeatChairAnim(villager, info,' 
 
 
 def emitted_sources():

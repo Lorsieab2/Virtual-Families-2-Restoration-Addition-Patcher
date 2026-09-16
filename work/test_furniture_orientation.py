@@ -159,7 +159,8 @@ class OrientationComesFromTheOrientationField(unittest.TestCase):
                       "the furniture orientation is no longer consulted")
         # Both call sites must go through it rather than re-deriving a facing.
         self.assertEqual(
-            CODE.count("VF2SeatChairAnim(villager, info);"), 2,
+            CODE.count("VF2SeatChairAnim(villager, info, 2);")
+            + CODE.count("VF2SeatChairAnim(villager, info, 4);"), 2,
             "both the picnic and the patio chair handlers must use the "
             "per-seat selection")
 
@@ -200,57 +201,76 @@ class OrientationComesFromTheOrientationField(unittest.TestCase):
                          "true for every seat on both tables")
 
     def test_the_seat_predicate_actually_discriminates(self):
-        """Both animations must be reachable across the real seat data.
+        """Both animations must be reachable, on BOTH tables' real seat data.
 
-        This is the assertion the previous round of tests lacked, and its
-        absence is why a predicate with ONE reachable answer passed review. A
-        structural test -- "the helper is called", "both strings appear" --
-        cannot tell a working conditional from a constant one.
+        This is the assertion the earlier rounds lacked, and its absence is why
+        two predicates with one reachable answer passed review. A structural
+        test -- "the helper is called", "both strings appear" -- cannot tell a
+        working conditional from a constant one.
 
-        VF2SeatChairAnim is evaluated here as pure logic over the actual inputs:
-        four seat indices against the four furniture orientations. The result
-        must not be constant for either, and each table's two sides must
-        disagree with each other.
+        The ground truth is decoded, not assumed. CContentMap::FindObject
+        extracts a cell's object id as ((cell >> 11) & 0x40000 | cell & 0x3F800)
+        >> 11; applied to the owner's APK maps that gives
+
+            picnic  (5,9)=0x13 west  (8,11)=0x14 west
+                    (15,12)=0x53 EAST (17,10)=0x54 EAST
+            patio   (3,8)=0x13 west  (13,8)=0x14 EAST
+
+        and FindPeepSlot enumerates present markers in the order
+        {0x13, 0x14, 0x53, 0x54}, so ordinals map to those cells in that order.
         """
-        # Mirror of the shipped expression. EFurnitureOrientation SE=0, SW=1,
-        # NE=2, NW=3; VF2FurnitureFacesEast is {SE, NE}.
         def faces_east(o):
-            return o in (0, 2)
+            return o in (0, 2)          # EFurnitureOrientation SE=0, NE=2
 
-        def anim(seat, orientation):
+        def anim(seat, orientation, seat_count):
             table_east = faces_east(orientation)
             if seat < 0:
                 return "NE" if table_east else "NW"
-            far = (seat & 1) != 0
+            far = seat >= (seat_count // 2)
             use_ne = (not far) if table_east else far
             return "NE" if use_ne else "NW"
 
-        # 1. For a fixed table orientation, the four seats must not all agree.
-        for orientation in range(4):
-            got = {anim(s, orientation) for s in range(4)}
-            self.assertEqual(
-                got, {"NE", "NW"},
-                "orientation %d gives every seat the same facing (%s); the "
-                "predicate is degenerate" % (orientation, got))
+        # The decoded side of each ordinal, per table.
+        TRUTH = {
+            4: {0: "west", 1: "west", 2: "east", 3: "east"},   # picnic
+            2: {0: "west", 1: "east"},                          # patio
+        }
 
-        # 2. For a fixed seat, rotating the table must change the facing.
-        for seat in range(4):
-            got = {anim(seat, o) for o in range(4)}
-            self.assertEqual(
-                got, {"NE", "NW"},
-                "seat %d ignores the furniture orientation (%s)"
-                % (seat, got))
+        for seat_count, sides in TRUTH.items():
+            # 1. Seats on OPPOSITE sides must take opposite animations, and
+            #    seats on the SAME side must agree. This is the check that
+            #    rejects the superseded (seat & 1), which split {0,2}|{1,3} and
+            #    therefore put a west seat and an east seat in each group.
+            for a, sa in sides.items():
+                for b, sb in sides.items():
+                    for orientation in range(4):
+                        same = anim(a, orientation, seat_count) ==                             anim(b, orientation, seat_count)
+                        self.assertEqual(
+                            same, sa == sb,
+                            "seats %d(%s) and %d(%s) on a %d-seat table "
+                            "disagree with their decoded sides at "
+                            "orientation %d" % (a, sa, b, sb, seat_count,
+                                                orientation))
 
-        # 3. Adjacent seats sit on opposite sides and must disagree.
-        for orientation in range(4):
-            self.assertNotEqual(
-                anim(0, orientation), anim(1, orientation),
-                "seats 0 and 1 are on opposite sides but take the same "
-                "animation at orientation %d" % orientation)
+            # 2. For a fixed orientation the seats must not all agree.
+            for orientation in range(4):
+                got = {anim(s, orientation, seat_count) for s in sides}
+                self.assertEqual(
+                    got, {"NE", "NW"},
+                    "a %d-seat table at orientation %d gives every seat the "
+                    "same facing (%s); the predicate is degenerate"
+                    % (seat_count, orientation, got))
 
-        # 4. The documented fallback: with no seat, orientation alone decides,
-        #    and it must still distinguish east from west.
-        self.assertNotEqual(anim(-1, 0), anim(-1, 1),
+            # 3. For a fixed seat, rotating the table must change the facing.
+            for seat in sides:
+                got = {anim(seat, o, seat_count) for o in range(4)}
+                self.assertEqual(
+                    got, {"NE", "NW"},
+                    "seat %d of a %d-seat table ignores the furniture "
+                    "orientation (%s)" % (seat, seat_count, got))
+
+        # 4. The documented fallback: with no seat, orientation alone decides.
+        self.assertNotEqual(anim(-1, 0, 4), anim(-1, 1, 4),
                             "the no-seat fallback ignores orientation")
 
     def test_the_seat_side_is_the_index_low_bit(self):
@@ -268,8 +288,13 @@ class OrientationComesFromTheOrientationField(unittest.TestCase):
         src = CODE
         start = src.index("static char const *VF2SeatChairAnim(")
         body = src[start:src.index("\n}", start)]
-        self.assertIn("(seat & 1)", body,
-                      "the side is no longer taken from the seat index")
+        self.assertIn("seat >= (seatCount / 2)", body,
+                      "the side is no longer taken from the seat ordinal "
+                      "against the table's own seat count")
+        self.assertNotIn("(seat & 1)", body,
+                         "ordinal parity splits {0,2}|{1,3}, which puts a west "
+                         "seat and an east seat in each group on the four-seat "
+                         "picnic table")
         self.assertIn("VF2FurnitureFacesEast(info.orientation)", body,
                       "the furniture orientation is no longer consulted")
         self.assertIn("VF2LinkedSeatIndex(villager, info)", body)
