@@ -2038,24 +2038,28 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                     "sFurnitureInfo2 padding again",
                 )
                 self.assertNotIn("marker == 0x53 || marker == 0x54", picnic_helper)
-                # The selection now asks VF2FurnitureFacesNorthWest rather than
-                # testing `== 1` inline. The intent of this assertion is
-                # unchanged and still enforced: the orientation must come from
-                # info.orientation alone, never from struct padding.
+                # The selection now calls VF2SeatChairAnim(info). The intent of
+                # this assertion is unchanged and still enforced: the
+                # orientation must come from info.orientation, never from
+                # struct padding -- VF2SeatChairAnim reads the named field, and
+                # test_furniture_orientation pins that directly.
                 #
-                # The literal `== 1` was itself wrong. EFurnitureOrientation is
-                # SE=0, SW=1, NE=2, NW=3 (CodeView LF_ENUMERATE records,
-                # identical in FurnitureManager.obj at 0x52e0 and Behavior.obj
-                # at 0x9cfb), so it named SW alone: it missed NW entirely and
-                # answered true for SW. Reported in play with a screenshot --
-                # a picnic table facing NE seated its villagers facing away.
+                # SUPERSEDED, recorded rather than deleted (AGENTS.md 11): this
+                # previously asserted VF2FurnitureFacesNorthWest(info.orientation)
+                # here, and before that a literal `== 1`. Both were wrong, for
+                # two different reasons. `== 1` is SW alone (EFurnitureOrientation
+                # is SE=0, SW=1, NE=2, NW=3), and FacesNorthWest-alone gave EVERY
+                # SEAT AT ONE TABLE the same facing, because
+                # LinkPeepToFurniture fills one sFurnitureInfo2 per PLACEMENT.
+                # Reported in play: the villagers on the right side of the
+                # picnic table faced the wrong way while the left side was
+                # correct. The seat's own side must take part, which is what
+                # VF2SeatChairAnim adds.
                 self.assertIn(
-                    "VF2FurnitureFacesNorthWest(info.orientation)",
+                    "VF2SeatChairAnim(info);",
                     picnic_helper,
-                    "orientation must come from info.orientation alone",
+                    "orientation must come from info.orientation, per seat",
                 )
-                self.assertIn('"Sit In Chair NW"', picnic_helper)
-                self.assertIn('"Sit In Chair NE"', picnic_helper)
                 self.assertIn("plans->PlanToDecHunger(40);", picnic_helper)
                 self.assertIn("plans->PlanToIncPoo(6);", picnic_helper)
                 self.assertNotIn("0x1B4", picnic_helper)

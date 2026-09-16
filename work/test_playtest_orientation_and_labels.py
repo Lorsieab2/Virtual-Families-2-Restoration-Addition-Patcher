@@ -328,13 +328,51 @@ class ThePositionNudgesAreNamedAndScoped(unittest.TestCase):
         self.assertIn("gVF2PatioPropX + kVF2PatioDrinksNudgeX", text)
 
     def test_the_home_gym_nudge_is_scoped_to_the_gym(self):
-        """The Yoga Equipment shares the borrowed fmap and stands correctly, so
-        it must not move."""
+        """The gym's own correction stays keyed to the gym's item id.
+
+        SUPERSEDED CLAIM, recorded rather than deleted (AGENTS.md 11): this
+        docstring previously said the Yoga Equipment "stands correctly, so it
+        must not move". That was wrong. The owner reported with a screenshot
+        that a villager doing yoga stands off the mat's right edge on bare
+        floor, so the yoga route needs its own correction -- pinned by
+        test_the_yoga_route_centres_the_villager_on_the_mat below. The two
+        corrections are separate because they want different destinations: the
+        gym's cubby is not the mat's centre.
+        """
         text = source_text()
         self.assertIn("if (itemId == __VF2_HOME_GYM_ITEM_ID__) {", text)
         self.assertIn("VF2FurnitureFacesEast(foundOrientation)", text)
         self.assertIn("kVF2HomeGymStandNudgeX", text)
         self.assertIn("outPoint.y += kVF2HomeGymStandNudgeY;", text)
+
+    def test_the_yoga_route_centres_the_villager_on_the_mat(self):
+        """Doing yoga must stand the villager ON the blue mat, not beside it.
+
+        Reported in play with a screenshot. The fmap is not at fault: decoding
+        the owner's APK (1.7.16, main.43 OBB) shows YogaGearStd.png.fmap is
+        byte-identical to both shipped PC maps, including its six-cell stand
+        block 0x0203A800 at (3,2) (4,2) (5,2) (3,3) (4,3) (5,3). The hotspot
+        the engine derives from it lands at that block's EDGE, so the
+        destination takes a correction the same shape the Home Gym uses.
+
+        Covers BOTH variants: 0x220 is the stock Yoga Equipment and
+        __VF2_YOGA_EQUIPMENT_ITEM_ID__ substitutes to InvisibleYogaEquipment.
+        """
+        text = source_text()
+        self.assertIn(
+            "if (itemId == 0x220 || itemId == __VF2_YOGA_EQUIPMENT_ITEM_ID__) {",
+            text,
+            "the yoga centring is gone, or no longer covers both variants")
+        self.assertIn("kVF2YogaMatCentreNudgeX", text)
+        self.assertIn("outPoint.y += kVF2YogaMatCentreNudgeY;", text)
+        # Orientation-aware per the owner's standing rule: respect the
+        # furniture orientation always.
+        block = text[text.index("THE YOGA MAT: STAND ON IT"):]
+        block = block[:block.index("return true;")]
+        self.assertIn("VF2FurnitureFacesEast(foundOrientation)", block,
+                      "the yoga correction ignores the furniture orientation")
+        self.assertIn("-kVF2YogaMatCentreNudgeX", block,
+                      "the correction is not mirrored for west-facing mats")
 
     def test_the_picnic_meal_moves_up_and_toward_each_table_facing(self):
         text = source_text()
