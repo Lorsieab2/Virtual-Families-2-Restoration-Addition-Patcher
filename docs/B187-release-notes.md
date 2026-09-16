@@ -47,16 +47,35 @@ same facing**. That is not a near miss; it is geometrically impossible for a
 table whose seats sit on opposite sides, and it is exactly what the screenshots
 show — one side right, the other reversed.
 
-The seat's own side is now recovered at runtime by comparing the seat point
-against the table's position in the placement record, identified by placement
-handle rather than by point. The facing combines that with the furniture's
-orientation, so a villager faces across the table and the two sides take
-opposite animations.
+The fix takes the seat from **the engine's own choice**, and the route there is
+worth recording because the obvious approach fails silently.
 
-The APK corroborates the split independently: the picnic table's four seats
-divide two-and-two either side of the table centre on its 22-wide grid, and the
-patio table's two seats divide one-and-one on its 19-wide grid. No seat sits on
-the centre line.
+The first attempt compared the seat's position against the table's, expecting a
+signed offset. `LinkPeepToFurniture` at +0x261–0x283 computes
+
+```
+info.point.x = record[+0x14] + (seatAnchor.x - contentBlock.origin.x)
+```
+
+so that difference is a column offset measured from the content block origin,
+and is **non-negative for every seat on both tables**. The comparison answered
+the same way for all of them, the per-seat selection collapsed straight back to
+one facing per table, and the defect would have shipped unchanged. It was
+caught in review rather than by the test suite, because the tests pinned the
+helper's structure rather than its ability to distinguish anything — the same
+lesson as the spa lounger below.
+
+What the engine already does: it loads the seat-marker array
+`{0x13, 0x14, 0x53, 0x54}` — the markers `docs/discoveries.md` records as
+selecting the exact `Sit In Chair NW` or `NE` label — indexes it by the seat it
+chose, and writes the villager's peep id into `record[+0x20 + index*4]`. So the
+index is recoverable after the link, and the markers pair as `{0x13, 0x53}`
+against `{0x14, 0x54}`, which makes the index's low bit the side.
+
+The APK confirms the mapping and shows why no single map field would do. The
+picnic table's four seats carry `0x98`/`0xA0` within each side and are
+separated by a side bit; the patio table's two seats have that bit **clear for
+both** and are separated by the seat byte alone.
 
 ## The spa lounger's orientation "had no change"
 
@@ -172,7 +191,10 @@ who owns none of these items loses nothing. The manifest records this as
 Everything above is **static and disassembly evidence**: source, decoded object
 files, the compiled executable, and the build manifest. Each fix is two-way
 validated, meaning reverting it makes a test fail, and the generated C++
-compiles.
+compiles. For the table seating the tests additionally assert that the
+selection DISCRIMINATES -- that no orientation gives every seat the same
+facing and no seat ignores the rotation -- because the first version of that
+fix passed a structural test while having exactly one reachable answer.
 
 None of that establishes that a villager sits the right way, walks to the right
 machine, or stands on the mat. **Live play by the owner is the only thing that
