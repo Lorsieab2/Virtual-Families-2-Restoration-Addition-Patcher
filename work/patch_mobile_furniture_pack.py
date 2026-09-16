@@ -34794,6 +34794,19 @@ static bool VF2FindAddedFurnitureVenueEx(
     // substitutes to InvisibleYogaEquipment (0x32A). Both stand on this same
     // borrowed mat, so both take the correction, and it is orientation-aware
     // per the owner's standing rule.
+    //
+    // NOTE, checked and deliberately left as is: this tests the itemId
+    // PARAMETER, not recordItem -- the id of the record the loop above
+    // actually matched. Those can differ only when a caller passes a
+    // non-negative altItemId, and VF2YogaEquipmentWorkout is the only one that
+    // does (itemId 0x32A, altItemId 0x220). Both of its ids are accepted by
+    // the arm below and take identical offsets, because they are the same
+    // physical mat, so there is no behavioural difference today.
+    //
+    // It is recorded rather than restructured because carrying recordItem out
+    // of the loop would be a wider change than anything the reported defects
+    // need. If a future caller passes an altItemId whose nudge should DIFFER
+    // from its itemId's, this block is where that assumption breaks.
     if (itemId == 0x220 || itemId == __VF2_YOGA_EQUIPMENT_ITEM_ID__) {
         outPoint.x += VF2FurnitureFacesEast(foundOrientation)
             ? kVF2YogaMatCentreNudgeX
