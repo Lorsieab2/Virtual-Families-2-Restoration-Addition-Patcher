@@ -559,10 +559,15 @@ class TestOnlyReceivingIsAutonomous(unittest.TestCase):
         body = src[start:src.index("\n}", start)]
         self.assertIn("ldwGameState::GetRandom(11) + 55", body) # about one real minute
         self.assertIn("PlanToLieDown", body)                    # the nap's posture
-        # Chosen per lounger. This now pins the CORRECTED question, because
-        # `info.orientation == 1` was itself the defect: EFurnitureOrientation
-        # is SE=0, SW=1, NE=2, NW=3, so `== 1` is SW alone and missed NW.
-        self.assertIn("VF2FurnitureFacesNorthWest(info.orientation)", body)
+        # Chosen per lounger. This pins the CORRECTED question; two earlier
+        # forms were each wrong. `info.orientation == 1` is SW alone and missed
+        # NW. VF2FurnitureFacesNorthWest is `orientation == 3`, which collapsed
+        # SE(0), SW(1) and NE(2) onto ONE pose -- three of four placements
+        # identical, reported in play as "spa lounger villager orientation has
+        # no change". EFurnitureOrientation is SE=0, SW=1, NE=2, NW=3 and the
+        # head directions are an east/west pair, so the split is {SE, NE}
+        # against {SW, NW}.
+        self.assertIn("!VF2FurnitureFacesEast(info.orientation)", body)
         self.assertIn("static_cast<ESound>(0x101)", body)       # gulpahh_01.ogg
 
     def test_receiving_uses_sleep_animation_and_preserves_total_duration(self):
@@ -982,13 +987,19 @@ class TheTreatmentPoseFollowsTheLounger(unittest.TestCase):
         self.assertIn("SleepNE", body)
         # The orientation must still select between the two sleep animations --
         # that is what this test guards, and that intent is unchanged. What
-        # changed is the QUESTION asked: `info.orientation == 1` is SW alone and
-        # missed NW, so both the settle pose and the sleep strip now derive from
-        # a single VF2FurnitureFacesNorthWest call, which additionally makes it
-        # impossible for the two to disagree with each other -- the exact split
-        # the owner reported on the hammock, where the lie-down faced wrong
-        # while the sleep that followed it looked right.
-        self.assertIn("VF2FurnitureFacesNorthWest(info.orientation)", body,
+        # changed is the QUESTION asked, twice over. `info.orientation == 1` is
+        # SW alone and missed NW. Its replacement,
+        # VF2FurnitureFacesNorthWest, is `orientation == 3`, which collapsed
+        # SE(0), SW(1) and NE(2) onto one pose and one sleep strip -- three of
+        # the four placements produced an IDENTICAL result, which is what the
+        # owner reported as the lounger orientation having "no change".
+        #
+        # The split is east/west: {SE(0), NE(2)} against {SW(1), NW(3)}. Both
+        # the settle pose and the sleep strip still derive from a SINGLE test,
+        # which is what makes it impossible for the two to disagree -- the
+        # exact defect the owner reported on the hammock, where the lie-down
+        # faced wrong while the sleep that followed it looked right.
+        self.assertIn("!VF2FurnitureFacesEast(info.orientation)", body,
                       "the orientation no longer selects between the two "
                       "sleep animations, so one facing will look wrong")
         self.assertIn('"SleepNW"', body)

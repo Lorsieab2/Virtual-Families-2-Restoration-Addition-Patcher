@@ -86,7 +86,13 @@ class OrientationComesFromTheOrientationField(unittest.TestCase):
     # that the field is read BY NAME rather than at a raw offset that lands in
     # padding, and that the declaration governing these sites keeps orientation
     # as its second field.
-    CHAIR_SITE = 'VF2FurnitureFacesNorthWest(info.orientation)'
+    # The chair sites now call VF2SeatChairAnim(info), which reads
+    # info.orientation AND the seat's own side. Using the furniture
+    # orientation alone gave every seat at one table the same facing,
+    # which is why the right-hand side of both tables was reversed in
+    # play: LinkPeepToFurniture fills one sFurnitureInfo2 per
+    # PLACEMENT, so a table's two sides cannot be told apart by it.
+    CHAIR_SITE = 'static char const *VF2SeatChairAnim('
 
     def test_there_really_are_several_declarations(self):
         # If this ever becomes one declaration, the scoping below is
@@ -125,14 +131,247 @@ class OrientationComesFromTheOrientationField(unittest.TestCase):
                 "layout by hand before doing so")
 
     def test_the_chair_animation_reads_the_named_field(self):
-        m = re.search(r'char const \*chairAnim =(.*?);', CODE, re.S)
+        m = re.search(
+            r'static char const \*VF2SeatChairAnim\(.*?\n\}', CODE, re.S)
         self.assertIsNotNone(m, "the chair animation selection is gone")
-        expr = m.group(1)
+        expr = m.group(0)
         self.assertIn("info.orientation", expr,
                       "the animation is not chosen from info.orientation")
         self.assertIn("Sit In Chair NW", expr)
         self.assertIn("Sit In Chair NE", expr)
 
+    def test_the_chair_animation_is_chosen_per_seat_not_per_table(self):
+        """The defect this replaced: one facing for every seat at a table.
+
+        Reported in play with screenshots for both tables -- the villagers on
+        the right side faced the wrong way while the left side was correct.
+        info.orientation is a property of the PLACEMENT, so it cannot
+        distinguish two seats of one table; the seat's own side must take part.
+        """
+        m = re.search(
+            r'static char const \*VF2SeatChairAnim\(.*?\n\}', CODE, re.S)
+        self.assertIsNotNone(m)
+        body = m.group(0)
+        self.assertIn("VF2LinkedSeatIndex", body,
+                      "the seat is no longer consulted, so every seat at "
+                      "a table would take the same facing again")
+        self.assertIn("VF2FurnitureFacesEast(info.orientation)", body,
+                      "the furniture orientation is no longer consulted")
+        # Both call sites must go through it rather than re-deriving a facing.
+        self.assertEqual(
+            CODE.count("VF2SeatChairAnim(villager, info, 2);")
+            + CODE.count("VF2SeatChairAnim(villager, info, 4);"), 2,
+            "both the picnic and the patio chair handlers must use the "
+            "per-seat selection")
+
+    def test_the_seat_comes_from_the_engines_own_index(self):
+        """The side must come from the ENGINE's seat choice, not coordinates.
+
+        SUPERSEDED APPROACH, recorded rather than deleted (AGENTS.md 11): this
+        previously asserted the helper compared info.point.x against the
+        table's record[+0x14]. That predicate was DEGENERATE. Decoded from
+        work/FurnitureManager.disasm.txt, LinkPeepToFurniture at +0x261-0x283
+        computes
+
+            info.point.x = record[+0x14] + (seatAnchor.x - block.origin.x)
+
+        so the difference is a column offset from the content block origin and
+        is non-negative for EVERY seat. The test answered true for all of them
+        and the wrong-side seating would have shipped unchanged.
+
+        The engine picks a seat by index and writes the villager's peep id into
+        record[+0x20 + index*4], so the index is recoverable and is the
+        engine's own choice.
+        """
+        src = CODE
+        self.assertIn("static int VF2LinkedSeatIndex(", src,
+                      "the seat index helper is gone")
+        start = src.index("static int VF2LinkedSeatIndex(")
+        body = src[start:src.index("\n}", start)]
+        self.assertIn("0x1BB48", body,
+                      "the villager's peep id is no longer read")
+        self.assertIn("record + 0x20 + seat * 4", body,
+                      "the peep slots the link writes are no longer scanned")
+        # Identify by placement handle, never by point (AGENTS.md rule).
+        self.assertIn("record + 0x04) != info.unknown0", body,
+                      "the record must be identified by placement handle")
+        # The degenerate comparison must not come back.
+        self.assertNotIn("info.point.x >= tableX", src,
+                         "the column-offset comparison is degenerate: it is "
+                         "true for every seat on both tables")
+
+    def test_the_seat_predicate_actually_discriminates(self):
+        """Both animations must be reachable, on BOTH tables' real seat data.
+
+        This is the assertion the earlier rounds lacked, and its absence is why
+        two predicates with one reachable answer passed review. A structural
+        test -- "the helper is called", "both strings appear" -- cannot tell a
+        working conditional from a constant one.
+
+        The ground truth is decoded, not assumed. CContentMap::FindObject
+        extracts a cell's object id as ((cell >> 11) & 0x40000 | cell & 0x3F800)
+        >> 11; applied to the owner's APK maps that gives
+
+            picnic  (5,9)=0x13 west  (8,11)=0x14 west
+                    (15,12)=0x53 EAST (17,10)=0x54 EAST
+            patio   (3,8)=0x13 west  (13,8)=0x14 EAST
+
+        and FindPeepSlot enumerates present markers in the order
+        {0x13, 0x14, 0x53, 0x54}, so ordinals map to those cells in that order.
+        """
+        def faces_east(o):
+            return o in (0, 2)          # EFurnitureOrientation SE=0, NE=2
+
+        def anim(seat, orientation, seat_count):
+            table_east = faces_east(orientation)
+            if seat < 0:
+                return "NE" if table_east else "NW"
+            far = seat >= (seat_count // 2)
+            use_ne = (not far) if table_east else far
+            return "NE" if use_ne else "NW"
+
+        # The decoded side of each ordinal, per table.
+        TRUTH = {
+            4: {0: "west", 1: "west", 2: "east", 3: "east"},   # picnic
+            2: {0: "west", 1: "east"},                          # patio
+        }
+
+        for seat_count, sides in TRUTH.items():
+            # 1. Seats on OPPOSITE sides must take opposite animations, and
+            #    seats on the SAME side must agree. This is the check that
+            #    rejects the superseded (seat & 1), which split {0,2}|{1,3} and
+            #    therefore put a west seat and an east seat in each group.
+            for a, sa in sides.items():
+                for b, sb in sides.items():
+                    for orientation in range(4):
+                        same = anim(a, orientation, seat_count) ==                             anim(b, orientation, seat_count)
+                        self.assertEqual(
+                            same, sa == sb,
+                            "seats %d(%s) and %d(%s) on a %d-seat table "
+                            "disagree with their decoded sides at "
+                            "orientation %d" % (a, sa, b, sb, seat_count,
+                                                orientation))
+
+            # 2. For a fixed orientation the seats must not all agree.
+            for orientation in range(4):
+                got = {anim(s, orientation, seat_count) for s in sides}
+                self.assertEqual(
+                    got, {"NE", "NW"},
+                    "a %d-seat table at orientation %d gives every seat the "
+                    "same facing (%s); the predicate is degenerate"
+                    % (seat_count, orientation, got))
+
+            # 3. For a fixed seat, rotating the table must change the facing.
+            for seat in sides:
+                got = {anim(seat, o, seat_count) for o in range(4)}
+                self.assertEqual(
+                    got, {"NE", "NW"},
+                    "seat %d of a %d-seat table ignores the furniture "
+                    "orientation (%s)" % (seat, seat_count, got))
+
+        # 4. The documented fallback: with no seat, orientation alone decides.
+        self.assertNotEqual(anim(-1, 0, 4), anim(-1, 1, 4),
+                            "the no-seat fallback ignores orientation")
+
+    def test_the_seat_rule_matches_the_fmaps_the_patcher_ships(self):
+        """Decode the real maps and check the rule against them.
+
+        Every earlier version of this predicate was checked against a model
+        written by hand, and three of them were wrong. This reads the
+        desktop-safe maps the patcher installs and decodes their seat markers
+        with the engine's own expression, so the test fails if the code and the
+        shipped data ever disagree.
+
+        CContentMap::FindObject (ContentMap.obj +0x5E-0x71):
+
+            id = (((cell >> 11) & 0x40000) | (cell & 0x3F800)) >> 11
+
+        CFurnitureManager::FindPeepSlot enumerates the markers a block HAS, in
+        the fixed order {0x13, 0x14, 0x53, 0x54}, so the ordinal of a seat is
+        its position in that filtered order.
+        """
+        import struct
+
+        maps = (patcher.ROOT / "patcher_assets" / "optional_patches"
+                / "mobile_furniture_behaviors" / "pc_fmaps")
+        MARKER_ORDER = (0x13, 0x14, 0x53, 0x54)
+
+        def seats_of(name):
+            data = (maps / name).read_bytes()
+            width, height = struct.unpack_from("<ii", data, 24)
+            found = {}
+            for offset in range(32, 32 + width * height * 4, 4):
+                cell = struct.unpack_from("<I", data, offset)[0]
+                if not cell:
+                    continue
+                obj = (((cell >> 11) & 0x40000) | (cell & 0x3F800)) >> 11
+                if obj in MARKER_ORDER:
+                    index = (offset - 32) // 4
+                    found[obj] = (index % width, index // width)
+            return width, found
+
+        for name in ("Picnic_table.png.fmap", "Patio_table.png.fmap"):
+            width, found = seats_of(name)
+            self.assertTrue(
+                found, "%s carries no seat markers at all; the decoder or the "
+                       "shipped map has changed" % name)
+
+            # Ordinals follow the marker order, filtered to those present.
+            ordered = [m for m in MARKER_ORDER if m in found]
+            seat_count = len(ordered)
+            self.assertIn(seat_count, (2, 4),
+                          "%s has %d seats; the halving rule assumes an even "
+                          "count" % (name, seat_count))
+
+            # The shipped rule: the far side is the back half of the ordinals.
+            for ordinal, marker in enumerate(ordered):
+                x, _y = found[marker]
+                east_by_geometry = x >= width / 2.0
+                far_by_rule = ordinal >= (seat_count // 2)
+                self.assertEqual(
+                    far_by_rule, east_by_geometry,
+                    "%s: ordinal %d (marker 0x%02X at column %d of %d) is %s "
+                    "by the shipped rule but %s by the map's own geometry"
+                    % (name, ordinal, marker, x, width,
+                       "far" if far_by_rule else "near",
+                       "east" if east_by_geometry else "west"))
+
+            # And the rule the code used before must be rejected by the data,
+            # so this test cannot pass against it.
+            parity_agrees = all(
+                ((ordinal & 1) != 0) == (found[marker][0] >= width / 2.0)
+                for ordinal, marker in enumerate(ordered))
+            if seat_count == 4:
+                self.assertFalse(
+                    parity_agrees,
+                    "%s: ordinal parity now agrees with the geometry, so this "
+                    "test no longer distinguishes the superseded rule" % name)
+
+    def test_the_seat_side_is_the_index_low_bit(self):
+        """Pins the mapping the APK and the engine marker array agree on.
+
+        The engine's marker array is {0x13, 0x14, 0x53, 0x54}: the pairs
+        {0x13, 0x53} and {0x14, 0x54} differ by 0x40, so seat indices 0/2 take
+        one side and 1/3 the other -- the index's LOW BIT.
+
+        The owner's APK corroborates this and shows why no single fmap field
+        would do. Picnic seats carry 0x98/0xA0 within each side, distinguished
+        additionally by a side bit; the patio table's two seats have the side
+        bit CLEAR for both and differ by the seat byte alone.
+        """
+        src = CODE
+        start = src.index("static char const *VF2SeatChairAnim(")
+        body = src[start:src.index("\n}", start)]
+        self.assertIn("seat >= (seatCount / 2)", body,
+                      "the side is no longer taken from the seat ordinal "
+                      "against the table's own seat count")
+        self.assertNotIn("(seat & 1)", body,
+                         "ordinal parity splits {0,2}|{1,3}, which puts a west "
+                         "seat and an east seat in each group on the four-seat "
+                         "picnic table")
+        self.assertIn("VF2FurnitureFacesEast(info.orientation)", body,
+                      "the furniture orientation is no longer consulted")
+        self.assertIn("VF2LinkedSeatIndex(villager, info)", body)
     def test_no_raw_offset_read_of_the_info_struct_for_orientation(self):
         # The specific defect: a byte offset into sFurnitureInfo2 that lands in
         # padding. Any reappearance of this shape is the bug returning.
@@ -145,12 +384,14 @@ class OrientationComesFromTheOrientationField(unittest.TestCase):
     def test_both_orientations_are_still_reachable(self):
         # A fix that always picks one branch would 'work' for whichever
         # orientation was tested and be wrong for the other. Both names must
-        # appear, on opposite sides of the same conditional.
-        m = re.search(r'char const \*chairAnim =(.*?);', CODE, re.S)
-        expr = m.group(1)
+        # remain reachable as the two arms of a conditional.
+        m = re.search(
+            r'static char const \*VF2SeatChairAnim\(.*?\n\}', CODE, re.S)
+        self.assertIsNotNone(m)
+        expr = m.group(0).replace("\n", " ")
         self.assertRegex(
-            expr.replace("\n", " "),
-            r"\?\s*\"Sit In Chair NW\"\s*:\s*\"Sit In Chair NE\"",
+            expr,
+            r"\?\s*\"Sit In Chair NE\"\s*:\s*\"Sit In Chair NW\"",
             "the two orientations are no longer the two arms of one "
             "conditional")
 
@@ -176,10 +417,36 @@ class OrientationComesFromTheOrientationField(unittest.TestCase):
         wrong -- eHeadDirectionNE was declared 1, which is really Southeast, and
         eHeadDirectionNW was declared 7, which is really UpNE1, an upward gaze.
         """
-        self.assertIn("VF2FurnitureFacesNorthWest(info.orientation)", SOURCE,
+        # The facing now splits on the EAST/WEST axis rather than on NW
+        # alone. VF2FurnitureFacesNorthWest is `orientation == 3`, so SE(0),
+        # SW(1) and NE(2) all took eHeadDirectionNE and only NW(3) differed --
+        # three of four placements produced an IDENTICAL pose, reported in play
+        # a third time as "spa lounger villager orientation has no change".
+        self.assertIn("VF2FurnitureFacesEast(info.orientation)", SOURCE,
                       "the chaise facing no longer follows the furniture")
         self.assertIn("eHeadDirectionNE = 0", SOURCE)
         self.assertIn("eHeadDirectionNW = 3", SOURCE)
+
+    def test_the_lounger_facing_does_not_collapse_three_orientations(self):
+        """Every lounger pose must split east/west, not on NW alone.
+
+        This is the specific regression: `orientation == 3` maps SE, SW and NE
+        onto one head direction, so rotating the lounger changes nothing for
+        three of the four placements. Both PlanToWait poses and the spa
+        settle/sleep strip must use the east/west split.
+        """
+        self.assertEqual(
+            SOURCE.count("VF2FurnitureFacesEast(info.orientation)\n"
+                         "                ? eHeadDirectionNE\n"
+                         "                : eHeadDirectionNW"), 2,
+            "both chaise poses must use the east/west split")
+        self.assertIn("!VF2FurnitureFacesEast(info.orientation)", SOURCE,
+                      "the spa settle/sleep strip must use the same split")
+        # The sleep strip and the settle pose must agree, so they come from
+        # one test rather than two.
+        self.assertIn("if (loungerFacesNorthWest) {", SOURCE)
+        self.assertIn('"SleepNW"', SOURCE)
+        self.assertIn('"SleepNE"', SOURCE)
 
     def test_resting_body_targets_all_four_colored_loungers(self):
         chaise = next(

@@ -133,7 +133,119 @@ class TestAddedFurnitureContract(unittest.TestCase):
         src = source()
         self.assertIn("_VF2PlanToGoAtAddedFurniture", src)
         self.assertIn("_VF2PlanToGoObjectAtAddedFurniture", src)
-        self.assertIn("donor PlanToGo callsites retain the selected placed-item destination", src)
+        self.assertIn("donor PlanToGo and FindFurniture callsites retain the selected placed-item venue", src)
+        # The donor's OWN furniture lookup must be constrained too.
+        # FindFurniture runs BEFORE PlanToGo, from the villager's
+        # pre-walk feet, so intercepting only the route left the donor
+        # bound to whichever shared-EObject placement was nearest --
+        # the Treadmill instead of the Exercise Bike, the Pool Table
+        # instead of the Ping-Pong Table. Reported in play repeatedly.
+        self.assertIn("_VF2FindFurnitureAtAddedFurniture", src)
+        self.assertIn("VF2FindFurnitureAtAddedFurnitureImpl", src)
+        for donor in ("WorkoutTreadmill", "RunningOnTreadmill",
+                      "PlayingPooltable"):
+            self.assertIn(donor + " FindFurniture", src,
+                          donor + " no longer has its furniture lookup "
+                          "constrained to the resolved venue")
+
+    def test_the_venue_lookup_searches_from_the_placement_not_the_anchor(self):
+        """The interceptor must supply the PLACEMENT, not the walk-to point.
+
+        Decoded from work/FurnitureManager.disasm.txt. FindFurniture ranks
+        candidates at 0x52-0x66 by
+
+            (point.x - record[+0x14])^2 + (point.y - record[+0x18])^2
+
+        i.e. by distance to each record's OWN placement, and at 0x121-0x137 it
+        returns info.point as that placement PLUS the furniture map's hotspot
+        offset. The two therefore differ by exactly one hotspot.
+
+        Caught by review: an earlier revision fed info.point back in as the
+        search origin. With an added bike or ping-pong table standing near a
+        stock treadmill or pool table, the neighbouring stock record can be
+        CLOSER to that anchor than the intended item's own placement is --
+        which silently reintroduces the cross-targeting the window exists to
+        prevent. Supplying the placement makes the intended record's distance
+        zero, which nothing else can beat.
+        """
+        src = source()
+        self.assertIn("gVF2AddedFurnitureVenuePlacement", src,
+                      "the window no longer carries the placement origin")
+        start = src.index("VF2FindFurnitureAtAddedFurnitureImpl(")
+        body = src[start:src.index("\n}", start)]
+        self.assertIn("point = gVF2AddedFurnitureVenuePlacement;", body,
+                      "the lookup must search from the placement")
+        self.assertNotIn("point = gVF2AddedFurnitureVenuePoint;", body,
+                         "searching from the walk-to anchor is off by one "
+                         "hotspot and lets a nearer stock record win")
+        # The resolver must actually report the placement it selected, or the
+        # window would carry a zeroed point.
+        self.assertIn("foundPlacement = placement;", src)
+        self.assertIn("if (outPlacement != 0) *outPlacement = foundPlacement;",
+                      src)
+
+    def test_the_reported_placement_belongs_to_the_winning_candidate(self):
+        """foundPlacement must update only with the rest of the winner.
+
+        The resolver walks every matching record and keeps the nearest. If
+        foundPlacement were assigned outside the "is this one better?" branch
+        it would hold the LAST record examined rather than the winning one,
+        and the venue window would then constrain the donor's lookup to the
+        wrong placement -- a subtler version of the bug this whole mechanism
+        exists to prevent, and one that would only show up with two or more of
+        the same item placed.
+
+        Pinned structurally: the three winner fields must sit together inside
+        the same branch.
+        """
+        src = source()
+        start = src.index("ldwPoint foundPlacement = {0, 0};")
+        end = src.index("if (!found) return false;", start)
+        body = src[start:end]
+        branch = body[body.index("if (!found || distance < bestDistance) {"):]
+        for field in ("outPoint = info.point;",
+                      "foundPlacement = placement;",
+                      "foundOrientation ="):
+            self.assertIn(field, branch,
+                          field + " is not inside the winning-candidate "
+                          "branch, so it can hold a losing record's value")
+        # And the placement is only handed out once a winner exists.
+        self.assertLess(
+            src.index("if (!found) return false;", start),
+            src.index("if (outPlacement != 0) *outPlacement = foundPlacement;",
+                      start),
+            "the placement is reported before the no-match early return")
+
+    def test_the_findfurniture_wrapper_forwards_every_stack_word(self):
+        """The naked wrapper must forward SEVEN words and clean 28 bytes.
+
+        FindFurniture(EObject, ldwPoint, sFurnitureInfo2 &, bool, int, bool) is
+        __thiscall: `this` arrives in ecx and the rest are pushed. ldwPoint is
+        PASSED BY VALUE and is {int x; int y;}, so it occupies TWO words, not
+        one -- 1 + 2 + 1 + 1 + 1 + 1 = 7 words = 28 bytes.
+
+        Caught by review on the first revision, which forwarded six words and
+        used `add esp, 28 / ret 24`. That makes the helper read the wrapper's
+        own return address as its final bool and leaves the donor's stack four
+        bytes out of position at every retargeted callsite -- a corruption, not
+        a cosmetic slip. Pinned because the arithmetic is invisible at a glance.
+        """
+        src = source()
+        start = src.index("void VF2FindFurnitureAtAddedFurniture()")
+        body = src[start:src.index("}", src.index("__asm", start)) + 1]
+        self.assertEqual(
+            body.count("push dword ptr [esp+28]"), 7,
+            "the wrapper must forward seven stack words; ldwPoint is two")
+        self.assertIn("push ecx", body, "`this` must be forwarded")
+        self.assertIn("add esp, 32", body,
+                      "seven forwarded words plus ecx is 32 bytes to clean")
+        self.assertIn("ret 28", body,
+                      "the callee-cleanup must match the 28 bytes of "
+                      "arguments the caller pushed")
+        # The old, wrong arithmetic must not come back.
+        self.assertNotIn("push dword ptr [esp+24]", body)
+        self.assertNotIn("add esp, 28", body)
+        self.assertNotIn("ret 24", body)
         self.assertIn("fallback\": \"native donor behavior remains unchanged", src)
 
     def test_plan_to_go_wrappers_forward_thiscall_stack_cleanup(self):
