@@ -184,6 +184,38 @@ class TestAddedFurnitureContract(unittest.TestCase):
         self.assertIn("if (outPlacement != 0) *outPlacement = foundPlacement;",
                       src)
 
+    def test_the_reported_placement_belongs_to_the_winning_candidate(self):
+        """foundPlacement must update only with the rest of the winner.
+
+        The resolver walks every matching record and keeps the nearest. If
+        foundPlacement were assigned outside the "is this one better?" branch
+        it would hold the LAST record examined rather than the winning one,
+        and the venue window would then constrain the donor's lookup to the
+        wrong placement -- a subtler version of the bug this whole mechanism
+        exists to prevent, and one that would only show up with two or more of
+        the same item placed.
+
+        Pinned structurally: the three winner fields must sit together inside
+        the same branch.
+        """
+        src = source()
+        start = src.index("ldwPoint foundPlacement = {0, 0};")
+        end = src.index("if (!found) return false;", start)
+        body = src[start:end]
+        branch = body[body.index("if (!found || distance < bestDistance) {"):]
+        for field in ("outPoint = info.point;",
+                      "foundPlacement = placement;",
+                      "foundOrientation ="):
+            self.assertIn(field, branch,
+                          field + " is not inside the winning-candidate "
+                          "branch, so it can hold a losing record's value")
+        # And the placement is only handed out once a winner exists.
+        self.assertLess(
+            src.index("if (!found) return false;", start),
+            src.index("if (outPlacement != 0) *outPlacement = foundPlacement;",
+                      start),
+            "the placement is reported before the no-match early return")
+
     def test_the_findfurniture_wrapper_forwards_every_stack_word(self):
         """The naked wrapper must forward SEVEN words and clean 28 bytes.
 
