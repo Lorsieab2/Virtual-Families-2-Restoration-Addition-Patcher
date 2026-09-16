@@ -273,6 +273,80 @@ class OrientationComesFromTheOrientationField(unittest.TestCase):
         self.assertNotEqual(anim(-1, 0, 4), anim(-1, 1, 4),
                             "the no-seat fallback ignores orientation")
 
+    def test_the_seat_rule_matches_the_fmaps_the_patcher_ships(self):
+        """Decode the real maps and check the rule against them.
+
+        Every earlier version of this predicate was checked against a model
+        written by hand, and three of them were wrong. This reads the
+        desktop-safe maps the patcher installs and decodes their seat markers
+        with the engine's own expression, so the test fails if the code and the
+        shipped data ever disagree.
+
+        CContentMap::FindObject (ContentMap.obj +0x5E-0x71):
+
+            id = (((cell >> 11) & 0x40000) | (cell & 0x3F800)) >> 11
+
+        CFurnitureManager::FindPeepSlot enumerates the markers a block HAS, in
+        the fixed order {0x13, 0x14, 0x53, 0x54}, so the ordinal of a seat is
+        its position in that filtered order.
+        """
+        import struct
+
+        maps = (patcher.ROOT / "patcher_assets" / "optional_patches"
+                / "mobile_furniture_behaviors" / "pc_fmaps")
+        MARKER_ORDER = (0x13, 0x14, 0x53, 0x54)
+
+        def seats_of(name):
+            data = (maps / name).read_bytes()
+            width, height = struct.unpack_from("<ii", data, 24)
+            found = {}
+            for offset in range(32, 32 + width * height * 4, 4):
+                cell = struct.unpack_from("<I", data, offset)[0]
+                if not cell:
+                    continue
+                obj = (((cell >> 11) & 0x40000) | (cell & 0x3F800)) >> 11
+                if obj in MARKER_ORDER:
+                    index = (offset - 32) // 4
+                    found[obj] = (index % width, index // width)
+            return width, found
+
+        for name in ("Picnic_table.png.fmap", "Patio_table.png.fmap"):
+            width, found = seats_of(name)
+            self.assertTrue(
+                found, "%s carries no seat markers at all; the decoder or the "
+                       "shipped map has changed" % name)
+
+            # Ordinals follow the marker order, filtered to those present.
+            ordered = [m for m in MARKER_ORDER if m in found]
+            seat_count = len(ordered)
+            self.assertIn(seat_count, (2, 4),
+                          "%s has %d seats; the halving rule assumes an even "
+                          "count" % (name, seat_count))
+
+            # The shipped rule: the far side is the back half of the ordinals.
+            for ordinal, marker in enumerate(ordered):
+                x, _y = found[marker]
+                east_by_geometry = x >= width / 2.0
+                far_by_rule = ordinal >= (seat_count // 2)
+                self.assertEqual(
+                    far_by_rule, east_by_geometry,
+                    "%s: ordinal %d (marker 0x%02X at column %d of %d) is %s "
+                    "by the shipped rule but %s by the map's own geometry"
+                    % (name, ordinal, marker, x, width,
+                       "far" if far_by_rule else "near",
+                       "east" if east_by_geometry else "west"))
+
+            # And the rule the code used before must be rejected by the data,
+            # so this test cannot pass against it.
+            parity_agrees = all(
+                ((ordinal & 1) != 0) == (found[marker][0] >= width / 2.0)
+                for ordinal, marker in enumerate(ordered))
+            if seat_count == 4:
+                self.assertFalse(
+                    parity_agrees,
+                    "%s: ordinal parity now agrees with the geometry, so this "
+                    "test no longer distinguishes the superseded rule" % name)
+
     def test_the_seat_side_is_the_index_low_bit(self):
         """Pins the mapping the APK and the engine marker array agree on.
 
