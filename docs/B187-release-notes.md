@@ -69,13 +69,30 @@ What the engine already does: it loads the seat-marker array
 `{0x13, 0x14, 0x53, 0x54}` — the markers `docs/discoveries.md` records as
 selecting the exact `Sit In Chair NW` or `NE` label — indexes it by the seat it
 chose, and writes the villager's peep id into `record[+0x20 + index*4]`. So the
-index is recoverable after the link, and the markers pair as `{0x13, 0x53}`
-against `{0x14, 0x54}`, which makes the index's low bit the side.
+index is recoverable after the link.
 
-The APK confirms the mapping and shows why no single map field would do. The
-picnic table's four seats carry `0x98`/`0xA0` within each side and are
-separated by a side bit; the patio table's two seats have that bit **clear for
-both** and are separated by the seat byte alone.
+Which ordinal sits on which side then took **two** more attempts, and only the
+decoded object ids settled it. `CContentMap::FindObject` extracts a cell's
+object id as `((cell >> 11) & 0x40000 | cell & 0x3F800) >> 11`, which gives:
+
+```
+Picnic_table   (5,9)=0x13 west    (8,11)=0x14 west
+               (15,12)=0x53 EAST  (17,10)=0x54 EAST
+Patio_table    (3,8)=0x13 west    (13,8)=0x14 EAST
+```
+
+`0x14` is **west** on the picnic table and **east** on the patio table, and the
+patio table has no `0x53`/`0x54` at all — so no fixed grouping of the four
+markers is right on both. An intermediate version used the ordinal's low bit,
+which groups `{0,2}` against `{1,3}`; that is correct on the two-seat patio
+table and wrong on the four-seat picnic table, where it puts one west and one
+east seat in each group. Two of four villagers would still have faced the wrong
+way.
+
+What holds on both: `FindPeepSlot` enumerates the markers the block actually
+has, in that fixed order, and each map puts the first half of the enumeration
+on one side and the second half on the other. So the side is
+`ordinal >= seats / 2`.
 
 ## The spa lounger's orientation "had no change"
 
