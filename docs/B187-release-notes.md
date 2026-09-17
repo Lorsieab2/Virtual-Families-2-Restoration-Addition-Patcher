@@ -218,3 +218,85 @@ machine, or stands on the mat. **Live play by the owner is the only thing that
 will settle these**, and until it happens every behavioural claim in this
 document should be read as "the mechanism is present and reachable", not as
 "the defect is fixed".
+
+---
+
+# Round 3 (playtest feedback on the round-2 asset)
+
+The round-2 asset fixed picnic and patio seating, confirmed in play by the
+owner. Four defects survived, and this round addresses those four.
+
+## Spa Lounger: the previous three attempts were arguing about the wrong argument
+
+The owner reported "they lie across it", with a screenshot of a villager lying
+across the lounger rather than along it. That is a different fault from facing
+the wrong end, and it explains why three successive fixes changed nothing.
+
+`eBodyPositionChaise` carries no facing of its own, and the three-argument
+`PlanToWait` supplies only a HEAD direction. The BODY therefore kept whatever
+facing the villager walked in with. The first attempt tested
+`orientation == 1`, the second `orientation == 3`, the third split east/west --
+all three tuned an argument that was never controlling the body. No orientation
+test could have caught this, because every one of them asserted on the head
+argument that was being passed correctly.
+
+The four-argument overload
+
+    ?PlanToWait@CVillagerPlans@@QAEXHW4EBodyPosition@@W4EDirection@@W4EHeadDirection@@@Z
+
+is present in the game's own object file and the patio umbrella route already
+calls it in shipped code. All three chaise pose sites now pass a body
+direction. `EDirection` was decoded from `AnimManager.obj` CodeView
+enumerators as Northeast=0, Southeast=1, Southwest=2, Northwest=3 -- which is
+NOT the `EFurnitureOrientation` ordering (SE=0, SW=1, NE=2, NW=3), so the
+orientation is mapped rather than passed through.
+
+This is the fourth attempt at this defect and the first to change the
+mechanism instead of the argument.
+
+## Treadmill: a regression introduced by the round-2 fix
+
+Dropping a villager on a Treadmill produced "using the exercise bike" and
+"doing high-intensity cycling" instead of the treadmill's own actions. The
+cause was in the round-2 venue-routing change: the position check ran only
+when the item was absent, so a placed Exercise Bike could still capture a
+villager already standing on the Treadmill. The guard now runs before the
+venue window opens.
+
+An automated review correctly found the first version of that guard too broad:
+it declined an autonomous Exercise Bike action whenever the villager stood on
+ANY furniture, including a sofa. The suggested remedy -- limit the guard to
+manual drops -- was not taken, because the owner asked for the Treadmill to be
+stock "on both manual drop and autonomous villager behaviors", and a drop-only
+guard leaves the autonomous half open.
+
+The guard was narrowed instead. The hijack exists because the venue window
+redirects the DONOR's `FindFurniture`, and a donor only ever searches its own
+object id, so a villager can be stolen only from furniture answering that same
+object: Treadmill and Exercise Bike are both `0x04`, Pool Table and Ping-Pong
+are both `0x36`. A sofa is not `0x04` and was never at risk.
+
+## Owner-specified nudges
+
+Patio drinks moved to X=18 (from 13), and the yoga mat centre offset is 5 with
+the Y sign corrected to `-=`, since +Y is down-screen and the previous `+=`
+moved the villager the wrong way. Picnic meal 7/9, Home Gym stand 14/12.
+
+## Evidence boundary for round 3
+
+Verified: all 32 variants link, the ZIP gate passes, an independent verifier
+authenticates the variant identities, a clean install plus this bundle
+reproduces 8,226 of 8,226 asset files byte-for-byte, no features are lost
+against 7 retained releases, and the `mobile_furniture_behaviors` flag flips
+`00`->`01` in `.vf2beh` for all 32 executables.
+
+Each of the four fixes was confirmed present in the C++ that the shipped
+build compiled from, regenerated with behaviour patches enabled. That last
+step matters: the leftover `.cpp` files in the shared build directory come
+from whichever variant the matrix built last, which was a behaviour-patches-OFF
+variant whose spontaneous-behaviours unit is a 78-byte stub. Reading those
+files would have suggested the fixes were missing when they were not.
+
+**None of the four round-3 fixes is verified in play.** The spa lounger
+especially is the fourth attempt at the same defect, and only the owner's
+playtest settles whether the body now aligns with the furniture.

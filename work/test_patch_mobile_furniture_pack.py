@@ -2038,7 +2038,8 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                     "sFurnitureInfo2 padding again",
                 )
                 self.assertNotIn("marker == 0x53 || marker == 0x54", picnic_helper)
-                # The selection now calls VF2SeatChairAnim(info). The intent of
+                # The selection now calls VF2SeatChairAnim(villager, info, 4).
+                # The intent of
                 # this assertion is unchanged and still enforced: the
                 # orientation must come from info.orientation, never from
                 # struct padding -- VF2SeatChairAnim reads the named field, and
@@ -2055,10 +2056,17 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                 # picnic table faced the wrong way while the left side was
                 # correct. The seat's own side must take part, which is what
                 # VF2SeatChairAnim adds.
+                # The seat count is part of the assertion because the side
+                # rule is `ordinal >= seats / 2`: the picnic table has FOUR
+                # seats and the patio table TWO, so passing the wrong count
+                # here silently mirrors one side. An earlier version of this
+                # fix used `seat & 1` parity, which is right on the two-seat
+                # patio table and wrong on this one.
                 self.assertIn(
-                    "VF2SeatChairAnim(info);",
+                    "VF2SeatChairAnim(villager, info, 4)",
                     picnic_helper,
-                    "orientation must come from info.orientation, per seat",
+                    "orientation must come from info.orientation and the "
+                    "seat's own side, with the picnic table's four seats",
                 )
                 self.assertIn("plans->PlanToDecHunger(40);", picnic_helper)
                 self.assertIn("plans->PlanToIncPoo(6);", picnic_helper)

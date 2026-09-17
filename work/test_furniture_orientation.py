@@ -86,7 +86,7 @@ class OrientationComesFromTheOrientationField(unittest.TestCase):
     # that the field is read BY NAME rather than at a raw offset that lands in
     # padding, and that the declaration governing these sites keeps orientation
     # as its second field.
-    # The chair sites now call VF2SeatChairAnim(info), which reads
+    # The chair sites now call VF2SeatChairAnim(villager, info, seats), which reads
     # info.orientation AND the seat's own side. Using the furniture
     # orientation alone gave every seat at one table the same facing,
     # which is why the right-hand side of both tables was reversed in

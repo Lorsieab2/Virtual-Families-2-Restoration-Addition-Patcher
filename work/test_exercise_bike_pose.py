@@ -188,11 +188,21 @@ class TheCaptionFollowsTheMachineTheVillagerIsAt(unittest.TestCase):
         for name in ("VF2RandomTreadmillWalkLabel", "VF2RandomTreadmillRunLabel"):
             with self.subTest(wrapper=name):
                 body = self.wrapper_body(name)
+                # SUPERSEDED, recorded rather than deleted (AGENTS.md 11): this
+                # asserted VF2LinkedFurnitureItemIs, which is
+                # FindFurniture(0x04, feet) -- the same call the native
+                # behaviour makes. Faithful to the DONOR's choice, which is why
+                # it was adopted, but the donor's choice is a NEAREST MATCH, and
+                # nearest-to-feet is not "the machine this villager is on". The
+                # owner played that build, found "Using the exercise bike" on
+                # the Treadmill, and asked that ONLY the exercise bike carry
+                # those captions. The check now reads the item id from the
+                # placement record under the villager.
                 self.assertIn(
-                    "VF2LinkedFurnitureItemIs(\n        villager, 0x04, "
+                    "VF2VillagerIsStandingOnItem(\n        villager, "
                     "__VF2_EXERCISE_BIKE_ITEM_ID__)", body,
-                    "%s no longer asks the same question the native behaviour "
-                    "asks" % name)
+                    "%s no longer requires the villager to be ON the bike, so "
+                    "the bike's caption can land on a treadmill" % name)
                 self.assertIn("bool const onBike = bike;", body)
                 self.assertIn("if (!onBike) return;", body)
 
@@ -206,11 +216,15 @@ class TheCaptionFollowsTheMachineTheVillagerIsAt(unittest.TestCase):
         for name in ("VF2RandomTreadmillWalkLabel", "VF2RandomTreadmillRunLabel"):
             with self.subTest(wrapper=name):
                 body = self.wrapper_body(name)
+                # The timing property this guards is unchanged: the check must
+                # be taken BEFORE the native behaviour runs. Only the question
+                # changed -- from "which 0x04 placement is nearest" to "which
+                # item is this villager standing on".
                 self.assertLess(
-                    body.index("VF2LinkedFurnitureItemIs"),
+                    body.index("VF2VillagerIsStandingOnItem"),
                     body.index("VF2RunNativeBehaviorAndChangedLabel"),
-                    "the probe must be taken before the native behaviour "
-                    "runs, which is when the native code makes its own choice")
+                    "the check must be taken before the native behaviour runs, "
+                    "which is when the native code makes its own choice")
 
     def test_the_position_blind_route_machinery_is_gone(self):
         """None of it may come back: it cannot answer a per-villager question.

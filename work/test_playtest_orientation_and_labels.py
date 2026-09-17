@@ -364,7 +364,17 @@ class ThePositionNudgesAreNamedAndScoped(unittest.TestCase):
             text,
             "the yoga centring is gone, or no longer covers both variants")
         self.assertIn("kVF2YogaMatCentreNudgeX", text)
-        self.assertIn("outPoint.y += kVF2YogaMatCentreNudgeY;", text)
+        # NE/NW, not merely east/west. The owner asked to "move yoga NE or
+        # NW depending on furniture position 5 pixels" after playing the build
+        # whose correction moved along X with a flat +Y. +Y is DOWN-screen, so
+        # both diagonals require a NEGATIVE Y -- the same convention the picnic
+        # meal nudge uses and which is confirmed correct in play.
+        self.assertIn("outPoint.y -= kVF2YogaMatCentreNudgeY;", text,
+                      "the yoga correction no longer travels up-screen, so it "
+                      "is east/west rather than NE/NW")
+        self.assertNotIn("outPoint.y += kVF2YogaMatCentreNudgeY;", text,
+                         "a positive Y moves the villager DOWN-screen, which "
+                         "is neither NE nor NW")
         # Orientation-aware per the owner's standing rule: respect the
         # furniture orientation always.
         block = text[text.index("THE YOGA MAT: STAND ON IT"):]

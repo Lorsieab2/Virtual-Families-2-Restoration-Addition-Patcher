@@ -216,6 +216,138 @@ class TestAddedFurnitureContract(unittest.TestCase):
                       start),
             "the placement is reported before the no-match early return")
 
+    def test_a_villager_on_other_furniture_is_never_dragged_to_a_venue(self):
+        """The Treadmill must behave like stock when a villager is dropped on it.
+
+        Reported in play: dropping a villager on the Treadmill produced "Using
+        the exercise bike" and "Doing high-intensity cycling", and the
+        treadmill's own actions never ran.
+
+        Cause: VF2RunOwnFurnitureActionEx consulted the villager's position only
+        inside the `!hasVenue` branch, which covers the case where the added
+        item is ABSENT. With an Exercise Bike placed anywhere in the house
+        hasVenue is true, so the position was never checked -- the window opened
+        on the bike and the FindFurniture interceptor bound the donor to it,
+        walking the villager off the treadmill. The owner owns both machines,
+        which is exactly the configuration that triggers it.
+        """
+        src = source()
+        self.assertIn("static bool VF2VillagerIsOnOtherFurniture(", src,
+                      "the standing-on-other-furniture guard is gone")
+
+        start = src.index("static void VF2RunOwnFurnitureActionEx(")
+        body = src[start:src.index('extern "C" void __cdecl VF2ExerciseBikeWalk', start)]
+
+        # The guard must be evaluated when a venue WAS resolved, which is the
+        # case the old code missed. If it only appeared inside !hasVenue the
+        # reported bug would still be present.
+        self.assertIn("if (hasVenue &&", body,
+                      "the position check does not run when a venue resolved, "
+                      "which is precisely the reported bug")
+        guard = body[body.index("if (hasVenue &&"):]
+        self.assertIn(
+            "VF2VillagerIsOnOtherFurniture(villager, itemId, altItemId, object)",
+            guard,
+            "the guard no longer receives the donor object, so it cannot tell "
+            "shared-object furniture from an unrelated sofa")
+        self.assertLess(
+            body.index("if (hasVenue &&"), body.index("VF2BeginAddedFurnitureVenue"),
+            "the position check must run BEFORE the venue window opens")
+
+    def test_standing_on_open_floor_still_reaches_the_venue(self):
+        """The guard must not break ordinary autonomous behaviour.
+
+        A villager on open floor has no furniture under them, so the helper
+        returns false and the venue is honoured. Without this the Exercise Bike
+        would become unreachable, which would trade one reported bug for
+        another.
+        """
+        src = source()
+        start = src.index("static bool VF2VillagerIsOnOtherFurniture(")
+        body = src[start:src.index("\n}", start)]
+        self.assertIn("if (slot < 0) return false;", body,
+                      "standing on open floor must not count as other furniture")
+        # NARROWED after review: only furniture answering the SAME donor object
+        # can be stolen from, because the venue window redirects the donor's own
+        # FindFurniture and a donor searches only its own object id. Guarding on
+        # ANY furniture declined an autonomous bike action whenever the villager
+        # stood on a sofa, which is the shape AGENTS.md warns about -- a placed
+        # item changing WHETHER a behaviour is available.
+        self.assertIn("(CContentMap::EObject)object, sample, info", body,
+                      "the guard no longer restricts itself to furniture that "
+                      "shares the donor object")
+        self.assertIn("if (candidate == itemId) return false;", body,
+                      "standing on the item itself must not count as other")
+        self.assertIn("altItemId >= 0 && candidate == altItemId", body,
+                      "the alternate id must not count as other furniture")
+
+    def test_only_the_exercise_bike_wears_the_bike_captions(self):
+        """Owner requirement, stated directly.
+
+        "I want ONLY the exercise bike to have the behaviors 'doing
+        high-intensity cycling' and 'using the exercise bike'."
+
+        Both treadmill caption wrappers previously asked
+        VF2LinkedFurnitureItemIs, which is FindFurniture(0x04, feet) -- a
+        NEAREST MATCH. It resolves its winner by placement handle so it never
+        confuses two records, but "nearest to the feet" is not "the machine this
+        villager is on": a bike beside the treadmill can win, and the caption
+        then lands on a treadmill action.
+
+        VF2VillagerIsStandingOnItem reads the item id from the placement record
+        under the villager, which is the test the drop dispatcher already trusts
+        for these shared-object items.
+        """
+        src = source()
+        self.assertIn("static bool VF2VillagerIsStandingOnItem(", src)
+
+        for wrapper, donor in (
+                ("VF2RandomTreadmillWalkLabel", "WorkoutTreadmill"),
+                ("VF2RandomTreadmillRunLabel", "RunningOnTreadmill")):
+            start = src.index('extern "C" void __cdecl %s(CVillager &villager)' % wrapper)
+            body = src[start:src.index("\n}", start)]
+            self.assertIn(
+                "VF2VillagerIsStandingOnItem(\n        villager, __VF2_EXERCISE_BIKE_ITEM_ID__)",
+                body,
+                "%s no longer requires the villager to be ON the bike" % wrapper)
+            # Comments deliberately NAME the superseded approach (AGENTS.md 11
+            # records dead ends rather than deleting them), so strip comment
+            # lines before asserting the CODE no longer calls it. Asserting
+            # against the raw text would forbid documenting the very mistake
+            # this test exists to prevent.
+            code = "\n".join(
+                line for line in body.splitlines()
+                if not line.lstrip().startswith("//"))
+            self.assertNotIn(
+                "VF2LinkedFurnitureItemIs", code,
+                "%s is back on the nearest-match test, which can put the "
+                "bike's caption on a treadmill" % wrapper)
+            self.assertIn("if (!onBike) return;", body,
+                          "%s no longer leaves the stock label alone when the "
+                          "villager is not on the bike" % wrapper)
+            self.assertIn("CBehavior::%s" % donor, body,
+                          "%s no longer runs its native donor" % wrapper)
+
+    def test_the_stock_treadmill_candidates_are_never_disabled(self):
+        """The Treadmill must stay autonomously reachable exactly as stock.
+
+        The bike's candidates are CLONES of the treadmill's (0x049 -> 0x0B1,
+        0x0E0 -> 0x0B2). Cloning copies into the target slot and leaves the
+        donor slot untouched, so the stock treadmill candidates survive. If a
+        future edit ever disabled them the treadmill would stop being selected
+        autonomously, which is the other half of what the owner asked for.
+        """
+        src = source()
+        self.assertIn("CloneAutonomousCandidateWithWeight(data, 0x049, 0x0B1, 450)", src)
+        self.assertIn("CloneAutonomousCandidateWithWeight(data, 0x0E0, 0x0B2, 450)", src)
+        clone = src[src.index("static void CloneAutonomousCandidateWithWeight("):]
+        clone = clone[:clone.index("\n}")]
+        self.assertIn("target[i] = donor[i]", clone,
+                      "cloning no longer copies the donor into the target")
+        self.assertNotIn("donor[0xCD] = 0", clone,
+                         "cloning now disables the donor candidate, which would "
+                         "stop the stock Treadmill being selected")
+
     def test_the_findfurniture_wrapper_forwards_every_stack_word(self):
         """The naked wrapper must forward SEVEN words and clean 28 bytes.
 
