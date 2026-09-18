@@ -7748,12 +7748,19 @@ class SpontaneousBehaviorContractTests(unittest.TestCase):
                 self.assertIn("*(unsigned int *)(candidate + 0x4C) = 0x168;", helper)
                 self.assertIn("candidate[0xA3] = 1;", helper)
                 self.assertNotIn("EnableAllAgesAutonomousCandidateWithWeight(data, 0x19A", helper)
+                # The clone calls gained a fifth argument, the OBJECT
+                # PREREQUISITE. These bathroom-sink and shower clones pass 0,
+                # meaning "keep the donor's", which is the behaviour they had
+                # before the parameter existed. Only items whose content-map
+                # object was CHANGED -- the Exercise Bike and the Ping-Pong
+                # Table -- name their own, because the record copy would
+                # otherwise leave them gated on their stock donor's object.
                 for target in range(0x0A5, 0x0A9):
                     self.assertIn(
-                        f"CloneAutonomousCandidateWithWeight(data, 0x0A4, 0x{target:03X}, 450)",
+                        f"CloneAutonomousCandidateWithWeight(data, 0x0A4, 0x{target:03X}, 450, 0)",
                         helper,
                     )
-                self.assertIn("CloneAutonomousCandidateWithWeight(data, 0x034, 0x016, 450)", helper)
+                self.assertIn("CloneAutonomousCandidateWithWeight(data, 0x034, 0x016, 450, 0)", helper)
                 self.assertIn("return VF2AgeValue(villager) >= 0x104;", helper)
                 self.assertIn("age >= 0x118 && age < 0x17C", helper)
                 self.assertIn("+ 0x6A58", helper)
