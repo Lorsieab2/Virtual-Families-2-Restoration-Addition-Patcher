@@ -150,11 +150,18 @@ MOBILE_PICNIC_TABLE_OBJECT = 0x97
 # which is what validates this encoding rather than assuming it.
 MOBILE_EXERCISE_BIKE_OBJECT = 0x99
 MOBILE_EXERCISE_BIKE_PC_CELL_VALUE = 0x2000C800
-# The donor cells this replaces. TreadmillStd.png.fmap is 14x16 and carries
-# object 0x04 on exactly these three, whose other bits are collision flags and
-# are preserved so the bike keeps the footprint it has today.
+# The donor object this replaces. TreadmillStd.png.fmap is 14x16 and carries
+# object 0x04 on exactly three cells -- (6,9), (6,10) and (7,10) -- whose other
+# bits are collision flags and are preserved, so the bike keeps the footprint it
+# has today.
+#
+# Those coordinates are recorded here as a NOTE, not as data. retarget_fmap_object
+# finds the cells by decoding the object out of each one, so it stays correct if
+# the donor map is ever re-authored, and a hardcoded coordinate list would be a
+# second source of truth that could silently disagree with the map. An earlier
+# revision of this block declared them as a tuple that nothing read -- dead data
+# that reads like a contract.
 MOBILE_EXERCISE_BIKE_DONOR_OBJECT = 0x04
-MOBILE_EXERCISE_BIKE_OBJECT_CELLS = ((6, 9), (6, 10), (7, 10))
 MOBILE_PICNIC_TABLE_PC_CELL_VALUE = 0x2000B800
 MOBILE_PICNIC_TABLE_PC_CELLS = (
     (10, 15), (11, 15), (12, 15), (13, 15),
