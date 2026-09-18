@@ -78,7 +78,11 @@ class TestAddedFurnitureContract(unittest.TestCase):
             "__VF2_EXERCISE_BIKE_ITEM_ID__": "__VF2_EXERCISE_BIKE_OBJECT__",
             "__VF2_HOME_GYM_ITEM_ID__": "0x75",
             "__VF2_YOGA_EQUIPMENT_ITEM_ID__": "0x75",
-            "__VF2_PING_PONG_TABLE_ITEM_ID__": "0x36",
+            # SUPERSEDED alongside the bike: the Ping-Pong Table also has its
+            # own object now (0x9A), for the same reason and at the owner's
+            # request. Sharing the Pool Table's 0x36 is what made villagers
+            # target the ping-pong table to play pool.
+            "__VF2_PING_PONG_TABLE_ITEM_ID__": "__VF2_PING_PONG_OBJECT__",
         }
         # An optional alternate item id may sit between the item and its
         # object. VF2RunOwnFurnitureAction* gained that parameter so ONE
@@ -105,6 +109,18 @@ class TestAddedFurnitureContract(unittest.TestCase):
             patcher.MOBILE_EXERCISE_BIKE_DONOR_OBJECT,
             "the Exercise Bike is sharing the Treadmill's object again, so "
             "bike and treadmill actions can resolve to each other")
+        # Same guarantee for the Ping-Pong Table and the Pool Table.
+        self.assertNotEqual(
+            patcher.MOBILE_PING_PONG_OBJECT,
+            patcher.MOBILE_PING_PONG_DONOR_OBJECT,
+            "the Ping-Pong Table is sharing the Pool Table's object again, so "
+            "villagers can target the ping-pong table to play pool")
+        # And the two separated items must not collide with EACH OTHER.
+        self.assertNotEqual(
+            patcher.MOBILE_EXERCISE_BIKE_OBJECT,
+            patcher.MOBILE_PING_PONG_OBJECT,
+            "the bike and the ping-pong table now share an object, which "
+            "trades two old bugs for a new one")
 
     def test_manual_drop_routes_added_items_to_own_handlers(self):
         src = source()

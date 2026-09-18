@@ -162,6 +162,26 @@ MOBILE_EXERCISE_BIKE_PC_CELL_VALUE = 0x2000C800
 # revision of this block declared them as a tuple that nothing read -- dead data
 # that reads like a contract.
 MOBILE_EXERCISE_BIKE_DONOR_OBJECT = 0x04
+# THE PING-PONG TABLE'S OWN OBJECT, so it is no longer the Pool Table.
+#
+# Owner, reported three times across rounds: "Villagers still target the
+# pingpong table to play pool autonomously" (issue #331 item 1).
+#
+# This is the IDENTICAL root cause the Exercise Bike had. PingPongTableStd
+# borrows PoolTableStd.png.fmap and therefore answered the Pool Table's object
+# 0x36, and FindFurniture resolves purely by object, so the two tables were
+# indistinguishable downstream. Guards narrow that; only separate objects end
+# it, which is exactly why the bike needed its own rather than another guard.
+#
+# 0x9A is the next free id after the bike's 0x99, and the cell value follows the
+# same encoding verified against CContentMap::HasObject's decoder.
+#
+# PoolTableStd.png.fmap is 21x20 and carries 0x36 on exactly ten cells. Only the
+# object field moves; every collision bit is preserved, so the Ping-Pong table
+# keeps the footprint it has today.
+MOBILE_PING_PONG_OBJECT = 0x9A
+MOBILE_PING_PONG_PC_CELL_VALUE = 0x2000D000
+MOBILE_PING_PONG_DONOR_OBJECT = 0x36
 MOBILE_PICNIC_TABLE_PC_CELL_VALUE = 0x2000B800
 MOBILE_PICNIC_TABLE_PC_CELLS = (
     (10, 15), (11, 15), (12, 15), (13, 15),
@@ -24867,20 +24887,36 @@ def sync_behavior_assets(manifest):
         # bike keeps the exact footprint it has today. The Treadmill's own map
         # is written from `src` above and is NOT touched, so the Treadmill keeps
         # 0x04 and stays stock.
+        # ADDED ITEMS THAT MUST NOT SHARE THEIR DONOR'S OBJECT.
+        #
+        # Each borrows a donor's fmap and would otherwise declare the donor's
+        # object, which makes the two indistinguishable to FindFurniture --
+        # the root cause behind both "bike actions on the Treadmill" and
+        # "villagers target the ping-pong table to play pool".
         retargeted = 0
-        if target == "ExerciseBikeStd.png.fmap":
-            base = merged if merged is not None else borrowed.read_bytes()
-            rebuilt, retargeted = retarget_fmap_object(
-                base,
+        retarget_pairs = {
+            "ExerciseBikeStd.png.fmap": (
                 MOBILE_EXERCISE_BIKE_DONOR_OBJECT,
                 MOBILE_EXERCISE_BIKE_OBJECT,
+                "the Treadmill's",
+            ),
+            "PingPongTableStd.png.fmap": (
+                MOBILE_PING_PONG_DONOR_OBJECT,
+                MOBILE_PING_PONG_OBJECT,
+                "the Pool Table's",
+            ),
+        }
+        if target in retarget_pairs:
+            donor_object, own_object, whose = retarget_pairs[target]
+            base = merged if merged is not None else borrowed.read_bytes()
+            rebuilt, retargeted = retarget_fmap_object(
+                base, donor_object, own_object
             )
             if retargeted == 0:
                 raise RuntimeError(
-                    "ExerciseBikeStd.png.fmap carries no object "
-                    "%#x cell to retarget; the donor map changed and the bike "
-                    "would silently keep sharing the Treadmill's object"
-                    % MOBILE_EXERCISE_BIKE_DONOR_OBJECT
+                    "%s carries no object %#x cell to retarget; the donor map "
+                    "changed and this item would silently keep sharing %s "
+                    "object" % (target, donor_object, whose)
                 )
             merged = rebuilt
         if merged is None:
@@ -24896,8 +24932,8 @@ def sync_behavior_assets(manifest):
         }
         if retargeted:
             record["object_retargeted"] = {
-                "from": hex(MOBILE_EXERCISE_BIKE_DONOR_OBJECT),
-                "to": hex(MOBILE_EXERCISE_BIKE_OBJECT),
+                "from": hex(donor_object),
+                "to": hex(own_object),
                 "cells": retargeted,
                 "reason": (
                     "the Exercise Bike is its own object, so bike behaviours "
@@ -35971,9 +36007,12 @@ extern "C" void __cdecl VF2PingPongPlay(CVillager &villager)
 {
     VF2RunOwnFurnitureAction(
         villager, CBehavior::PlayingPooltable,
-        // Ping-Pong's own object IS its donor's (both 0x36), so the venue
-        // object and the exclusion object are the same value here.
-        __VF2_PING_PONG_TABLE_ITEM_ID__, 0x36, 0x36,
+        // Ping-Pong's OWN object selects its venue; the Pool Table's 0x36 is
+        // what the exclusion must ask about, because the donor here is the
+        // stock PlayingPooltable behaviour and 0x36 is the only object it can
+        // be diverted through. Same split as the Exercise Bike.
+        __VF2_PING_PONG_TABLE_ITEM_ID__, __VF2_PING_PONG_OBJECT__,
+        __VF2_PING_PONG_DONOR_OBJECT__,
         kVF2BehaviorLabels_ping_pong,
         VF2_LABEL_COUNT(kVF2BehaviorLabels_ping_pong));
 }
@@ -35990,13 +36029,22 @@ extern "C" void __cdecl VF2RandomPooltableLabel(CVillager &villager)
     int remembered = VF2CurrentLabelInGroup(
         villager, kVF2BehaviorLabels_ping_pong,
         VF2_LABEL_COUNT(kVF2BehaviorLabels_ping_pong));
-    // Ask which 0x36 table this villager is linked to BEFORE running the
-    // behaviour, while the link is the one the plan will use. IsInWorld is
-    // not enough: with both tables placed it would answer yes for the
-    // ping-pong table even when the villager walked to the pool table.
-    // 0x36 is the object PlayingPooltable searches.
+    // Ask which table this villager is linked to BEFORE running the behaviour,
+    // while the link is the one the plan will use. IsInWorld is not enough:
+    // with both tables placed it would answer yes for the ping-pong table even
+    // when the villager walked to the pool table.
+    //
+    // THE OBJECT HERE IS THE PING-PONG TABLE'S OWN, NOT THE POOL TABLE'S.
+    //
+    // This probe previously hardcoded 0x36 -- correct only while the
+    // Ping-Pong Table borrowed the Pool Table's object. It now declares its
+    // own 0x9A, so searching 0x36 would find only genuine pool tables, never
+    // match the ping-pong item id, and silently leave "Playing pool" on the
+    // ping-pong table. This helper's own comment warns that getting the object
+    // wrong "fails silently", and an earlier round shipped exactly that
+    // mistake in the mirror direction for the bike.
     bool pingPong = VF2LinkedFurnitureItemIs(
-        villager, 0x36, __VF2_PING_PONG_TABLE_ITEM_ID__);
+        villager, __VF2_PING_PONG_OBJECT__, __VF2_PING_PONG_TABLE_ITEM_ID__);
     if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::PlayingPooltable)) return;
     // WHICH TABLE DID THE ROUTE PICK?
     //
@@ -36881,6 +36929,12 @@ extern "C" void __cdecl VF2EnableAutonomousCandidates(void *villager)
     helper_cpp = helper_cpp.replace(
         "__VF2_EXERCISE_BIKE_DONOR_OBJECT__",
         f"{MOBILE_EXERCISE_BIKE_DONOR_OBJECT:#x}",
+    )
+    helper_cpp = helper_cpp.replace(
+        "__VF2_PING_PONG_OBJECT__", f"{MOBILE_PING_PONG_OBJECT:#x}"
+    )
+    helper_cpp = helper_cpp.replace(
+        "__VF2_PING_PONG_DONOR_OBJECT__", f"{MOBILE_PING_PONG_DONOR_OBJECT:#x}"
     )
     helper_cpp = helper_cpp.replace(
         "__VF2_HOME_GYM_ITEM_ID__",
