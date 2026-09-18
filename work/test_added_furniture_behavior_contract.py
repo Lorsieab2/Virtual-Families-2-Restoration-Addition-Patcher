@@ -499,6 +499,46 @@ class TestAddedFurnitureContract(unittest.TestCase):
         # should not inherit, zero would silently keep the WRONG gate and this
         # table would pin that mistake in place -- which is why the reason is
         # recorded here rather than left implicit.
+        #
+        # EVERY VALUE BELOW IS VERIFIED AGAINST THE GAME BINARY.
+        #
+        # Read out of CVillager::InitAI in work/desktop_obj_files/Villager.obj,
+        # which sets each candidate record's fields. The object prerequisite
+        # is record offset +0xC4, i.e. [esi+reg+6C7Ch] against base 0x6BB8.
+        # InitAI dispatches per behaviour through a TWO-LEVEL switch:
+        #
+        #     lea   eax,[ebx-2]                 ; index = behaviour id - 2
+        #     cmp   eax,197h                    ; 0x198 behaviours
+        #     ja    $LN207                      ; default: no per-behaviour fields
+        #     movzx eax,byte ptr $LN205[eax]    ; byte map -> CASE NUMBER
+        #     jmp   dword ptr $LN249[eax*4]     ; case number -> case block
+        #
+        # $LN249 is indexed by CASE NUMBER, not by behaviour id, and 0xBE is
+        # the default case. Resolved values:
+        #
+        #   donor  behaviour             case  block    prerequisite
+        #   0x049  Treadmill walk        0x24  $LN99    0x04
+        #   0x0E0  Treadmill run         0x24  $LN99    0x04
+        #   0x099  PlayingPooltable      0x55  $LN95    0x36
+        #   0x034  North shower          0x18  $LN76    none
+        #   0x076  WateringRoses         0x44  $LN130   none
+        #   0x0A4  BathroomSink          0x5D  $LN80    none
+        #   0x04A  WorkingOut            0x25  $LN100   none
+        #   0x08B  yoga donor            0x4C  $LN101   none
+        #   0x047  WorkKitchenDispatch   0x23  $LN22    none
+        #
+        # So the six zeroes are MEASURED, not assumed: those donors carry no
+        # gate, and passing 0 inherits nothing. The three named objects are
+        # measured too, and they are exactly the donors that DO carry a stock
+        # gate -- which is why those three clones need the override and the
+        # other six must not have one.
+        #
+        # Two earlier attempts of mine got this wrong, so the decode is only
+        # trustworthy because it reproduces three INDEPENDENTLY KNOWN values
+        # first: 0x04 for both treadmill donors and 0x36 for the pool donor,
+        # known from the owner's in-play report that bike autonomy required a
+        # placed Treadmill and from the review finding on #343. A decode that
+        # cannot reproduce those is rejected rather than reported.
         expected = [
             (0x034, 0x016, "0"),                             # North shower
             (0x076, 0x077, "0"),                             # WateringWindowBoxes
