@@ -115,4 +115,14 @@ Lounge Chairs should behave exactly as they did in B188.
 ## Artifact identity
 
     VF2-B189-Release.zip
+    sha256  d644df48aabb200dc2166a228c18934d8b35712ea6850a41ac74b0d3465cc507
+    bytes   144,562,636
     built from main at 3a598d2 (PR #348)
+
+All three gates passed on this exact file: the repository release gate with
+`--require-identities` (32 variants, 7467 members, identities authenticated),
+an artifact verifier (8 checks, 0 failed) and a comparator against the B188
+bundle (nothing lost: 7467 entries, 153 fmaps, 6587 pngs, all 32 variants).
+All 32 executables differ from B188, which rules out a seeded build inheriting
+the previous release untouched -- a real failure mode here -- but cannot show
+which fix is present.
