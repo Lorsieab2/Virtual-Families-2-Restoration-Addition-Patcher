@@ -26317,7 +26317,27 @@ struct sFurnitureInfo2 {
 // other way.
 static bool VF2FurnitureFacesNorthWest(int orientation)
 {
-    return orientation == 3 /* NW */;
+    // THE VILLAGER FACES THE WAY THE LOUNGER FACES, HEAD AND BODY.
+    //
+    // This tested `orientation == 3` for five rounds, and in B188 the owner
+    // found one lounger correct and one wrong. The reason: a lounger only
+    // ever occupies TWO orientations, and a live capture of the running game
+    // showed those are 0 and 1. So `== 3` was never true for any real
+    // lounger and BOTH loungers took the northeast arm unconditionally.
+    // Orientation 0 wants northeast, so it looked right by luck; orientation
+    // 1 wants northwest and was the broken one.
+    //
+    // The captured values make the rule plain -- the direction IS the
+    // orientation, passed straight through:
+    //
+    //   orientation 0 (SE)  ->  EDirection 0 = NE, EHeadDirection 0 = NE
+    //   orientation 1 (SW)  ->  EDirection 3 = NW, EHeadDirection 3 = NW
+    //
+    // Testing orientation 1 reproduces that for both real placements. It is
+    // deliberately not `!= 0`: orientations 2 and 3 do not occur for a
+    // lounger, and if that ever changes they should fail visibly rather than
+    // silently inherit the northwest strip.
+    return orientation == 1 /* SW: the placement that needs the NW strip */;
 }
 
 class CVillagerPlans {

@@ -561,7 +561,8 @@ class TestOnlyReceivingIsAutonomous(unittest.TestCase):
         self.assertIn("PlanToLieDown", body)                    # the nap's posture
         # Chosen per lounger. This pins the CORRECTED question; two earlier
         # forms were each wrong. `info.orientation == 1` is SW alone and missed
-        # NW. VF2FurnitureFacesNorthWest is `orientation == 3`, which collapsed
+        # NW. VF2FurnitureFacesNorthWest is now `orientation == 1`; it used to be
+        # `orientation == 3`, which never matched a real lounger and collapsed
         # SE(0), SW(1) and NE(2) onto ONE pose -- three of four placements
         # identical, reported in play as "spa lounger villager orientation has
         # no change". EFurnitureOrientation is SE=0, SW=1, NE=2, NW=3 and the

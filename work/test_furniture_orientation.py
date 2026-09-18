@@ -418,7 +418,7 @@ class OrientationComesFromTheOrientationField(unittest.TestCase):
         eHeadDirectionNW was declared 7, which is really UpNE1, an upward gaze.
         """
         # The facing now splits on the EAST/WEST axis rather than on NW
-        # alone. VF2FurnitureFacesNorthWest is `orientation == 3`, so SE(0),
+        # alone. VF2FurnitureFacesNorthWest was `orientation == 3`, so SE(0),
         # SW(1) and NE(2) all took eHeadDirectionNE and only NW(3) differed --
         # three of four placements produced an IDENTICAL pose, reported in play
         # a third time as "spa lounger villager orientation has no change".
@@ -427,18 +427,31 @@ class OrientationComesFromTheOrientationField(unittest.TestCase):
         self.assertIn("eHeadDirectionNE = 0", SOURCE)
         self.assertIn("eHeadDirectionNW = 3", SOURCE)
 
-    def test_the_lounger_facing_gives_the_nw_strip_to_orientation_3_alone(self):
-        """Both CONFIRMED orientations take SleepNE; NW(3) alone takes SleepNW.
+    def test_the_lounger_facing_follows_the_furniture_for_both_placements(self):
+        """The villager faces the way the lounger faces, head and body.
 
-        What is actually confirmed, from live IDA captures on the shipped B187
-        build plus the owner's verdict on each placement:
+        THE VALUE OF THE RULE IS PINNED HERE, not just the fact that the rule
+        is consulted. That distinction is the whole reason this defect survived
+        five rounds: every assertion checked that
+        `VF2FurnitureFacesNorthWest(info.orientation)` APPEARS at the pose
+        sites, and none checked what it RETURNS. Changing the predicate body
+        from `orientation == 3` to `orientation == 1` left 94 tests green while
+        flipping the behaviour of every lounger in the game.
 
-            orientation=0 (SE)  SleepNE   <- CORRECT in play
-            orientation=1 (SW)  SleepNW   <- WRONG in play
+        What is confirmed, from live IDA captures on the shipped build plus the
+        owner's verdict on each placement in B188:
 
-        SE(0) wants SleepNE, and SW(1) wants the strip it did not get, which is
-        also SleepNE. `orientation == 3` satisfies both. Orientations 2 and 3
-        are UNOBSERVED, so the NW arm is a guess and is named as one.
+            orientation=0 (SE)  EDirection 0 = NE, EHeadDirection 0 = NE  <- correct
+            orientation=1 (SW)  EDirection 3 = NW, EHeadDirection 3 = NW  <- correct
+
+        A lounger only ever occupies those TWO orientations -- the owner
+        confirmed that directly -- so `orientation == 3` was never true for any
+        real lounger and BOTH placements took the northeast arm. Orientation 0
+        looked right by luck; orientation 1 was the one reported broken.
+
+        The captured numbers say the rule plainly: the direction IS the
+        orientation. Testing `orientation == 1` reproduces that for both real
+        placements.
 
         TWO SUPERSEDED CLAIMS, recorded rather than deleted (AGENTS.md 11).
 
@@ -468,11 +481,27 @@ class OrientationComesFromTheOrientationField(unittest.TestCase):
         from stock, and keep the owner's play evidence above any disassembly
         when the two disagree.
         """
+        # THE PREDICATE'S VALUE. This is the assertion whose absence let five
+        # wrong rules ship. Read the function body and pin the comparison.
+        body = SOURCE[SOURCE.index("static bool VF2FurnitureFacesNorthWest("):]
+        body = body[:body.index("\n}")]
+        self.assertIn(
+            "return orientation == 1", body,
+            "the lounger facing must select the northwest strip for "
+            "orientation 1 (SW). A lounger only occupies orientations 0 and "
+            "1, so testing any other value leaves BOTH placements on the "
+            "northeast arm -- which is exactly the defect the owner reported "
+            "in B188, with one lounger correct by luck and one wrong.")
+        self.assertNotIn(
+            "return orientation == 3", body,
+            "orientation 3 never occurs for a lounger, so this predicate "
+            "would always be false and both placements would pose identically")
+
         self.assertEqual(
             SOURCE.count("VF2FurnitureFacesNorthWest(info.orientation)\n"
                          "                ? eHeadDirectionNW\n"
                          "                : eHeadDirectionNE"), 2,
-            "both chaise poses must give the NW strip to orientation 3 alone")
+            "both chaise poses must route the strip through the same test")
         self.assertIn(
             "loungerFacesNorthWest =\n"
             "        VF2FurnitureFacesNorthWest(info.orientation);", SOURCE,
