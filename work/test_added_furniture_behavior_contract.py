@@ -436,6 +436,83 @@ class TestAddedFurnitureContract(unittest.TestCase):
                          "the donor's own object prerequisite must not be "
                          "rewritten, or the stock candidate changes too")
 
+    def test_every_clone_call_site_pins_its_object_prerequisite(self):
+        """The COMPLETE clone table, every argument, and the sentinel branch.
+
+        Two review findings on #344 showed that asserting individual call
+        sites leaves the unasserted ones free. Both mutations below kept 71
+        tests green while undoing authorized fixes:
+
+        1. `objectPrerequisite != 0` -> `== 0` gates the bike and ping-pong
+           clones on their STOCK DONORS, so bike autonomy needs a Treadmill
+           placed and ping-pong needs a Pool Table. That is exactly the
+           cross-targeting bug the owner reported.
+        2. The four zero-valued sites (WateringWindowBoxes, Home Gym, Yoga,
+           WorkKitchen0) set to the bike object gates Home Gym and Yoga on an
+           unrelated Exercise Bike existing.
+
+        So this test pins the WHOLE table by exact text rather than sampling
+        it, and pins the sentinel's sense behaviourally. A new clone call
+        added without a decision about its prerequisite fails here, which is
+        the point: the owner's rule is that each item's actions are offered
+        when THAT item is placed and never because of another item.
+        """
+        src = source()
+
+        # donor, target, weight, prerequisite -- the exact expected table.
+        # A zero means "keep the gates the donor record already carries",
+        # which is correct only for clones that act on the DONOR's object.
+        expected = [
+            (0x034, 0x016, "0"),                             # North shower
+            (0x076, 0x077, "0"),                             # WateringWindowBoxes
+            (0x0A4, 0x0A5, "0"),                             # WashingInBathroomSink0
+            (0x0A4, 0x0A6, "0"),                             # WashingInBathroomSink1
+            (0x0A4, 0x0A7, "0"),                             # WashingInBathroomSink2
+            (0x0A4, 0x0A8, "0"),                             # WashingInBathroomSink3
+            (0x049, 0x0B1, "__VF2_EXERCISE_BIKE_OBJECT__"),  # bike, walking
+            (0x0E0, 0x0B2, "__VF2_EXERCISE_BIKE_OBJECT__"),  # bike, running
+            (0x04A, 0x0B3, "0"),                             # Home Gym System
+            (0x08B, 0x0B4, "0"),                             # Yoga Equipment
+            (0x099, 0x0B8, "__VF2_PING_PONG_OBJECT__"),      # Ping-Pong Table
+            (0x047, 0x048, "0"),                             # WorkKitchen0
+        ]
+
+        for donor, target, prerequisite in expected:
+            call = ("CloneAutonomousCandidateWithWeight(data, 0x%03X, 0x%03X, "
+                    "450, %s)" % (donor, target, prerequisite))
+            with self.subTest(target="0x%03X" % target):
+                self.assertIn(
+                    call, src,
+                    "clone 0x%03X -> 0x%03X must pass prerequisite %s. Either "
+                    "the call changed or a prerequisite was altered; both "
+                    "change WHEN the action is offered in play."
+                    % (donor, target, prerequisite))
+
+        # The table must be COMPLETE. Without this, adding a new clone call
+        # with a wrong prerequisite would pass every assertion above.
+        actual = re.findall(
+            r"CloneAutonomousCandidateWithWeight\(data,[^;]*\);", src)
+        self.assertEqual(
+            len(actual), len(expected),
+            "the clone table has %d call sites but this test pins %d. Add the "
+            "new call to `expected` WITH a deliberate prerequisite, so its "
+            "gating is a decision rather than an inherited accident."
+            % (len(actual), len(expected)))
+
+        # And the sentinel's SENSE, not merely the presence of an assignment.
+        # `== 0` passes any assertion that only looks for the write.
+        clone = src[src.index("static void CloneAutonomousCandidateWithWeight("):]
+        clone = clone[:clone.index("\n}")]
+        self.assertIn(
+            "if (objectPrerequisite != 0) {", clone,
+            "the prerequisite must be written when the caller NAMES one. "
+            "Inverting this to `== 0` leaves the bike and ping-pong gated on "
+            "their donors and clears every zero-valued clone's real gates.")
+        self.assertNotIn(
+            "if (objectPrerequisite == 0) {", clone,
+            "inverted sentinel: zero would overwrite the donor's gates and a "
+            "named object would be ignored")
+
     def test_the_findfurniture_wrapper_forwards_every_stack_word(self):
         """The naked wrapper must forward SEVEN words and clean 28 bytes.
 
