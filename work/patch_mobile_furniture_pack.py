@@ -33572,17 +33572,45 @@ static void EnableNursingMotherAutonomousCandidateWithWeight(unsigned char *vill
     candidate[0xA3] = 1;
 }
 
+// objectPrerequisite: THE OBJECT THAT MUST EXIST FOR THIS CANDIDATE TO BE
+// OFFERED. Zero keeps the donor's, which is what every clone did before this
+// parameter existed and is still what most of them want.
+//
+// The copy below duplicates the donor's whole 0xD0-byte record, so the object
+// prerequisite at +0xC4 is inherited too. CVillagerAI::DecideWhatToDo gates
+// selection on it -- from work/VillagerAI.disasm.txt:
+//
+//     mov  eax, dword ptr [edi+esi+6C7Ch]   ; 0x6BB8 + 0xC4
+//     test eax,eax
+//     je   ...                               ; zero means no prerequisite
+//     push eax
+//     call ?ObjectExists@CContentMap@@...
+//     test al,al
+//     je   ...                               ; REJECT the candidate
+//
+// Inheriting was harmless while each added item shared its donor's object. Once
+// the Exercise Bike moved to 0x99 and the Ping-Pong Table to 0x9A it became a
+// real defect: the bike's clones would be offered only when a TREADMILL was
+// placed, and ping-pong only when a POOL TABLE was. A player owning the added
+// item and not the stock donor would get no autonomous action at all, which
+// looks exactly like the item doing nothing.
 static void CloneAutonomousCandidateWithWeight(
     unsigned char *villager,
     unsigned int donorBehavior,
     unsigned int targetBehavior,
-    unsigned int weight)
+    unsigned int weight,
+    unsigned int objectPrerequisite)
 {
     unsigned char *donor = villager + 0x6BB8 + donorBehavior * 0xD0;
     unsigned char *target = villager + 0x6BB8 + targetBehavior * 0xD0;
     for (int i = 0; i < 0xD0; ++i) target[i] = donor[i];
     *(unsigned int *)(target + 0x00) = targetBehavior;
     *(unsigned int *)(target + 0x0C) = weight;
+    // Only when the caller names one. The gate stays meaningful either way:
+    // the candidate is offered exactly when the item it acts on is placed.
+    if (objectPrerequisite != 0) {
+        *(unsigned int *)(target + 0xC4) = objectPrerequisite;
+    }
     target[0xCD] = 1;
 }
 
@@ -36026,62 +36054,40 @@ extern "C" void __cdecl VF2PingPongPlay(CVillager &villager)
 // Stock pool tables keep their stock labels untouched.
 extern "C" void __cdecl VF2RandomPooltableLabel(CVillager &villager)
 {
-    int remembered = VF2CurrentLabelInGroup(
-        villager, kVF2BehaviorLabels_ping_pong,
-        VF2_LABEL_COUNT(kVF2BehaviorLabels_ping_pong));
-    // Ask which table this villager is linked to BEFORE running the behaviour,
-    // while the link is the one the plan will use. IsInWorld is not enough:
-    // with both tables placed it would answer yes for the ping-pong table even
-    // when the villager walked to the pool table.
+    // THIS WRAPPER NO LONGER CLASSIFIES ANYTHING, AND MUST NOT.
     //
-    // THE OBJECT HERE IS THE PING-PONG TABLE'S OWN, NOT THE POOL TABLE'S.
+    // It exists because the Ping-Pong Table used to SHARE object 0x36 with the
+    // stock Pool Table. A villager reaching stock PlayingPooltable might have
+    // been at either one, so the caption had to be decided by probing which
+    // table they were actually at.
     //
-    // This probe previously hardcoded 0x36 -- correct only while the
-    // Ping-Pong Table borrowed the Pool Table's object. It now declares its
-    // own 0x9A, so searching 0x36 would find only genuine pool tables, never
-    // match the ping-pong item id, and silently leave "Playing pool" on the
-    // ping-pong table. This helper's own comment warns that getting the object
-    // wrong "fails silently", and an earlier round shipped exactly that
-    // mistake in the mirror direction for the bike.
-    bool pingPong = VF2LinkedFurnitureItemIs(
-        villager, __VF2_PING_PONG_OBJECT__, __VF2_PING_PONG_TABLE_ITEM_ID__);
-    if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::PlayingPooltable)) return;
-    // WHICH TABLE DID THE ROUTE PICK?
+    // Separating the objects removed that ambiguity. Stock PlayingPooltable
+    // searches 0x36 and now only ever routes to a genuine Pool Table, so its
+    // native label is already correct and there is nothing left to decide.
     //
-    // The pre-probe above is a nearest-match from the villager's feet taken
-    // before the behaviour runs, so it answers "which 0x36 table is nearest
-    // right now", not "which table will the route pick". With both tables
-    // placed, a villager standing nearer the ping-pong table but routed by
-    // the engine to the pool table was captioned "Playing ping-pong" while
-    // playing on a stock pool table -- a stock item wearing a modded label.
-    // The mirror case silently kept "Playing pool" on the ping-pong table.
+    // TWO SUPERSEDED FORMS, recorded rather than deleted (AGENTS.md 11),
+    // because each looked right and each mislabelled something real:
     //
-    // The interceptor on PlanToGo(object, ...) records the placement the
-    // engine's own resolver chose, and PlayingPooltable's two object PlanToGo
-    // callsites are already retargeted to it, so the answer is already being
-    // recorded on this path -- it was simply never read. Prefer it, and fall
-    // back to the probe only when nothing was recorded, which leaves the
-    // stock label alone rather than guessing.
+    //   1. Probing 0x36 for the ping-pong item id. Correct while the two
+    //      shared an object; after the separation it matches only genuine pool
+    //      tables, never the ping-pong item, so it would silently leave
+    //      "Playing pool" on the ping-pong table.
+    //   2. Probing 0x9A instead. That asks about a DIFFERENT item than the one
+    //      this behaviour routes to, so with both tables placed it finds the
+    //      ping-pong table and overwrites a genuine STOCK POOL action's
+    //      caption with a ping-pong label -- a stock item wearing a modded
+    //      label, which this file records having shipped once before in the
+    //      mirror direction.
     //
-    // This is the same correction the two treadmill wrappers already carry
-    // for the exercise bike, which shares EObject 0x04 with the stock
-    // treadmill exactly as these two tables share 0x36.
-    // SAME CORRECTION AS THE TWO TREADMILL WRAPPERS.
+    // The ping-pong caption is not lost. VF2PingPongPlay applies
+    // kVF2BehaviorLabels_ping_pong itself, on its own behaviour id 0x0B8 with
+    // its own venue object, and that is the only path that should produce one.
     //
-    // ?PlayingPooltable@CBehavior@@ (Behavior.obj section 488) likewise carries
-    // exactly ONE furniture relocation, ?FindFurniture@CFurnitureManager@@, and
-    // references neither LinkPeepToFurniture nor CContentMap::FindObject. So
-    // the probe above already reproduces the native choice, and preferring the
-    // FindObject-derived route id could only override a correct answer with a
-    // position-blind one.
-    bool const onPingPong = pingPong;
-    if (!onPingPong) {
-        // A stock pool table: leave the native label exactly as it was.
-        return;
-    }
-    VF2ApplyVenueLabel(
-        villager, kVF2BehaviorLabels_ping_pong,
-        VF2_LABEL_COUNT(kVF2BehaviorLabels_ping_pong), remembered);
+    // The wrapper is kept rather than removed because the label-retarget table
+    // still resolves PlayingPooltable's label callsite to it. Running the
+    // native behaviour and leaving its label alone is exactly what the stock
+    // game does unaided, which is the narrowest correct behaviour here.
+    VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::PlayingPooltable);
 }
 
 // The Exercise Bike borrows the Treadmill's two behaviours, so its users were
@@ -36849,7 +36855,7 @@ extern "C" void __cdecl VF2EnableAutonomousCandidates(void *villager)
     EnableAutonomousCandidateWithWeight(data, 0x032, 450); // PreparingAMeal variants
     EnableAutonomousCandidateWithWeight(data, 0x033, 450); // Bookshelf reading variants
     EnableAutonomousCandidateWithWeight(data, 0x034, 450); // Shower/bath variants
-    CloneAutonomousCandidateWithWeight(data, 0x034, 0x016, 450); // North shower, with stock shower gates
+    CloneAutonomousCandidateWithWeight(data, 0x034, 0x016, 450, 0); // North shower, with stock shower gates
     EnableAutonomousCandidateWithWeight(data, 0x0D3, 450); // Coffee/tea variants
     EnableAutonomousCandidateWithWeight(data, 0x0D9, 150); // Rare grande-latte variants
     EnableAutonomousCandidateWithWeight(data, 0x0D8, 150); // Rare burger variant, matched to the latte
@@ -36872,12 +36878,12 @@ extern "C" void __cdecl VF2EnableAutonomousCandidates(void *villager)
     EnableAutonomousCandidateWithWeight(data, 0x0D6, 450); // HaveBreakfast
     EnableAutonomousCandidateWithWeight(data, 0x075, 450); // WateringFlowers
     EnableAutonomousCandidateWithWeight(data, 0x076, 450); // WateringRoses
-    CloneAutonomousCandidateWithWeight(data, 0x076, 0x077, 450); // WateringWindowBoxes, with flower-water gates
+    CloneAutonomousCandidateWithWeight(data, 0x076, 0x077, 450, 0); // WateringWindowBoxes, with flower-water gates
     EnableAutonomousCandidateWithWeight(data, 0x0A4, 450); // WashingInBathroomSink
-    CloneAutonomousCandidateWithWeight(data, 0x0A4, 0x0A5, 450); // WashingInBathroomSink0
-    CloneAutonomousCandidateWithWeight(data, 0x0A4, 0x0A6, 450); // WashingInBathroomSink1
-    CloneAutonomousCandidateWithWeight(data, 0x0A4, 0x0A7, 450); // WashingInBathroomSink2
-    CloneAutonomousCandidateWithWeight(data, 0x0A4, 0x0A8, 450); // WashingInBathroomSink3
+    CloneAutonomousCandidateWithWeight(data, 0x0A4, 0x0A5, 450, 0); // WashingInBathroomSink0
+    CloneAutonomousCandidateWithWeight(data, 0x0A4, 0x0A6, 450, 0); // WashingInBathroomSink1
+    CloneAutonomousCandidateWithWeight(data, 0x0A4, 0x0A7, 450, 0); // WashingInBathroomSink2
+    CloneAutonomousCandidateWithWeight(data, 0x0A4, 0x0A8, 450, 0); // WashingInBathroomSink3
     EnableAutonomousCandidateWithWeight(data, 0x0A9, 450); // BathroomGroomingGeneral
     EnableAutonomousCandidateWithWeight(data, 0x0AD, 450); // BathroomGroomingShaveMakeup
     EnableAutonomousCandidateWithWeight(data, 0x11D, 450); // UseTelescope
@@ -36890,13 +36896,13 @@ extern "C" void __cdecl VF2EnableAutonomousCandidates(void *villager)
     // rows only ADD. Each handler then declines to act unless its item is
     // actually placed, so the action happens at the item rather than being
     // gated on owning it.
-    CloneAutonomousCandidateWithWeight(data, 0x049, 0x0B1, 450); // Exercise Bike, walking
-    CloneAutonomousCandidateWithWeight(data, 0x0E0, 0x0B2, 450); // Exercise Bike, running
-    CloneAutonomousCandidateWithWeight(data, 0x04A, 0x0B3, 450); // Home Gym System
-    CloneAutonomousCandidateWithWeight(data, 0x08B, 0x0B4, 450); // Yoga Equipment
-    CloneAutonomousCandidateWithWeight(data, 0x099, 0x0B8, 450); // Ping-Pong Table
+    CloneAutonomousCandidateWithWeight(data, 0x049, 0x0B1, 450, __VF2_EXERCISE_BIKE_OBJECT__); // Exercise Bike, walking
+    CloneAutonomousCandidateWithWeight(data, 0x0E0, 0x0B2, 450, __VF2_EXERCISE_BIKE_OBJECT__); // Exercise Bike, running
+    CloneAutonomousCandidateWithWeight(data, 0x04A, 0x0B3, 450, 0); // Home Gym System
+    CloneAutonomousCandidateWithWeight(data, 0x08B, 0x0B4, 450, 0); // Yoga Equipment
+    CloneAutonomousCandidateWithWeight(data, 0x099, 0x0B8, 450, __VF2_PING_PONG_OBJECT__); // Ping-Pong Table
     EnableAdultOnlyAutonomousCandidateWithWeight(data, 0x047, 450); // WorkKitchenDispatch
-    CloneAutonomousCandidateWithWeight(data, 0x047, 0x048, 450); // WorkKitchen0, with kitchen career gates
+    CloneAutonomousCandidateWithWeight(data, 0x047, 0x048, 450, 0); // WorkKitchen0, with kitchen career gates
     EnableAdultOnlyAutonomousCandidateWithWeight(data, 0x048, 450);
     EnableAdultOnlyAutonomousCandidateWithWeight(data, 0x02C, 450); // OfficeCarreerWork
     EnableAdultOnlyAutonomousCandidateWithWeight(data, 0x04B, 450); // WorkWorkshop

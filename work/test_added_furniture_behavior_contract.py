@@ -38,8 +38,20 @@ class TestAddedFurnitureContract(unittest.TestCase):
 
     def test_stock_donor_wrappers_use_strict_selector_only_for_added_items(self):
         src = source()
+        # THE POOL WRAPPER IS DELIBERATELY NOT IN THIS LIST ANY MORE.
+        #
+        # SUPERSEDED, recorded rather than deleted (AGENTS.md 11): it used to
+        # be checked alongside the two treadmill wrappers, because all three
+        # had to choose between a stock donor's label and an added item's while
+        # the pairs shared a content-map object.
+        #
+        # The Ping-Pong Table now has its own object (0x9A), so stock
+        # PlayingPooltable routes only to genuine pool tables and its wrapper
+        # applies no label at all -- any selector there could only mislabel a
+        # stock action. The treadmill wrappers still need theirs, because the
+        # bike's LABELS are still applied by wrapping the stock treadmill
+        # behaviours even though the bike's venue object is now its own.
         for start_marker, end_marker in (
-            ("extern \"C\" void __cdecl VF2RandomPooltableLabel", "// The Exercise Bike"),
             ("extern \"C\" void __cdecl VF2RandomTreadmillWalkLabel", "extern \"C\" void __cdecl VF2RandomTreadmillRunLabel"),
             ("extern \"C\" void __cdecl VF2RandomTreadmillRunLabel", "extern \"C\" void __cdecl VF2RandomDrinkLabel"),
         ):
@@ -47,6 +59,12 @@ class TestAddedFurnitureContract(unittest.TestCase):
             body = src[start:src.index(end_marker, start)]
             self.assertIn("VF2ApplyVenueLabel", body)
             self.assertIn("if (!", body)
+        # And the pool wrapper must NOT carry a selector.
+        pool = src.index(
+            "extern \"C\" void __cdecl VF2RandomPooltableLabel(CVillager &villager)")
+        pool_body = src[pool:src.index("// The Exercise Bike borrows", pool)]
+        self.assertNotIn("VF2ApplyVenueLabel", pool_body,
+                         "the stock pool wrapper must not relabel anything")
 
     def test_missing_venue_does_not_run_the_shared_donor(self):
         src = source()
@@ -392,8 +410,18 @@ class TestAddedFurnitureContract(unittest.TestCase):
         autonomously, which is the other half of what the owner asked for.
         """
         src = source()
-        self.assertIn("CloneAutonomousCandidateWithWeight(data, 0x049, 0x0B1, 450)", src)
-        self.assertIn("CloneAutonomousCandidateWithWeight(data, 0x0E0, 0x0B2, 450)", src)
+        # The clone calls gained a fifth argument, the OBJECT PREREQUISITE, so
+        # the bike's candidates can require the BIKE to be placed rather than
+        # inheriting the Treadmill's 0x04 from the donor record. Without it the
+        # bike's autonomous actions were offered only when a Treadmill was
+        # placed. The property this test guards is unchanged: the donor slots
+        # 0x049 and 0x0E0 are still cloned FROM and never disabled.
+        self.assertIn(
+            "CloneAutonomousCandidateWithWeight(data, 0x049, 0x0B1, 450, "
+            "__VF2_EXERCISE_BIKE_OBJECT__)", src)
+        self.assertIn(
+            "CloneAutonomousCandidateWithWeight(data, 0x0E0, 0x0B2, 450, "
+            "__VF2_EXERCISE_BIKE_OBJECT__)", src)
         clone = src[src.index("static void CloneAutonomousCandidateWithWeight("):]
         clone = clone[:clone.index("\n}")]
         self.assertIn("target[i] = donor[i]", clone,
@@ -401,6 +429,12 @@ class TestAddedFurnitureContract(unittest.TestCase):
         self.assertNotIn("donor[0xCD] = 0", clone,
                          "cloning now disables the donor candidate, which would "
                          "stop the stock Treadmill being selected")
+        # And the prerequisite must only ever be written to the TARGET slot.
+        self.assertIn("*(unsigned int *)(target + 0xC4) = objectPrerequisite;",
+                      clone)
+        self.assertNotIn("donor + 0xC4", clone,
+                         "the donor's own object prerequisite must not be "
+                         "rewritten, or the stock candidate changes too")
 
     def test_the_findfurniture_wrapper_forwards_every_stack_word(self):
         """The naked wrapper must forward SEVEN words and clean 28 bytes.

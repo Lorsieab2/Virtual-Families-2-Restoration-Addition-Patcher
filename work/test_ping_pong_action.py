@@ -93,50 +93,64 @@ class TestTheWrapperIsInstalled(unittest.TestCase):
 
     def test_a_stock_pool_table_keeps_its_stock_label(self):
         src = _source()
-        body = re.search(
-            r"VF2RandomPooltableLabel\(CVillager &villager\)\n\{(.*?)\n\}",
-            src, re.S,
-        ).group(1)
-        # The guard reads onPingPong, which prefers the table the engine's
-        # route actually chose and falls back to the pingPong pre-probe when
-        # nothing was recorded. It was a bare "if (!pingPong)" before that
-        # correction; the property pinned here -- a stock pool table returns
-        # before any label is applied -- is unchanged, and is now reached on
-        # the routed answer rather than on a stale nearest-match.
-        self.assertIn("if (!onPingPong)", body)
-        # The early return must come before any label is applied.
+        # Bounded by the next top-level definition rather than the first "\n}".
+        # The wrapper body is now a single statement with no inner block, and
+        # an earlier version of this extraction relied on a closing brace that
+        # only existed while the body had an `if` in it.
+        start = src.index(
+            "VF2RandomPooltableLabel(CVillager &villager)" + NL + "{")
+        body = src[start:src.index(NL + "// The Exercise Bike borrows", start)]
+        # THE PROPERTY IS UNCHANGED; what guarantees it is now much simpler.
         #
-        # Found by matching the CALL SHAPE rather than one helper's name.
-        # This pinned "VF2ApplyRememberedOrRandomLabel" and went red when
-        # that call was renamed to VF2ApplyVenueLabel here -- while the
-        # behaviour it protects was completely unchanged. The property is
-        # that a stock table returns before ANY label is applied, and which
-        # helper applies it is not what this test is for.
-        refuse = body.index("if (!onPingPong)")
+        # SUPERSEDED, recorded rather than deleted (AGENTS.md 11): this
+        # asserted `if (!onPingPong)`, a guard that had to DECIDE whether the
+        # villager was at a stock pool table. That decision was necessary only
+        # while the two tables shared object 0x36.
+        #
+        # They no longer do, so stock PlayingPooltable routes only to a genuine
+        # pool table and the wrapper applies no label at all. The native label
+        # now survives by construction rather than by a correct decision, which
+        # is a stronger guarantee than the one this test used to make.
+        self.assertNotIn("onPingPong", body)
+        # NO LABEL IS APPLIED HERE AT ALL, which is the strongest form of the
+        # property this test has ever asserted.
+        #
+        # It previously located the early return and required it to come
+        # BEFORE any label application, matching the call SHAPE rather than a
+        # helper name -- an earlier version had pinned
+        # "VF2ApplyRememberedOrRandomLabel" and went red on a pure rename.
+        # Shape-matching was the right instinct, and it is now unnecessary:
+        # there is no label application in this wrapper to be ordered against.
         applications = [
             match.start()
             for match in re.finditer(r"\bVF2Apply\w*Label\w*\(", body)
         ]
-        self.assertTrue(
-            applications,
-            "no label application found; if the mechanism changed name AND "
-            "shape, this test needs rewriting rather than relaxing",
-        )
-        self.assertLess(
-            refuse, min(applications),
-            "a pool table must return before the ping-pong label is applied",
+        self.assertEqual(
+            applications, [],
+            "the stock pool wrapper applies a label again; stock "
+            "PlayingPooltable only ever routes to a pool table now, so any "
+            "label applied here overwrites a correct native one",
         )
 
-    def test_the_table_is_identified_before_the_behaviour_runs(self):
-        # LinkPeepToFurniture reports the table the plan will use. Asking
-        # afterwards could observe a different link.
+    def test_the_wrapper_only_runs_the_native_behaviour(self):
+        """SUPERSEDED: there is no probe left whose ordering could matter.
+
+        Recorded rather than deleted (AGENTS.md 11). This required the
+        table-identity probe to be taken BEFORE the native behaviour, since a
+        probe taken afterwards samples a different moment. That ordering was
+        load-bearing while the wrapper had to classify which of two
+        same-object tables the villager was at.
+
+        The tables now have separate objects, so stock PlayingPooltable routes
+        only to pool tables and the wrapper classifies nothing. The invariant
+        reduces to: run the native behaviour, touch nothing else.
+        """
         body = re.search(
             r"VF2RandomPooltableLabel\(CVillager &villager\)\n\{(.*?)\n\}",
             _source(), re.S,
         ).group(1)
-        probe = body.index("VF2LinkedFurnitureItemIs")
-        native = body.index("VF2RunNativeBehaviorAndChangedLabel")
-        self.assertLess(probe, native)
+        self.assertIn("VF2RunNativeBehaviorAndChangedLabel", body)
+        self.assertNotIn("VF2LinkedFurnitureItemIs", body)
 
 
 class TestTheEmittedCIsValid(unittest.TestCase):
@@ -182,23 +196,24 @@ class TestTheEmittedCIsValid(unittest.TestCase):
 
 
 class TestTheFurnitureProbe(unittest.TestCase):
-    def test_it_matches_the_ping_pong_item_id(self):
+    def test_the_item_id_is_still_the_derived_constant(self):
+        """The item id must come from the furniture table, not a literal.
+
+        TWO SUPERSEDED FORMS, recorded rather than deleted (AGENTS.md 11).
+        This test used to assert that the caption probe in
+        VF2RandomPooltableLabel compared against the derived item id -- first
+        with the POOL TABLE's object 0x36, then with the ping-pong table's own
+        0x9A after the separation.
+
+        Neither form survives, because the probe itself is gone: stock
+        PlayingPooltable routes only to pool tables now, so any classification
+        in that wrapper can only mislabel a stock action. What the test was
+        really protecting -- that the item id is DERIVED rather than hardcoded
+        -- is pinned here and by
+        test_the_item_id_is_derived_from_the_furniture_table below.
+        """
         self.assertEqual(patcher.PING_PONG_TABLE_ITEM_ID, 0x32E)
-        # The generated C interpolates the constant, so the literal appears in
-        # the f-string template as the placeholder rather than the value.
-        self.assertIn(
-            # SUPERSEDED, recorded rather than deleted (AGENTS.md 11): this
-            # was `villager, 0x36, ...`, the POOL TABLE's object. Correct only
-            # while the Ping-Pong Table borrowed it. The table now declares its
-            # own 0x9A, so probing 0x36 would match only genuine pool tables,
-            # never the ping-pong item id, and would silently leave "Playing
-            # pool" on the ping-pong table. VF2LinkedFurnitureItemIs's own
-            # comment warns that getting this object wrong "fails silently".
-            "villager, __VF2_PING_PONG_OBJECT__, "
-            "__VF2_PING_PONG_TABLE_ITEM_ID__)",
-            _source(),
-            "the wrapper must compare against the derived item id",
-        )
+        self.assertIn("__VF2_PING_PONG_TABLE_ITEM_ID__", _source())
 
     def test_the_item_id_is_derived_from_the_furniture_table(self):
         record = next(
@@ -305,25 +320,57 @@ class TheCaptionFollowsTheTableTheVillagerIsAt(unittest.TestCase):
             + NL + '{')
         return source[start:source.index(NL + 'extern "C"', start)]
 
-    def test_the_wrapper_decides_from_its_own_probe(self):
-        body = self.wrapper_body()
-        self.assertIn(
-            "VF2LinkedFurnitureItemIs(" + NL
-            + "        villager, __VF2_PING_PONG_OBJECT__, "
-            + "__VF2_PING_PONG_TABLE_ITEM_ID__)", body,
-            "the wrapper no longer asks the same question PlayingPooltable "
-            "asks, so it cannot agree with the table the engine picks")
-        self.assertIn("bool const onPingPong = pingPong;", body)
-        self.assertIn("if (!onPingPong) {", body)
+    def test_the_wrapper_no_longer_classifies_at_all(self):
+        """The wrapper must not decide anything now that the objects differ.
 
-    def test_the_probe_runs_before_the_native_behaviour(self):
-        """PlayingPooltable samples FeetPos and captions before PlanToGo, so a
-        probe taken afterwards would sample a different moment."""
+        SUPERSEDED, recorded rather than deleted (AGENTS.md 11). This used to
+        require the wrapper to probe which table the villager was at and
+        relabel when it was the added one. That was right while the two SHARED
+        object 0x36 and a villager reaching stock PlayingPooltable might have
+        been at either.
+
+        Separating the objects removed the ambiguity and made every form of the
+        probe wrong:
+
+          * probing 0x36 matches only genuine pool tables after the split, so
+            it would silently leave "Playing pool" on the ping-pong table;
+          * probing 0x9A asks about a DIFFERENT item than this behaviour routes
+            to, so with both placed it finds the ping-pong table and overwrites
+            a genuine STOCK POOL caption with a ping-pong label.
+
+        The decisive fact is the binding. The retarget hooks behaviour 0x099 --
+        STOCK PlayingPooltable -- while the added table runs on its own id
+        0x0B8 through VF2PingPongPlay, which applies
+        kVF2BehaviorLabels_ping_pong itself. So this wrapper only ever sees a
+        stock pool action, and the correct behaviour is to leave its native
+        label alone.
+        """
         body = self.wrapper_body()
-        self.assertLess(
-            body.index("VF2LinkedFurnitureItemIs"),
-            body.index("VF2RunNativeBehaviorAndChangedLabel"),
-            "the probe must be taken before the native behaviour runs")
+        self.assertNotIn(
+            "VF2LinkedFurnitureItemIs", body,
+            "the wrapper is classifying again; stock PlayingPooltable only "
+            "ever routes to a pool table now, so any probe here can only "
+            "mislabel it")
+        self.assertNotIn("onPingPong", body)
+        self.assertNotIn("VF2ApplyVenueLabel", body)
+        self.assertIn(
+            "VF2RunNativeBehaviorAndChangedLabel(villager, "
+            "CBehavior::PlayingPooltable);", body,
+            "the wrapper must still run the native behaviour")
+
+    def test_the_ping_pong_label_still_has_exactly_one_source(self):
+        """Removing the wrapper's relabel must not lose the ping-pong caption.
+
+        It comes from VF2PingPongPlay, on behaviour id 0x0B8, which passes the
+        label group itself. If that ever stopped, the caption would be gone
+        rather than merely misplaced.
+        """
+        source = _source()
+        start = source.index(
+            'extern "C" void __cdecl VF2PingPongPlay(CVillager &villager)')
+        handler = source[start:source.index(NL + "}", start)]
+        self.assertIn("kVF2BehaviorLabels_ping_pong", handler)
+        self.assertIn("__VF2_PING_PONG_OBJECT__", handler)
 
     def test_the_position_blind_route_machinery_is_gone(self):
         """It cannot answer a per-villager question, so it must not return.
@@ -409,27 +456,37 @@ class ThePingPongTableHasItsOwnObject(unittest.TestCase):
             "__VF2_PING_PONG_TABLE_ITEM_ID__, 0x36, 0x36,", src,
             "the table is back on the Pool Table's object for both questions")
 
-    def test_the_caption_probe_searches_the_tables_own_object(self):
-        """The label probe must not keep hardcoding the Pool Table's object.
+    def test_the_stock_pool_wrapper_does_not_classify_by_our_object(self):
+        """The stock wrapper must not probe the ping-pong table at all.
 
-        VF2LinkedFurnitureItemIs takes the object as a parameter precisely
-        because getting it wrong FAILS SILENTLY -- its own comment records an
-        earlier round where hardcoding 0x36 made the bike probe search for a
-        pool table, never match, and leave the wrong labels in place.
+        SUPERSEDED, and this one was mine from earlier the same day. I added a
+        test requiring the caption probe to search the table's OWN object
+        (0x9A) instead of the Pool Table's 0x36, reasoning that probing 0x36
+        after the separation would never match and would silently leave
+        "Playing pool" on the ping-pong table.
 
-        After the separation the mirror mistake is live: probing 0x36 for the
-        ping-pong item would find only genuine pool tables, never match, and
-        silently leave "Playing pool" on the ping-pong table.
+        That reasoning was right about 0x36 and wrong about the remedy. Review
+        caught the rest: VF2RandomPooltableLabel wraps STOCK
+        CBehavior::PlayingPooltable, which searches 0x36 and therefore always
+        routes to a genuine POOL TABLE. Probing 0x9A there asks about a
+        DIFFERENT item than the behaviour routes to, so with both tables placed
+        it finds the ping-pong table and overwrites a real stock pool caption
+        with a ping-pong label.
+
+        The binding is what settles it: the retarget hooks behaviour 0x099
+        (stock pool), while the added table runs on its own 0x0B8 through
+        VF2PingPongPlay, which applies the ping-pong label itself. The stock
+        wrapper never sees the added table, so it must classify nothing.
         """
         src = _source()
-        self.assertIn(
+        self.assertNotIn(
             "villager, __VF2_PING_PONG_OBJECT__, "
             "__VF2_PING_PONG_TABLE_ITEM_ID__)", src,
-            "the caption probe searches the wrong object, so the ping-pong "
-            "label can never be applied")
+            "the stock pool wrapper is probing the ping-pong table again, "
+            "which can only mislabel a stock pool action")
         self.assertNotIn(
             "villager, 0x36, __VF2_PING_PONG_TABLE_ITEM_ID__)", src,
-            "the probe still hardcodes the Pool Table's object")
+            "the probe is back on the Pool Table's object")
 
     def test_both_object_macros_are_substituted_from_constants(self):
         """Searched object and declared object must not be able to drift."""
