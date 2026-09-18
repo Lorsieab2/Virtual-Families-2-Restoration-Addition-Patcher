@@ -25971,6 +25971,7 @@ extern "C" void __cdecl VF2MobileRestingBody(CVillager &);
 extern "C" void __cdecl VF2MobileStudyingOnPatio(CVillager &);
 __VF2_BEHAVIOR_FALLBACK_DECLS__
 extern "C" void __cdecl VF2ExerciseBikeWalk(CVillager &);
+extern "C" void __cdecl VF2ExerciseBikeRun(CVillager &);
 extern "C" void __cdecl VF2HomeGymWorkout(CVillager &);
 extern "C" void __cdecl VF2YogaEquipmentWorkout(CVillager &);
 extern "C" void __cdecl VF2PingPongPlay(CVillager &);
@@ -26389,7 +26390,11 @@ static bool gVF2PicnicPropPlaced = false;
 // Screen-space and chosen by eye against the art, like the other prop nudges
 // -- there is no measurable ground truth for it, so it is the owner's judgement
 // that decides when it is centred.
-static int const kVF2PatioDrinksNudgeX = 18;
+// Owner, third measurement from live play: "move it 7 pixels to the right on
+// the furniture item." The value has walked 6 -> 13 -> 18 -> 25, and every
+// step was the owner measuring the SHIPPED result, so each is an observation
+// rather than an estimate.
+static int const kVF2PatioDrinksNudgeX = 25;
 // The mobile meal sprite is authored at the table centre. The PC table
 // artwork needs a small screen-space correction: upward, then toward the
 // table's NE/NW side. Keep the placement record untouched and apply this
@@ -27061,14 +27066,31 @@ static bool VF2HandleMobileChaise(CVillager &villager)
         // shipped code. EDirection is NE=0, SE=1, SW=2, NW=3, which is a
         // DIFFERENT ordering from EFurnitureOrientation (SE=0, SW=1, NE=2,
         // NW=3), so the orientation is mapped rather than passed through.
+        // THE STOCK ORIENTATION TEST, NOT AN EAST/WEST SPLIT.
+        //
+        // Live IDA capture on the shipped build, with the owner reporting the
+        // first correct and the second wrong:
+        //
+        //   orientation=0 (SE)  dir=0 head=0  SleepNE   <- correct in play
+        //   orientation=1 (SW)  dir=3 head=3  SleepNW   <- WRONG in play
+        //
+        // The orientations actually in play are SE(0) and SW(1). Stock
+        // CBehavior::RestingBody -- the behaviour behind the normal chaise
+        // Lounge Chairs, which the owner confirms are correct and which this
+        // patch does not touch -- tests `cmp eax, 3` / `jne`: NW(3) ALONE
+        // takes SleepNW, every other orientation takes SleepNE.
+        //
+        // VF2FurnitureFacesEast groups {SE,NE} against {SW,NW}, which pulls
+        // SW into the NW arm. SW is the ONLY orientation where this patch
+        // disagreed with stock, and it is exactly the broken placement.
         plans->PlanToWait(
             duration, eBodyPositionChaise,
-            VF2FurnitureFacesEast(info.orientation)
-                ? eDirectionNortheast
-                : eDirectionNorthwest,
-            VF2FurnitureFacesEast(info.orientation)
-                ? eHeadDirectionNE
-                : eHeadDirectionNW);
+            VF2FurnitureFacesNorthWest(info.orientation)
+                ? eDirectionNorthwest
+                : eDirectionNortheast,
+            VF2FurnitureFacesNorthWest(info.orientation)
+                ? eHeadDirectionNW
+                : eHeadDirectionNE);
     } else {
         plans->PlanToLieDown(duration);
     }
@@ -29408,14 +29430,31 @@ static void VF2PlanLinkedChaiseAction(
         // shipped code. EDirection is NE=0, SE=1, SW=2, NW=3, which is a
         // DIFFERENT ordering from EFurnitureOrientation (SE=0, SW=1, NE=2,
         // NW=3), so the orientation is mapped rather than passed through.
+        // THE STOCK ORIENTATION TEST, NOT AN EAST/WEST SPLIT.
+        //
+        // Live IDA capture on the shipped build, with the owner reporting the
+        // first correct and the second wrong:
+        //
+        //   orientation=0 (SE)  dir=0 head=0  SleepNE   <- correct in play
+        //   orientation=1 (SW)  dir=3 head=3  SleepNW   <- WRONG in play
+        //
+        // The orientations actually in play are SE(0) and SW(1). Stock
+        // CBehavior::RestingBody -- the behaviour behind the normal chaise
+        // Lounge Chairs, which the owner confirms are correct and which this
+        // patch does not touch -- tests `cmp eax, 3` / `jne`: NW(3) ALONE
+        // takes SleepNW, every other orientation takes SleepNE.
+        //
+        // VF2FurnitureFacesEast groups {SE,NE} against {SW,NW}, which pulls
+        // SW into the NW arm. SW is the ONLY orientation where this patch
+        // disagreed with stock, and it is exactly the broken placement.
         plans->PlanToWait(
             duration, eBodyPositionChaise,
-            VF2FurnitureFacesEast(info.orientation)
-                ? eDirectionNortheast
-                : eDirectionNorthwest,
-            VF2FurnitureFacesEast(info.orientation)
-                ? eHeadDirectionNE
-                : eHeadDirectionNW);
+            VF2FurnitureFacesNorthWest(info.orientation)
+                ? eDirectionNorthwest
+                : eDirectionNortheast,
+            VF2FurnitureFacesNorthWest(info.orientation)
+                ? eHeadDirectionNW
+                : eHeadDirectionNE);
     } else {
         plans->PlanToLieDown(duration);
     }
@@ -29651,8 +29690,14 @@ static void VF2PlanSpaTreatment(
     // one sleep strip. The pair is east/west: {SE(0), NE(2)} east,
     // {SW(1), NW(3)} west. This drives BOTH the settle head direction and the
     // SleepNW/SleepNE animation, so the two stay in agreement.
+    // THE STOCK ORIENTATION TEST. See the relax poses above for the live
+    // capture that settles this: the orientations in play are SE(0) and SW(1),
+    // and stock RestingBody gives SleepNE to both -- only NW(3) takes SleepNW.
+    // The east/west grouping wrongly sent SW to the NW arm, which is the one
+    // orientation where this patch differed from stock and is exactly the
+    // placement the owner sees wrong.
     bool const loungerFacesNorthWest =
-        !VF2FurnitureFacesEast(info.orientation);
+        VF2FurnitureFacesNorthWest(info.orientation);
     EHeadDirection loungerHead =
         loungerFacesNorthWest ? eHeadDirectionNW : eHeadDirectionNE;
     // Same correction as the two relax poses: eBodyPositionChaise carries no
@@ -30099,7 +30144,24 @@ __VF2_COMPUTER_DROP_DISPATCH__
     // Added-item identity must win before the stock hotspot: these items use
     // donor maps, so the stock hotspot would otherwise consume the drop first.
     if (candidate == __VF2_EXERCISE_BIKE_ITEM_ID__) {
-        VF2ExerciseBikeWalk(villager);
+        // BOTH bike variants must be reachable from a DROP.
+        //
+        // Reported in play: dropping a villager on the Exercise Bike only ever
+        // produced "using the exercise bike", never "doing high-intensity
+        // cycling". This branch called VF2ExerciseBikeWalk unconditionally, so
+        // the run helper and its whole label family were unreachable from a
+        // drop -- a dispatch with exactly one reachable answer, which is the
+        // failure shape AGENTS.md warns about.
+        //
+        // The autonomous path already offers the choice, registering the two
+        // as separate candidates at equal weight 450 (0x0B1 walking,
+        // 0x0B2 running), so the drop uses the same even split through the
+        // engine's own RNG rather than inventing a different distribution.
+        if (ldwGameState::GetRandom(2)) {
+            VF2ExerciseBikeRun(villager);
+        } else {
+            VF2ExerciseBikeWalk(villager);
+        }
         return true;
     }
     if (candidate == __VF2_HOME_GYM_ITEM_ID__) {
@@ -34827,6 +34889,49 @@ static bool VF2VillagerIsDroppedOnAddedFurniture(
         (altItemId >= 0 && candidate == altItemId);
 }
 
+// The two items the owner asked to act where the villager is dropped.
+//
+// Named as a predicate so both call parameters test the same set, and so the
+// stock Yoga Equipment (0x220) is not forgotten beside the invisible copy
+// (__VF2_YOGA_EQUIPMENT_ITEM_ID__, 0x32A). The Home Gym has a single id.
+static bool VF2ItemIsHomeGymOrYoga(int itemId)
+{
+    return itemId == __VF2_HOME_GYM_ITEM_ID__ ||
+           itemId == 0x220 ||
+           itemId == __VF2_YOGA_EQUIPMENT_ITEM_ID__;
+}
+
+// WHICH placement the villager was dropped on, not merely whether.
+//
+// Owner request: "Villagers should do their actions where they are dropped
+// instead of moving somewhere else for the home Gym and Yoga Equipment only."
+//
+// VF2VillagerIsDroppedOnAddedFurniture above answers the yes/no question and
+// discards the record that answered it. The venue lookup then picks the
+// NEAREST placement of the item, so with two gyms placed a villager dropped on
+// one can be routed to the other. Reporting the slot lets the venue be taken
+// from the placement under the villager's own feet.
+//
+// Returns the furniture slot index, or -1 when the villager is not standing on
+// a placement of either item id.
+static int VF2DroppedOnAddedFurnitureSlot(
+    CVillager &villager, int itemId, int altItemId)
+{
+    ldwPoint sample = villager.FeetPos();
+    sample.y -= 10;
+    int const slot = VF2BehaviorPtOnFurnitureIndex(FurnitureManager, sample);
+    if (slot < 0) return -1;
+    unsigned char *manager = reinterpret_cast<unsigned char *>(&FurnitureManager);
+    int const count = *reinterpret_cast<int *>(manager + 0x1004);
+    if (slot >= count) return -1;
+    unsigned char *record = manager + 0x1008 + slot * 0x40;
+    if ((*reinterpret_cast<unsigned int *>(record + 0x0C) & 1) == 0) return -1;
+    int const candidate = *reinterpret_cast<int *>(record);
+    if (candidate == itemId) return slot;
+    if (altItemId >= 0 && candidate == altItemId) return slot;
+    return -1;
+}
+
 // How far the Home Gym's villager moves from the borrowed yoga-mat hotspot,
 // in world pixels -- toward the cubby the gym art provides.
 //
@@ -34864,10 +34969,21 @@ static int const kVF2HomeGymStandNudgeY = 12;
 // the stock item (0x220) and the invisible copy (0x32A) are the same thing with
 // different art, and a drop on either must reach the same venue. Pass -1 when
 // there is no second id, which is what every other caller does.
+// preferSlot: ACT WHERE THE VILLAGER WAS DROPPED, for the two items the owner
+// named. When preferSlot is a furniture slot that this loop also accepts as a
+// valid placement of the item, that placement wins regardless of distance.
+// Pass -1 -- as every caller except the Home Gym and Yoga routes does -- to
+// keep the original nearest-placement behaviour unchanged.
+//
+// The placement still supplies the hotspot and the orientation, so the gym's
+// cubby offset and the yoga mat's centre offset continue to apply. The request
+// is about WHICH placement is used, not about abandoning the correct spot on
+// it; dropping the nudges would reopen two separately reported bugs.
 static bool VF2FindAddedFurnitureVenueEx(
     CVillager &villager, int itemId, int altItemId, int object,
-    ldwPoint &outPoint, ldwPoint *outPlacement)
+    ldwPoint &outPoint, ldwPoint *outPlacement, int preferSlot)
 {
+    bool preferred = false;
     // This venue wrapper only needs a destination, not a peep reservation.
     // Do not call LinkPeepToFurniture speculatively: a shared-object stock
     // placement could be reserved and there is no unlink API to undo it.
@@ -34899,12 +35015,14 @@ static bool VF2FindAddedFurnitureVenueEx(
         long dx = info.point.x - feet.x;
         long dy = info.point.y - feet.y;
         long distance = dx * dx + dy * dy;
-        if (!found || distance < bestDistance) {
+        bool const isPreferred = (preferSlot >= 0 && slot == preferSlot);
+        if (isPreferred || !found || (!preferred && distance < bestDistance)) {
             bestDistance = distance;
             outPoint = info.point;
             foundPlacement = placement;
             foundOrientation = *reinterpret_cast<int *>(record + 0x10);
             found = true;
+            if (isPreferred) preferred = true;
         }
     }
     if (!found) return false;
@@ -34981,7 +35099,7 @@ static bool VF2FindAddedFurnitureVenue(
     CVillager &villager, int itemId, int object, ldwPoint &outPoint)
 {
     return VF2FindAddedFurnitureVenueEx(
-        villager, itemId, -1, object, outPoint, 0);
+        villager, itemId, -1, object, outPoint, 0, -1);
 }
 
 static void VF2BeginAddedFurnitureVenue(
@@ -35301,8 +35419,28 @@ static void VF2RunOwnFurnitureActionEx(
     // native lookup ranks by placement while the anchor carries a hotspot
     // offset. See VF2FindFurnitureAtAddedFurnitureImpl.
     ldwPoint venuePlacement = {};
+    // The Home Gym and the Yoga Equipment act where the villager is dropped,
+    // so they resolve the venue from the placement under the villager's feet.
+    // Every other item keeps the nearest-placement behaviour via -1.
+    // BOTH yoga item ids, stock AND invisible.
+    //
+    // __VF2_YOGA_EQUIPMENT_ITEM_ID__ substitutes to the INVISIBLE copy (0x32A)
+    // only; the stock Yoga Equipment is 0x220. The yoga route passes 0x220 as
+    // itemId and the invisible copy as altItemId, so testing only the macro
+    // would match through altItemId alone and would depend on which id landed
+    // in which parameter. A comment further down this file records an earlier
+    // round of exactly that mistake, where a drop on the VISIBLE item found no
+    // venue and fell back to the generic "Working out" label. Both ids are
+    // therefore named explicitly on both parameters.
+    bool const actsWhereDropped =
+        VF2ItemIsHomeGymOrYoga(itemId) ||
+        (altItemId >= 0 && VF2ItemIsHomeGymOrYoga(altItemId));
+    int const preferSlot = actsWhereDropped
+        ? VF2DroppedOnAddedFurnitureSlot(villager, itemId, altItemId)
+        : -1;
     bool const hasVenue = VF2FindAddedFurnitureVenueEx(
-        villager, itemId, altItemId, object, venue, &venuePlacement);
+        villager, itemId, altItemId, object, venue, &venuePlacement,
+        preferSlot);
     // THE VILLAGER'S ACTUAL POSITION OUTRANKS A RESOLVED VENUE.
     //
     // Reported in play: a villager dropped on the Treadmill did "Using the
