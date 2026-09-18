@@ -64,7 +64,18 @@ class TestAddedFurnitureContract(unittest.TestCase):
     def test_shared_donor_objects_are_explicit_and_separate(self):
         src = source()
         expected = {
-            "__VF2_EXERCISE_BIKE_ITEM_ID__": "0x04",
+            # THE EXERCISE BIKE IS NO LONGER ON THE TREADMILL'S OBJECT.
+            #
+            # SUPERSEDED, recorded rather than deleted (AGENTS.md 11): this
+            # expected "0x04", the Treadmill's object, because the bike
+            # borrowed TreadmillStd.png.fmap and therefore declared it. The
+            # owner asked for the two to become separate items with separate
+            # behaviours -- "the exercise bike is a totally new object" -- so
+            # the bike now has object 0x99 and its shipped fmap is retargeted
+            # to match. FindFurniture resolves purely by object, so sharing
+            # 0x04 is what made the two indistinguishable and forced every
+            # earlier fix to be a positional guard instead of a separation.
+            "__VF2_EXERCISE_BIKE_ITEM_ID__": "__VF2_EXERCISE_BIKE_OBJECT__",
             "__VF2_HOME_GYM_ITEM_ID__": "0x75",
             "__VF2_YOGA_EQUIPMENT_ITEM_ID__": "0x75",
             "__VF2_PING_PONG_TABLE_ITEM_ID__": "0x36",
@@ -75,7 +86,7 @@ class TestAddedFurnitureContract(unittest.TestCase):
         # stock item (0x220) and the invisible copy are the same thing with
         # different art and a drop on either must reach the same venue. Callers
         # with no second id pass -1. The pairing this test guards -- which
-        # donor OBJECT each added item is bound to -- is unchanged.
+        # OBJECT each added item is bound to -- is otherwise unchanged.
         for item, obj in expected.items():
             self.assertRegex(
                 src, rf"{re.escape(item)}, (?:(?:-1|0x[0-9a-fA-F]+), )?{obj}",
@@ -85,6 +96,15 @@ class TestAddedFurnitureContract(unittest.TestCase):
         self.assertIn("CBehavior::WorkingOut", src)
         self.assertIn("CBehavior::QuickWorkout", src)
         self.assertIn("CBehavior::PlayingPooltable", src)
+        # The bike and the Treadmill must not converge again. The object the
+        # bike searches is substituted from MOBILE_EXERCISE_BIKE_OBJECT, and
+        # that constant must differ from the donor object the Treadmill keeps,
+        # or the separation the owner asked for silently collapses.
+        self.assertNotEqual(
+            patcher.MOBILE_EXERCISE_BIKE_OBJECT,
+            patcher.MOBILE_EXERCISE_BIKE_DONOR_OBJECT,
+            "the Exercise Bike is sharing the Treadmill's object again, so "
+            "bike and treadmill actions can resolve to each other")
 
     def test_manual_drop_routes_added_items_to_own_handlers(self):
         src = source()
@@ -251,8 +271,20 @@ class TestAddedFurnitureContract(unittest.TestCase):
                       "the position check does not run when a venue resolved, "
                       "which is precisely the reported bug")
         guard = body[body.index("if (hasVenue &&"):]
+        # The guard must receive the DONOR's object, which is what this
+        # assertion's message always said it wanted. It previously matched on
+        # the parameter named `object`, and that was correct only while every
+        # item's own object WAS its donor's.
+        #
+        # The Exercise Bike broke that assumption: it now has its own 0x99
+        # while its donors are the stock Treadmill behaviours searching 0x04.
+        # Passing 0x99 here would make the guard look for a BIKE under a
+        # villager standing on a TREADMILL, match the remote bike's handle,
+        # conclude they were on open floor, and walk them off the treadmill --
+        # the precise regression this test exists to prevent.
         self.assertIn(
-            "VF2VillagerIsOnOtherFurniture(villager, itemId, altItemId, object)",
+            "VF2VillagerIsOnOtherFurniture(\n"
+            "            villager, itemId, altItemId, donorObject)",
             guard,
             "the guard no longer receives the donor object, so it cannot tell "
             "shared-object furniture from an unrelated sofa")

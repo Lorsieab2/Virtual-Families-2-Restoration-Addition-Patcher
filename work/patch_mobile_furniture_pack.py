@@ -132,6 +132,36 @@ MOBILE_PATIO_TABLE_PC_SEAT_CELLS = {
 }
 MOBILE_PICNIC_TABLE_ITEM_ID = 0x2E8
 MOBILE_PICNIC_TABLE_OBJECT = 0x97
+# THE EXERCISE BIKE'S OWN OBJECT, so it is no longer the Treadmill.
+#
+# Owner: "the exercise bike is a totally new object", and the standing rule
+# that bike actions target only the bike and treadmill actions only the
+# treadmill, in both directions and on both the drop and autonomous paths.
+#
+# ExerciseBikeStd borrows TreadmillStd.png.fmap and therefore answered the
+# Treadmill's object 0x04. FindFurniture resolves purely by object, so the two
+# were indistinguishable downstream and every earlier fix had to be a
+# positional guard instead of a real separation.
+#
+# 0x99 is the next free id after the four added items above, and the cell value
+# follows the same encoding: the low seven bits of the id sit at cell bits
+# 11..17, so 0x99 -> (0x19 << 11) | bit29 = 0x2000C800. Re-deriving the four
+# existing values from CContentMap::HasObject's decoder reproduces them exactly,
+# which is what validates this encoding rather than assuming it.
+MOBILE_EXERCISE_BIKE_OBJECT = 0x99
+MOBILE_EXERCISE_BIKE_PC_CELL_VALUE = 0x2000C800
+# The donor object this replaces. TreadmillStd.png.fmap is 14x16 and carries
+# object 0x04 on exactly three cells -- (6,9), (6,10) and (7,10) -- whose other
+# bits are collision flags and are preserved, so the bike keeps the footprint it
+# has today.
+#
+# Those coordinates are recorded here as a NOTE, not as data. retarget_fmap_object
+# finds the cells by decoding the object out of each one, so it stays correct if
+# the donor map is ever re-authored, and a hardcoded coordinate list would be a
+# second source of truth that could silently disagree with the map. An earlier
+# revision of this block declared them as a tuple that nothing read -- dead data
+# that reads like a contract.
+MOBILE_EXERCISE_BIKE_DONOR_OBJECT = 0x04
 MOBILE_PICNIC_TABLE_PC_CELL_VALUE = 0x2000B800
 MOBILE_PICNIC_TABLE_PC_CELLS = (
     (10, 15), (11, 15), (12, 15), (13, 15),
@@ -1023,6 +1053,49 @@ def borrowed_fmap_bytes(donor_map, desktop_safe_map):
         + struct.pack("<%dI" % len(merged), *merged)
         + donor_map[grid_end:]
     )
+
+
+def retarget_fmap_object(data, old_object, new_object):
+    """A copy of `data` with every `old_object` cell reading `new_object`.
+
+    Used to give the Exercise Bike its own content-map object instead of the
+    Treadmill's. The owner asked for the two to be separate items with separate
+    behaviours, and sharing object 0x04 is what made them indistinguishable to
+    CFurnitureManager::FindFurniture.
+
+    Only the object field moves. Every other bit of each cell is preserved, so
+    the borrower keeps the donor's exact collision geometry -- the point is to
+    change WHAT the piece is, not where it is solid. A borrower that lost its
+    footprint here would regress the way the Patio Table did when borrowers
+    were switched onto the sparse desktop-safe map.
+
+    The encoding is CContentMap::HasObject's own, read from its disassembly:
+
+        id = (((cell >> 11) & 0x40000) | (cell & 0x3F800)) >> 11
+
+    so the id's low seven bits live at cell bits 11..17 and its 0x80 bit lives
+    at cell bit 29. Returns (bytes, cells_changed) and returns the input
+    unchanged with a count of 0 when the data is not a readable QAMF grid,
+    rather than guessing.
+    """
+    cells = _fmap_cells(data)
+    if not cells:
+        return data, 0
+    low_mask = 0x3F800
+    high_mask = 0x40000 << 11
+    out = bytearray(data)
+    changed = 0
+    for index, cell in enumerate(cells):
+        decoded = (((cell >> 11) & 0x40000) | (cell & low_mask)) >> 11
+        if decoded != old_object:
+            continue
+        rebuilt = cell & ~low_mask & ~high_mask
+        rebuilt |= (new_object & 0x7F) << 11
+        if new_object & 0x80:
+            rebuilt |= high_mask
+        struct.pack_into("<I", out, 32 + index * 4, rebuilt)
+        changed += 1
+    return bytes(out), changed
 
 
 def _fmap_cells(data):
@@ -24779,6 +24852,37 @@ def sync_behavior_assets(manifest):
         merged = None
         if borrowed != src:
             merged = borrowed_fmap_bytes(src.read_bytes(), borrowed.read_bytes())
+        # THE EXERCISE BIKE GETS ITS OWN OBJECT, NOT THE TREADMILL'S.
+        #
+        # Owner: "the exercise bike is a totally new object", plus the standing
+        # symmetric rule that bike actions target only the bike and treadmill
+        # actions only the treadmill, on both the drop and autonomous paths.
+        #
+        # The bike borrows TreadmillStd.png.fmap, so the file written here for
+        # it declared the Treadmill's object 0x04. FindFurniture resolves purely
+        # by object, so the two were indistinguishable downstream and every
+        # earlier fix had to be a positional guard rather than a separation.
+        #
+        # Only the object field moves; every collision bit is preserved, so the
+        # bike keeps the exact footprint it has today. The Treadmill's own map
+        # is written from `src` above and is NOT touched, so the Treadmill keeps
+        # 0x04 and stays stock.
+        retargeted = 0
+        if target == "ExerciseBikeStd.png.fmap":
+            base = merged if merged is not None else borrowed.read_bytes()
+            rebuilt, retargeted = retarget_fmap_object(
+                base,
+                MOBILE_EXERCISE_BIKE_DONOR_OBJECT,
+                MOBILE_EXERCISE_BIKE_OBJECT,
+            )
+            if retargeted == 0:
+                raise RuntimeError(
+                    "ExerciseBikeStd.png.fmap carries no object "
+                    "%#x cell to retarget; the donor map changed and the bike "
+                    "would silently keep sharing the Treadmill's object"
+                    % MOBILE_EXERCISE_BIKE_DONOR_OBJECT
+                )
+            merged = rebuilt
         if merged is None:
             shutil.copy2(borrowed, dst)
         else:
@@ -24790,6 +24894,17 @@ def sync_behavior_assets(manifest):
             "source": str(borrowed),
             "bytes": dst.stat().st_size,
         }
+        if retargeted:
+            record["object_retargeted"] = {
+                "from": hex(MOBILE_EXERCISE_BIKE_DONOR_OBJECT),
+                "to": hex(MOBILE_EXERCISE_BIKE_OBJECT),
+                "cells": retargeted,
+                "reason": (
+                    "the Exercise Bike is its own object, so bike behaviours "
+                    "and Treadmill behaviours can no longer resolve to each "
+                    "other through the shared donor object"
+                ),
+            }
         if borrowed != src:
             record["donor_own_source"] = str(src)
             record["reason"] = (
@@ -30266,6 +30381,19 @@ __VF2_COMPUTER_DROP_DISPATCH__
         helper_source = helper_source.replace(
             _placeholder, f"{furniture_item_id_by_name(_item_name):#x}"
         )
+    # THE EXERCISE BIKE'S OWN OBJECT.
+    #
+    # Substituted from the constant rather than written as a literal, so the
+    # object the bike's behaviours SEARCH and the object its shipped fmap
+    # DECLARES can never drift apart. They are the same number by
+    # construction: retarget_fmap_object writes
+    # MOBILE_EXERCISE_BIKE_OBJECT into the map, and this substitution puts the
+    # same value into the FindFurniture calls. If these two ever disagreed the
+    # bike would resolve to nothing and its actions would silently stop
+    # working, which is exactly the kind of failure a literal invites.
+    helper_source = helper_source.replace(
+        "__VF2_EXERCISE_BIKE_OBJECT__", f"{MOBILE_EXERCISE_BIKE_OBJECT:#x}"
+    )
     # The prop sprites' image ids. Substituted from the same functions the
     # descriptor append uses, so a shifted block cannot leave the draw
     # pointing at whatever art now occupies the old id.
@@ -34830,6 +34958,19 @@ static bool gVF2AddedFurnitureVenueActive = false;
 // the walk-to point: FindFurniture returns info.point as the placement PLUS
 // the furniture map's hotspot offset, so the two differ by that offset.
 static ldwPoint gVF2AddedFurnitureVenuePlacement = {0, 0};
+// THE OBJECT THE VENUE WAS SELECTED FROM.
+//
+// Added for the Exercise Bike's own object (0x99). The donor behaviours are
+// the stock Treadmill ones and they push their OWN literal object, 0x04, into
+// their internal FindFurniture. The venue wrapper used to substitute only the
+// search point and forward that object unchanged, so once the bike's fmap
+// stopped declaring 0x04 the donor's lookup would either find nothing -- the
+// bike silently doing nothing at all -- or bind to a placed Treadmill, which
+// is the cross-targeting this change exists to end.
+//
+// -1 means "no substitution", which is what every venue opened before this
+// existed effectively did.
+static int gVF2AddedFurnitureVenueObject = -1;
 
 
 
@@ -35152,11 +35293,14 @@ static bool VF2FindAddedFurnitureVenue(
 }
 
 static void VF2BeginAddedFurnitureVenue(
-    CVillager &villager, ldwPoint point, ldwPoint placement)
+    CVillager &villager, ldwPoint point, ldwPoint placement, int object)
 {
     gVF2AddedFurnitureVenuePlans = reinterpret_cast<CVillagerPlans *>(&villager);
     gVF2AddedFurnitureVenuePoint = point;
     gVF2AddedFurnitureVenuePlacement = placement;
+    // The object the venue was selected from, so the donor's own
+    // FindFurniture searches the same thing rather than its own literal.
+    gVF2AddedFurnitureVenueObject = object;
     gVF2AddedFurnitureVenueActive = true;
 }
 
@@ -35165,6 +35309,10 @@ static void VF2EndAddedFurnitureVenue(CVillager &villager)
     if (gVF2AddedFurnitureVenuePlans == reinterpret_cast<CVillagerPlans *>(&villager)) {
         gVF2AddedFurnitureVenuePlans = 0;
         gVF2AddedFurnitureVenueActive = false;
+        // Cleared with the window. The active flag already gates every read,
+        // so this is belt and braces -- but a stale object left behind is
+        // exactly the kind of thing that reads as correct and fails later.
+        gVF2AddedFurnitureVenueObject = -1;
     }
 }
 
@@ -35312,6 +35460,20 @@ static bool __cdecl VF2FindFurnitureAtAddedFurnitureImpl(
     // record, which no other placement can beat.
     if (gVF2AddedFurnitureVenueActive) {
         point = gVF2AddedFurnitureVenuePlacement;
+        // AND THE OBJECT THE VENUE WAS SELECTED FROM.
+        //
+        // The donor here is a stock behaviour pushing its own literal object.
+        // For the Exercise Bike that literal is the Treadmill's 0x04, while
+        // the bike's placement now declares 0x99, so forwarding the donor's
+        // object would search for something this placement no longer has --
+        // finding nothing, or finding a placed Treadmill instead.
+        //
+        // Substituted only while the window is open, so every unrelated
+        // caller, including the stock Treadmill's own behaviours, is
+        // untouched and still searches its own object.
+        if (gVF2AddedFurnitureVenueObject >= 0) {
+            object = (CContentMap::EObject)gVF2AddedFurnitureVenueObject;
+        }
     }
     return manager->FindFurniture(object, point, *info, a, b, c);
 }
@@ -35453,12 +35615,31 @@ extern "C" __declspec(naked) void VF2PlanToGoObjectAtAddedFurniture()
 // Runs the donor's native action, then relabels to the item's own group.
 // Returning early when the native behaviour did not take leaves the villager
 // exactly as the stock game left them.
+// TWO OBJECTS, BECAUSE THERE ARE TWO QUESTIONS.
+//
+// `object` answers "which placement is THIS ITEM's venue" and must be the
+// item's own object. `donorObject` answers "is the villager standing on
+// furniture this action could steal them away from", and must be the object
+// the DONOR behaviour searches, because that is the only object a donor can be
+// diverted through.
+//
+// They are the same value for every item whose object is its donor's -- the
+// Home Gym and Yoga on 0x75, Ping-Pong on 0x36 -- and they differ only for the
+// Exercise Bike, which now has its own 0x99 while its donors are the stock
+// Treadmill behaviours searching 0x04.
+//
+// Conflating them is not theoretical: passing the bike's 0x99 to the exclusion
+// made it search for a BIKE under the feet of a villager standing on a
+// TREADMILL, match the remote bike's handle, and conclude the villager was on
+// open floor -- so the bike candidate walked them off the Treadmill, which is
+// the precise regression this guard exists to prevent.
 static void VF2RunOwnFurnitureActionEx(
     CVillager &villager,
     void (__cdecl *donorBehavior)(CVillager &),
     int itemId,
     int altItemId,
     int object,
+    int donorObject,
     int const *labels,
     int labelCount,
     bool varyLabelEachVisit)
@@ -35509,7 +35690,8 @@ static void VF2RunOwnFurnitureActionEx(
     // Standing on open floor returns false, so ordinary autonomous behaviour
     // is untouched: a villager who wanders toward the bike still gets it.
     if (hasVenue &&
-        VF2VillagerIsOnOtherFurniture(villager, itemId, altItemId, object)) {
+        VF2VillagerIsOnOtherFurniture(
+            villager, itemId, altItemId, donorObject)) {
         return;
     }
     if (!hasVenue) {
@@ -35529,7 +35711,7 @@ static void VF2RunOwnFurnitureActionEx(
         }
         return;
     }
-    VF2BeginAddedFurnitureVenue(villager, venue, venuePlacement);
+    VF2BeginAddedFurnitureVenue(villager, venue, venuePlacement, object);
     // READ THE SLOT SERIAL BEFORE THE RESOLVER RUNS.
     //
     // VF2CurrentLabelInGroup reaches VF2BehaviorLabelSlotIsCurrentFor, whose
@@ -35565,12 +35747,13 @@ static void VF2RunOwnFurnitureAction(
     void (__cdecl *donorBehavior)(CVillager &),
     int itemId,
     int object,
+    int donorObject,
     int const *labels,
     int labelCount)
 {
     VF2RunOwnFurnitureActionEx(
-        villager, donorBehavior, itemId, -1, object, labels, labelCount,
-        false);
+        villager, donorBehavior, itemId, -1, object, donorObject, labels,
+        labelCount, false);
 }
 
 // Run ONE OF SEVERAL donor behaviours at the item's venue.
@@ -35612,9 +35795,12 @@ static void VF2RunOwnFurnitureActionVaried(
     // this dispatcher, and their whole point is the set of workout variations
     // the owner asked for: a villager who rolled "Doing crunches" once must not
     // be stuck with it for the rest of the save.
+    // The gym and yoga routes have no separate donor object: their own object
+    // IS the donor's (0x75), so the exclusion asks exactly what it asked
+    // before. Only the Exercise Bike needs the two to differ.
     VF2RunOwnFurnitureActionEx(
-        villager, donorBehaviors[index], itemId, altItemId, object, labels,
-        labelCount, true);
+        villager, donorBehaviors[index], itemId, altItemId, object, object,
+        labels, labelCount, true);
 }
 
 // The general workout behaviours the Home Gym System and the Yoga Equipment
@@ -35720,7 +35906,14 @@ extern "C" void __cdecl VF2ExerciseBikeWalk(CVillager &villager)
 {
     VF2RunOwnFurnitureAction(
         villager, CBehavior::WorkoutTreadmill,
-        __VF2_EXERCISE_BIKE_ITEM_ID__, 0x04,
+        // The bike's OWN object selects its venue; the Treadmill's 0x04 is
+        // what the exclusion must ask about, because the donors here are the
+        // stock Treadmill behaviours and 0x04 is the only object they can be
+        // diverted through. Passing 0x99 to the exclusion would make it look
+        // for a BIKE under a villager standing on a TREADMILL, find the remote
+        // bike's handle, and walk them off the treadmill.
+        __VF2_EXERCISE_BIKE_ITEM_ID__, __VF2_EXERCISE_BIKE_OBJECT__,
+        __VF2_EXERCISE_BIKE_DONOR_OBJECT__,
         kVF2BehaviorLabels_exercise_bike_walk,
         VF2_LABEL_COUNT(kVF2BehaviorLabels_exercise_bike_walk));
 }
@@ -35729,7 +35922,14 @@ extern "C" void __cdecl VF2ExerciseBikeRun(CVillager &villager)
 {
     VF2RunOwnFurnitureAction(
         villager, CBehavior::RunningOnTreadmill,
-        __VF2_EXERCISE_BIKE_ITEM_ID__, 0x04,
+        // The bike's OWN object selects its venue; the Treadmill's 0x04 is
+        // what the exclusion must ask about, because the donors here are the
+        // stock Treadmill behaviours and 0x04 is the only object they can be
+        // diverted through. Passing 0x99 to the exclusion would make it look
+        // for a BIKE under a villager standing on a TREADMILL, find the remote
+        // bike's handle, and walk them off the treadmill.
+        __VF2_EXERCISE_BIKE_ITEM_ID__, __VF2_EXERCISE_BIKE_OBJECT__,
+        __VF2_EXERCISE_BIKE_DONOR_OBJECT__,
         kVF2BehaviorLabels_exercise_bike_run,
         VF2_LABEL_COUNT(kVF2BehaviorLabels_exercise_bike_run));
 }
@@ -35771,7 +35971,9 @@ extern "C" void __cdecl VF2PingPongPlay(CVillager &villager)
 {
     VF2RunOwnFurnitureAction(
         villager, CBehavior::PlayingPooltable,
-        __VF2_PING_PONG_TABLE_ITEM_ID__, 0x36,
+        // Ping-Pong's own object IS its donor's (both 0x36), so the venue
+        // object and the exclusion object are the same value here.
+        __VF2_PING_PONG_TABLE_ITEM_ID__, 0x36, 0x36,
         kVF2BehaviorLabels_ping_pong,
         VF2_LABEL_COUNT(kVF2BehaviorLabels_ping_pong));
 }
@@ -36662,6 +36864,23 @@ extern "C" void __cdecl VF2EnableAutonomousCandidates(void *villager)
     helper_cpp = helper_cpp.replace(
         "__VF2_EXERCISE_BIKE_ITEM_ID__",
         f"{furniture_item_id_by_name('ExerciseBikeStd'):#x}",
+    )
+    # THE BIKE'S OWN OBJECT, from the constant rather than a literal.
+    #
+    # The object the bike's behaviours SEARCH and the object its shipped fmap
+    # DECLARES must be the same number, and substituting both from
+    # MOBILE_EXERCISE_BIKE_OBJECT makes them the same by construction. If they
+    # ever disagreed, FindFurniture would match nothing and the bike's actions
+    # would silently stop working -- a failure that looks identical to the item
+    # not being placed, which is why it is not written as a literal here.
+    helper_cpp = helper_cpp.replace(
+        "__VF2_EXERCISE_BIKE_OBJECT__", f"{MOBILE_EXERCISE_BIKE_OBJECT:#x}"
+    )
+    # The DONOR's object, which the treadmill-exclusion guard must keep asking
+    # about even though the bike itself has moved to its own object.
+    helper_cpp = helper_cpp.replace(
+        "__VF2_EXERCISE_BIKE_DONOR_OBJECT__",
+        f"{MOBILE_EXERCISE_BIKE_DONOR_OBJECT:#x}",
     )
     helper_cpp = helper_cpp.replace(
         "__VF2_HOME_GYM_ITEM_ID__",
