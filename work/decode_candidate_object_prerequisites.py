@@ -26,8 +26,10 @@ plausible-looking rows the way attempt 1 did:
   C. the treadmill donors must resolve to 0x04 and the pool donor to 0x36 --
      independently known from the owner's in-play report and the #343 review
 """
+import glob
 import os
 import re
+import subprocess
 import sys
 
 SIG = bytes([0x00, 0x01, 0x02, 0xBE, 0x03, 0xBE, 0xBE, 0xBE, 0xBE,
@@ -40,9 +42,37 @@ DEFAULT_CASE = 0xBE
 _HERE = os.path.dirname(os.path.abspath(__file__))
 OBJ = os.path.join(_HERE, "desktop_obj_files", "Villager.obj")
 DISASM = os.path.join(_HERE, "Villager.disasm.txt")
-# dumpbin /RELOCATIONS output for Villager.obj, checked in beside this
-# script so the decode is reproducible without the MSVC toolchain.
+# dumpbin /RELOCATIONS output for Villager.obj. GENERATED ON DEMAND rather
+# than committed: it is a 3,400-line machine-generated build artifact, and
+# review correctly flagged checking it into the repository. If a cached copy
+# happens to sit beside this script it is used; otherwise dumpbin produces it
+# into a temporary directory.
 RELOCS = os.path.join(_HERE, "Villager_relocations.txt")
+
+
+def relocation_lines():
+    """Lines of `dumpbin /RELOCATIONS Villager.obj`, cached copy or fresh run.
+
+    Returns None when neither a cached dump nor dumpbin is available, so the
+    caller can say the decode is unavailable instead of reporting a result it
+    could not compute.
+    """
+    if os.path.exists(RELOCS):
+        with open(RELOCS, encoding="utf-8", errors="replace") as handle:
+            return handle.read().splitlines()
+
+    pattern = os.path.join(
+        "C:\\", "Program Files", "Microsoft Visual Studio", "*", "*", "VC",
+        "Tools", "MSVC", "*", "bin", "Hostx64", "x86", "dumpbin.exe")
+    matches = sorted(glob.glob(pattern))
+    if not matches:
+        return None
+    result = subprocess.run(
+        [matches[-1], "/nologo", "/RELOCATIONS", OBJ],
+        capture_output=True, text=True)
+    if result.returncode != 0 or not result.stdout:
+        return None
+    return result.stdout.splitlines()
 
 
 def main():
@@ -68,7 +98,12 @@ def main():
 
     # --- case number -> label, from relocations
     case_to_label = {}
-    for line in open(RELOCS, encoding="utf-8", errors="replace"):
+    lines_of_relocs = relocation_lines()
+    if lines_of_relocs is None:
+        print("no cached relocation dump and dumpbin not found;")
+        print("the behaviour -> prerequisite decode is UNAVAILABLE.")
+        return 2
+    for line in lines_of_relocs:
         m = re.match(r"\s+([0-9A-F]{8})\s+DIR32\s+\S+\s+\S+\s+(\$LN\d+)\s*$", line)
         if not m:
             continue
