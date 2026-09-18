@@ -575,7 +575,9 @@ class TestOnlyReceivingIsAutonomous(unittest.TestCase):
         # sent SW to the NW sleep strip. Stock CBehavior::RestingBody tests
         # NW(3) ALONE, and the normal chaise Lounge Chairs that use it are
         # confirmed correct in play.
-        self.assertIn("VF2FurnitureFacesNorthWest(info.orientation)", body)
+        self.assertIn(
+            "VF2SpaLoungerFacesNorthWest(info.orientation, info.unknown0)",
+            body)  # the SPA-GATED rule; the shared one serves ordinary chaises
         self.assertIn("static_cast<ESound>(0x101)", body)       # gulpahh_01.ogg
 
     def test_receiving_uses_sleep_animation_and_preserves_total_duration(self):
@@ -1082,7 +1084,9 @@ class TheTreatmentPoseFollowsTheLounger(unittest.TestCase):
         # which is what makes it impossible for the two to disagree -- the
         # exact defect the owner reported on the hammock, where the lie-down
         # faced wrong while the sleep that followed it looked right.
-        self.assertIn("VF2FurnitureFacesNorthWest(info.orientation)", body,
+        self.assertIn(
+            "VF2SpaLoungerFacesNorthWest(info.orientation, info.unknown0)",
+            body,
                       "the orientation no longer selects between the two "
                       "sleep animations, so one facing will look wrong")
         self.assertIn('"SleepNW"', body)

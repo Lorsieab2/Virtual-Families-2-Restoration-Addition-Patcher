@@ -481,31 +481,94 @@ class OrientationComesFromTheOrientationField(unittest.TestCase):
         from stock, and keep the owner's play evidence above any disassembly
         when the two disagree.
         """
-        # THE PREDICATE'S VALUE. This is the assertion whose absence let five
-        # wrong rules ship. Read the function body and pin the comparison.
-        body = SOURCE[SOURCE.index("static bool VF2FurnitureFacesNorthWest("):]
-        body = body[:body.index("\n}")]
+        # THE PREDICATE'S VALUE, asserted on the body with COMMENTS STRIPPED
+        # and the statement normalised.
+        #
+        # Two separate weaknesses were found here by review, and both are the
+        # same shape as the defect this test exists to catch:
+        #
+        #   1. The original version only asserted the predicate was CALLED at
+        #      the pose sites, never what it RETURNED. Changing the body from
+        #      `== 3` to `== 1` left 94 tests green.
+        #   2. The replacement scanned the raw body INCLUDING COMMENTS, so a
+        #      `== 3` sitting in the explanatory comment satisfied an assertion
+        #      about the code, and a dead `return` before the live one would
+        #      have passed too.
+        #
+        # So: strip comments, then require the spa rule's return to be exactly
+        # the intended statement.
+        spa = CODE[CODE.index("static bool VF2SpaLoungerFacesNorthWest("):]
+        spa = spa[:spa.index("\n}")]
+        # THE HANDLE GATE ITSELF. Found by mutation: replacing
+        # `if (!VF2SpaLoungerHasHandle(handle))` with `if (false)` left 66
+        # tests green while restoring the exact regression review caught --
+        # the spa facing applied to ordinary Lounge Chairs. Asserting the two
+        # returns is not enough, because the guard that chooses between them
+        # was unpinned.
         self.assertIn(
-            "return orientation == 1", body,
-            "the lounger facing must select the northwest strip for "
-            "orientation 1 (SW). A lounger only occupies orientations 0 and "
-            "1, so testing any other value leaves BOTH placements on the "
-            "northeast arm -- which is exactly the defect the owner reported "
-            "in B188, with one lounger correct by luck and one wrong.")
+            "if (!VF2SpaLoungerHasHandle(handle)) {", spa,
+            "the spa facing rule must be gated on the handle actually being "
+            "a spa lounger. Without that gate it applies to every chaise "
+            "that enters the reclined branch, including the ordinary Lounge "
+            "Chairs the owner confirmed working in play.")
         self.assertNotIn(
-            "return orientation == 3", body,
-            "orientation 3 never occurs for a lounger, so this predicate "
-            "would always be false and both placements would pose identically")
+            "if (false)", spa,
+            "the spa handle gate has been short-circuited, so the spa "
+            "facing would apply to ordinary chaises")
 
+        returns = [ln.strip() for ln in spa.splitlines()
+                   if ln.strip().startswith("return ")]
         self.assertEqual(
-            SOURCE.count("VF2FurnitureFacesNorthWest(info.orientation)\n"
-                         "                ? eHeadDirectionNW\n"
-                         "                : eHeadDirectionNE"), 2,
-            "both chaise poses must route the strip through the same test")
+            returns, ["return false;", "return orientation == 1;"],
+            "the spa lounger facing must be exactly: false when the handle is "
+            "not a spa lounger, then `orientation == 1` for the SW placement. "
+            "Got %r. A spa lounger only occupies orientations 0 and 1, so any "
+            "other value leaves BOTH placements on the northeast arm -- the "
+            "defect the owner reported in B188." % (returns,))
+
+        # And the SHARED chaise predicate must keep the value the ordinary
+        # Lounge Chairs were confirmed working with. Review caught the first
+        # version of this fix changing it, which would have regressed them.
+        shared = CODE[CODE.index("static bool VF2FurnitureFacesNorthWest("):]
+        shared = shared[:shared.index("\n}")]
+        shared_returns = [ln.strip() for ln in shared.splitlines()
+                          if ln.strip().startswith("return ")]
+        self.assertEqual(
+            shared_returns, ["return orientation == 3 /* NW */;"],
+            "the shared chaise/hammock facing test must stay unchanged; the "
+            "spa lounger's corrected rule belongs in "
+            "VF2SpaLoungerFacesNorthWest, gated on the spa handle, because "
+            "ordinary Lounge Chairs at orientation 1 enter the same reclined "
+            "branch and were confirmed working in play. Got %r."
+            % (shared_returns,))
+
+        # The mixed-scope handlers must route through the SPA-GATED rule, not
+        # the shared one, or the gate accomplishes nothing.
+        self.assertEqual(
+            CODE.count("VF2SpaLoungerFacesNorthWest(info.orientation, "
+                       "info.unknown0)"), 5,
+            "all five lounger facing decisions -- two poses in each mixed "
+            "handler plus the spa settle strip -- must ask the spa-gated rule")
+
+        # SUPERSEDED, recorded rather than deleted (AGENTS.md 11): this
+        # required both chaise poses to call VF2FurnitureFacesNorthWest
+        # directly. Review showed that is precisely the defect -- those poses
+        # are reached by ordinary Lounge Chairs as well as spa loungers, so
+        # they must ask the SPA-GATED rule instead. The count assertion above
+        # pins that, and the shared predicate is pinned separately.
+        self.assertNotIn(
+            "VF2FurnitureFacesNorthWest(info.orientation)\n"
+            "                ? eHeadDirectionNW", CODE,
+            "a mixed chaise pose is using the shared predicate again, which "
+            "would apply the spa lounger's facing to ordinary Lounge Chairs")
+        # SUPERSEDED alongside the pose sites: the spa settle/sleep strip now
+        # asks the spa-gated rule too, so that all three spa decisions agree
+        # AND none of them can reach an ordinary Lounge Chair.
         self.assertIn(
             "loungerFacesNorthWest =\n"
-            "        VF2FurnitureFacesNorthWest(info.orientation);", SOURCE,
-            "the spa settle/sleep strip must use the same test")
+            "        VF2SpaLoungerFacesNorthWest(info.orientation, "
+            "info.unknown0);", SOURCE,
+            "the spa settle/sleep strip must use the spa-gated rule")
         self.assertNotIn(
             "!VF2FurnitureFacesEast(info.orientation)", SOURCE,
             "the east/west split is what put SW on the wrong sleep strip")
