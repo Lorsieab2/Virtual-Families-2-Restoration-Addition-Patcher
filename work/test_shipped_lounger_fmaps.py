@@ -535,11 +535,34 @@ class TestStockDonorBorrowersMatchTheirDonors(unittest.TestCase):
     BORROWERS = {
         "InvisibleYogaEquipment.png.fmap": "YogaGearStd.png.fmap",
         "HomeGymSystemStd.png.fmap": "YogaGearStd.png.fmap",
-        "ExerciseBikeStd.png.fmap": "TreadmillStd.png.fmap",
-        "PingPongTableStd.png.fmap": "PoolTableStd.png.fmap",
         "InvisibleHammock.png.fmap": "HammockStd.png.fmap",
         "InvisibleKiddiePool.png.fmap": "PoolChildrensStd.png.fmap",
         "InvisibleFullSizePool.png.fmap": "PoolLargeStd.png.fmap",
+    }
+
+    # TWO BORROWERS ARE DELIBERATELY NO LONGER BYTE-IDENTICAL.
+    #
+    # SUPERSEDED, recorded rather than deleted (AGENTS.md 11): the Exercise
+    # Bike and the Ping-Pong Table used to be in BORROWERS above. They are the
+    # two items the owner asked to become separate furniture with separate
+    # behaviours -- "the exercise bike is a totally new object" -- because
+    # sharing the donor's content-map object is what made the pairs
+    # indistinguishable to FindFurniture and produced years of cross-targeting
+    # reports.
+    #
+    # The docstring's reasoning still holds for the five items above: they rely
+    # on the game's NATIVE hotspot path, which only works if the placement data
+    # they carry is the donor's. It does NOT apply to these two, because this
+    # patcher's own drop dispatcher claims them first and keys on ITEM ID, not
+    # object -- "Added-item identity must win before the stock hotspot" in the
+    # generator, resolved through VF2FurnitureItemAtPoint. So retargeting the
+    # object cannot affect their drop path.
+    #
+    # They are still checked, just for the correct property: identical to the
+    # donor EXCEPT for the object field, which must be their own.
+    RETARGETED_BORROWERS = {
+        "ExerciseBikeStd.png.fmap": ("TreadmillStd.png.fmap", 0x04, 0x99),
+        "PingPongTableStd.png.fmap": ("PoolTableStd.png.fmap", 0x36, 0x9A),
     }
 
     def setUp(self):
@@ -566,6 +589,66 @@ class TestStockDonorBorrowersMatchTheirDonors(unittest.TestCase):
         self.assertGreater(
             checked, 0,
             "found no borrower/donor pairs to compare -- a vacuous pass",
+        )
+
+    def test_the_retargeted_borrowers_keep_the_footprint_but_own_the_object(self):
+        """The bike and ping-pong table: donor geometry, their own object.
+
+        This is the property that replaced byte-identity for these two. Both
+        halves matter and each catches a different real failure:
+
+          * the OBJECT must be their own, or the pair stays indistinguishable
+            to FindFurniture and the owner's cross-targeting reports return;
+          * every OTHER bit must match the donor, or the item lost collision
+            geometry -- the way the Patio Table fell from 241 occupied cells to
+            8 when borrowers were switched onto the sparse desktop-safe map.
+        """
+        low_mask = 0x3F800
+        high_mask = 0x40000 << 11
+
+        def cells(data):
+            if len(data) < 32 or data[:4] != b"QAMF":
+                return None
+            width, height = struct.unpack_from("<II", data, 24)
+            count = width * height
+            if len(data) < 32 + 4 * count:
+                return None
+            return list(struct.unpack_from("<%dI" % count, data, 32))
+
+        def decode(cell):
+            return (((cell >> 11) & 0x40000) | (cell & low_mask)) >> 11
+
+        checked = 0
+        for build in self.builds:
+            assets = build / "Assets"
+            for borrower, (donor, donor_obj, own_obj) in \
+                    self.RETARGETED_BORROWERS.items():
+                bp, dp = assets / borrower, assets / donor
+                if not (bp.is_file() and dp.is_file()):
+                    continue
+                bc, dc = cells(bp.read_bytes()), cells(dp.read_bytes())
+                if bc is None or dc is None or len(bc) != len(dc):
+                    continue
+                with self.subTest(build=build.name, fmap=borrower):
+                    seen = {decode(c) for c in bc if c}
+                    self.assertIn(
+                        own_obj, seen,
+                        f"{borrower} does not declare its own object "
+                        f"{own_obj:#x}, so it is still indistinguishable "
+                        f"from {donor}")
+                    self.assertNotIn(
+                        donor_obj, seen,
+                        f"{borrower} still declares {donor_obj:#x}, the "
+                        f"donor's object")
+                    self.assertEqual(
+                        [c & ~low_mask & ~high_mask for c in bc],
+                        [c & ~low_mask & ~high_mask for c in dc],
+                        f"{borrower} differs from {donor} outside the object "
+                        "field, so its collision footprint moved")
+                    checked += 1
+        self.assertGreater(
+            checked, 0,
+            "found no retargeted borrower/donor pairs -- a vacuous pass",
         )
 
 

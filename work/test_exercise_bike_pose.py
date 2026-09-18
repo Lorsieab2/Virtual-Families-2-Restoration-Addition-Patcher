@@ -515,7 +515,16 @@ class TheExerciseBikeHasItsOwnObject(unittest.TestCase):
         split. If either silently changed, an unrelated item would have been
         modified to fix the bike.
         """
-        self.assertIn("__VF2_PING_PONG_TABLE_ITEM_ID__, 0x36, 0x36,", SOURCE)
+        # SUPERSEDED: Ping-Pong used to pass 0x36 for both questions, because
+        # its own object WAS the Pool Table's. The owner asked for that
+        # separation too, so it now passes its own 0x9A for the venue and the
+        # Pool Table's 0x36 for the exclusion -- the same split as the bike.
+        # The gym/yoga dispatcher below is now the only item where the two
+        # values coincide.
+        self.assertIn(
+            "__VF2_PING_PONG_TABLE_ITEM_ID__, __VF2_PING_PONG_OBJECT__,",
+            SOURCE)
+        self.assertIn("__VF2_PING_PONG_DONOR_OBJECT__,", SOURCE)
         self.assertIn(
             "villager, donorBehaviors[index], itemId, altItemId, object, object,",
             SOURCE,
@@ -529,7 +538,9 @@ class TheExerciseBikeHasItsOwnObject(unittest.TestCase):
 
     def test_the_shipped_bike_fmap_is_retargeted(self):
         """The copy that writes the bike's own file must retarget it."""
-        self.assertIn('if target == "ExerciseBikeStd.png.fmap":', SOURCE)
+        # The retarget is now a table covering both separated items, so the
+        # bike's entry is a key rather than an if-statement.
+        self.assertIn('"ExerciseBikeStd.png.fmap": (', SOURCE)
         self.assertIn("MOBILE_EXERCISE_BIKE_DONOR_OBJECT,", SOURCE)
         self.assertIn("MOBILE_EXERCISE_BIKE_OBJECT,", SOURCE)
         self.assertIn(

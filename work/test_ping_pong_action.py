@@ -3,9 +3,18 @@
 
 The table borrows CBehavior::PlayingPooltable from the Pool Table, which is
 the whole reason it has any interaction at all -- but that behaviour labels its
-users "Playing pool". Both tables answer to EObject 0x36, so the behaviour
-cannot tell them apart on its own; the placed-furniture record behind the
-villager's linked table can.
+users "Playing pool".
+
+THE TWO TABLES NO LONGER SHARE AN OBJECT. They both answered EObject 0x36 for a
+long time, because the Ping-Pong Table borrowed PoolTableStd.png.fmap, and that
+is why the owner kept reporting villagers targeting the ping-pong table to play
+pool: FindFurniture resolves purely by object, so nothing downstream could tell
+them apart. The Ping-Pong Table now declares its own 0x9A and its shipped fmap
+is retargeted to match.
+
+The placed-furniture record behind the villager's linked table is still what
+distinguishes the two for LABELLING, and that probe must search the ping-pong
+table's own object now rather than the Pool Table's.
 
 A stock Pool Table must keep its stock label untouched.
 """
@@ -178,7 +187,15 @@ class TestTheFurnitureProbe(unittest.TestCase):
         # The generated C interpolates the constant, so the literal appears in
         # the f-string template as the placeholder rather than the value.
         self.assertIn(
-            "villager, 0x36, __VF2_PING_PONG_TABLE_ITEM_ID__)",
+            # SUPERSEDED, recorded rather than deleted (AGENTS.md 11): this
+            # was `villager, 0x36, ...`, the POOL TABLE's object. Correct only
+            # while the Ping-Pong Table borrowed it. The table now declares its
+            # own 0x9A, so probing 0x36 would match only genuine pool tables,
+            # never the ping-pong item id, and would silently leave "Playing
+            # pool" on the ping-pong table. VF2LinkedFurnitureItemIs's own
+            # comment warns that getting this object wrong "fails silently".
+            "villager, __VF2_PING_PONG_OBJECT__, "
+            "__VF2_PING_PONG_TABLE_ITEM_ID__)",
             _source(),
             "the wrapper must compare against the derived item id",
         )
@@ -292,7 +309,8 @@ class TheCaptionFollowsTheTableTheVillagerIsAt(unittest.TestCase):
         body = self.wrapper_body()
         self.assertIn(
             "VF2LinkedFurnitureItemIs(" + NL
-            + "        villager, 0x36, __VF2_PING_PONG_TABLE_ITEM_ID__)", body,
+            + "        villager, __VF2_PING_PONG_OBJECT__, "
+            + "__VF2_PING_PONG_TABLE_ITEM_ID__)", body,
             "the wrapper no longer asks the same question PlayingPooltable "
             "asks, so it cannot agree with the table the engine picks")
         self.assertIn("bool const onPingPong = pingPong;", body)
@@ -321,6 +339,106 @@ class TheCaptionFollowsTheTableTheVillagerIsAt(unittest.TestCase):
         for symbol in ("gVF2RoutedItemValid", "VF2RoutedToItem", "routeIsOurs"):
             with self.subTest(symbol=symbol):
                 self.assertNotIn(symbol, code)
+
+
+class ThePingPongTableHasItsOwnObject(unittest.TestCase):
+    """The table must not share the Pool Table's content-map object.
+
+    Owner, reported across three separate rounds:
+
+        "Villagers still target the pingpong table to play pool autonomously"
+
+    This is the IDENTICAL root cause the Exercise Bike had. PingPongTableStd
+    borrows PoolTableStd.png.fmap and therefore answered the Pool Table's
+    object 0x36. CFurnitureManager::FindFurniture resolves purely by object,
+    so the two tables were indistinguishable downstream and every earlier fix
+    had to be a positional guard or a label probe rather than a separation.
+    """
+
+    def test_the_table_has_its_own_object_id(self):
+        self.assertEqual(patcher.MOBILE_PING_PONG_OBJECT, 0x9A)
+        self.assertNotEqual(
+            patcher.MOBILE_PING_PONG_OBJECT,
+            patcher.MOBILE_PING_PONG_DONOR_OBJECT,
+            "the Ping-Pong Table is sharing the Pool Table's object again")
+
+    def test_the_object_id_collides_with_nothing(self):
+        """A collision would recreate the bug against a different item."""
+        others = {
+            patcher.MOBILE_CHAISE_OBJECT,
+            patcher.MOBILE_PATIO_UMBRELLA_OBJECT,
+            patcher.MOBILE_PICNIC_TABLE_OBJECT,
+            patcher.MOBILE_PATIO_TABLE_OBJECT,
+            patcher.MOBILE_EXERCISE_BIKE_OBJECT,
+        }
+        self.assertNotIn(patcher.MOBILE_PING_PONG_OBJECT, others)
+
+    def test_the_cell_value_decodes_to_the_object_id(self):
+        """The encoding is CContentMap::HasObject's own, not an assumption."""
+        def decode(cell):
+            return (((cell >> 11) & 0x40000) | (cell & 0x3F800)) >> 11
+
+        self.assertEqual(
+            decode(patcher.MOBILE_PING_PONG_PC_CELL_VALUE),
+            patcher.MOBILE_PING_PONG_OBJECT)
+
+    def test_the_shipped_fmap_is_retargeted(self):
+        """The copy that writes the table's own file must retarget it."""
+        src = _source()
+        self.assertIn('"PingPongTableStd.png.fmap": (', src)
+        self.assertIn("MOBILE_PING_PONG_DONOR_OBJECT,", src)
+        self.assertIn("MOBILE_PING_PONG_OBJECT,", src)
+        self.assertIn(
+            "carries no object ", src,
+            "a donor map that stops carrying the object must fail the build, "
+            "not silently leave the table sharing the Pool Table's object")
+
+    def test_the_behaviour_splits_venue_from_donor_object(self):
+        """Venue selection uses 0x9A; the exclusion still asks about 0x36.
+
+        Same split the Exercise Bike needed. The donor is the stock
+        PlayingPooltable behaviour, and 0x36 is the only object it can be
+        diverted through, so the exclusion must keep asking about 0x36 even
+        though the table itself has moved.
+        """
+        src = _source()
+        self.assertIn(
+            "__VF2_PING_PONG_TABLE_ITEM_ID__, __VF2_PING_PONG_OBJECT__,", src)
+        self.assertIn("__VF2_PING_PONG_DONOR_OBJECT__,", src)
+        self.assertNotIn(
+            "__VF2_PING_PONG_TABLE_ITEM_ID__, 0x36, 0x36,", src,
+            "the table is back on the Pool Table's object for both questions")
+
+    def test_the_caption_probe_searches_the_tables_own_object(self):
+        """The label probe must not keep hardcoding the Pool Table's object.
+
+        VF2LinkedFurnitureItemIs takes the object as a parameter precisely
+        because getting it wrong FAILS SILENTLY -- its own comment records an
+        earlier round where hardcoding 0x36 made the bike probe search for a
+        pool table, never match, and leave the wrong labels in place.
+
+        After the separation the mirror mistake is live: probing 0x36 for the
+        ping-pong item would find only genuine pool tables, never match, and
+        silently leave "Playing pool" on the ping-pong table.
+        """
+        src = _source()
+        self.assertIn(
+            "villager, __VF2_PING_PONG_OBJECT__, "
+            "__VF2_PING_PONG_TABLE_ITEM_ID__)", src,
+            "the caption probe searches the wrong object, so the ping-pong "
+            "label can never be applied")
+        self.assertNotIn(
+            "villager, 0x36, __VF2_PING_PONG_TABLE_ITEM_ID__)", src,
+            "the probe still hardcodes the Pool Table's object")
+
+    def test_both_object_macros_are_substituted_from_constants(self):
+        """Searched object and declared object must not be able to drift."""
+        src = _source()
+        self.assertIn(
+            '"__VF2_PING_PONG_OBJECT__", f"{MOBILE_PING_PONG_OBJECT:#x}"', src)
+        self.assertIn(
+            '"__VF2_PING_PONG_DONOR_OBJECT__", '
+            'f"{MOBILE_PING_PONG_DONOR_OBJECT:#x}"', src)
 
 
 if __name__ == "__main__":
