@@ -1,6 +1,7 @@
 import re
 import unittest
 
+import extract_emitted_behavior_cpp as emitted
 import patch_mobile_furniture_pack as patcher
 
 
@@ -554,31 +555,74 @@ class TestAddedFurnitureContract(unittest.TestCase):
             (0x047, 0x048, "0"),                             # WorkKitchen0
         ]
 
-        for donor, target, prerequisite in expected:
-            call = ("CloneAutonomousCandidateWithWeight(data, 0x%03X, 0x%03X, "
-                    "450, %s)" % (donor, target, prerequisite))
-            with self.subTest(target="0x%03X" % target):
-                self.assertIn(
-                    call, src,
-                    "clone 0x%03X -> 0x%03X must pass prerequisite %s. Either "
-                    "the call changed or a prerequisite was altered; both "
-                    "change WHEN the action is offered in play."
-                    % (donor, target, prerequisite))
+        # Assert against PREPROCESSED C++, not source text.
+        #
+        # Review found two ways text-matching lies about what runs:
+        #   - `//` in front of a call leaves its text intact
+        #   - `#if 0` around a call leaves its text intact even after comment
+        #     stripping, because the PREPROCESSOR removes it, not the text
+        #
+        # No regex can answer the second one; only a preprocessor can. So the
+        # calls below come from `cl /EP /P` output, which is exactly what the
+        # compiler sees. If MSVC is unavailable the test FAILS rather than
+        # quietly falling back to the weaker check -- a skipped check that
+        # reports as a pass is the defect this whole review chain is about.
+        preprocessed = emitted.preprocessed_cpp()
+        self.assertIsNotNone(
+            preprocessed,
+            "cl.exe not found, so preprocessor reachability cannot be "
+            "established. This test asserts which clone calls SURVIVE "
+            "preprocessing; without MSVC that claim is unverifiable and "
+            "must not be reported as a pass.")
+        live = emitted.clone_calls(preprocessed)
 
-        # The table must be COMPLETE. Without this, adding a new clone call
-        # with a wrong prerequisite would pass every assertion above.
-        actual = re.findall(
-            r"CloneAutonomousCandidateWithWeight\(data,[^;]*\);", src)
+        # Calls are matched by HELPER NAME with parsed arguments, so a call
+        # whose first argument is spelled anything other than `data` -- a cast,
+        # a different variable -- is still counted. Anchoring the old regex on
+        # `data,` let exactly such a call slip past the completeness check.
+        by_target = {}
+        for args in live:
+            if len(args) != 5:
+                continue
+            by_target.setdefault(args[2], []).append(args)
+
+        for donor, target, prerequisite in expected:
+            key = "0x%03X" % target
+            with self.subTest(target=key):
+                matches = by_target.get(key) or []
+                self.assertEqual(
+                    len(matches), 1,
+                    "expected exactly one live clone call targeting %s, found "
+                    "%d. A duplicate or a removed call changes which "
+                    "autonomous actions exist." % (key, len(matches)))
+                args = matches[0]
+                self.assertEqual(
+                    args[1], "0x%03X" % donor,
+                    "clone targeting %s must come from donor 0x%03X"
+                    % (key, donor))
+                self.assertEqual(
+                    args[4], prerequisite,
+                    "clone 0x%03X -> %s must pass prerequisite %s, found %s. "
+                    "This changes WHEN the action is offered in play."
+                    % (donor, key, prerequisite, args[4]))
+
+        # The table must be COMPLETE, counted from preprocessed output so a
+        # `#if 0`-disabled call reduces the count and a sneaked-in live call
+        # raises it. Either way this fails until someone makes a deliberate
+        # decision about the new call's gating.
         self.assertEqual(
-            len(actual), len(expected),
-            "the clone table has %d call sites but this test pins %d. Add the "
-            "new call to `expected` WITH a deliberate prerequisite, so its "
-            "gating is a decision rather than an inherited accident."
-            % (len(actual), len(expected)))
+            len(live), len(expected),
+            "%d live clone call(s) survive preprocessing but this test pins "
+            "%d. Add the new call to `expected` WITH a deliberate "
+            "prerequisite, or confirm why one disappeared."
+            % (len(live), len(expected)))
 
         # And the sentinel's SENSE, not merely the presence of an assignment.
-        # `== 0` passes any assertion that only looks for the write.
-        clone = src[src.index("static void CloneAutonomousCandidateWithWeight("):]
+        # `== 0` passes any assertion that only looks for the write. Read from
+        # preprocessed output too, so a sentinel inside `#if 0` cannot satisfy
+        # this either.
+        clone = preprocessed[
+            preprocessed.index("void CloneAutonomousCandidateWithWeight("):]
         clone = clone[:clone.index("\n}")]
         self.assertIn(
             "if (objectPrerequisite != 0) {", clone,
