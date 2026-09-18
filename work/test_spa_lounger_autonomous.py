@@ -561,7 +561,8 @@ class TestOnlyReceivingIsAutonomous(unittest.TestCase):
         self.assertIn("PlanToLieDown", body)                    # the nap's posture
         # Chosen per lounger. This pins the CORRECTED question; two earlier
         # forms were each wrong. `info.orientation == 1` is SW alone and missed
-        # NW. VF2FurnitureFacesNorthWest is `orientation == 3`, which collapsed
+        # NW. VF2FurnitureFacesNorthWest is now `orientation == 1`; it used to be
+        # `orientation == 3`, which never matched a real lounger and collapsed
         # SE(0), SW(1) and NE(2) onto ONE pose -- three of four placements
         # identical, reported in play as "spa lounger villager orientation has
         # no change". EFurnitureOrientation is SE=0, SW=1, NE=2, NW=3 and the
@@ -574,7 +575,9 @@ class TestOnlyReceivingIsAutonomous(unittest.TestCase):
         # sent SW to the NW sleep strip. Stock CBehavior::RestingBody tests
         # NW(3) ALONE, and the normal chaise Lounge Chairs that use it are
         # confirmed correct in play.
-        self.assertIn("VF2FurnitureFacesNorthWest(info.orientation)", body)
+        self.assertIn(
+            "VF2SpaLoungerFacesNorthWest(info.orientation, info.unknown0)",
+            body)  # the SPA-GATED rule; the shared one serves ordinary chaises
         self.assertIn("static_cast<ESound>(0x101)", body)       # gulpahh_01.ogg
 
     def test_receiving_uses_sleep_animation_and_preserves_total_duration(self):
@@ -1073,15 +1076,35 @@ class TheTreatmentPoseFollowsTheLounger(unittest.TestCase):
         # the four placements produced an IDENTICAL result, which is what the
         # owner reported as the lounger orientation having "no change".
         #
-        # THIRD AND FINAL QUESTION, settled by live capture rather than
-        # inference: stock RestingBody tests NW(3) ALONE. The east/west split
-        # was itself wrong -- it put SW(1) on the NW strip, and SW is one of
-        # the two orientations the owner actually placed. Both
+        # SUPERSEDED BY THE B188 PLAYTEST, recorded rather than deleted
+        # (AGENTS.md 11). This comment previously read: "THIRD AND FINAL
+        # QUESTION, settled by live capture rather than inference: stock
+        # RestingBody tests NW(3) ALONE. The east/west split was itself
+        # wrong -- it put SW(1) on the NW strip, and SW is one of the two
+        # orientations the owner actually placed."
+        #
+        # It was neither third nor final, and its reason was backwards. The
+        # east/west split put SW(1) on the NW strip, and that is what SW(1)
+        # ACTUALLY WANTS -- confirmed by the owner playtesting B188, where
+        # `orientation == 3` gave both placements the NE strip and SW came
+        # back wrong while SE came back right.
+        #
+        # FOURTH QUESTION, and the one the owner stated outright: the villager
+        # faces the way the lounger faces, head and body.
+        #
+        #   orientation 0 (SE) -> NE direction, NE head, SleepNE
+        #   orientation 1 (SW) -> NW direction, NW head, SleepNW
+        #
+        # Asked of VF2SpaLoungerFacesNorthWest, which answers only for a spa
+        # lounger handle so ordinary Lounge Chairs sharing this branch keep
+        # the NE strip they were confirmed working with. Both
         # the settle pose and the sleep strip still derive from a SINGLE test,
         # which is what makes it impossible for the two to disagree -- the
         # exact defect the owner reported on the hammock, where the lie-down
         # faced wrong while the sleep that followed it looked right.
-        self.assertIn("VF2FurnitureFacesNorthWest(info.orientation)", body,
+        self.assertIn(
+            "VF2SpaLoungerFacesNorthWest(info.orientation, info.unknown0)",
+            body,
                       "the orientation no longer selects between the two "
                       "sleep animations, so one facing will look wrong")
         self.assertIn('"SleepNW"', body)

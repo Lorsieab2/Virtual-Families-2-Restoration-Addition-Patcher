@@ -26315,8 +26315,55 @@ struct sFurnitureInfo2 {
 // missed NW entirely and answered true for SW. Reported in play on the picnic
 // table -- the table faced NE and the meal and the seated villagers faced the
 // other way.
+// THE SPA LOUNGER'S OWN FACING RULE, SEPARATE FROM EVERY OTHER CHAISE.
+//
+// Review caught a real regression in the first version of this fix. The
+// reclined-pose branch is
+//
+//     if (info.orientation == 1 || VF2SpaLoungerHasHandle(info.unknown0))
+//
+// and its comment claims to be scoped to the spa loungers -- but the `||`
+// means orientation 1 ALONE is sufficient, so an ordinary or mobile Lounge
+// Chair at orientation 1 enters that block too. Changing the shared facing
+// predicate therefore flipped those loungers from northeast to northwest,
+// and the owner had already confirmed them working in play. The reported
+// defect is the spa loungers only.
+//
+// So the spa rule lives here, gated on the handle actually being a spa
+// lounger, and every other chaise keeps the mapping it was confirmed with.
+// Forward-declared because the definition sits several hundred lines below,
+// with the furniture-manager helpers. Without this the emitted translation
+// unit fails with C3861 -- caught by test_the_emission_compiles, not by any
+// assertion about the source text.
+static bool VF2SpaLoungerHasHandle(int handle);
+
+static bool VF2SpaLoungerFacesNorthWest(int orientation, int handle)
+{
+    if (!VF2SpaLoungerHasHandle(handle)) {
+        // Not a spa lounger: keep the confirmed-working chaise behaviour,
+        // which is the northeast strip for every orientation this branch
+        // admits.
+        return false;
+    }
+    // A spa lounger only ever occupies orientations 0 and 1 -- the owner
+    // confirmed that directly -- and the live capture of the running game
+    // recorded the facing as the orientation itself:
+    //
+    //   orientation 0 (SE)  ->  EDirection 0 = NE, EHeadDirection 0 = NE
+    //   orientation 1 (SW)  ->  EDirection 3 = NW, EHeadDirection 3 = NW
+    //
+    // Orientation 0 was already correct in B188; orientation 1 is the one
+    // the owner reported wrong, and it wants the northwest strip.
+    return orientation == 1;
+}
+
 static bool VF2FurnitureFacesNorthWest(int orientation)
 {
+    // UNCHANGED, and deliberately so. This is the shared chaise/hammock
+    // facing test, and the loungers the owner confirmed working in play get
+    // their mapping from here. The spa lounger's corrected rule lives in
+    // VF2SpaLoungerFacesNorthWest above, gated on the spa handle, because
+    // changing this value regressed ordinary Lounge Chairs at orientation 1.
     return orientation == 3 /* NW */;
 }
 
@@ -27228,8 +27275,31 @@ static bool VF2HandleMobileChaise(CVillager &villager)
         //   orientation=0 (SE)  dir=0 head=0  SleepNE   <- CORRECT in play
         //   orientation=1 (SW)  dir=3 head=3  SleepNW   <- WRONG in play
         //
-        // So SE(0) wants SleepNE, and SW(1) wants the strip it did not get,
-        // which is also SleepNE. `orientation == 3` satisfies both.
+        // SUPERSEDED BY THE B188 PLAYTEST, recorded rather than deleted
+        // (AGENTS.md 11). This comment concluded: "SE(0) wants SleepNE, and
+        // SW(1) wants the strip it did not get, which is also SleepNE, so
+        // `orientation == 3` satisfies both."
+        //
+        // THAT CONCLUSION WAS WRONG, and B188 is the proof. `orientation == 3`
+        // never matches a real lounger, so BOTH placements got SleepNE -- and
+        // the owner then reported one lounger correct and one wrong. SE(0) was
+        // the correct one; SW(1) was the broken one. So SW(1) wants SleepNW,
+        // which is the strip the capture above shows it already had.
+        //
+        // The misreading: the capture marked orientation=1 SleepNW as "WRONG
+        // in play", so this comment inferred SW wanted the other strip. The
+        // facing was wrong at that moment for a different reason -- the head
+        // and body direction were not being supplied with the pose at all --
+        // and the sleep strip was never the defect for SW.
+        //
+        // CURRENT EXPECTED MAPPING, per the owner's B188 verdict:
+        //
+        //   orientation=0 (SE)  ->  NE direction, NE head, SleepNE
+        //   orientation=1 (SW)  ->  NW direction, NW head, SleepNW
+        //
+        // which is exactly "the villager faces the way the lounger faces",
+        // the rule the owner stated. It lives in VF2SpaLoungerFacesNorthWest
+        // and applies only when the handle is a spa lounger.
         //
         // SUPERSEDED CLAIM, recorded rather than deleted (AGENTS.md 11). An
         // earlier revision of this comment asserted that stock
@@ -27258,10 +27328,10 @@ static bool VF2HandleMobileChaise(CVillager &villager)
         // impossible to interpret.
         plans->PlanToWait(
             duration, eBodyPositionChaise,
-            VF2FurnitureFacesNorthWest(info.orientation)
+            VF2SpaLoungerFacesNorthWest(info.orientation, info.unknown0)
                 ? eDirectionNorthwest
                 : eDirectionNortheast,
-            VF2FurnitureFacesNorthWest(info.orientation)
+            VF2SpaLoungerFacesNorthWest(info.orientation, info.unknown0)
                 ? eHeadDirectionNW
                 : eHeadDirectionNE);
     } else {
@@ -29614,8 +29684,31 @@ static void VF2PlanLinkedChaiseAction(
         //   orientation=0 (SE)  dir=0 head=0  SleepNE   <- CORRECT in play
         //   orientation=1 (SW)  dir=3 head=3  SleepNW   <- WRONG in play
         //
-        // So SE(0) wants SleepNE, and SW(1) wants the strip it did not get,
-        // which is also SleepNE. `orientation == 3` satisfies both.
+        // SUPERSEDED BY THE B188 PLAYTEST, recorded rather than deleted
+        // (AGENTS.md 11). This comment concluded: "SE(0) wants SleepNE, and
+        // SW(1) wants the strip it did not get, which is also SleepNE, so
+        // `orientation == 3` satisfies both."
+        //
+        // THAT CONCLUSION WAS WRONG, and B188 is the proof. `orientation == 3`
+        // never matches a real lounger, so BOTH placements got SleepNE -- and
+        // the owner then reported one lounger correct and one wrong. SE(0) was
+        // the correct one; SW(1) was the broken one. So SW(1) wants SleepNW,
+        // which is the strip the capture above shows it already had.
+        //
+        // The misreading: the capture marked orientation=1 SleepNW as "WRONG
+        // in play", so this comment inferred SW wanted the other strip. The
+        // facing was wrong at that moment for a different reason -- the head
+        // and body direction were not being supplied with the pose at all --
+        // and the sleep strip was never the defect for SW.
+        //
+        // CURRENT EXPECTED MAPPING, per the owner's B188 verdict:
+        //
+        //   orientation=0 (SE)  ->  NE direction, NE head, SleepNE
+        //   orientation=1 (SW)  ->  NW direction, NW head, SleepNW
+        //
+        // which is exactly "the villager faces the way the lounger faces",
+        // the rule the owner stated. It lives in VF2SpaLoungerFacesNorthWest
+        // and applies only when the handle is a spa lounger.
         //
         // SUPERSEDED CLAIM, recorded rather than deleted (AGENTS.md 11). An
         // earlier revision of this comment asserted that stock
@@ -29644,10 +29737,10 @@ static void VF2PlanLinkedChaiseAction(
         // impossible to interpret.
         plans->PlanToWait(
             duration, eBodyPositionChaise,
-            VF2FurnitureFacesNorthWest(info.orientation)
+            VF2SpaLoungerFacesNorthWest(info.orientation, info.unknown0)
                 ? eDirectionNorthwest
                 : eDirectionNortheast,
-            VF2FurnitureFacesNorthWest(info.orientation)
+            VF2SpaLoungerFacesNorthWest(info.orientation, info.unknown0)
                 ? eHeadDirectionNW
                 : eHeadDirectionNE);
     } else {
@@ -29888,16 +29981,22 @@ static void VF2PlanSpaTreatment(
     // ORIENTATION 3 ALONE TAKES THE NW STRIP. See the relax poses above for
     // the full reasoning and for the corrected stock table.
     //
-    // Confirmed in play: SE(0) wants SleepNE, and SW(1) wants the strip it did
-    // not get, which is also SleepNE. `orientation == 3` satisfies both.
+    // Confirmed in play across two releases: SE(0) wants SleepNE. B188 shipped
+    // `orientation == 3` here, which never matches a real spa lounger, so SW(1)
+    // also got SleepNE -- and that is the placement the owner reported wrong.
+    // SW(1) wants SleepNW, matching the live capture where the facing IS the
+    // orientation.
     //
     // NOT copied from stock, and an earlier revision of this comment wrongly
     // said it was. Stock RestingBody is a four-way PARITY dispatch that plays
     // SleepNW at orientation 0 -- where the owner confirms SleepNE is right on
-    // this item -- so copying it would break the working placement. NW(3)
-    // remains an unobserved guess.
+    // this item -- so copying it would break the working placement.
+    //
+    // This handler is the spa treatment, so it asks the spa rule directly.
+    // The shared VF2FurnitureFacesNorthWest is left alone because ordinary
+    // Lounge Chairs depend on it and were confirmed working.
     bool const loungerFacesNorthWest =
-        VF2FurnitureFacesNorthWest(info.orientation);
+        VF2SpaLoungerFacesNorthWest(info.orientation, info.unknown0);
     EHeadDirection loungerHead =
         loungerFacesNorthWest ? eHeadDirectionNW : eHeadDirectionNE;
     // Same correction as the two relax poses: eBodyPositionChaise carries no
