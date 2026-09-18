@@ -547,11 +547,15 @@ class TestAddedFurnitureContract(unittest.TestCase):
             (0x0A4, 0x0A6, "0"),                             # WashingInBathroomSink1
             (0x0A4, 0x0A7, "0"),                             # WashingInBathroomSink2
             (0x0A4, 0x0A8, "0"),                             # WashingInBathroomSink3
-            (0x049, 0x0B1, "__VF2_EXERCISE_BIKE_OBJECT__"),  # bike, walking
-            (0x0E0, 0x0B2, "__VF2_EXERCISE_BIKE_OBJECT__"),  # bike, running
+            # RESOLVED values, not placeholders. The generator substitutes
+            # __VF2_EXERCISE_BIKE_OBJECT__ and __VF2_PING_PONG_OBJECT__ before
+            # writing the .cpp, so pinning the placeholder text asserted
+            # something the compiler never sees. Review caught that.
+            (0x049, 0x0B1, "0x99"),                          # bike, walking
+            (0x0E0, 0x0B2, "0x99"),                          # bike, running
             (0x04A, 0x0B3, "0"),                             # Home Gym System
             (0x08B, 0x0B4, "0"),                             # Yoga Equipment
-            (0x099, 0x0B8, "__VF2_PING_PONG_OBJECT__"),      # Ping-Pong Table
+            (0x099, 0x0B8, "0x9a"),                          # Ping-Pong Table
             (0x047, 0x048, "0"),                             # WorkKitchen0
         ]
 
@@ -567,6 +571,13 @@ class TestAddedFurnitureContract(unittest.TestCase):
         # compiler sees. If MSVC is unavailable the test FAILS rather than
         # quietly falling back to the weaker check -- a skipped check that
         # reports as a pass is the defect this whole review chain is about.
+        # The resolved values below are only trustworthy if this module knows
+        # about every object placeholder the generator substitutes. Without
+        # this call the drift guard exists but never runs, which I confirmed
+        # by mutation: renaming a placeholder in the generator left the whole
+        # suite green.
+        emitted.assert_substitutions_match_generator()
+
         preprocessed = emitted.preprocessed_cpp()
         self.assertIsNotNone(
             preprocessed,
@@ -633,6 +644,100 @@ class TestAddedFurnitureContract(unittest.TestCase):
             "if (objectPrerequisite == 0) {", clone,
             "inverted sentinel: zero would overwrite the donor's gates and a "
             "named object would be ignored")
+
+    def test_the_candidate_enabler_is_actually_invoked_by_the_game(self):
+        """The clone table is only reachable if something CALLS its function.
+
+        The test above proves the twelve clone calls exist and survive
+        preprocessing. That is `code exists`, not `code runs`. Their enclosing
+        function, `VF2EnableAutonomousCandidates`, has NO call site in the
+        emitted C++ at all -- it is an `extern "C"` symbol invoked from patched
+        game code -- so nothing in that test would notice if the hooks
+        installing those calls were removed. The whole table would then be
+        compiled, preprocessor-live, and never executed.
+
+        Two hooks install it, and both are needed:
+
+          * `CVillager::InitAI` epilogue  -- newly created villagers
+          * `CVillager::LoadAI` epilogues -- households loaded from a save
+
+        Losing the LoadAI hook is the quiet one: a new game would gain the
+        actions while every existing save silently would not, which is exactly
+        the kind of half-working behaviour the owner reports from play rather
+        than from tests.
+
+        Each detour also has to END with the stock epilogue it replaced, or
+        the function returns with the wrong stack and the game corrupts
+        instead of merely missing a feature.
+        """
+        src = source()
+
+        # The symbol must be appended as undefined and relocated, which is
+        # what makes the linker bind the call to the emitted helper.
+        self.assertIn(
+            'obj.append_undefined_symbol("_VF2EnableAutonomousCandidates")',
+            src,
+            "the enabler is no longer imported as a symbol, so no patched "
+            "call site could bind to it")
+
+        # Two distinct relocations, one per hook, both against that symbol.
+        #
+        # Scoped to the block that installs THIS enabler. `helper_sym` is a
+        # generic local name reused by about twenty unrelated patches in this
+        # file, so a file-wide search for it counts all of them -- my first
+        # version of this assertion expected 2 and found 20.
+        start = src.index(
+            'obj.append_undefined_symbol("_VF2EnableAutonomousCandidates")')
+        block = src[start:src.index("\ndef ", start)]
+        relocations = re.findall(
+            r"append_relocation\([^)]*helper_sym[^)]*\)", block)
+        self.assertEqual(
+            len(relocations), 2,
+            "expected exactly 2 relocations binding the enabler (InitAI and "
+            "LoadAI); found %d. One missing means either new villagers or "
+            "loaded saves never run the new candidates."
+            % len(relocations))
+
+        # Everything below is asserted against `whole`, the ENCLOSING PATCH
+        # FUNCTION, not the whole file and not the post-import `block`.
+        #
+        # Scope matters twice over here, and I got it wrong both ways while
+        # writing this test:
+        #   - file-wide `assertIn` passed even with the hook's own bytes
+        #     removed, because these byte sequences and guard messages also
+        #     appear in unrelated patches (caught by mutation);
+        #   - `block` starts after the symbol import, but the InitAI detour is
+        #     defined BEFORE it, so scoping there failed on correct code.
+        function_start = src.rfind("\ndef ", 0, start)
+        whole = src[function_start:src.index("\ndef ", start)]
+
+        # The InitAI detour: push the villager, call, restore stock epilogue.
+        self.assertIn("0xFF, 0x75, 0xFC,", whole,
+                      "InitAI detour no longer pushes [ebp-4], the CVillager*")
+        # The LoadAI detour uses edi, and must end with `ret 4` because
+        # LoadAI is __thiscall with one stack argument.
+        #
+        # Scoped to the detour's OWN byte list. Even inside this function the
+        # bytes C2 04 00 appear a second time, in the `load_expected` literal
+        # that guards the epilogue being overwritten. Asserting against the
+        # function as a whole therefore passed with the detour's `ret 4`
+        # replaced by a plain `ret` -- found by mutation, not by reading.
+        detour = whole[whole.index("load_helper = bytearray(["):]
+        detour = detour[:detour.index("])")]
+        self.assertIn("0xC2, 0x04, 0x00,", detour,
+                      "LoadAI detour no longer ends with `ret 4`; returning "
+                      "with the wrong stack adjustment corrupts the caller")
+        self.assertIn("0x57,", detour,
+                      "LoadAI detour no longer pushes edi, the CVillager*")
+
+        # Both hooks must verify the bytes they overwrite, so a future game
+        # revision fails the build instead of being silently mis-patched.
+        for guard in ("Unexpected CVillager::InitAI epilogue",
+                      "Unexpected CVillager::LoadAI epilogue"):
+            self.assertIn(
+                guard, whole,
+                "%s check removed; the patch would apply blindly to an "
+                "executable whose epilogue has moved" % guard)
 
     def test_the_findfurniture_wrapper_forwards_every_stack_word(self):
         """The naked wrapper must forward SEVEN words and clean 28 bytes.
