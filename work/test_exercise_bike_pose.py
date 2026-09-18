@@ -469,6 +469,58 @@ class TheExerciseBikeHasItsOwnObject(unittest.TestCase):
             "the substitution must be gated, or an unset window would force "
             "object 0 onto every donor lookup")
 
+    def test_the_exclusion_keeps_asking_about_the_donor_object(self):
+        """The treadmill exclusion must search 0x04, not the bike's 0x99.
+
+        Codex P1 #2 on #340. VF2RunOwnFurnitureActionEx used ONE object for two
+        different questions:
+
+          1. which placement is this item's venue -- needs the bike's own 0x99;
+          2. is the villager standing on furniture this action could steal them
+             away from -- needs the DONOR's 0x04, because a donor can only be
+             diverted through the object it searches.
+
+        Giving the bike 0x99 silently changed question 2 as well. With both
+        machines placed and a villager standing on the Treadmill, the exclusion
+        would search 0x99 at their feet, match the REMOTE bike's handle rather
+        than the Treadmill's, conclude the villager was on open floor, and let
+        the bike candidate walk them off the Treadmill.
+
+        That is the owner's reported bug returning by a new route:
+
+            "make sure the TREADMILL and ONLY the treadmill behaves identically
+             to stock, on both manual drop and autonomous villager behaviors"
+        """
+        self.assertIn("int donorObject,", SOURCE,
+                      "the donor object parameter is gone, so one value is "
+                      "answering two different questions again")
+        self.assertIn(
+            "villager, itemId, altItemId, donorObject)) {", SOURCE,
+            "the exclusion is back on the venue object, so a placed bike can "
+            "walk a villager off a Treadmill")
+        self.assertEqual(
+            SOURCE.count("__VF2_EXERCISE_BIKE_DONOR_OBJECT__,"), 2,
+            "both bike helpers must pass the Treadmill's object for the "
+            "exclusion")
+        self.assertIn(
+            '"__VF2_EXERCISE_BIKE_DONOR_OBJECT__",' + NL +
+            '        f"{MOBILE_EXERCISE_BIKE_DONOR_OBJECT:#x}",', SOURCE,
+            "the donor object must be substituted from the constant")
+
+    def test_items_whose_object_is_their_donors_pass_it_twice(self):
+        """Ping-Pong and the gym/yoga routes must be unaffected.
+
+        Their own object IS their donor's -- 0x36 and 0x75 -- so both questions
+        take the same value and their behaviour is identical to before the
+        split. If either silently changed, an unrelated item would have been
+        modified to fix the bike.
+        """
+        self.assertIn("__VF2_PING_PONG_TABLE_ITEM_ID__, 0x36, 0x36,", SOURCE)
+        self.assertIn(
+            "villager, donorBehaviors[index], itemId, altItemId, object, object,",
+            SOURCE,
+            "the gym/yoga dispatcher must pass its own object for both")
+
     def test_closing_the_venue_clears_the_object(self):
         """A stale object must not outlive the window that set it."""
         end = SOURCE.split("static void VF2EndAddedFurnitureVenue", 1)[1]

@@ -271,8 +271,20 @@ class TestAddedFurnitureContract(unittest.TestCase):
                       "the position check does not run when a venue resolved, "
                       "which is precisely the reported bug")
         guard = body[body.index("if (hasVenue &&"):]
+        # The guard must receive the DONOR's object, which is what this
+        # assertion's message always said it wanted. It previously matched on
+        # the parameter named `object`, and that was correct only while every
+        # item's own object WAS its donor's.
+        #
+        # The Exercise Bike broke that assumption: it now has its own 0x99
+        # while its donors are the stock Treadmill behaviours searching 0x04.
+        # Passing 0x99 here would make the guard look for a BIKE under a
+        # villager standing on a TREADMILL, match the remote bike's handle,
+        # conclude they were on open floor, and walk them off the treadmill --
+        # the precise regression this test exists to prevent.
         self.assertIn(
-            "VF2VillagerIsOnOtherFurniture(villager, itemId, altItemId, object)",
+            "VF2VillagerIsOnOtherFurniture(\n"
+            "            villager, itemId, altItemId, donorObject)",
             guard,
             "the guard no longer receives the donor object, so it cannot tell "
             "shared-object furniture from an unrelated sofa")

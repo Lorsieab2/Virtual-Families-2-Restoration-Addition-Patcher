@@ -35615,12 +35615,31 @@ extern "C" __declspec(naked) void VF2PlanToGoObjectAtAddedFurniture()
 // Runs the donor's native action, then relabels to the item's own group.
 // Returning early when the native behaviour did not take leaves the villager
 // exactly as the stock game left them.
+// TWO OBJECTS, BECAUSE THERE ARE TWO QUESTIONS.
+//
+// `object` answers "which placement is THIS ITEM's venue" and must be the
+// item's own object. `donorObject` answers "is the villager standing on
+// furniture this action could steal them away from", and must be the object
+// the DONOR behaviour searches, because that is the only object a donor can be
+// diverted through.
+//
+// They are the same value for every item whose object is its donor's -- the
+// Home Gym and Yoga on 0x75, Ping-Pong on 0x36 -- and they differ only for the
+// Exercise Bike, which now has its own 0x99 while its donors are the stock
+// Treadmill behaviours searching 0x04.
+//
+// Conflating them is not theoretical: passing the bike's 0x99 to the exclusion
+// made it search for a BIKE under the feet of a villager standing on a
+// TREADMILL, match the remote bike's handle, and conclude the villager was on
+// open floor -- so the bike candidate walked them off the Treadmill, which is
+// the precise regression this guard exists to prevent.
 static void VF2RunOwnFurnitureActionEx(
     CVillager &villager,
     void (__cdecl *donorBehavior)(CVillager &),
     int itemId,
     int altItemId,
     int object,
+    int donorObject,
     int const *labels,
     int labelCount,
     bool varyLabelEachVisit)
@@ -35671,7 +35690,8 @@ static void VF2RunOwnFurnitureActionEx(
     // Standing on open floor returns false, so ordinary autonomous behaviour
     // is untouched: a villager who wanders toward the bike still gets it.
     if (hasVenue &&
-        VF2VillagerIsOnOtherFurniture(villager, itemId, altItemId, object)) {
+        VF2VillagerIsOnOtherFurniture(
+            villager, itemId, altItemId, donorObject)) {
         return;
     }
     if (!hasVenue) {
@@ -35727,12 +35747,13 @@ static void VF2RunOwnFurnitureAction(
     void (__cdecl *donorBehavior)(CVillager &),
     int itemId,
     int object,
+    int donorObject,
     int const *labels,
     int labelCount)
 {
     VF2RunOwnFurnitureActionEx(
-        villager, donorBehavior, itemId, -1, object, labels, labelCount,
-        false);
+        villager, donorBehavior, itemId, -1, object, donorObject, labels,
+        labelCount, false);
 }
 
 // Run ONE OF SEVERAL donor behaviours at the item's venue.
@@ -35774,9 +35795,12 @@ static void VF2RunOwnFurnitureActionVaried(
     // this dispatcher, and their whole point is the set of workout variations
     // the owner asked for: a villager who rolled "Doing crunches" once must not
     // be stuck with it for the rest of the save.
+    // The gym and yoga routes have no separate donor object: their own object
+    // IS the donor's (0x75), so the exclusion asks exactly what it asked
+    // before. Only the Exercise Bike needs the two to differ.
     VF2RunOwnFurnitureActionEx(
-        villager, donorBehaviors[index], itemId, altItemId, object, labels,
-        labelCount, true);
+        villager, donorBehaviors[index], itemId, altItemId, object, object,
+        labels, labelCount, true);
 }
 
 // The general workout behaviours the Home Gym System and the Yoga Equipment
@@ -35882,7 +35906,14 @@ extern "C" void __cdecl VF2ExerciseBikeWalk(CVillager &villager)
 {
     VF2RunOwnFurnitureAction(
         villager, CBehavior::WorkoutTreadmill,
+        // The bike's OWN object selects its venue; the Treadmill's 0x04 is
+        // what the exclusion must ask about, because the donors here are the
+        // stock Treadmill behaviours and 0x04 is the only object they can be
+        // diverted through. Passing 0x99 to the exclusion would make it look
+        // for a BIKE under a villager standing on a TREADMILL, find the remote
+        // bike's handle, and walk them off the treadmill.
         __VF2_EXERCISE_BIKE_ITEM_ID__, __VF2_EXERCISE_BIKE_OBJECT__,
+        __VF2_EXERCISE_BIKE_DONOR_OBJECT__,
         kVF2BehaviorLabels_exercise_bike_walk,
         VF2_LABEL_COUNT(kVF2BehaviorLabels_exercise_bike_walk));
 }
@@ -35891,7 +35922,14 @@ extern "C" void __cdecl VF2ExerciseBikeRun(CVillager &villager)
 {
     VF2RunOwnFurnitureAction(
         villager, CBehavior::RunningOnTreadmill,
+        // The bike's OWN object selects its venue; the Treadmill's 0x04 is
+        // what the exclusion must ask about, because the donors here are the
+        // stock Treadmill behaviours and 0x04 is the only object they can be
+        // diverted through. Passing 0x99 to the exclusion would make it look
+        // for a BIKE under a villager standing on a TREADMILL, find the remote
+        // bike's handle, and walk them off the treadmill.
         __VF2_EXERCISE_BIKE_ITEM_ID__, __VF2_EXERCISE_BIKE_OBJECT__,
+        __VF2_EXERCISE_BIKE_DONOR_OBJECT__,
         kVF2BehaviorLabels_exercise_bike_run,
         VF2_LABEL_COUNT(kVF2BehaviorLabels_exercise_bike_run));
 }
@@ -35933,7 +35971,9 @@ extern "C" void __cdecl VF2PingPongPlay(CVillager &villager)
 {
     VF2RunOwnFurnitureAction(
         villager, CBehavior::PlayingPooltable,
-        __VF2_PING_PONG_TABLE_ITEM_ID__, 0x36,
+        // Ping-Pong's own object IS its donor's (both 0x36), so the venue
+        // object and the exclusion object are the same value here.
+        __VF2_PING_PONG_TABLE_ITEM_ID__, 0x36, 0x36,
         kVF2BehaviorLabels_ping_pong,
         VF2_LABEL_COUNT(kVF2BehaviorLabels_ping_pong));
 }
@@ -36835,6 +36875,12 @@ extern "C" void __cdecl VF2EnableAutonomousCandidates(void *villager)
     # not being placed, which is why it is not written as a literal here.
     helper_cpp = helper_cpp.replace(
         "__VF2_EXERCISE_BIKE_OBJECT__", f"{MOBILE_EXERCISE_BIKE_OBJECT:#x}"
+    )
+    # The DONOR's object, which the treadmill-exclusion guard must keep asking
+    # about even though the bike itself has moved to its own object.
+    helper_cpp = helper_cpp.replace(
+        "__VF2_EXERCISE_BIKE_DONOR_OBJECT__",
+        f"{MOBILE_EXERCISE_BIKE_DONOR_OBJECT:#x}",
     )
     helper_cpp = helper_cpp.replace(
         "__VF2_HOME_GYM_ITEM_ID__",
