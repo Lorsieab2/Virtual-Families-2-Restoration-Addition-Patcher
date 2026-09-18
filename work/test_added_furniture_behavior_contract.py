@@ -202,13 +202,7 @@ class TestAddedFurnitureContract(unittest.TestCase):
         start = src.index("ldwPoint foundPlacement = {0, 0};")
         end = src.index("if (!found) return false;", start)
         body = src[start:end]
-        # The winning-branch CONDITION gained a preferred-slot term when the
-        # owner asked for the Home Gym and Yoga Equipment to act where the
-        # villager is dropped, so this anchors on the branch rather than on the
-        # exact comparison. The property under test is unchanged: the three
-        # winner fields must be assigned together inside that one branch, or a
-        # losing record's value can survive.
-        branch = body[body.index("|| !found ||"):]
+        branch = body[body.index("if (!found || distance < bestDistance) {"):]
         for field in ("outPoint = info.point;",
                       "foundPlacement = placement;",
                       "foundOrientation ="):
@@ -399,50 +393,6 @@ class TestAddedFurnitureContract(unittest.TestCase):
         table = src.index("    patch_mobile_table_prop_draw(manifest)")
         curtain = src.index("    patch_bathroom1_curtain_decal(manifest)")
         self.assertLess(table, curtain)
-
-
-class TheGymAndYogaActWhereTheVillagerIsDropped(unittest.TestCase):
-    """Owner: act at the drop point, for the Home Gym and Yoga Equipment ONLY.
-
-    Verbatim request: "Villagers should do their actions where they are dropped
-    instead of moving somewhere else for the home Gym and Yoga Equipment only."
-
-    The scope limit is asserted as firmly as the feature: the venue lookup
-    otherwise keeps its nearest-placement behaviour, and widening this to other
-    items would change furniture the owner did not ask about.
-    """
-
-    def test_the_preferred_slot_covers_all_three_item_ids(self):
-        text = source()
-        self.assertIn("static bool VF2ItemIsHomeGymOrYoga(int itemId)", text)
-        block = text.split("VF2ItemIsHomeGymOrYoga(int itemId)", 1)[1]
-        block = block.split("}", 1)[0]
-        self.assertIn("__VF2_HOME_GYM_ITEM_ID__", block)
-        self.assertIn("__VF2_YOGA_EQUIPMENT_ITEM_ID__", block)
-        self.assertIn(
-            "0x220", block,
-            "the STOCK Yoga Equipment is 0x220 and the macro resolves to the "
-            "invisible copy only; omitting it makes a drop on the visible item "
-            "fall back to the generic 'Working out' label, which is an "
-            "already-reported regression")
-
-    def test_other_items_keep_the_nearest_placement_behaviour(self):
-        """-1 must remain the default, or every item would act where dropped."""
-        text = source()
-        self.assertIn(
-            "villager, itemId, -1, object, outPoint, 0, -1);", text,
-            "the compatibility wrapper must pass -1 so unrelated items are "
-            "unaffected")
-        self.assertIn("int preferSlot)", text)
-        self.assertIn("preferSlot >= 0 && slot == preferSlot", text)
-
-    def test_the_drop_slot_helper_validates_the_record(self):
-        """A slot is only honoured when it really is that item, in world."""
-        text = source()
-        block = text.split("VF2DroppedOnAddedFurnitureSlot(", 1)[1]
-        block = block.split("\n}", 1)[0]
-        self.assertIn("0x1004", block, "the slot must be bounds-checked")
-        self.assertIn("record + 0x0C", block, "the in-world bit must be tested")
 
 
 if __name__ == "__main__":

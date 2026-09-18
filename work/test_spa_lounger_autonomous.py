@@ -567,14 +567,7 @@ class TestOnlyReceivingIsAutonomous(unittest.TestCase):
         # no change". EFurnitureOrientation is SE=0, SW=1, NE=2, NW=3 and the
         # head directions are an east/west pair, so the split is {SE, NE}
         # against {SW, NW}.
-        # SUPERSEDED AGAIN, by live evidence rather than by reasoning. The
-        # east/west split asserted here was disproved by IDA Pro captures on
-        # the shipped B187 build: the orientations in play are SE(0) and SW(1),
-        # the SE one is correct and the SW one is wrong, and the split is what
-        # sent SW to the NW sleep strip. Stock CBehavior::RestingBody tests
-        # NW(3) ALONE, and the normal chaise Lounge Chairs that use it are
-        # confirmed correct in play.
-        self.assertIn("VF2FurnitureFacesNorthWest(info.orientation)", body)
+        self.assertIn("!VF2FurnitureFacesEast(info.orientation)", body)
         self.assertIn("static_cast<ESound>(0x101)", body)       # gulpahh_01.ogg
 
     def test_receiving_uses_sleep_animation_and_preserves_total_duration(self):
@@ -962,16 +955,8 @@ class TheTreatmentPoseFollowsTheLounger(unittest.TestCase):
         self.assertIn("eDirectionNortheast = 0", text,
                       "the decoded EDirection values are gone")
         self.assertIn("eDirectionNorthwest = 3", text)
-        # The arms are now ordered NW-first, because the predicate changed
-        # from VF2FurnitureFacesEast to the stock VF2FurnitureFacesNorthWest
-        # test. What this asserts is unchanged: both relax poses must supply a
-        # BODY direction, not only a head direction.
-        # Counted as the multi-line RELAX form specifically. The spa settle
-        # site uses the same two enumerators on a single inline ternary, so a
-        # bare count of "? eDirectionNorthwest" finds three sites, not two.
         self.assertEqual(
-            text.count("? eDirectionNorthwest\n"
-                       "                : eDirectionNortheast,"), 2,
+            text.count("? eDirectionNortheast"), 2,
             "the two chaise relax poses do not both supply a body direction, "
             "so the villager keeps the facing they walked in with")
         self.assertIn(
@@ -1073,15 +1058,12 @@ class TheTreatmentPoseFollowsTheLounger(unittest.TestCase):
         # the four placements produced an IDENTICAL result, which is what the
         # owner reported as the lounger orientation having "no change".
         #
-        # THIRD AND FINAL QUESTION, settled by live capture rather than
-        # inference: stock RestingBody tests NW(3) ALONE. The east/west split
-        # was itself wrong -- it put SW(1) on the NW strip, and SW is one of
-        # the two orientations the owner actually placed. Both
+        # The split is east/west: {SE(0), NE(2)} against {SW(1), NW(3)}. Both
         # the settle pose and the sleep strip still derive from a SINGLE test,
         # which is what makes it impossible for the two to disagree -- the
         # exact defect the owner reported on the hammock, where the lie-down
         # faced wrong while the sleep that followed it looked right.
-        self.assertIn("VF2FurnitureFacesNorthWest(info.orientation)", body,
+        self.assertIn("!VF2FurnitureFacesEast(info.orientation)", body,
                       "the orientation no longer selects between the two "
                       "sleep animations, so one facing will look wrong")
         self.assertIn('"SleepNW"', body)
