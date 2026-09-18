@@ -1076,10 +1076,28 @@ class TheTreatmentPoseFollowsTheLounger(unittest.TestCase):
         # the four placements produced an IDENTICAL result, which is what the
         # owner reported as the lounger orientation having "no change".
         #
-        # THIRD AND FINAL QUESTION, settled by live capture rather than
-        # inference: stock RestingBody tests NW(3) ALONE. The east/west split
-        # was itself wrong -- it put SW(1) on the NW strip, and SW is one of
-        # the two orientations the owner actually placed. Both
+        # SUPERSEDED BY THE B188 PLAYTEST, recorded rather than deleted
+        # (AGENTS.md 11). This comment previously read: "THIRD AND FINAL
+        # QUESTION, settled by live capture rather than inference: stock
+        # RestingBody tests NW(3) ALONE. The east/west split was itself
+        # wrong -- it put SW(1) on the NW strip, and SW is one of the two
+        # orientations the owner actually placed."
+        #
+        # It was neither third nor final, and its reason was backwards. The
+        # east/west split put SW(1) on the NW strip, and that is what SW(1)
+        # ACTUALLY WANTS -- confirmed by the owner playtesting B188, where
+        # `orientation == 3` gave both placements the NE strip and SW came
+        # back wrong while SE came back right.
+        #
+        # FOURTH QUESTION, and the one the owner stated outright: the villager
+        # faces the way the lounger faces, head and body.
+        #
+        #   orientation 0 (SE) -> NE direction, NE head, SleepNE
+        #   orientation 1 (SW) -> NW direction, NW head, SleepNW
+        #
+        # Asked of VF2SpaLoungerFacesNorthWest, which answers only for a spa
+        # lounger handle so ordinary Lounge Chairs sharing this branch keep
+        # the NE strip they were confirmed working with. Both
         # the settle pose and the sleep strip still derive from a SINGLE test,
         # which is what makes it impossible for the two to disagree -- the
         # exact defect the owner reported on the hammock, where the lie-down

@@ -27275,8 +27275,31 @@ static bool VF2HandleMobileChaise(CVillager &villager)
         //   orientation=0 (SE)  dir=0 head=0  SleepNE   <- CORRECT in play
         //   orientation=1 (SW)  dir=3 head=3  SleepNW   <- WRONG in play
         //
-        // So SE(0) wants SleepNE, and SW(1) wants the strip it did not get,
-        // which is also SleepNE. `orientation == 3` satisfies both.
+        // SUPERSEDED BY THE B188 PLAYTEST, recorded rather than deleted
+        // (AGENTS.md 11). This comment concluded: "SE(0) wants SleepNE, and
+        // SW(1) wants the strip it did not get, which is also SleepNE, so
+        // `orientation == 3` satisfies both."
+        //
+        // THAT CONCLUSION WAS WRONG, and B188 is the proof. `orientation == 3`
+        // never matches a real lounger, so BOTH placements got SleepNE -- and
+        // the owner then reported one lounger correct and one wrong. SE(0) was
+        // the correct one; SW(1) was the broken one. So SW(1) wants SleepNW,
+        // which is the strip the capture above shows it already had.
+        //
+        // The misreading: the capture marked orientation=1 SleepNW as "WRONG
+        // in play", so this comment inferred SW wanted the other strip. The
+        // facing was wrong at that moment for a different reason -- the head
+        // and body direction were not being supplied with the pose at all --
+        // and the sleep strip was never the defect for SW.
+        //
+        // CURRENT EXPECTED MAPPING, per the owner's B188 verdict:
+        //
+        //   orientation=0 (SE)  ->  NE direction, NE head, SleepNE
+        //   orientation=1 (SW)  ->  NW direction, NW head, SleepNW
+        //
+        // which is exactly "the villager faces the way the lounger faces",
+        // the rule the owner stated. It lives in VF2SpaLoungerFacesNorthWest
+        // and applies only when the handle is a spa lounger.
         //
         // SUPERSEDED CLAIM, recorded rather than deleted (AGENTS.md 11). An
         // earlier revision of this comment asserted that stock
@@ -29661,8 +29684,31 @@ static void VF2PlanLinkedChaiseAction(
         //   orientation=0 (SE)  dir=0 head=0  SleepNE   <- CORRECT in play
         //   orientation=1 (SW)  dir=3 head=3  SleepNW   <- WRONG in play
         //
-        // So SE(0) wants SleepNE, and SW(1) wants the strip it did not get,
-        // which is also SleepNE. `orientation == 3` satisfies both.
+        // SUPERSEDED BY THE B188 PLAYTEST, recorded rather than deleted
+        // (AGENTS.md 11). This comment concluded: "SE(0) wants SleepNE, and
+        // SW(1) wants the strip it did not get, which is also SleepNE, so
+        // `orientation == 3` satisfies both."
+        //
+        // THAT CONCLUSION WAS WRONG, and B188 is the proof. `orientation == 3`
+        // never matches a real lounger, so BOTH placements got SleepNE -- and
+        // the owner then reported one lounger correct and one wrong. SE(0) was
+        // the correct one; SW(1) was the broken one. So SW(1) wants SleepNW,
+        // which is the strip the capture above shows it already had.
+        //
+        // The misreading: the capture marked orientation=1 SleepNW as "WRONG
+        // in play", so this comment inferred SW wanted the other strip. The
+        // facing was wrong at that moment for a different reason -- the head
+        // and body direction were not being supplied with the pose at all --
+        // and the sleep strip was never the defect for SW.
+        //
+        // CURRENT EXPECTED MAPPING, per the owner's B188 verdict:
+        //
+        //   orientation=0 (SE)  ->  NE direction, NE head, SleepNE
+        //   orientation=1 (SW)  ->  NW direction, NW head, SleepNW
+        //
+        // which is exactly "the villager faces the way the lounger faces",
+        // the rule the owner stated. It lives in VF2SpaLoungerFacesNorthWest
+        // and applies only when the handle is a spa lounger.
         //
         // SUPERSEDED CLAIM, recorded rather than deleted (AGENTS.md 11). An
         // earlier revision of this comment asserted that stock

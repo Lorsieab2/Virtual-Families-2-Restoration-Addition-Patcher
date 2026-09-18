@@ -23,17 +23,38 @@ used a predicate that pulled orientation SW into the NW arm.
 The orientations that actually occur in play are **SE (0) and SW (1)**, not
 NE/NW. That was established from a live capture of the running game, and it
 contradicted four earlier rounds of fixes that had assumed 2 and 3 from the
-visual description. Both observed orientations want `SleepNE`, and testing
-`orientation == 3` satisfies both.
+visual description.
+
+> **SUPERSEDED — this release shipped the wrong conclusion.** These notes
+> originally stated: "Both observed orientations want `SleepNE`, and testing
+> `orientation == 3` satisfies both", and that orientations 2 and 3 remained
+> unobserved guesses.
+>
+> The owner's playtest of this very release disproved it. `orientation == 3`
+> never matches a real lounger, so **both** placements took `SleepNE`, and the
+> owner reported **one lounger correct and one wrong**: SE(0) correct, SW(1)
+> broken. SW(1) wants `SleepNW`.
+>
+> The owner also confirmed a lounger only ever occupies **two** orientations,
+> so the "2 and 3 unobserved" caveat described states that do not exist.
+>
+> **Current expected mapping**, and the rule the owner stated — *the villager
+> faces the way the lounger faces, head and body*:
+>
+> | orientation | direction | head | strip |
+> |---|---|---|---|
+> | 0 (SE) | NE | NE | `SleepNE` |
+> | 1 (SW) | NW | NW | `SleepNW` |
+>
+> Fixed after this release; see issue #330. The corrected rule is gated on the
+> spa-lounger handle, because ordinary Lounge Chairs share the same reclined
+> branch and were confirmed working here.
 
 Stock is **not** the model here. Stock `CBehavior::RestingBody` dispatches
 four ways on orientation parity and plays `SleepNW` at orientation 0, which is
 the value the owner confirms is wrong on screen. An earlier claim that this
 fix "copies the stock rule" was false and has been corrected in the source
 comment rather than quietly dropped.
-
-**Orientations 2 and 3 remain unobserved.** The NW arm is a guess and is
-labelled as one in the tests.
 
 ### 2. Exercise Bike drop never produced "doing high-intensity cycling" (#336)
 
