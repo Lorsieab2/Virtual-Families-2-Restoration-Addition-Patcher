@@ -327,6 +327,23 @@ class ThePositionNudgesAreNamedAndScoped(unittest.TestCase):
         self.assertIn("static int const kVF2PatioDrinksNudgeX", text)
         self.assertIn("gVF2PatioPropX + kVF2PatioDrinksNudgeX", text)
 
+    def test_the_patio_drinks_nudge_carries_the_owners_measured_value(self):
+        """Pin the VALUE, not merely the constant's existence.
+
+        The assertion above passes at any number, so it could not tell 18 from
+        25 -- and the owner has now measured this three times from shipped
+        builds: 6 -> 13 -> 18 -> 25. A test that only checks the name is the
+        degenerate-assertion shape AGENTS.md warns about, because it reports
+        success whether or not the requested change was applied.
+        """
+        text = source_text()
+        self.assertIn(
+            "static int const kVF2PatioDrinksNudgeX = 25;",
+            text,
+            "the owner's third measurement moved the drinks prop 7 more "
+            "pixels right, from 18 to 25",
+        )
+
     def test_the_home_gym_nudge_is_scoped_to_the_gym(self):
         """The gym's own correction stays keyed to the gym's item id.
 
