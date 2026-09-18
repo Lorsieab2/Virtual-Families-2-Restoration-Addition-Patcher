@@ -429,6 +429,52 @@ class TheExerciseBikeHasItsOwnObject(unittest.TestCase):
             "the object macro must be substituted from the constant, or the "
             "searched object and the declared object can drift apart")
 
+    def test_the_donor_lookup_searches_the_venue_object(self):
+        """The donor's OWN FindFurniture must search the bike's object too.
+
+        Codex P1 on #340, and it would have shipped a bike that does nothing.
+
+        Giving the bike object 0x99 changed the object the venue SELECTION
+        searches, but the donor behaviours are the stock Treadmill ones and
+        they push their own literal 0x04 into their internal FindFurniture.
+        The venue wrapper substituted only the search POINT and forwarded that
+        object unchanged, so once the bike's fmap stopped declaring 0x04:
+
+          * with no Treadmill placed, the donor's lookup finds nothing and the
+            behaviour returns immediately -- the bike silently does nothing;
+          * with a Treadmill placed, it binds to the TREADMILL's record, which
+            is the exact cross-targeting this change exists to end.
+
+        Both failure modes look like "the item is not placed", which is why
+        this is pinned rather than left to a playtest to rediscover.
+        """
+        self.assertIn("static int gVF2AddedFurnitureVenueObject = -1;", SOURCE)
+        self.assertIn(
+            "gVF2AddedFurnitureVenueObject = object;", SOURCE,
+            "the window does not record the object it was selected from")
+        self.assertIn(
+            "VF2BeginAddedFurnitureVenue(villager, venue, venuePlacement, object);",
+            SOURCE,
+            "the venue is opened without the object")
+        wrapper = SOURCE.split(
+            "static bool __cdecl VF2FindFurnitureAtAddedFurnitureImpl", 1)[1]
+        wrapper = wrapper.split("extern \"C\" __declspec(naked)", 1)[0]
+        self.assertIn(
+            "object = (CContentMap::EObject)gVF2AddedFurnitureVenueObject;",
+            wrapper,
+            "the donor's own lookup still forwards its literal object, so the "
+            "bike would search for something its placement no longer has")
+        self.assertIn(
+            "gVF2AddedFurnitureVenueObject >= 0", wrapper,
+            "the substitution must be gated, or an unset window would force "
+            "object 0 onto every donor lookup")
+
+    def test_closing_the_venue_clears_the_object(self):
+        """A stale object must not outlive the window that set it."""
+        end = SOURCE.split("static void VF2EndAddedFurnitureVenue", 1)[1]
+        end = end.split(NL + "}", 1)[0]
+        self.assertIn("gVF2AddedFurnitureVenueObject = -1;", end)
+
     def test_the_shipped_bike_fmap_is_retargeted(self):
         """The copy that writes the bike's own file must retarget it."""
         self.assertIn('if target == "ExerciseBikeStd.png.fmap":', SOURCE)

@@ -34951,6 +34951,19 @@ static bool gVF2AddedFurnitureVenueActive = false;
 // the walk-to point: FindFurniture returns info.point as the placement PLUS
 // the furniture map's hotspot offset, so the two differ by that offset.
 static ldwPoint gVF2AddedFurnitureVenuePlacement = {0, 0};
+// THE OBJECT THE VENUE WAS SELECTED FROM.
+//
+// Added for the Exercise Bike's own object (0x99). The donor behaviours are
+// the stock Treadmill ones and they push their OWN literal object, 0x04, into
+// their internal FindFurniture. The venue wrapper used to substitute only the
+// search point and forward that object unchanged, so once the bike's fmap
+// stopped declaring 0x04 the donor's lookup would either find nothing -- the
+// bike silently doing nothing at all -- or bind to a placed Treadmill, which
+// is the cross-targeting this change exists to end.
+//
+// -1 means "no substitution", which is what every venue opened before this
+// existed effectively did.
+static int gVF2AddedFurnitureVenueObject = -1;
 
 
 
@@ -35273,11 +35286,14 @@ static bool VF2FindAddedFurnitureVenue(
 }
 
 static void VF2BeginAddedFurnitureVenue(
-    CVillager &villager, ldwPoint point, ldwPoint placement)
+    CVillager &villager, ldwPoint point, ldwPoint placement, int object)
 {
     gVF2AddedFurnitureVenuePlans = reinterpret_cast<CVillagerPlans *>(&villager);
     gVF2AddedFurnitureVenuePoint = point;
     gVF2AddedFurnitureVenuePlacement = placement;
+    // The object the venue was selected from, so the donor's own
+    // FindFurniture searches the same thing rather than its own literal.
+    gVF2AddedFurnitureVenueObject = object;
     gVF2AddedFurnitureVenueActive = true;
 }
 
@@ -35286,6 +35302,10 @@ static void VF2EndAddedFurnitureVenue(CVillager &villager)
     if (gVF2AddedFurnitureVenuePlans == reinterpret_cast<CVillagerPlans *>(&villager)) {
         gVF2AddedFurnitureVenuePlans = 0;
         gVF2AddedFurnitureVenueActive = false;
+        // Cleared with the window. The active flag already gates every read,
+        // so this is belt and braces -- but a stale object left behind is
+        // exactly the kind of thing that reads as correct and fails later.
+        gVF2AddedFurnitureVenueObject = -1;
     }
 }
 
@@ -35433,6 +35453,20 @@ static bool __cdecl VF2FindFurnitureAtAddedFurnitureImpl(
     // record, which no other placement can beat.
     if (gVF2AddedFurnitureVenueActive) {
         point = gVF2AddedFurnitureVenuePlacement;
+        // AND THE OBJECT THE VENUE WAS SELECTED FROM.
+        //
+        // The donor here is a stock behaviour pushing its own literal object.
+        // For the Exercise Bike that literal is the Treadmill's 0x04, while
+        // the bike's placement now declares 0x99, so forwarding the donor's
+        // object would search for something this placement no longer has --
+        // finding nothing, or finding a placed Treadmill instead.
+        //
+        // Substituted only while the window is open, so every unrelated
+        // caller, including the stock Treadmill's own behaviours, is
+        // untouched and still searches its own object.
+        if (gVF2AddedFurnitureVenueObject >= 0) {
+            object = (CContentMap::EObject)gVF2AddedFurnitureVenueObject;
+        }
     }
     return manager->FindFurniture(object, point, *info, a, b, c);
 }
@@ -35650,7 +35684,7 @@ static void VF2RunOwnFurnitureActionEx(
         }
         return;
     }
-    VF2BeginAddedFurnitureVenue(villager, venue, venuePlacement);
+    VF2BeginAddedFurnitureVenue(villager, venue, venuePlacement, object);
     // READ THE SLOT SERIAL BEFORE THE RESOLVER RUNS.
     //
     // VF2CurrentLabelInGroup reaches VF2BehaviorLabelSlotIsCurrentFor, whose
