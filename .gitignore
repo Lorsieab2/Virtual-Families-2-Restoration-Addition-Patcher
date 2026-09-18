@@ -121,3 +121,8 @@ __pycache__/
 # Written by the GUI (and by its tests, which instantiate the real app).
 work/patcher_local_settings.json
 src/patcher_local_settings.json
+
+# dumpbin /RELOCATIONS output, regenerated on demand by
+# work/decode_candidate_object_prerequisites.py. It is a large machine-
+# generated build artifact, not source, and review flagged committing it.
+work/Villager_relocations.txt

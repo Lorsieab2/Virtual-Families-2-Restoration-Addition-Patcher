@@ -1,6 +1,7 @@
 import re
 import unittest
 
+import extract_emitted_behavior_cpp as emitted
 import patch_mobile_furniture_pack as patcher
 
 
@@ -8,6 +9,25 @@ def source():
     return (patcher.ROOT / "work" / "patch_mobile_furniture_pack.py").read_text(
         encoding="utf-8"
     )
+
+
+def active_cpp(text):
+    """`text` with C++ comments removed, so assertions see LIVE code only.
+
+    Review found that a call disabled by prefixing `//` still satisfies an
+    `assertIn` for its exact text: commenting out the Home Gym clone left the
+    whole contract suite green while the generated C++ silently lost that
+    autonomous candidate. Matching against raw source therefore proves a
+    string is PRESENT, not that it RUNS.
+
+    Only `//` to end-of-line and `/* ... */` are stripped, and each is
+    replaced by a newline or a space so that line structure and token
+    boundaries survive. This is deliberately not a C++ parser: it is applied
+    to the generator's own emitted-C++ string literals, which use plain
+    comments and no `//` inside string constants in the regions asserted on.
+    """
+    text = re.sub(r"/\*.*?\*/", " ", text, flags=re.DOTALL)
+    return re.sub(r"//[^\n]*", "", text)
 
 
 class TestAddedFurnitureContract(unittest.TestCase):
@@ -435,6 +455,289 @@ class TestAddedFurnitureContract(unittest.TestCase):
         self.assertNotIn("donor + 0xC4", clone,
                          "the donor's own object prerequisite must not be "
                          "rewritten, or the stock candidate changes too")
+
+    def test_every_clone_call_site_pins_its_object_prerequisite(self):
+        """The COMPLETE clone table, every argument, and the sentinel branch.
+
+        Two review findings on #344 showed that asserting individual call
+        sites leaves the unasserted ones free. Both mutations below kept 71
+        tests green while undoing authorized fixes:
+
+        1. `objectPrerequisite != 0` -> `== 0` gates the bike and ping-pong
+           clones on their STOCK DONORS, so bike autonomy needs a Treadmill
+           placed and ping-pong needs a Pool Table. That is exactly the
+           cross-targeting bug the owner reported.
+        2. The four zero-valued sites (WateringWindowBoxes, Home Gym, Yoga,
+           WorkKitchen0) set to the bike object gates Home Gym and Yoga on an
+           unrelated Exercise Bike existing.
+
+        A third, found by review on the first revision of THIS test: prefixing
+        a call with `//` left all twelve assertions passing while the
+        generated C++ lost that candidate entirely. So every match below is
+        against `active_cpp`, not raw source -- a commented-out call is an
+        absent call.
+
+        So this test pins the WHOLE table by exact text rather than sampling
+        it, and pins the sentinel's sense behaviourally. A new clone call
+        added without a decision about its prerequisite fails here, which is
+        the point: the owner's rule is that each item's actions are offered
+        when THAT item is placed and never because of another item.
+        """
+        src = active_cpp(source())
+
+        # donor, target, prerequisite -- the exact expected table.
+        #
+        # A zero means "write no prerequisite, leave the donor record's own
+        # gates alone". That is correct for these five because their donors
+        # are stock behaviours that CONSULT NO PLACED ITEM (see the generator
+        # at the VF2GymDonorBehaviors comment). There is no object gate in
+        # those donor records to inherit, and what confines each action to its
+        # item is the handler's own venue search plus the positional
+        # eligibility rule, NOT the candidate gate.
+        #
+        # So a zero here is a deliberate "no gate", not "same gate as the
+        # donor". If a donor ever did carry a non-zero +0xC4 that its clone
+        # should not inherit, zero would silently keep the WRONG gate and this
+        # table would pin that mistake in place -- which is why the reason is
+        # recorded here rather than left implicit.
+        #
+        # EVERY VALUE BELOW IS VERIFIED AGAINST THE GAME BINARY.
+        #
+        # Read out of CVillager::InitAI in work/desktop_obj_files/Villager.obj,
+        # which sets each candidate record's fields. The object prerequisite
+        # is record offset +0xC4, i.e. [esi+reg+6C7Ch] against base 0x6BB8.
+        # InitAI dispatches per behaviour through a TWO-LEVEL switch:
+        #
+        #     lea   eax,[ebx-2]                 ; index = behaviour id - 2
+        #     cmp   eax,197h                    ; 0x198 behaviours
+        #     ja    $LN207                      ; default: no per-behaviour fields
+        #     movzx eax,byte ptr $LN205[eax]    ; byte map -> CASE NUMBER
+        #     jmp   dword ptr $LN249[eax*4]     ; case number -> case block
+        #
+        # $LN249 is indexed by CASE NUMBER, not by behaviour id, and 0xBE is
+        # the default case. Resolved values:
+        #
+        #   donor  behaviour             case  block    prerequisite
+        #   0x049  Treadmill walk        0x24  $LN99    0x04
+        #   0x0E0  Treadmill run         0x24  $LN99    0x04
+        #   0x099  PlayingPooltable      0x55  $LN95    0x36
+        #   0x034  North shower          0x18  $LN76    none
+        #   0x076  WateringRoses         0x44  $LN130   none
+        #   0x0A4  BathroomSink          0x5D  $LN80    none
+        #   0x04A  WorkingOut            0x25  $LN100   none
+        #   0x08B  yoga donor            0x4C  $LN101   none
+        #   0x047  WorkKitchenDispatch   0x23  $LN22    none
+        #
+        # So the six zeroes are MEASURED, not assumed: those donors carry no
+        # gate, and passing 0 inherits nothing. The three named objects are
+        # measured too, and they are exactly the donors that DO carry a stock
+        # gate -- which is why those three clones need the override and the
+        # other six must not have one.
+        #
+        # Two earlier attempts of mine got this wrong, so the decode is only
+        # trustworthy because it reproduces three INDEPENDENTLY KNOWN values
+        # first: 0x04 for both treadmill donors and 0x36 for the pool donor,
+        # known from the owner's in-play report that bike autonomy required a
+        # placed Treadmill and from the review finding on #343. A decode that
+        # cannot reproduce those is rejected rather than reported.
+        expected = [
+            (0x034, 0x016, "0"),                             # North shower
+            (0x076, 0x077, "0"),                             # WateringWindowBoxes
+            (0x0A4, 0x0A5, "0"),                             # WashingInBathroomSink0
+            (0x0A4, 0x0A6, "0"),                             # WashingInBathroomSink1
+            (0x0A4, 0x0A7, "0"),                             # WashingInBathroomSink2
+            (0x0A4, 0x0A8, "0"),                             # WashingInBathroomSink3
+            # RESOLVED values, not placeholders. The generator substitutes
+            # __VF2_EXERCISE_BIKE_OBJECT__ and __VF2_PING_PONG_OBJECT__ before
+            # writing the .cpp, so pinning the placeholder text asserted
+            # something the compiler never sees. Review caught that.
+            (0x049, 0x0B1, "0x99"),                          # bike, walking
+            (0x0E0, 0x0B2, "0x99"),                          # bike, running
+            (0x04A, 0x0B3, "0"),                             # Home Gym System
+            (0x08B, 0x0B4, "0"),                             # Yoga Equipment
+            (0x099, 0x0B8, "0x9a"),                          # Ping-Pong Table
+            (0x047, 0x048, "0"),                             # WorkKitchen0
+        ]
+
+        # Assert against PREPROCESSED C++, not source text.
+        #
+        # Review found two ways text-matching lies about what runs:
+        #   - `//` in front of a call leaves its text intact
+        #   - `#if 0` around a call leaves its text intact even after comment
+        #     stripping, because the PREPROCESSOR removes it, not the text
+        #
+        # No regex can answer the second one; only a preprocessor can. So the
+        # calls below come from `cl /EP /P` output, which is exactly what the
+        # compiler sees. If MSVC is unavailable the test FAILS rather than
+        # quietly falling back to the weaker check -- a skipped check that
+        # reports as a pass is the defect this whole review chain is about.
+        # The resolved values below are only trustworthy if this module knows
+        # about every object placeholder the generator substitutes. Without
+        # this call the drift guard exists but never runs, which I confirmed
+        # by mutation: renaming a placeholder in the generator left the whole
+        # suite green.
+        emitted.assert_substitutions_match_generator()
+
+        preprocessed = emitted.preprocessed_cpp()
+        self.assertIsNotNone(
+            preprocessed,
+            "cl.exe not found, so preprocessor reachability cannot be "
+            "established. This test asserts which clone calls SURVIVE "
+            "preprocessing; without MSVC that claim is unverifiable and "
+            "must not be reported as a pass.")
+        live = emitted.clone_calls(preprocessed)
+
+        # Calls are matched by HELPER NAME with parsed arguments, so a call
+        # whose first argument is spelled anything other than `data` -- a cast,
+        # a different variable -- is still counted. Anchoring the old regex on
+        # `data,` let exactly such a call slip past the completeness check.
+        by_target = {}
+        for args in live:
+            if len(args) != 5:
+                continue
+            by_target.setdefault(args[2], []).append(args)
+
+        for donor, target, prerequisite in expected:
+            key = "0x%03X" % target
+            with self.subTest(target=key):
+                matches = by_target.get(key) or []
+                self.assertEqual(
+                    len(matches), 1,
+                    "expected exactly one live clone call targeting %s, found "
+                    "%d. A duplicate or a removed call changes which "
+                    "autonomous actions exist." % (key, len(matches)))
+                args = matches[0]
+                self.assertEqual(
+                    args[1], "0x%03X" % donor,
+                    "clone targeting %s must come from donor 0x%03X"
+                    % (key, donor))
+                self.assertEqual(
+                    args[4], prerequisite,
+                    "clone 0x%03X -> %s must pass prerequisite %s, found %s. "
+                    "This changes WHEN the action is offered in play."
+                    % (donor, key, prerequisite, args[4]))
+
+        # The table must be COMPLETE, counted from preprocessed output so a
+        # `#if 0`-disabled call reduces the count and a sneaked-in live call
+        # raises it. Either way this fails until someone makes a deliberate
+        # decision about the new call's gating.
+        self.assertEqual(
+            len(live), len(expected),
+            "%d live clone call(s) survive preprocessing but this test pins "
+            "%d. Add the new call to `expected` WITH a deliberate "
+            "prerequisite, or confirm why one disappeared."
+            % (len(live), len(expected)))
+
+        # And the sentinel's SENSE, not merely the presence of an assignment.
+        # `== 0` passes any assertion that only looks for the write. Read from
+        # preprocessed output too, so a sentinel inside `#if 0` cannot satisfy
+        # this either.
+        clone = preprocessed[
+            preprocessed.index("void CloneAutonomousCandidateWithWeight("):]
+        clone = clone[:clone.index("\n}")]
+        self.assertIn(
+            "if (objectPrerequisite != 0) {", clone,
+            "the prerequisite must be written when the caller NAMES one. "
+            "Inverting this to `== 0` leaves the bike and ping-pong gated on "
+            "their donors and clears every zero-valued clone's real gates.")
+        self.assertNotIn(
+            "if (objectPrerequisite == 0) {", clone,
+            "inverted sentinel: zero would overwrite the donor's gates and a "
+            "named object would be ignored")
+
+    def test_the_candidate_enabler_is_actually_invoked_by_the_game(self):
+        """The clone table is only reachable if something CALLS its function.
+
+        The test above proves the twelve clone calls exist and survive
+        preprocessing. That is `code exists`, not `code runs`. Their enclosing
+        function, `VF2EnableAutonomousCandidates`, has NO call site in the
+        emitted C++ at all -- it is an `extern "C"` symbol invoked from patched
+        game code -- so nothing in that test would notice if the hooks
+        installing those calls were removed. The whole table would then be
+        compiled, preprocessor-live, and never executed.
+
+        Two hooks install it, and both are needed:
+
+          * `CVillager::InitAI` epilogue  -- newly created villagers
+          * `CVillager::LoadAI` epilogues -- households loaded from a save
+
+        Losing the LoadAI hook is the quiet one: a new game would gain the
+        actions while every existing save silently would not, which is exactly
+        the kind of half-working behaviour the owner reports from play rather
+        than from tests.
+
+        Each detour also has to END with the stock epilogue it replaced, or
+        the function returns with the wrong stack and the game corrupts
+        instead of merely missing a feature.
+        """
+        src = source()
+
+        # The symbol must be appended as undefined and relocated, which is
+        # what makes the linker bind the call to the emitted helper.
+        self.assertIn(
+            'obj.append_undefined_symbol("_VF2EnableAutonomousCandidates")',
+            src,
+            "the enabler is no longer imported as a symbol, so no patched "
+            "call site could bind to it")
+
+        # Two distinct relocations, one per hook, both against that symbol.
+        #
+        # Scoped to the block that installs THIS enabler. `helper_sym` is a
+        # generic local name reused by about twenty unrelated patches in this
+        # file, so a file-wide search for it counts all of them -- my first
+        # version of this assertion expected 2 and found 20.
+        start = src.index(
+            'obj.append_undefined_symbol("_VF2EnableAutonomousCandidates")')
+        block = src[start:src.index("\ndef ", start)]
+        relocations = re.findall(
+            r"append_relocation\([^)]*helper_sym[^)]*\)", block)
+        self.assertEqual(
+            len(relocations), 2,
+            "expected exactly 2 relocations binding the enabler (InitAI and "
+            "LoadAI); found %d. One missing means either new villagers or "
+            "loaded saves never run the new candidates."
+            % len(relocations))
+
+        # Everything below is asserted against `whole`, the ENCLOSING PATCH
+        # FUNCTION, not the whole file and not the post-import `block`.
+        #
+        # Scope matters twice over here, and I got it wrong both ways while
+        # writing this test:
+        #   - file-wide `assertIn` passed even with the hook's own bytes
+        #     removed, because these byte sequences and guard messages also
+        #     appear in unrelated patches (caught by mutation);
+        #   - `block` starts after the symbol import, but the InitAI detour is
+        #     defined BEFORE it, so scoping there failed on correct code.
+        function_start = src.rfind("\ndef ", 0, start)
+        whole = src[function_start:src.index("\ndef ", start)]
+
+        # The InitAI detour: push the villager, call, restore stock epilogue.
+        self.assertIn("0xFF, 0x75, 0xFC,", whole,
+                      "InitAI detour no longer pushes [ebp-4], the CVillager*")
+        # The LoadAI detour uses edi, and must end with `ret 4` because
+        # LoadAI is __thiscall with one stack argument.
+        #
+        # Scoped to the detour's OWN byte list. Even inside this function the
+        # bytes C2 04 00 appear a second time, in the `load_expected` literal
+        # that guards the epilogue being overwritten. Asserting against the
+        # function as a whole therefore passed with the detour's `ret 4`
+        # replaced by a plain `ret` -- found by mutation, not by reading.
+        detour = whole[whole.index("load_helper = bytearray(["):]
+        detour = detour[:detour.index("])")]
+        self.assertIn("0xC2, 0x04, 0x00,", detour,
+                      "LoadAI detour no longer ends with `ret 4`; returning "
+                      "with the wrong stack adjustment corrupts the caller")
+        self.assertIn("0x57,", detour,
+                      "LoadAI detour no longer pushes edi, the CVillager*")
+
+        # Both hooks must verify the bytes they overwrite, so a future game
+        # revision fails the build instead of being silently mis-patched.
+        for guard in ("Unexpected CVillager::InitAI epilogue",
+                      "Unexpected CVillager::LoadAI epilogue"):
+            self.assertIn(
+                guard, whole,
+                "%s check removed; the patch would apply blindly to an "
+                "executable whose epilogue has moved" % guard)
 
     def test_the_findfurniture_wrapper_forwards_every_stack_word(self):
         """The naked wrapper must forward SEVEN words and clean 28 bytes.
