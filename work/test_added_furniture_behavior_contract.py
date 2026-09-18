@@ -64,7 +64,18 @@ class TestAddedFurnitureContract(unittest.TestCase):
     def test_shared_donor_objects_are_explicit_and_separate(self):
         src = source()
         expected = {
-            "__VF2_EXERCISE_BIKE_ITEM_ID__": "0x04",
+            # THE EXERCISE BIKE IS NO LONGER ON THE TREADMILL'S OBJECT.
+            #
+            # SUPERSEDED, recorded rather than deleted (AGENTS.md 11): this
+            # expected "0x04", the Treadmill's object, because the bike
+            # borrowed TreadmillStd.png.fmap and therefore declared it. The
+            # owner asked for the two to become separate items with separate
+            # behaviours -- "the exercise bike is a totally new object" -- so
+            # the bike now has object 0x99 and its shipped fmap is retargeted
+            # to match. FindFurniture resolves purely by object, so sharing
+            # 0x04 is what made the two indistinguishable and forced every
+            # earlier fix to be a positional guard instead of a separation.
+            "__VF2_EXERCISE_BIKE_ITEM_ID__": "__VF2_EXERCISE_BIKE_OBJECT__",
             "__VF2_HOME_GYM_ITEM_ID__": "0x75",
             "__VF2_YOGA_EQUIPMENT_ITEM_ID__": "0x75",
             "__VF2_PING_PONG_TABLE_ITEM_ID__": "0x36",
@@ -75,7 +86,7 @@ class TestAddedFurnitureContract(unittest.TestCase):
         # stock item (0x220) and the invisible copy are the same thing with
         # different art and a drop on either must reach the same venue. Callers
         # with no second id pass -1. The pairing this test guards -- which
-        # donor OBJECT each added item is bound to -- is unchanged.
+        # OBJECT each added item is bound to -- is otherwise unchanged.
         for item, obj in expected.items():
             self.assertRegex(
                 src, rf"{re.escape(item)}, (?:(?:-1|0x[0-9a-fA-F]+), )?{obj}",
@@ -85,6 +96,15 @@ class TestAddedFurnitureContract(unittest.TestCase):
         self.assertIn("CBehavior::WorkingOut", src)
         self.assertIn("CBehavior::QuickWorkout", src)
         self.assertIn("CBehavior::PlayingPooltable", src)
+        # The bike and the Treadmill must not converge again. The object the
+        # bike searches is substituted from MOBILE_EXERCISE_BIKE_OBJECT, and
+        # that constant must differ from the donor object the Treadmill keeps,
+        # or the separation the owner asked for silently collapses.
+        self.assertNotEqual(
+            patcher.MOBILE_EXERCISE_BIKE_OBJECT,
+            patcher.MOBILE_EXERCISE_BIKE_DONOR_OBJECT,
+            "the Exercise Bike is sharing the Treadmill's object again, so "
+            "bike and treadmill actions can resolve to each other")
 
     def test_manual_drop_routes_added_items_to_own_handlers(self):
         src = source()

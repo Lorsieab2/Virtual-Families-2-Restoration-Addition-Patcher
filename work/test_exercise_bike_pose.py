@@ -30,6 +30,13 @@ import os
 import re
 import unittest
 
+# Imported as well as read as text. Most of this module inspects the generator
+# as SOURCE, but the Exercise Bike's own object is a CONSTANT and a transform
+# function, and those are worth exercising rather than pattern-matched: a
+# string check cannot tell whether the cell encoding actually round-trips
+# through CContentMap::HasObject's decoder.
+import patch_mobile_furniture_pack as patcher
+
 # Newline as a name, so a stripping expression inside a test never needs a
 # backslash escape that the surrounding string quoting would fight over.
 NL = chr(10)
@@ -299,6 +306,138 @@ class TheCaptionFollowsTheMachineTheVillagerIsAt(unittest.TestCase):
         # is unchanged and both probes inspect identical state.
         self.assertNotIn("bikeNow", SOURCE)
         self.assertNotIn("pingPongNow", SOURCE)
+
+
+class TheExerciseBikeHasItsOwnObject(unittest.TestCase):
+    """The bike must not share the Treadmill's content-map object.
+
+    Owner: "the exercise bike is a totally new object", and the standing
+    symmetric rule that bike actions target only the bike and treadmill
+    actions only the treadmill, in BOTH directions and on BOTH the drop and
+    autonomous paths.
+
+    Sharing object 0x04 is what made the two indistinguishable to
+    CFurnitureManager::FindFurniture, which resolves purely by object. Every
+    earlier fix for this had to be a positional guard rather than a real
+    separation, and the defect kept returning from whichever direction was not
+    guarded.
+    """
+
+    def test_the_bike_has_its_own_object_id(self):
+        self.assertEqual(patcher.MOBILE_EXERCISE_BIKE_OBJECT, 0x99)
+        self.assertNotEqual(
+            patcher.MOBILE_EXERCISE_BIKE_OBJECT,
+            patcher.MOBILE_EXERCISE_BIKE_DONOR_OBJECT,
+            "the bike is sharing the Treadmill's object again")
+
+    def test_the_object_id_is_not_taken_by_another_added_item(self):
+        """A collision here would recreate the bug against a different item."""
+        others = {
+            patcher.MOBILE_CHAISE_OBJECT,
+            patcher.MOBILE_PATIO_UMBRELLA_OBJECT,
+            patcher.MOBILE_PICNIC_TABLE_OBJECT,
+            patcher.MOBILE_PATIO_TABLE_OBJECT,
+        }
+        self.assertNotIn(patcher.MOBILE_EXERCISE_BIKE_OBJECT, others)
+
+    def test_the_cell_value_decodes_to_the_object_id(self):
+        """The encoding is CContentMap::HasObject's own, not an assumption.
+
+        HasObject walks the content block's cells and decodes each as
+
+            id = (((cell >> 11) & 0x40000) | (cell & 0x3F800)) >> 11
+
+        This asserts the declared cell value round-trips through that exact
+        decoder, and that the same decoder reproduces all four pre-existing
+        added-item values -- which is what makes the encoding evidence rather
+        than a guess.
+        """
+        def decode(cell):
+            return (((cell >> 11) & 0x40000) | (cell & 0x3F800)) >> 11
+
+        self.assertEqual(
+            decode(patcher.MOBILE_EXERCISE_BIKE_PC_CELL_VALUE),
+            patcher.MOBILE_EXERCISE_BIKE_OBJECT)
+        for cell, obj in (
+            (patcher.MOBILE_CHAISE_PC_CELL_VALUE, patcher.MOBILE_CHAISE_OBJECT),
+            (patcher.MOBILE_PATIO_UMBRELLA_PC_CELL_VALUE,
+             patcher.MOBILE_PATIO_UMBRELLA_OBJECT),
+            (patcher.MOBILE_PICNIC_TABLE_PC_CELL_VALUE,
+             patcher.MOBILE_PICNIC_TABLE_OBJECT),
+            (patcher.MOBILE_PATIO_TABLE_PC_CELL_VALUE,
+             patcher.MOBILE_PATIO_TABLE_OBJECT),
+        ):
+            self.assertEqual(decode(cell), obj)
+
+    def test_the_retarget_preserves_every_collision_bit(self):
+        """Only the object field may move; the footprint must not change.
+
+        A borrower that lost its geometry here would regress the way the Patio
+        Table did when borrowers were switched onto the sparse desktop-safe
+        map -- 241 occupied cells down to 8.
+        """
+        import struct
+        width, height = 4, 4
+        cells = [0] * (width * height)
+        cells[0] = 0x00202000   # object 0x04 plus collision flags
+        cells[1] = 0x02202000   # object 0x04 plus different flags
+        cells[2] = 0x00200000   # footprint only, no object
+        data = (b"QAMF" + bytes(20)
+                + struct.pack("<ii", width, height)
+                + struct.pack("<%dI" % len(cells), *cells))
+
+        out, changed = patcher.retarget_fmap_object(data, 0x04, 0x99)
+        self.assertEqual(changed, 2, "both object cells must be retargeted")
+        self.assertEqual(len(out), len(data))
+
+        low, high = 0x3F800, 0x40000 << 11
+        before = patcher._fmap_cells(data)
+        after = patcher._fmap_cells(out)
+        self.assertEqual(
+            [c & ~low & ~high for c in before],
+            [c & ~low & ~high for c in after],
+            "a collision flag bit changed, so the footprint moved")
+
+        def decode(cell):
+            return (((cell >> 11) & 0x40000) | (cell & low)) >> 11
+        self.assertEqual(decode(after[0]), 0x99)
+        self.assertEqual(decode(after[1]), 0x99)
+        self.assertEqual(decode(after[2]), 0, "a non-object cell was touched")
+
+    def test_a_map_without_the_donor_object_is_reported_not_guessed(self):
+        """Zero changes must be visible to the caller, which raises on it."""
+        import struct
+        cells = [0x00200000, 0, 0, 0]
+        data = (b"QAMF" + bytes(20) + struct.pack("<ii", 2, 2)
+                + struct.pack("<4I", *cells))
+        _out, changed = patcher.retarget_fmap_object(data, 0x04, 0x99)
+        self.assertEqual(changed, 0)
+
+    def test_both_bike_helpers_search_the_bike_object(self):
+        """The search object and the declared object come from one constant."""
+        self.assertEqual(
+            SOURCE.count(
+                "__VF2_EXERCISE_BIKE_ITEM_ID__, __VF2_EXERCISE_BIKE_OBJECT__,"),
+            2,
+            "a bike helper is still searching a literal object")
+        self.assertNotIn(
+            "__VF2_EXERCISE_BIKE_ITEM_ID__, 0x04,", SOURCE,
+            "a bike helper still searches the Treadmill's object")
+        self.assertIn(
+            '"__VF2_EXERCISE_BIKE_OBJECT__", f"{MOBILE_EXERCISE_BIKE_OBJECT:#x}"',
+            SOURCE,
+            "the object macro must be substituted from the constant, or the "
+            "searched object and the declared object can drift apart")
+
+    def test_the_shipped_bike_fmap_is_retargeted(self):
+        """The copy that writes the bike's own file must retarget it."""
+        self.assertIn('if target == "ExerciseBikeStd.png.fmap":', SOURCE)
+        self.assertIn("MOBILE_EXERCISE_BIKE_DONOR_OBJECT,", SOURCE)
+        self.assertIn("MOBILE_EXERCISE_BIKE_OBJECT,", SOURCE)
+        self.assertIn(
+            "carries no object ", SOURCE,
+            "a donor map that stops carrying the object must fail the build, "
+            "not silently leave the bike sharing the Treadmill's object")
 
 
 if __name__ == "__main__":
