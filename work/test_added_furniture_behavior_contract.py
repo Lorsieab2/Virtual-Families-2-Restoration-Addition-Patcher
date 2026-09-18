@@ -10,6 +10,25 @@ def source():
     )
 
 
+def active_cpp(text):
+    """`text` with C++ comments removed, so assertions see LIVE code only.
+
+    Review found that a call disabled by prefixing `//` still satisfies an
+    `assertIn` for its exact text: commenting out the Home Gym clone left the
+    whole contract suite green while the generated C++ silently lost that
+    autonomous candidate. Matching against raw source therefore proves a
+    string is PRESENT, not that it RUNS.
+
+    Only `//` to end-of-line and `/* ... */` are stripped, and each is
+    replaced by a newline or a space so that line structure and token
+    boundaries survive. This is deliberately not a C++ parser: it is applied
+    to the generator's own emitted-C++ string literals, which use plain
+    comments and no `//` inside string constants in the regions asserted on.
+    """
+    text = re.sub(r"/\*.*?\*/", " ", text, flags=re.DOTALL)
+    return re.sub(r"//[^\n]*", "", text)
+
+
 class TestAddedFurnitureContract(unittest.TestCase):
     def test_ownership_never_gates_the_own_handlers(self):
         src = source()
@@ -451,13 +470,19 @@ class TestAddedFurnitureContract(unittest.TestCase):
            WorkKitchen0) set to the bike object gates Home Gym and Yoga on an
            unrelated Exercise Bike existing.
 
+        A third, found by review on the first revision of THIS test: prefixing
+        a call with `//` left all twelve assertions passing while the
+        generated C++ lost that candidate entirely. So every match below is
+        against `active_cpp`, not raw source -- a commented-out call is an
+        absent call.
+
         So this test pins the WHOLE table by exact text rather than sampling
         it, and pins the sentinel's sense behaviourally. A new clone call
         added without a decision about its prerequisite fails here, which is
         the point: the owner's rule is that each item's actions are offered
         when THAT item is placed and never because of another item.
         """
-        src = source()
+        src = active_cpp(source())
 
         # donor, target, prerequisite -- the exact expected table.
         #
