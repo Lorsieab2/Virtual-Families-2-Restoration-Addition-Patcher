@@ -25971,6 +25971,7 @@ extern "C" void __cdecl VF2MobileRestingBody(CVillager &);
 extern "C" void __cdecl VF2MobileStudyingOnPatio(CVillager &);
 __VF2_BEHAVIOR_FALLBACK_DECLS__
 extern "C" void __cdecl VF2ExerciseBikeWalk(CVillager &);
+extern "C" void __cdecl VF2ExerciseBikeRun(CVillager &);
 extern "C" void __cdecl VF2HomeGymWorkout(CVillager &);
 extern "C" void __cdecl VF2YogaEquipmentWorkout(CVillager &);
 extern "C" void __cdecl VF2PingPongPlay(CVillager &);
@@ -26389,7 +26390,11 @@ static bool gVF2PicnicPropPlaced = false;
 // Screen-space and chosen by eye against the art, like the other prop nudges
 // -- there is no measurable ground truth for it, so it is the owner's judgement
 // that decides when it is centred.
-static int const kVF2PatioDrinksNudgeX = 18;
+// Owner, third measurement from live play: "move it 7 pixels to the right on
+// the furniture item." The value has walked 6 -> 13 -> 18 -> 25, and every
+// step was the owner measuring the SHIPPED result, so each is an observation
+// rather than an estimate.
+static int const kVF2PatioDrinksNudgeX = 25;
 // The mobile meal sprite is authored at the table centre. The PC table
 // artwork needs a small screen-space correction: upward, then toward the
 // table's NE/NW side. Keep the placement record untouched and apply this
@@ -30099,7 +30104,24 @@ __VF2_COMPUTER_DROP_DISPATCH__
     // Added-item identity must win before the stock hotspot: these items use
     // donor maps, so the stock hotspot would otherwise consume the drop first.
     if (candidate == __VF2_EXERCISE_BIKE_ITEM_ID__) {
-        VF2ExerciseBikeWalk(villager);
+        // BOTH bike variants must be reachable from a DROP.
+        //
+        // Reported in play: dropping a villager on the Exercise Bike only ever
+        // produced "using the exercise bike", never "doing high-intensity
+        // cycling". This branch called VF2ExerciseBikeWalk unconditionally, so
+        // the run helper and its whole label family were unreachable from a
+        // drop -- a dispatch with exactly one reachable answer, which is the
+        // failure shape AGENTS.md warns about.
+        //
+        // The autonomous path already offers the choice, registering the two
+        // as separate candidates at equal weight 450 (0x0B1 walking,
+        // 0x0B2 running), so the drop uses the same even split through the
+        // engine's own RNG rather than inventing a different distribution.
+        if (ldwGameState::GetRandom(2)) {
+            VF2ExerciseBikeRun(villager);
+        } else {
+            VF2ExerciseBikeWalk(villager);
+        }
         return true;
     }
     if (candidate == __VF2_HOME_GYM_ITEM_ID__) {
