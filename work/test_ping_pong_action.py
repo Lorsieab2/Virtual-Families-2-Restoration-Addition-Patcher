@@ -409,6 +409,32 @@ class ThePingPongTableHasItsOwnObject(unittest.TestCase):
             patcher.MOBILE_PING_PONG_DONOR_OBJECT,
             "the Ping-Pong Table is sharing the Pool Table's object again")
 
+    def test_the_autonomous_clone_requires_the_ping_pong_table(self):
+        """The 0x0B8 clone must name its OWN object as the prerequisite.
+
+        Codex P1 on #344, and it found a real hole in my own two-way
+        validation: I mutated the BIKE call sites and confirmed tests failed,
+        but never mutated the ping-pong one. Replacing
+        `__VF2_PING_PONG_OBJECT__` with `0` here left 379 tests green while
+        restoring the exact defect.
+
+        Why it matters: CloneAutonomousCandidateWithWeight copies the donor's
+        whole candidate record, so a 0 prerequisite means "inherit the donor's"
+        -- and the donor is stock pool behaviour 0x099, whose prerequisite is
+        the Pool Table's 0x36. CVillagerAI::DecideWhatToDo then calls
+        ObjectExists on it, so autonomous ping-pong would only ever be offered
+        when a POOL TABLE happened to be placed.
+
+        Asserted at the CALL SITE, because the generic `target + 0xC4` write
+        and the bike call sites are all satisfied without this one.
+        """
+        self.assertIn(
+            "CloneAutonomousCandidateWithWeight(data, 0x099, 0x0B8, 450, "
+            "__VF2_PING_PONG_OBJECT__)", _source(),
+            "the ping-pong autonomous candidate inherits the Pool Table's "
+            "object prerequisite, so it is only offered when a pool table is "
+            "placed")
+
     def test_the_object_id_collides_with_nothing(self):
         """A collision would recreate the bug against a different item."""
         others = {
