@@ -459,9 +459,21 @@ class TestAddedFurnitureContract(unittest.TestCase):
         """
         src = source()
 
-        # donor, target, weight, prerequisite -- the exact expected table.
-        # A zero means "keep the gates the donor record already carries",
-        # which is correct only for clones that act on the DONOR's object.
+        # donor, target, prerequisite -- the exact expected table.
+        #
+        # A zero means "write no prerequisite, leave the donor record's own
+        # gates alone". That is correct for these five because their donors
+        # are stock behaviours that CONSULT NO PLACED ITEM (see the generator
+        # at the VF2GymDonorBehaviors comment). There is no object gate in
+        # those donor records to inherit, and what confines each action to its
+        # item is the handler's own venue search plus the positional
+        # eligibility rule, NOT the candidate gate.
+        #
+        # So a zero here is a deliberate "no gate", not "same gate as the
+        # donor". If a donor ever did carry a non-zero +0xC4 that its clone
+        # should not inherit, zero would silently keep the WRONG gate and this
+        # table would pin that mistake in place -- which is why the reason is
+        # recorded here rather than left implicit.
         expected = [
             (0x034, 0x016, "0"),                             # North shower
             (0x076, 0x077, "0"),                             # WateringWindowBoxes
