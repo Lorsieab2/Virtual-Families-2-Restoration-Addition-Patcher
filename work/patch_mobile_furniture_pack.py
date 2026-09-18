@@ -27066,14 +27066,31 @@ static bool VF2HandleMobileChaise(CVillager &villager)
         // shipped code. EDirection is NE=0, SE=1, SW=2, NW=3, which is a
         // DIFFERENT ordering from EFurnitureOrientation (SE=0, SW=1, NE=2,
         // NW=3), so the orientation is mapped rather than passed through.
+        // THE STOCK ORIENTATION TEST, NOT AN EAST/WEST SPLIT.
+        //
+        // Live IDA capture on the shipped build, with the owner reporting the
+        // first correct and the second wrong:
+        //
+        //   orientation=0 (SE)  dir=0 head=0  SleepNE   <- correct in play
+        //   orientation=1 (SW)  dir=3 head=3  SleepNW   <- WRONG in play
+        //
+        // The orientations actually in play are SE(0) and SW(1). Stock
+        // CBehavior::RestingBody -- the behaviour behind the normal chaise
+        // Lounge Chairs, which the owner confirms are correct and which this
+        // patch does not touch -- tests `cmp eax, 3` / `jne`: NW(3) ALONE
+        // takes SleepNW, every other orientation takes SleepNE.
+        //
+        // VF2FurnitureFacesEast groups {SE,NE} against {SW,NW}, which pulls
+        // SW into the NW arm. SW is the ONLY orientation where this patch
+        // disagreed with stock, and it is exactly the broken placement.
         plans->PlanToWait(
             duration, eBodyPositionChaise,
-            VF2FurnitureFacesEast(info.orientation)
-                ? eDirectionNortheast
-                : eDirectionNorthwest,
-            VF2FurnitureFacesEast(info.orientation)
-                ? eHeadDirectionNE
-                : eHeadDirectionNW);
+            VF2FurnitureFacesNorthWest(info.orientation)
+                ? eDirectionNorthwest
+                : eDirectionNortheast,
+            VF2FurnitureFacesNorthWest(info.orientation)
+                ? eHeadDirectionNW
+                : eHeadDirectionNE);
     } else {
         plans->PlanToLieDown(duration);
     }
@@ -29413,14 +29430,31 @@ static void VF2PlanLinkedChaiseAction(
         // shipped code. EDirection is NE=0, SE=1, SW=2, NW=3, which is a
         // DIFFERENT ordering from EFurnitureOrientation (SE=0, SW=1, NE=2,
         // NW=3), so the orientation is mapped rather than passed through.
+        // THE STOCK ORIENTATION TEST, NOT AN EAST/WEST SPLIT.
+        //
+        // Live IDA capture on the shipped build, with the owner reporting the
+        // first correct and the second wrong:
+        //
+        //   orientation=0 (SE)  dir=0 head=0  SleepNE   <- correct in play
+        //   orientation=1 (SW)  dir=3 head=3  SleepNW   <- WRONG in play
+        //
+        // The orientations actually in play are SE(0) and SW(1). Stock
+        // CBehavior::RestingBody -- the behaviour behind the normal chaise
+        // Lounge Chairs, which the owner confirms are correct and which this
+        // patch does not touch -- tests `cmp eax, 3` / `jne`: NW(3) ALONE
+        // takes SleepNW, every other orientation takes SleepNE.
+        //
+        // VF2FurnitureFacesEast groups {SE,NE} against {SW,NW}, which pulls
+        // SW into the NW arm. SW is the ONLY orientation where this patch
+        // disagreed with stock, and it is exactly the broken placement.
         plans->PlanToWait(
             duration, eBodyPositionChaise,
-            VF2FurnitureFacesEast(info.orientation)
-                ? eDirectionNortheast
-                : eDirectionNorthwest,
-            VF2FurnitureFacesEast(info.orientation)
-                ? eHeadDirectionNE
-                : eHeadDirectionNW);
+            VF2FurnitureFacesNorthWest(info.orientation)
+                ? eDirectionNorthwest
+                : eDirectionNortheast,
+            VF2FurnitureFacesNorthWest(info.orientation)
+                ? eHeadDirectionNW
+                : eHeadDirectionNE);
     } else {
         plans->PlanToLieDown(duration);
     }
@@ -29656,8 +29690,14 @@ static void VF2PlanSpaTreatment(
     // one sleep strip. The pair is east/west: {SE(0), NE(2)} east,
     // {SW(1), NW(3)} west. This drives BOTH the settle head direction and the
     // SleepNW/SleepNE animation, so the two stay in agreement.
+    // THE STOCK ORIENTATION TEST. See the relax poses above for the live
+    // capture that settles this: the orientations in play are SE(0) and SW(1),
+    // and stock RestingBody gives SleepNE to both -- only NW(3) takes SleepNW.
+    // The east/west grouping wrongly sent SW to the NW arm, which is the one
+    // orientation where this patch differed from stock and is exactly the
+    // placement the owner sees wrong.
     bool const loungerFacesNorthWest =
-        !VF2FurnitureFacesEast(info.orientation);
+        VF2FurnitureFacesNorthWest(info.orientation);
     EHeadDirection loungerHead =
         loungerFacesNorthWest ? eHeadDirectionNW : eHeadDirectionNE;
     // Same correction as the two relax poses: eBodyPositionChaise carries no
