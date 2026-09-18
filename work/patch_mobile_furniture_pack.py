@@ -34849,6 +34849,49 @@ static bool VF2VillagerIsDroppedOnAddedFurniture(
         (altItemId >= 0 && candidate == altItemId);
 }
 
+// The two items the owner asked to act where the villager is dropped.
+//
+// Named as a predicate so both call parameters test the same set, and so the
+// stock Yoga Equipment (0x220) is not forgotten beside the invisible copy
+// (__VF2_YOGA_EQUIPMENT_ITEM_ID__, 0x32A). The Home Gym has a single id.
+static bool VF2ItemIsHomeGymOrYoga(int itemId)
+{
+    return itemId == __VF2_HOME_GYM_ITEM_ID__ ||
+           itemId == 0x220 ||
+           itemId == __VF2_YOGA_EQUIPMENT_ITEM_ID__;
+}
+
+// WHICH placement the villager was dropped on, not merely whether.
+//
+// Owner request: "Villagers should do their actions where they are dropped
+// instead of moving somewhere else for the home Gym and Yoga Equipment only."
+//
+// VF2VillagerIsDroppedOnAddedFurniture above answers the yes/no question and
+// discards the record that answered it. The venue lookup then picks the
+// NEAREST placement of the item, so with two gyms placed a villager dropped on
+// one can be routed to the other. Reporting the slot lets the venue be taken
+// from the placement under the villager's own feet.
+//
+// Returns the furniture slot index, or -1 when the villager is not standing on
+// a placement of either item id.
+static int VF2DroppedOnAddedFurnitureSlot(
+    CVillager &villager, int itemId, int altItemId)
+{
+    ldwPoint sample = villager.FeetPos();
+    sample.y -= 10;
+    int const slot = VF2BehaviorPtOnFurnitureIndex(FurnitureManager, sample);
+    if (slot < 0) return -1;
+    unsigned char *manager = reinterpret_cast<unsigned char *>(&FurnitureManager);
+    int const count = *reinterpret_cast<int *>(manager + 0x1004);
+    if (slot >= count) return -1;
+    unsigned char *record = manager + 0x1008 + slot * 0x40;
+    if ((*reinterpret_cast<unsigned int *>(record + 0x0C) & 1) == 0) return -1;
+    int const candidate = *reinterpret_cast<int *>(record);
+    if (candidate == itemId) return slot;
+    if (altItemId >= 0 && candidate == altItemId) return slot;
+    return -1;
+}
+
 // How far the Home Gym's villager moves from the borrowed yoga-mat hotspot,
 // in world pixels -- toward the cubby the gym art provides.
 //
@@ -34886,10 +34929,21 @@ static int const kVF2HomeGymStandNudgeY = 12;
 // the stock item (0x220) and the invisible copy (0x32A) are the same thing with
 // different art, and a drop on either must reach the same venue. Pass -1 when
 // there is no second id, which is what every other caller does.
+// preferSlot: ACT WHERE THE VILLAGER WAS DROPPED, for the two items the owner
+// named. When preferSlot is a furniture slot that this loop also accepts as a
+// valid placement of the item, that placement wins regardless of distance.
+// Pass -1 -- as every caller except the Home Gym and Yoga routes does -- to
+// keep the original nearest-placement behaviour unchanged.
+//
+// The placement still supplies the hotspot and the orientation, so the gym's
+// cubby offset and the yoga mat's centre offset continue to apply. The request
+// is about WHICH placement is used, not about abandoning the correct spot on
+// it; dropping the nudges would reopen two separately reported bugs.
 static bool VF2FindAddedFurnitureVenueEx(
     CVillager &villager, int itemId, int altItemId, int object,
-    ldwPoint &outPoint, ldwPoint *outPlacement)
+    ldwPoint &outPoint, ldwPoint *outPlacement, int preferSlot)
 {
+    bool preferred = false;
     // This venue wrapper only needs a destination, not a peep reservation.
     // Do not call LinkPeepToFurniture speculatively: a shared-object stock
     // placement could be reserved and there is no unlink API to undo it.
@@ -34921,12 +34975,14 @@ static bool VF2FindAddedFurnitureVenueEx(
         long dx = info.point.x - feet.x;
         long dy = info.point.y - feet.y;
         long distance = dx * dx + dy * dy;
-        if (!found || distance < bestDistance) {
+        bool const isPreferred = (preferSlot >= 0 && slot == preferSlot);
+        if (isPreferred || !found || (!preferred && distance < bestDistance)) {
             bestDistance = distance;
             outPoint = info.point;
             foundPlacement = placement;
             foundOrientation = *reinterpret_cast<int *>(record + 0x10);
             found = true;
+            if (isPreferred) preferred = true;
         }
     }
     if (!found) return false;
@@ -35003,7 +35059,7 @@ static bool VF2FindAddedFurnitureVenue(
     CVillager &villager, int itemId, int object, ldwPoint &outPoint)
 {
     return VF2FindAddedFurnitureVenueEx(
-        villager, itemId, -1, object, outPoint, 0);
+        villager, itemId, -1, object, outPoint, 0, -1);
 }
 
 static void VF2BeginAddedFurnitureVenue(
@@ -35323,8 +35379,28 @@ static void VF2RunOwnFurnitureActionEx(
     // native lookup ranks by placement while the anchor carries a hotspot
     // offset. See VF2FindFurnitureAtAddedFurnitureImpl.
     ldwPoint venuePlacement = {};
+    // The Home Gym and the Yoga Equipment act where the villager is dropped,
+    // so they resolve the venue from the placement under the villager's feet.
+    // Every other item keeps the nearest-placement behaviour via -1.
+    // BOTH yoga item ids, stock AND invisible.
+    //
+    // __VF2_YOGA_EQUIPMENT_ITEM_ID__ substitutes to the INVISIBLE copy (0x32A)
+    // only; the stock Yoga Equipment is 0x220. The yoga route passes 0x220 as
+    // itemId and the invisible copy as altItemId, so testing only the macro
+    // would match through altItemId alone and would depend on which id landed
+    // in which parameter. A comment further down this file records an earlier
+    // round of exactly that mistake, where a drop on the VISIBLE item found no
+    // venue and fell back to the generic "Working out" label. Both ids are
+    // therefore named explicitly on both parameters.
+    bool const actsWhereDropped =
+        VF2ItemIsHomeGymOrYoga(itemId) ||
+        (altItemId >= 0 && VF2ItemIsHomeGymOrYoga(altItemId));
+    int const preferSlot = actsWhereDropped
+        ? VF2DroppedOnAddedFurnitureSlot(villager, itemId, altItemId)
+        : -1;
     bool const hasVenue = VF2FindAddedFurnitureVenueEx(
-        villager, itemId, altItemId, object, venue, &venuePlacement);
+        villager, itemId, altItemId, object, venue, &venuePlacement,
+        preferSlot);
     // THE VILLAGER'S ACTUAL POSITION OUTRANKS A RESOLVED VENUE.
     //
     // Reported in play: a villager dropped on the Treadmill did "Using the
