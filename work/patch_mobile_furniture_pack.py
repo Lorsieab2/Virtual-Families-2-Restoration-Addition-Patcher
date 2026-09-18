@@ -27068,21 +27068,43 @@ static bool VF2HandleMobileChaise(CVillager &villager)
         // NW=3), so the orientation is mapped rather than passed through.
         // THE STOCK ORIENTATION TEST, NOT AN EAST/WEST SPLIT.
         //
-        // Live IDA capture on the shipped build, with the owner reporting the
-        // first correct and the second wrong:
+        // ORIENTATION 3 ALONE TAKES THE NW STRIP. Two orientations are
+        // confirmed in play; the other two are NOT, and that is said plainly
+        // here rather than dressed up as a derived rule.
         //
-        //   orientation=0 (SE)  dir=0 head=0  SleepNE   <- correct in play
+        // Live IDA capture on the shipped build, with the owner's verdict:
+        //
+        //   orientation=0 (SE)  dir=0 head=0  SleepNE   <- CORRECT in play
         //   orientation=1 (SW)  dir=3 head=3  SleepNW   <- WRONG in play
         //
-        // The orientations actually in play are SE(0) and SW(1). Stock
-        // CBehavior::RestingBody -- the behaviour behind the normal chaise
-        // Lounge Chairs, which the owner confirms are correct and which this
-        // patch does not touch -- tests `cmp eax, 3` / `jne`: NW(3) ALONE
-        // takes SleepNW, every other orientation takes SleepNE.
+        // So SE(0) wants SleepNE, and SW(1) wants the strip it did not get,
+        // which is also SleepNE. `orientation == 3` satisfies both.
         //
-        // VF2FurnitureFacesEast groups {SE,NE} against {SW,NW}, which pulls
-        // SW into the NW arm. SW is the ONLY orientation where this patch
-        // disagreed with stock, and it is exactly the broken placement.
+        // SUPERSEDED CLAIM, recorded rather than deleted (AGENTS.md 11). An
+        // earlier revision of this comment asserted that stock
+        // CBehavior::RestingBody tests `orientation == 3` two-ways and that
+        // this rule was copied from it. THAT WAS WRONG, and it was wrong
+        // because only the first compare was read. The full dispatch in
+        // work/Behavior_patched_disasm.txt is FOUR-way:
+        //
+        //   orientation   body          legs/lie        sleep strip
+        //   0 SE          9             --              SleepNW
+        //   1 SW          0x17 chaise   Lie SW          SleepNE
+        //   2 NE          9             RestingLegsE    SleepNW
+        //   3 NW          0x17 chaise   RestingLegsW    SleepNE
+        //
+        // Stock is a PARITY rule, and it is the OPPOSITE of what was claimed.
+        //
+        // Stock is also NOT the model to copy here. At orientation 0 stock
+        // plays SleepNW, yet the owner confirms SleepNE looks right on the
+        // spa lounger there -- so copying stock would break the placement
+        // that already works. The spa lounger's art is a reclined seat, not
+        // the stock chaise art, and nothing requires the strips to agree.
+        //
+        // NW(3) IS A GUESS. It is unobserved, and it is kept as a separate arm
+        // only so both strips stay reachable for the owner's next rotation
+        // test; flattening everything to SleepNE would make that test
+        // impossible to interpret.
         plans->PlanToWait(
             duration, eBodyPositionChaise,
             VF2FurnitureFacesNorthWest(info.orientation)
@@ -29432,21 +29454,43 @@ static void VF2PlanLinkedChaiseAction(
         // NW=3), so the orientation is mapped rather than passed through.
         // THE STOCK ORIENTATION TEST, NOT AN EAST/WEST SPLIT.
         //
-        // Live IDA capture on the shipped build, with the owner reporting the
-        // first correct and the second wrong:
+        // ORIENTATION 3 ALONE TAKES THE NW STRIP. Two orientations are
+        // confirmed in play; the other two are NOT, and that is said plainly
+        // here rather than dressed up as a derived rule.
         //
-        //   orientation=0 (SE)  dir=0 head=0  SleepNE   <- correct in play
+        // Live IDA capture on the shipped build, with the owner's verdict:
+        //
+        //   orientation=0 (SE)  dir=0 head=0  SleepNE   <- CORRECT in play
         //   orientation=1 (SW)  dir=3 head=3  SleepNW   <- WRONG in play
         //
-        // The orientations actually in play are SE(0) and SW(1). Stock
-        // CBehavior::RestingBody -- the behaviour behind the normal chaise
-        // Lounge Chairs, which the owner confirms are correct and which this
-        // patch does not touch -- tests `cmp eax, 3` / `jne`: NW(3) ALONE
-        // takes SleepNW, every other orientation takes SleepNE.
+        // So SE(0) wants SleepNE, and SW(1) wants the strip it did not get,
+        // which is also SleepNE. `orientation == 3` satisfies both.
         //
-        // VF2FurnitureFacesEast groups {SE,NE} against {SW,NW}, which pulls
-        // SW into the NW arm. SW is the ONLY orientation where this patch
-        // disagreed with stock, and it is exactly the broken placement.
+        // SUPERSEDED CLAIM, recorded rather than deleted (AGENTS.md 11). An
+        // earlier revision of this comment asserted that stock
+        // CBehavior::RestingBody tests `orientation == 3` two-ways and that
+        // this rule was copied from it. THAT WAS WRONG, and it was wrong
+        // because only the first compare was read. The full dispatch in
+        // work/Behavior_patched_disasm.txt is FOUR-way:
+        //
+        //   orientation   body          legs/lie        sleep strip
+        //   0 SE          9             --              SleepNW
+        //   1 SW          0x17 chaise   Lie SW          SleepNE
+        //   2 NE          9             RestingLegsE    SleepNW
+        //   3 NW          0x17 chaise   RestingLegsW    SleepNE
+        //
+        // Stock is a PARITY rule, and it is the OPPOSITE of what was claimed.
+        //
+        // Stock is also NOT the model to copy here. At orientation 0 stock
+        // plays SleepNW, yet the owner confirms SleepNE looks right on the
+        // spa lounger there -- so copying stock would break the placement
+        // that already works. The spa lounger's art is a reclined seat, not
+        // the stock chaise art, and nothing requires the strips to agree.
+        //
+        // NW(3) IS A GUESS. It is unobserved, and it is kept as a separate arm
+        // only so both strips stay reachable for the owner's next rotation
+        // test; flattening everything to SleepNE would make that test
+        // impossible to interpret.
         plans->PlanToWait(
             duration, eBodyPositionChaise,
             VF2FurnitureFacesNorthWest(info.orientation)
@@ -29690,12 +29734,17 @@ static void VF2PlanSpaTreatment(
     // one sleep strip. The pair is east/west: {SE(0), NE(2)} east,
     // {SW(1), NW(3)} west. This drives BOTH the settle head direction and the
     // SleepNW/SleepNE animation, so the two stay in agreement.
-    // THE STOCK ORIENTATION TEST. See the relax poses above for the live
-    // capture that settles this: the orientations in play are SE(0) and SW(1),
-    // and stock RestingBody gives SleepNE to both -- only NW(3) takes SleepNW.
-    // The east/west grouping wrongly sent SW to the NW arm, which is the one
-    // orientation where this patch differed from stock and is exactly the
-    // placement the owner sees wrong.
+    // ORIENTATION 3 ALONE TAKES THE NW STRIP. See the relax poses above for
+    // the full reasoning and for the corrected stock table.
+    //
+    // Confirmed in play: SE(0) wants SleepNE, and SW(1) wants the strip it did
+    // not get, which is also SleepNE. `orientation == 3` satisfies both.
+    //
+    // NOT copied from stock, and an earlier revision of this comment wrongly
+    // said it was. Stock RestingBody is a four-way PARITY dispatch that plays
+    // SleepNW at orientation 0 -- where the owner confirms SleepNE is right on
+    // this item -- so copying it would break the working placement. NW(3)
+    // remains an unobserved guess.
     bool const loungerFacesNorthWest =
         VF2FurnitureFacesNorthWest(info.orientation);
     EHeadDirection loungerHead =

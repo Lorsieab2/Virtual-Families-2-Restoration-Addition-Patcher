@@ -427,39 +427,56 @@ class OrientationComesFromTheOrientationField(unittest.TestCase):
         self.assertIn("eHeadDirectionNE = 0", SOURCE)
         self.assertIn("eHeadDirectionNW = 3", SOURCE)
 
-    def test_the_lounger_facing_uses_the_stock_orientation_test(self):
-        """Every lounger pose must use stock RestingBody's rule: NW(3) alone.
+    def test_the_lounger_facing_gives_the_nw_strip_to_orientation_3_alone(self):
+        """Both CONFIRMED orientations take SleepNE; NW(3) alone takes SleepNW.
 
-        SUPERSEDED CLAIM, recorded rather than deleted (AGENTS.md 11). This
-        test previously demanded an EAST/WEST split and explicitly forbade
-        testing NW alone, on the theory that `orientation == 3` collapsed three
-        placements onto one pose. Live IDA Pro captures on the shipped B187
-        build disproved it:
+        What is actually confirmed, from live IDA captures on the shipped B187
+        build plus the owner's verdict on each placement:
 
-            orientation=0 (SE)  dir=0 head=0  SleepNE   <- correct in play
-            orientation=1 (SW)  dir=3 head=3  SleepNW   <- WRONG in play
+            orientation=0 (SE)  SleepNE   <- CORRECT in play
+            orientation=1 (SW)  SleepNW   <- WRONG in play
 
-        The orientations actually in play are SE(0) and SW(1), and the
-        east/west split is what sent SW into the NW arm. Stock
-        CBehavior::RestingBody -- the behaviour behind the normal chaise Lounge
-        Chairs, which the owner confirms correct in play and which this patch
-        does not modify -- tests `cmp eax, 3` / `jne`: NW(3) ALONE takes
-        SleepNW. SW was the only orientation where this patch disagreed with
-        stock, and it was exactly the broken placement.
+        SE(0) wants SleepNE, and SW(1) wants the strip it did not get, which is
+        also SleepNE. `orientation == 3` satisfies both. Orientations 2 and 3
+        are UNOBSERVED, so the NW arm is a guess and is named as one.
 
-        The lesson worth keeping: an orientation rule must be copied from the
-        stock behaviour that demonstrably works, not derived from reasoning
-        about what the enum values ought to mean.
+        TWO SUPERSEDED CLAIMS, recorded rather than deleted (AGENTS.md 11).
+
+        First, this test demanded an EAST/WEST split and forbade testing NW
+        alone. The live capture disproved that: the split sent SW into the NW
+        arm, which is the placement the owner saw broken.
+
+        Second -- and this is the one worth remembering -- the replacement
+        docstring claimed the NW-only rule was COPIED FROM stock
+        CBehavior::RestingBody. That was false, and it was false because only
+        the first compare was read. The full dispatch in
+        work/Behavior_patched_disasm.txt is FOUR-way and is the OPPOSITE parity:
+
+            orientation   body          legs/lie        sleep strip
+            0 SE          9             --              SleepNW
+            1 SW          0x17 chaise   Lie SW          SleepNE
+            2 NE          9             RestingLegsE    SleepNW
+            3 NW          0x17 chaise   RestingLegsW    SleepNE
+
+        Stock is also not the model to copy: it plays SleepNW at orientation 0,
+        where the owner confirms SleepNE is right on the spa lounger, so
+        copying stock would break the placement that already works. The spa
+        lounger's art is a reclined seat rather than the stock chaise art, and
+        nothing requires the strips to agree.
+
+        The real lesson: decode the WHOLE branch before claiming a rule came
+        from stock, and keep the owner's play evidence above any disassembly
+        when the two disagree.
         """
         self.assertEqual(
             SOURCE.count("VF2FurnitureFacesNorthWest(info.orientation)\n"
                          "                ? eHeadDirectionNW\n"
                          "                : eHeadDirectionNE"), 2,
-            "both chaise poses must use the stock NW-only test")
+            "both chaise poses must give the NW strip to orientation 3 alone")
         self.assertIn(
             "loungerFacesNorthWest =\n"
             "        VF2FurnitureFacesNorthWest(info.orientation);", SOURCE,
-            "the spa settle/sleep strip must use the same stock test")
+            "the spa settle/sleep strip must use the same test")
         self.assertNotIn(
             "!VF2FurnitureFacesEast(info.orientation)", SOURCE,
             "the east/west split is what put SW on the wrong sleep strip")
