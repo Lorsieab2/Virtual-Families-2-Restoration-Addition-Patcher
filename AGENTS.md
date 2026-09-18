@@ -200,19 +200,6 @@ and a skip is not a pass.
   plan slot and stores there. A route set before invoking a donor behaviour is
   not overwritten — the donor's own route lands *after* it, so the villager
   reaches the venue and then walks away again.
-- **Indices and enum values start at 0.** The owner's rule: "in general the
-  first of most things is value 0. not 1." `EFurnitureOrientation` is
-  SE=0, SW=1, NE=2, NW=3; `EDirection` and `EHeadDirection` are both NE=0,
-  SE=1, SW=2, NW=3; seat ordinals, furniture slots and generations are all
-  zero-based.
-- **A human's visual description is not an index.** Translating "the NE
-  lounger" or "the first one" into a numeric value is an ASSUMPTION, and it
-  must be verified against runtime evidence before anything is built on it.
-  The spa lounger orientation defect survived four fixes because the two
-  placements were assumed to be NE(2)/NW(3) while a live debugger capture
-  showed them reporting SE(0)/SW(1) -- so every fix targeted orientations that
-  were never placed. When a fix keeps failing while the reasoning looks sound,
-  suspect the index mapping before the mechanism.
 - **A placed item changes *where* a behaviour happens, never *whether* it is
   available.** No ownership or `IsInWorld` gate on availability; stock donors
   stay globally available and unchanged when the added item is absent.

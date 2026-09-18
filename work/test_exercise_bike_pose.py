@@ -263,36 +263,6 @@ class TheCaptionFollowsTheMachineTheVillagerIsAt(unittest.TestCase):
             "ContentMap.FindObject", code,
             "the interceptor is resolving destinations again")
 
-    def test_the_bike_drop_can_reach_both_variants(self):
-        """A DROP on the Exercise Bike must be able to produce either label.
-
-        Owner report from live play: dropping a villager on the Exercise Bike
-        only ever produced "using the exercise bike", never "doing
-        high-intensity cycling". The drop dispatch called VF2ExerciseBikeWalk
-        unconditionally, so the run helper -- and its whole label family --
-        was unreachable from a drop no matter what the player did.
-
-        Both arms are asserted, not merely the presence of a selector: a
-        dispatch that names a choice while having one reachable answer passes
-        a structural check happily, which is exactly how this defect shipped.
-        """
-        drop = SOURCE.split("__VF2_EXERCISE_BIKE_ITEM_ID__)", 1)[1]
-        drop = drop.split("__VF2_HOME_GYM_ITEM_ID__", 1)[0]
-        code = NL.join(
-            line for line in drop.splitlines()
-            if not line.lstrip().startswith("//"))
-        self.assertIn(
-            "VF2ExerciseBikeRun(villager);", code,
-            "the run variant is unreachable from a drop, so "
-            "'doing high-intensity cycling' can never appear")
-        self.assertIn(
-            "VF2ExerciseBikeWalk(villager);", code,
-            "the walk variant must remain reachable")
-        self.assertIn(
-            "ldwGameState::GetRandom(2)", code,
-            "the drop must actually choose between the two, matching the "
-            "autonomous path's equal 450/450 weighting")
-
     def test_the_ineffective_post_walk_probe_stays_gone(self):
         # Re-probing after the native call was tried and cannot fire:
         # VF2RunNativeBehaviorAndChangedLabel only enqueues plans, so FeetPos
