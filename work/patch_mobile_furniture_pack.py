@@ -26379,9 +26379,14 @@ public:
     bool PlanToGo(CContentMap::EObject, ESpeed, EPriority, bool);
     void PlanToGo(ldwPoint, ESpeed, EPriority);
     void PlanToWait(int, EBodyPosition);
-    // NOTE: the engine exports ONLY PlanToWait(int, EBodyPosition).
-    // Overloads taking EDirection/EHeadDirection do not exist; declaring
-    // them compiled fine and discarded the arguments at runtime.
+    // The 3-argument form is REAL and is what the working hammock pose uses
+    // (see the second CVillagerPlans block, which also declares it). A
+    // FOUR-argument overload taking an extra EDirection was previously
+    // declared here and is a FABRICATION: no such symbol exists, the extra
+    // argument never reached the function, and the head value was silently
+    // discarded -- which is why both orientation arms rendered the identical
+    // wrong pose across nine playtest rounds. Do not reintroduce it.
+    void PlanToWait(int, EBodyPosition, EHeadDirection);
     void PlanToLieDown(int);
     void PlanToCarry(ECarrying);
     void PlanToSay(StringId);
