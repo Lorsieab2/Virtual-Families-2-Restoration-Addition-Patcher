@@ -428,7 +428,9 @@ class OrientationComesFromTheOrientationField(unittest.TestCase):
         self.assertIn("eHeadDirectionNW = 3", SOURCE)
 
     def test_the_lounger_facing_follows_the_furniture_for_both_placements(self):
-        """The villager faces the way the lounger faces, head and body.
+        """The SHARED chaise predicate: villager faces the way the lounger does.
+
+        NOT the spa receiving pose, which is mirrored. See the SCOPE note below.
 
         THE VALUE OF THE RULE IS PINNED HERE, not just the fact that the rule
         is consulted. That distinction is the whole reason this defect survived
@@ -438,11 +440,24 @@ class OrientationComesFromTheOrientationField(unittest.TestCase):
         from `orientation == 3` to `orientation == 1` left 94 tests green while
         flipping the behaviour of every lounger in the game.
 
-        What is confirmed, from live IDA captures on the shipped build plus the
-        owner's verdict on each placement in B188:
+        SCOPE: this test pins the SHARED chaise predicate, which drives the
+        ordinary and mobile Lounge Chairs. It does NOT describe the spa
+        receiving pose, which is mirrored -- see
+        test_the_receiving_pose_is_mirrored_and_internally_consistent in
+        test_spa_lounger_autonomous.py.
 
-            orientation=0 (SE)  EDirection 0 = NE, EHeadDirection 0 = NE  <- correct
-            orientation=1 (SW)  EDirection 3 = NW, EHeadDirection 3 = NW  <- correct
+        SUPERSEDED FOR THE SPA RECEIVING POSE, kept because it remains true of
+        the shared predicate. From live IDA captures plus the owner's verdict
+        on each placement in B188:
+
+            orientation=0 (SE)  EDirection 0 = NE, EHeadDirection 0 = NE
+            orientation=1 (SW)  EDirection 3 = NW, EHeadDirection 3 = NW
+
+        B189 applied that mapping to the SPA RECEIVING pose as well and the
+        owner playtested it: the villager was still lying across the lounger.
+        The receiving pose needs the MIRROR of whatever this test picks, so
+        both placements were wrong together. Do not carry this mapping back
+        into VF2PlanSpaTreatment.
 
         A lounger only ever occupies those TWO orientations -- the owner
         confirmed that directly -- so `orientation == 3` was never true for any

@@ -114,6 +114,18 @@ lounger genuinely changed nothing for most of them, which is what "no change"
 looks like from the player's side. The two head directions are an east/west
 pair, so the split is now `{SE, NE}` against `{SW, NW}`.
 
+> **SUPERSEDED FOR THE SPA RECEIVING POSE.** "Applied at all three lounger
+> sites" was true of B187 and is no longer the rule. The owner playtested B189
+> and the villager was still lying across the spa lounger; the **receiving**
+> pose needs the **mirror** of whatever the orientation test picks, so it takes
+> the opposite arm from the two relax poses. The east/west split described here
+> still governs the two chaise relax poses and the shared predicate. Do not
+> re-apply it to `VF2PlanSpaTreatment`. See issue #330.
+>
+> Still true and NOT superseded: the settle pose and the sleep strip must
+> derive from ONE test so they cannot disagree. That property is preserved by
+> mirroring both together.
+
 Applied at all three lounger sites. The spa settle pose and the
 `SleepNW`/`SleepNE` strip now derive from one test so they cannot disagree, and
 the invisible Spa Lounger is covered because `VF2SpaLoungerHasHandle` matches

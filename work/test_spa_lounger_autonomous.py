@@ -1121,15 +1121,27 @@ class TheTreatmentPoseFollowsTheLounger(unittest.TestCase):
         # `orientation == 3` gave both placements the NE strip and SW came
         # back wrong while SE came back right.
         #
-        # FOURTH QUESTION, and the one the owner stated outright: the villager
-        # faces the way the lounger faces, head and body.
+        # SUPERSEDED, KEPT AS THE FAILED APPROACH (AGENTS.md 11). This read:
         #
-        #   orientation 0 (SE) -> NE direction, NE head, SleepNE
-        #   orientation 1 (SW) -> NW direction, NW head, SleepNW
+        #   "FOURTH QUESTION, and the one the owner stated outright: the
+        #    villager faces the way the lounger faces, head and body.
         #
-        # Asked of VF2SpaLoungerFacesNorthWest, which answers only for a spa
-        # lounger handle so ordinary Lounge Chairs sharing this branch keep
-        # the NE strip they were confirmed working with. Both
+        #      orientation 0 (SE) -> NE direction, NE head, SleepNE
+        #      orientation 1 (SW) -> NW direction, NW head, SleepNW"
+        #
+        # B189 shipped exactly that and the owner playtested it: the villager
+        # was STILL lying across the lounger. The receiving pose needs the
+        # MIRROR of whatever the orientation test picks, so both placements
+        # were wrong together and no choice of arm could have fixed it.
+        #
+        # FIFTH AND CURRENT: the receiving pose takes the OPPOSITE arm --
+        # orientation 0 -> NW, orientation 1 -> NE -- pinned by
+        # test_the_receiving_pose_is_mirrored_and_internally_consistent.
+        #
+        # Still asked of VF2SpaLoungerFacesNorthWest, which answers only for a
+        # spa lounger handle so ordinary Lounge Chairs sharing this branch keep
+        # the strip they were confirmed working with. That gate is unchanged
+        # and still correct. Both
         # the settle pose and the sleep strip still derive from a SINGLE test,
         # which is what makes it impossible for the two to disagree -- the
         # exact defect the owner reported on the hammock, where the lie-down
