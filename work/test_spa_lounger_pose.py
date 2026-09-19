@@ -91,6 +91,14 @@ def _relax_sites(src):
     ]
 
 
+# The treatment's call into the rest helper, exactly as emitted. Kept as
+# a constant because it spans a line break and is asserted verbatim.
+REST_CALL = (
+    "VF2PlanSpaLoungerRest(\n"
+    "        plans, info.orientation, total, ldwGameState::GetRandom(180) + 180);"
+)
+
+
 def _spa_treatment(src):
     return _function(src, "static void VF2PlanSpaTreatment(")
 
@@ -182,8 +190,16 @@ class EveryRouteUsesIt(unittest.TestCase):
                     "if (VF2SpaLoungerHasHandle(info.unknown0)) {", body,
                     "relax site %d no longer tests for a spa lounger first" % n)
                 self.assertIn(
-                    "        if (sleeping) {\n"
-                    "            VF2PlanSpaLoungerRest(plans, info.orientation, duration);\n"
+                    "        if (sleeping) {\n", body,
+                    "relax site %d no longer splits on the roll" % n)
+                self.assertIn(
+                    "            VF2PlanSpaLoungerRest(\n"
+                    "                plans, info.orientation, duration,\n"
+                    "                duration > napSettle ? duration - napSettle : 1);",
+                    body,
+                    "relax site %d does not run the nap/sleep strip out the "
+                    "remainder of its own roll" % n)
+                self.assertIn(
                     "        } else {\n"
                     "            VF2PlanSpaLoungerPose(plans, info.orientation, duration);\n"
                     "        }",
@@ -232,9 +248,59 @@ class EveryRouteUsesIt(unittest.TestCase):
             self.assertIn(", true);", src[i:src.index(");", i) + 2],
                           "%s caller does not pass sleeping" % label)
 
+    def test_the_receiving_treatment_lasts_as_long_as_the_giving_one(self):
+        """The owner reported the receiver finishing before the giver.
+
+        Both sides compute the same GetRandom(11) + 55, so the plans looked
+        identical -- but PlanToWork counts TICKS while PlanToPlayAnim counts
+        animation frames at 0.02f. Handing the strip the leftover ticks made
+        the receiving villager get up while the giver was still working.
+
+        The strip length is therefore its own argument, sized in the strip's
+        own unit, and the treatment passes the hammock's confirmed-in-play
+        GetRandom(180) + 180 rather than an invented conversion factor.
+        """
+        src = _strip_comments(_source())
+        spa = _spa_treatment(src)
+        self.assertIn(
+            "int const total = ldwGameState::GetRandom(11) + 55;", spa,
+            "the receiver no longer settles against the giver's tick budget")
+        self.assertIn(
+            REST_CALL, spa,
+            "the treatment does not pass the hammock's proven strip length; "
+            "sizing the strip from the leftover ticks is what made the "
+            "receiving treatment end early")
+        drop = _function(
+            src, "static bool VF2HandleMobileInvisibleSpaLounger(CVillager &villager)")
+        self.assertIn(
+            "plans->PlanToWork(ldwGameState::GetRandom(11) + 55);", drop,
+            "the GIVING villager's duration changed, so the two halves no "
+            "longer match -- update both or record why they differ")
+        self.assertRegex(
+            src,
+            r"PlanToPlayAnim\(ldwGameState::GetRandom\(180\) \+ 180, sleepAnim",
+            "the hammock's sleep length changed; the treatment copies it, so "
+            "either update both or record why they now differ")
+
+    def test_the_strip_length_is_independent_of_the_tick_budget(self):
+        """PlanToPlayAnim frames and PlanToWait ticks are different units."""
+        rest = _rest(_strip_comments(_source()))
+        self.assertIn(
+            "CVillagerPlans *plans, int orientation, int duration, int stripFrames)",
+            rest,
+            "the strip length is not a separate argument, so it is being "
+            "derived from the tick budget again")
+        self.assertIn("stripFrames > 0 ? stripFrames : 1,", rest)
+        self.assertNotIn(
+            "duration > settle ? duration - settle : 1", rest,
+            "the strip is sized from the leftover ticks again, which is the "
+            "defect the owner reported")
+
     def test_the_spa_treatment_uses_the_helper_and_nothing_else(self):
         spa = _strip_comments(_spa_treatment(_source()))
-        self.assertIn("VF2PlanSpaLoungerRest(plans, info.orientation, total);", spa)
+        self.assertIn(REST_CALL, spa)
+        # GetRandom is expected here: it computes both the tick budget and
+        # the strip length. What must not appear is any POSING of its own.
         for bad in ("PlanToWait", "PlanToLieDown", "SleepN", "eBodyPosition",
                     "eHeadDirection", "eDirection"):
             self.assertNotIn(
@@ -248,11 +314,13 @@ class EveryRouteUsesIt(unittest.TestCase):
             src.count("VF2PlanSpaLoungerPose(plans, info.orientation, duration);"), 2,
             "expected the pose at exactly the two relax sites")
         self.assertEqual(
-            src.count("VF2PlanSpaLoungerRest(plans, info.orientation, total);"), 1,
-            "expected the rest at exactly the spa treatment")
+            src.count("VF2PlanSpaLoungerRest("), 4,
+            "expected the rest at exactly three CALL sites -- the spa "
+            "treatment and the two relax sites' nap/sleep branches -- plus "
+            "its own definition")
         self.assertEqual(
-            src.count("VF2PlanSpaLoungerRest(plans, info.orientation, duration);"), 2,
-            "expected the rest under `if (sleeping)` at exactly the two relax sites")
+            src.count("plans, info.orientation, total, ldwGameState::GetRandom(180) + 180);"), 1,
+            "expected the spa treatment to pass the hammock's strip length")
         self.assertEqual(
             src.count("VF2PlanSpaLoungerPose("), 4,
             "declaration, two relax sites and the rest's own delegation; "
@@ -669,9 +737,9 @@ class TheCompiledArtifact(unittest.TestCase):
                          "the compiled pose plays a strip: every awake relax "
                          "roll on a spa lounger would sleep")
 
-    def _rest_calls(self, orientation, duration):
+    def _rest_calls(self, orientation, duration, strip_frames=240):
         calls = self._run(self._block("VF2PlanSpaLoungerRest@@"),
-                          ["plans", orientation, duration])
+                          ["plans", orientation, duration, strip_frames])
         self.assertEqual(
             [c[0] for c in calls],
             ["?VF2PlanSpaLoungerPose@@YAXPAVCVillagerPlans@@HH@Z", self.PLAY_ANIM],
@@ -683,19 +751,24 @@ class TheCompiledArtifact(unittest.TestCase):
         """Settle through the one body table, then SleepNE / SleepNW."""
         for orientation, strip in ((1, "SleepNE"), (0, "SleepNW")):
             with self.subTest(orientation=orientation):
-                pose, anim = self._rest_calls(orientation, 60)
+                pose, anim = self._rest_calls(orientation, 60, 240)
                 self.assertEqual(pose[1], ["plans", orientation, 10],
                                  "the treatment (60 ticks) must settle for 10")
                 self.assertEqual(anim[2], "plans")
-                self.assertEqual(anim[1][0], 50, "the strip runs the remainder")
+                self.assertEqual(
+                    anim[1][0], 240,
+                    "the strip must run for the frames it was handed, not a "
+                    "number derived from the tick budget -- the two are "
+                    "different units and that is what ended the receiving "
+                    "treatment early")
                 self.assertEqual(anim[1][1], strip,
                                  "orientation %d must sleep with %s; the "
                                  "inverted strip shipped in several builds"
                                  % (orientation, strip))
                 self.assertEqual(anim[1][2], 0, "the strip must not loop")
-        pose, anim = self._rest_calls(0, 5)
+        pose, anim = self._rest_calls(0, 5, 3)
         self.assertEqual(pose[1][2], 2, "a five-tick nap settles for two")
-        self.assertEqual(anim[1][0], 3, "and sleeps for three")
+        self.assertEqual(anim[1][0], 3, "and sleeps for the frames given")
 
     def test_every_compiled_route_reaches_the_pose(self):
         treatment = self._block("VF2PlanSpaTreatment@@")

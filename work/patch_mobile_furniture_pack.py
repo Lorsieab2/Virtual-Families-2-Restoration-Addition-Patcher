@@ -27247,20 +27247,48 @@ static void VF2PlanSpaLoungerPose(
 // the mapping the owner confirmed correct in play on B190. It was inverted
 // twice in later rounds, and that inversion is what the last several builds
 // shipped.
+// THE STRIP LENGTH IS NOT IN THE SAME UNIT AS THE WAIT, which is why the
+// receiving treatment used to end early.
+//
+// The owner reported it directly: "do you mind increasing the length of spa
+// receiving treatments so they match the length of spa giving treatments?"
+// Both sides already computed the SAME number -- GetRandom(11) + 55 -- so the
+// two plans looked identical on paper. They are not:
+//
+//   giving     PlanToWork(55..65)                   -- 55..65 ticks of work
+//   receiving  PlanToWait(settle) + PlanToPlayAnim(55..65 - settle)
+//
+// PlanToWork and PlanToWait count ticks. PlanToPlayAnim counts ANIMATION
+// frames at the speed it is handed (0.02f here), so the same integer buys far
+// less wall-clock time. Subtracting the settle out of the tick budget and
+// handing the remainder to the strip made the receiver finish well before the
+// giver, and the giver was left working on nobody.
+//
+// The hammock is the working reference and it does not do this. It waits a
+// FIXED ten ticks and then plays its strip for GetRandom(180) + 180 -- a
+// number chosen for the strip's own unit, independent of the wait:
+//
+//     plans->PlanToWait(10, eBodyPositionRestingHammock, hammockHead);
+//     plans->PlanToPlayAnim(ldwGameState::GetRandom(180) + 180, ...);
+//
+// So `duration` here is the TICK budget for the settle, and the strip is
+// sized separately in its own unit by the caller. The relax rolls (a five-
+// tick nap) still settle proportionally; the spa treatment passes the strip
+// length it wants so the receiving villager stays put for as long as the
+// giver works.
 static void VF2PlanSpaLoungerRest(
-    CVillagerPlans *plans, int orientation, int duration)
+    CVillagerPlans *plans, int orientation, int duration, int stripFrames)
 {
     bool const liesNorthEast = orientation == 1;
     // Settle for up to ten ticks, but never more than half the stay: the
-    // treatment (55-65 ticks) still settles ten, while a five-tick nap from
-    // the relax roll settles two and sleeps three instead of settling five
-    // and sleeping one.
+    // treatment still settles ten, while a five-tick nap from the relax roll
+    // settles two and sleeps for the rest instead of settling five.
     int settle = duration / 2;
     if (settle > 10) settle = 10;
     if (settle < 1) settle = 1;
     VF2PlanSpaLoungerPose(plans, orientation, settle);
     plans->PlanToPlayAnim(
-        duration > settle ? duration - settle : 1,
+        stripFrames > 0 ? stripFrames : 1,
         liesNorthEast ? "SleepNE" : "SleepNW",
         false,
         0.02f);
@@ -27356,7 +27384,12 @@ static bool VF2HandleMobileChaise(CVillager &villager)
     // the orientation-1 body at every orientation.
     if (VF2SpaLoungerHasHandle(info.unknown0)) {
         if (sleeping) {
-            VF2PlanSpaLoungerRest(plans, info.orientation, duration);
+            // A nap or a full sleep on a spa lounger: the strip runs out the
+            // remainder of the roll's own duration, as it always has.
+            int const napSettle = duration / 2 > 10 ? 10 : (duration / 2 < 1 ? 1 : duration / 2);
+            VF2PlanSpaLoungerRest(
+                plans, info.orientation, duration,
+                duration > napSettle ? duration - napSettle : 1);
         } else {
             VF2PlanSpaLoungerPose(plans, info.orientation, duration);
         }
@@ -29820,7 +29853,12 @@ static void VF2PlanLinkedChaiseAction(
     // the orientation-1 body at every orientation.
     if (VF2SpaLoungerHasHandle(info.unknown0)) {
         if (sleeping) {
-            VF2PlanSpaLoungerRest(plans, info.orientation, duration);
+            // A nap or a full sleep on a spa lounger: the strip runs out the
+            // remainder of the roll's own duration, as it always has.
+            int const napSettle = duration / 2 > 10 ? 10 : (duration / 2 < 1 ? 1 : duration / 2);
+            VF2PlanSpaLoungerRest(
+                plans, info.orientation, duration,
+                duration > napSettle ? duration - napSettle : 1);
         } else {
             VF2PlanSpaLoungerPose(plans, info.orientation, duration);
         }
@@ -30164,8 +30202,24 @@ static void VF2PlanSpaTreatment(
     //
     // info describes ONE placement: the drop route's linked chaise, or the
     // autonomous route's verified record. Nothing patches it in between.
+    // MATCH THE GIVER. The giving villager plans PlanToWork(GetRandom(11) +
+    // 55) at the call site above, so the receiver settles against that same
+    // tick budget -- and then holds the sleep strip for the span the HAMMOCK
+    // uses, which is the one reclining-sleep length in this game that has
+    // been confirmed in play.
+    //
+    // The strip length is NOT the tick number (see VF2PlanSpaLoungerRest):
+    // PlanToPlayAnim counts animation frames at 0.02f, not ticks, so handing
+    // it the leftover ticks is what made the receiving treatment end early
+    // while the giver was still working. Rather than invent a conversion
+    // factor, this copies the hammock's own GetRandom(180) + 180 verbatim --
+    // same strips, same reclining sleep, same 0.02f speed, and a duration the
+    // owner has played. Its 180..360 is comfortably longer than the giver's
+    // 55..65 ticks, so the receiver no longer finishes first; the giver's
+    // work ending is what closes the pairing, as it already did.
     int const total = ldwGameState::GetRandom(11) + 55;
-    VF2PlanSpaLoungerRest(plans, info.orientation, total);
+    VF2PlanSpaLoungerRest(
+        plans, info.orientation, total, ldwGameState::GetRandom(180) + 180);
     plans->PlanToPlaySound(
         static_cast<ESound>(0x101), 1.0f, eSoundTypeEffects);
     plans->PlanToIncDirtiness(2);
