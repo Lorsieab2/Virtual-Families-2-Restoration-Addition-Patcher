@@ -160,15 +160,42 @@ a villager lying correctly on a lounger.
 Drop a villager on **each** spa lounger. Both should lie **along** the lounger,
 head at the raised end — not sprawled *across* it, which is the defect.
 
-The villager's facing is the **mirror** of the furniture's, not a match to it:
+> **SUPERSEDED — and this was my own replacement table, written to fix the
+> previous error.** It paired one facing with one strip per row:
+>
+> > | lounger placement | expected villager facing | strip |
+> > |---|---|---|
+> > | SE (orientation 0) | **NW** | `SleepNW` |
+> > | SW (orientation 1) | **NE** | `SleepNE` |
+>
+> That is still the **coupled** rule — one facing per placement, matching its
+> strip. The owner's B190 playtest disproved exactly that: they confirmed the
+> **strip** correct while the **settle** was wrong. A tester using the table
+> above would reject the corrected settle and accept the known-bad coupled
+> pose.
 
-| lounger placement | expected villager facing | strip |
+**There are TWO phases and they are expected to look different.** That is the
+whole fix; it is not a glitch.
+
+| phase | when | what to expect |
 |---|---|---|
-| SE (orientation 0) | **NW** | `SleepNW` |
-| SW (orientation 1) | **NE** | `SleepNE` |
+| **settle** | eyes **open**, just lay down | lies **along** the lounger, head at the raised end |
+| **sleep** | eyes **closed** | unchanged from B190 — the owner already confirmed this phase correct |
 
-If a villager faces the *same* way as the lounger, that is B189's behaviour
-and this release did not take effect.
+The owner's own description of the bug, which is the acceptance criterion:
+
+> before they close their eyes, they have the wrong position. once they close
+> their eyes the position is correct.
+
+**Pass:** both phases look right — the settle no longer sprawls the villager
+*across* the lounger, and the eyes-closed pose still looks as it did.
+
+**Fail:** the villager lies across the lounger before the eyes close (the
+settle is still wrong), **or** the eyes-closed pose changed (a regression in
+the phase that was already correct).
+
+Do **not** judge this by whether the settle facing matches the sleep strip.
+Under this fix they deliberately differ.
 
 Worth a glance too, since they share the same code branch: ordinary and mobile
 **Lounge Chairs** should behave exactly as they did in B189 — those were
