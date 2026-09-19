@@ -132,14 +132,31 @@ pair, so the split is now `{SE, NE}` against `{SW, NW}`.
 >
 > The 0/1 mapping belongs to the spa-gated predicate, not the shared one.
 >
-> Still true and NOT superseded: the settle pose and the sleep strip must
-> derive from ONE test so they cannot disagree. That property is preserved by
-> mirroring both together.
+> **THIS CARVE-OUT IS ITSELF NOW SUPERSEDED.** It read: *"Still true and NOT
+> superseded: the settle pose and the sleep strip must derive from ONE test so
+> they cannot disagree. That property is preserved by mirroring both
+> together."*
+>
+> The owner's B190 playtest disproved it: *"before they close their eyes, they
+> have the wrong position. once they close their eyes the position is
+> correct."* The settle and the strip index facing **differently**, so
+> deriving them from one test is what made the defect unfixable — the wrong
+> phase could not be corrected without breaking the right one. They now take
+> **opposite** arms deliberately. See PR #352.
+>
+> This sentence was especially dangerous because it told a maintainer the
+> coupling was explicitly NOT superseded while marking other claims around it
+> as superseded.
 
-Applied at all three lounger sites. The spa settle pose and the
-`SleepNW`/`SleepNE` strip now derive from one test so they cannot disagree, and
-the invisible Spa Lounger is covered because `VF2SpaLoungerHasHandle` matches
-both item ids.
+Applied at all three lounger sites. The invisible Spa Lounger is covered
+because `VF2SpaLoungerHasHandle` matches both item ids.
+
+> **SUPERSEDED for the spa settle pose.** This paragraph also said the settle
+> pose and the `SleepNW`/`SleepNE` strip *"now derive from one test so they
+> cannot disagree."* After the owner's B190 playtest they deliberately derive
+> from **opposite** arms of that test, because the two phases index facing
+> differently. The two chaise **relax** poses are unaffected and still work as
+> described here.
 
 ## Villagers doing yoga stood beside the mat
 

@@ -39,8 +39,28 @@ either.
 | body | `? Northwest : Northeast` | `? Northeast : Northwest` |
 | strip | `? SleepNW : SleepNE` | `? SleepNE : SleepNW` |
 
-All three mirrored **together**, so the settle pose and the sleep strip cannot
-disagree — the defect originally reported on the hammock.
+> **SUPERSEDED BY THE OWNER'S B190 PLAYTEST.** This read: *"All three mirrored
+> **together**, so the settle pose and the sleep strip cannot disagree — the
+> defect originally reported on the hammock."*
+>
+> The owner playtested this very release and observed something no earlier
+> round had isolated:
+>
+> > before they close their eyes, they have the wrong position. once they
+> > close their eyes the position is correct.
+>
+> The settle pose and the sleep strip therefore index facing **differently**,
+> and coupling them is not a safeguard — it is the bug. Every round up to and
+> including B190 derived both phases from one test, deliberately, so the
+> wrong phase could never be corrected without breaking the right one.
+>
+> The settle and the strip now take **opposite** arms. The table above
+> describes the **strip**, which the owner confirmed correct; the settle takes
+> the other arm. See PR #352.
+>
+> A maintainer who "restores" the coupling described here will reintroduce
+> the defect, which is why the original wording is retained and marked rather
+> than deleted.
 
 ## Scope — what was deliberately not touched
 
@@ -72,6 +92,13 @@ The three mutations are why the tests are worth citing: un-mirroring the body
 direction — **exactly the defect in the owner's screenshot** — un-mirroring the
 head, and leaving the strip unmirrored so settle and sleep disagree, all fail
 the suite.
+
+> **THE THIRD MUTATION IS SUPERSEDED.** "Leaving the strip unmirrored so
+> settle and sleep disagree" was treated here as a caught regression. After
+> the owner's B190 playtest, settle and sleep are **supposed** to disagree —
+> they index facing differently, and that disagreement is the fix in #352,
+> not a defect. The first two mutations still stand. This one is recorded as
+> wrong so nobody reinstates it as a guard against the current behaviour.
 
 ## What is NOT claimed
 
