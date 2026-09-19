@@ -27169,9 +27169,8 @@ static int VF2CurrentEnergy(CVillager &villager)
 
 static bool VF2SpaLoungerHasHandle(int handle);
 
-// THE ONE SPA-LOUNGER POSE. Settle, then sleep, on the lounger the villager
-// is actually on. Used by every route that poses a villager on a spa lounger,
-// so there is exactly one implementation to keep correct.
+// THE ONE SPA-LOUNGER POSE, used by every route that puts a villager on a
+// spa lounger, so there is exactly one body table to keep correct.
 //
 // THE MODEL, and why roughly twenty earlier attempts all failed.
 //
@@ -27195,22 +27194,36 @@ static bool VF2SpaLoungerHasHandle(int handle);
 // 0x17 branch by `|| VF2SpaLoungerHasHandle(...)`.
 //
 // The hammock never had it either: it uses body 9 -- the same sprite -- with
-// the head and strip selected from ONE predicate, via the 3-argument
-// PlanToWait. That is the shape copied here. The 4-argument PlanToWait is not
-// used: it failed on both arms in play, and neither working reference uses it.
+// the head selected from ONE predicate, via the 3-argument PlanToWait. That is
+// the shape copied here. The 4-argument PlanToWait is not used: it failed on
+// both arms in play, and neither working reference uses it.
 //
-// The strip mapping (1 -> SleepNE, else SleepNW) matches stock AND the mapping
-// the owner confirmed correct in play on B190. It was inverted twice in later
-// rounds, and that inversion is what the last several builds shipped.
+// Pose holds the position for the whole duration and adds nothing else. The
+// chaise relax sites use it directly because their rolls are AWAKE activities
+// -- reading, studying, needing to sit -- which the ordinary chaise holds for
+// the full duration too. Review caught an earlier revision that sent every
+// relax roll to sleep after ten ticks.
+static void VF2PlanSpaLoungerPose(
+    CVillagerPlans *plans, int orientation, int duration)
+{
+    bool const liesNorthEast = orientation == 1;
+    plans->PlanToWait(
+        duration,
+        liesNorthEast ? eBodyPositionChaise : eBodyPositionRestingHammock,
+        liesNorthEast ? eHeadDirectionNE : eHeadDirectionNW);
+}
+
+// THE SPA TREATMENT'S REST: settle into the pose, then sleep. The strip
+// mapping (1 -> SleepNE, else SleepNW) matches stock AND the mapping the owner
+// confirmed correct in play on B190. It was inverted twice in later rounds,
+// and that inversion is what the last several builds shipped. Only the
+// treatment sleeps; see VF2PlanSpaLoungerPose for the relax sites.
 static void VF2PlanSpaLoungerRest(
     CVillagerPlans *plans, int orientation, int duration)
 {
     bool const liesNorthEast = orientation == 1;
     int const settle = duration > 10 ? 10 : duration;
-    plans->PlanToWait(
-        settle,
-        liesNorthEast ? eBodyPositionChaise : eBodyPositionRestingHammock,
-        liesNorthEast ? eHeadDirectionNE : eHeadDirectionNW);
+    VF2PlanSpaLoungerPose(plans, orientation, settle);
     plans->PlanToPlayAnim(
         duration > settle ? duration - settle : 1,
         liesNorthEast ? "SleepNE" : "SleepNW",
@@ -27298,13 +27311,13 @@ static bool VF2HandleMobileChaise(CVillager &villager)
     // Scoped to the spa loungers deliberately: a stock chaise keeps the flat
     // pose it has always used here. Changing that would alter base-game
     // furniture, which is the owner's call and not this fix's.
-    // Spa loungers take the one correct pose (see VF2PlanSpaLoungerRest).
+    // Spa loungers take the one correct pose (see VF2PlanSpaLoungerPose).
     // Every other chaise keeps the branch below EXACTLY as it shipped and
     // as the owner confirmed working. The old condition's
     // `|| VF2SpaLoungerHasHandle(...)` is what forced spa loungers into
     // the orientation-1 body at every orientation.
     if (VF2SpaLoungerHasHandle(info.unknown0)) {
-        VF2PlanSpaLoungerRest(plans, info.orientation, duration);
+        VF2PlanSpaLoungerPose(plans, info.orientation, duration);
     } else if (info.orientation == 1) {
         // Plan the pose WITH a head direction. eBodyPositionChaise carries
         // no facing of its own, so a two-argument wait leaves the villager
@@ -29741,13 +29754,13 @@ static void VF2PlanLinkedChaiseAction(
     // Scoped to the spa loungers deliberately: a stock chaise keeps the flat
     // pose it has always used here. Changing that would alter base-game
     // furniture, which is the owner's call and not this fix's.
-    // Spa loungers take the one correct pose (see VF2PlanSpaLoungerRest).
+    // Spa loungers take the one correct pose (see VF2PlanSpaLoungerPose).
     // Every other chaise keeps the branch below EXACTLY as it shipped and
     // as the owner confirmed working. The old condition's
     // `|| VF2SpaLoungerHasHandle(...)` is what forced spa loungers into
     // the orientation-1 body at every orientation.
     if (VF2SpaLoungerHasHandle(info.unknown0)) {
-        VF2PlanSpaLoungerRest(plans, info.orientation, duration);
+        VF2PlanSpaLoungerPose(plans, info.orientation, duration);
     } else if (info.orientation == 1) {
         // Plan the pose WITH a head direction. eBodyPositionChaise carries
         // no facing of its own, so a two-argument wait leaves the villager
@@ -30054,9 +30067,8 @@ static void VF2PlanSpaTreatment(
     // on PR #353 and is not repeated here, because the stack of contradictory
     // superseded blocks was itself leading each round back into the bug.
     //
-    // info.orientation is the orientation of the lounger the villager is
-    // actually on: the drop route corrects it from the slot under the
-    // villager, and the autonomous route reads it from the verified record.
+    // info describes ONE placement: the drop route's linked chaise, or the
+    // autonomous route's verified record. Nothing patches it in between.
     int const total = ldwGameState::GetRandom(11) + 55;
     VF2PlanSpaLoungerRest(plans, info.orientation, total);
     plans->PlanToPlaySound(
@@ -30171,37 +30183,6 @@ static bool VF2SpaOccupantIndex(CVillager &dropped, int loungerSlot, CVillager *
     return false;
 }
 
-// THE SPA LOUNGER RECORD UNDER THE VILLAGER, or 0.
-//
-// VF2HandleMobileInvisibleSpaLounger is the only handler registered for the
-// spa lounger item ids, and it builds receiveInfo from
-// LinkPeepToFurniture(eObjectChaise, ...). eObjectChaise is shared by EVERY
-// ordinary chaise and that call resolves purely by object, so receiveInfo can
-// describe different furniture than the lounger the villager is lying on.
-// The handler already computes the exact slot under the villager for its
-// occupancy checks; this returns that slot's record when it is a spa lounger.
-//
-// Field offsets are copied from the existing reader in
-// VF2AddedFurniturePlacement: records at manager + 0x1008 + i * 0x40, item id
-// +0x00, handle +0x04, placed bit 0 at +0x0C, orientation +0x10, point
-// +0x14/+0x18.
-static unsigned char *VF2SpaLoungerRecordUnderVillager(CVillager &villager)
-{
-    int slot = VF2FurnitureSlotUnderVillager(villager);
-    if (slot < 0) return 0;
-    unsigned char *manager = reinterpret_cast<unsigned char *>(&FurnitureManager);
-    int count = *reinterpret_cast<int *>(manager + 0x1004);
-    if (slot >= count) return 0;
-    unsigned char *record = manager + 0x1008 + slot * 0x40;
-    if ((*reinterpret_cast<unsigned int *>(record + 0x0C) & 1) == 0) return 0;
-    int itemId = *reinterpret_cast<int *>(record);
-    if (itemId != __VF2_INVISIBLE_SPA_LOUNGER_ITEM_ID__ &&
-        itemId != __VF2_SPA_LOUNGER_ITEM_ID__) {
-        return 0;
-    }
-    return record;
-}
-
 static bool VF2HandleMobileInvisibleSpaLounger(CVillager &villager)
 {
     CVillagerPlans *plans = reinterpret_cast<CVillagerPlans *>(&villager);
@@ -30251,40 +30232,16 @@ static bool VF2HandleMobileInvisibleSpaLounger(CVillager &villager)
         return false;
     }
 
-    // MAKE receiveInfo DESCRIBE THE LOUNGER THE VILLAGER IS ACTUALLY ON --
-    // all of it, not one field. Review caught that patching only the
-    // orientation left a HYBRID: orientation from the dropped-on lounger,
-    // point and handle from whatever chaise the shared-object link resolved.
-    // The walk target, the nudge, the hold release and the treatment would
-    // then operate on two different placements.
-    //
-    // This is the receiving handler's own pattern, copied: re-resolve at
-    // this lounger's placement point, then VERIFY the handle matches before
-    // trusting anything. If the villager is not on a spa lounger, receiveInfo
-    // is left exactly as the stock link produced it.
-    if (unsigned char *spaRecord = VF2SpaLoungerRecordUnderVillager(villager)) {
-        int const spaHandle = *reinterpret_cast<int *>(spaRecord + 0x04);
-        if (receiveInfo.unknown0 != spaHandle) {
-            ldwPoint loungerPlacement = {
-                *reinterpret_cast<int *>(spaRecord + 0x14),
-                *reinterpret_cast<int *>(spaRecord + 0x18)};
-            // FindFurniture is the read-only lookup: it reserves nothing, so
-            // it is safe to ask after the link above has already reserved.
-            // If it does not land on THIS handle the stock record stands --
-            // the link is already made and cannot be given back, so refusing
-            // the drop here would only strand it.
-            sFurnitureInfo2 ownInfo = {};
-            if (FurnitureManager.FindFurniture(
-                    CContentMap::eObjectChaise, loungerPlacement, ownInfo,
-                    true, 0, 0) &&
-                ownInfo.unknown0 == spaHandle) {
-                receiveInfo = ownInfo;
-            }
-        }
-        // The pose is what the player sees, so it follows the lounger under
-        // the villager even in the fallback above.
-        receiveInfo.orientation = *reinterpret_cast<int *>(spaRecord + 0x10);
-    }
+    // receiveInfo IS USED WHOLE: point, handle and orientation all come from
+    // the placement the engine actually linked. Two earlier revisions tried
+    // to correct it from the slot under the villager -- first one field,
+    // then by substituting a read-only FindFurniture result -- and review
+    // rejected both: a link cannot be re-anchored (LinkPeepToFurniture takes
+    // no point and UnlinkPeepFromFurniture does not exist), so any
+    // substitution leaves the reservation on one chaise and the villager on
+    // another. The hypothesis behind those revisions, that the pose was fed
+    // the wrong lounger's orientation, was disproved in round 21: the defect
+    // was the body table (see VF2PlanSpaLoungerPose), not the source.
 
     // This is a PLAYER DROP, so it wins. An autonomous recipient may already
     // be walking to this lounger -- VF2SpaOccupantIndex cannot see them, and

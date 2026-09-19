@@ -20,10 +20,15 @@ native path picks body 9). The hammock never had it (body 9 at both of its
 orientations, head + strip from one predicate, 3-argument PlanToWait).
 
 These tests pin:
-  * ONE helper, VF2PlanSpaLoungerRest, with the stock body table, the
-    hammock's head/strip pairing and call shape;
-  * EVERY route that poses a villager on a spa lounger uses it -- both
-    chaise relax sites and the spa treatment;
+  * ONE body table, VF2PlanSpaLoungerPose, with the hammock's head pairing
+    and call shape, held for the full duration and nothing else;
+  * the spa treatment's VF2PlanSpaLoungerRest, which settles THROUGH that
+    table and only then sleeps -- the relax sites never sleep, because their
+    rolls are awake activities (reading, studying, sitting);
+  * EVERY route that poses a villager on a spa lounger goes through the one
+    table -- both chaise relax sites and the spa treatment;
+  * each route uses ONE placement whole: the drop route the record the
+    engine linked, the autonomous route the record it verified;
   * the ordinary-chaise branches are byte-identical to what shipped;
   * each historical mistake, as a negative case that must FAIL.
 """
@@ -66,7 +71,13 @@ def _function(src, signature_start):
             return src[i:src.index("\n}\n", close)]
 
 
-def _helper(src):
+def _pose(src):
+    """The body table: PlanToWait for the whole duration, nothing else."""
+    return _function(src, "static void VF2PlanSpaLoungerPose(")
+
+
+def _rest(src):
+    """The treatment's settle-then-sleep, which delegates the pose to _pose."""
     return _function(src, "static void VF2PlanSpaLoungerRest(")
 
 
@@ -94,7 +105,7 @@ class TheOneHelper(unittest.TestCase):
 
     def test_body_position_follows_the_stock_table(self):
         """orientation 1 -> 0x17, otherwise 9. THIS is the fix."""
-        h = _strip_comments(_helper(_source()))
+        h = _strip_comments(_pose(_source()))
         self.assertIn("orientation == 1", h,
                       "the predicate is no longer orientation == 1")
         self.assertRegex(
@@ -106,11 +117,13 @@ class TheOneHelper(unittest.TestCase):
 
     def test_head_and_strip_pair_like_the_hammock(self):
         """NE body -> NE head -> SleepNE. NW body -> NW head -> SleepNW."""
-        h = _strip_comments(_helper(_source()))
+        src = _source()
+        h = _strip_comments(_pose(src))
         self.assertRegex(
             h, r"liesNorthEast\s*\?\s*eHeadDirectionNE\s*:\s*eHeadDirectionNW",
             "the head does not pair with the body: the hammock pairs an NE "
             "head with SleepNE and an NW head with SleepNW")
+        h = _strip_comments(_rest(src))
         self.assertRegex(
             h, r'liesNorthEast\s*\?\s*"SleepNE"\s*:\s*"SleepNW"',
             "the strip is INVERTED. Stock and the owner's B190 playtest both "
@@ -119,7 +132,7 @@ class TheOneHelper(unittest.TestCase):
 
     def test_call_shape_is_the_hammocks(self):
         """3-argument PlanToWait: no EDirection, no PlanToLieDown."""
-        h = _strip_comments(_helper(_source()))
+        h = _strip_comments(_pose(_source()))
         call = re.search(r"PlanToWait\(([^;]*)\);", h, re.S)
         self.assertIsNotNone(call, "the helper does not settle with PlanToWait")
         argc = call.group(1).count(",") + 1
@@ -138,11 +151,24 @@ class TheOneHelper(unittest.TestCase):
                          "orientation == 3 is never true for a spa lounger")
 
     def test_both_phases_come_from_one_predicate(self):
-        h = _strip_comments(_helper(_source()))
+        src = _source()
+        pose = _strip_comments(_pose(src))
         self.assertEqual(
-            h.count("liesNorthEast ?"), 3,
-            "body, head and strip must ALL be selected by the single "
-            "predicate; anything else lets the phases disagree")
+            pose.count("liesNorthEast ?"), 2,
+            "body and head must BOTH be selected by the single predicate")
+        rest = _strip_comments(_rest(src))
+        self.assertEqual(
+            rest.count("liesNorthEast ?"), 1,
+            "the strip must be selected by the same predicate")
+        self.assertIn(
+            "VF2PlanSpaLoungerPose(plans, orientation, settle);", rest,
+            "the treatment no longer settles through the ONE body table; a "
+            "second PlanToWait here is a second place for the body to be wrong")
+        self.assertNotIn("PlanToWait", rest,
+                         "the treatment poses itself instead of delegating")
+        self.assertNotIn("PlanToPlayAnim", pose,
+                         "the pose helper sleeps: every relax roll on a spa "
+                         "lounger would close its eyes, including reading")
 
 
 class EveryRouteUsesIt(unittest.TestCase):
@@ -154,8 +180,14 @@ class EveryRouteUsesIt(unittest.TestCase):
                     "if (VF2SpaLoungerHasHandle(info.unknown0)) {", body,
                     "relax site %d no longer tests for a spa lounger first" % n)
                 self.assertIn(
-                    "VF2PlanSpaLoungerRest(plans, info.orientation, duration);",
-                    body, "relax site %d does not use the one helper" % n)
+                    "VF2PlanSpaLoungerPose(plans, info.orientation, duration);",
+                    body, "relax site %d does not use the one body table" % n)
+                self.assertNotIn(
+                    "VF2PlanSpaLoungerRest(", body,
+                    "relax site %d sleeps. Its rolls are awake activities -- "
+                    "reading, studying, sitting -- which the ordinary chaise "
+                    "holds for the full duration; the sleep strip belongs to "
+                    "the spa treatment only (review, round 2)" % n)
                 self.assertLess(
                     body.index("VF2SpaLoungerHasHandle(info.unknown0)) {"),
                     body.index("info.orientation == 1"),
@@ -175,9 +207,15 @@ class EveryRouteUsesIt(unittest.TestCase):
     def test_exactly_three_call_sites(self):
         src = _strip_comments(_source())
         self.assertEqual(
-            src.count("VF2PlanSpaLoungerRest(plans, info.orientation,"), 3,
-            "expected exactly 3 uses of the helper: two relax sites and the "
-            "spa treatment")
+            src.count("VF2PlanSpaLoungerPose(plans, info.orientation, duration);"), 2,
+            "expected the pose at exactly the two relax sites")
+        self.assertEqual(
+            src.count("VF2PlanSpaLoungerRest(plans, info.orientation, total);"), 1,
+            "expected the rest at exactly the spa treatment")
+        self.assertEqual(
+            src.count("VF2PlanSpaLoungerPose("), 4,
+            "declaration, two relax sites and the rest's own delegation; "
+            "anything else is a route that bypasses the one body table")
 
 
 class OrdinaryChaisesAreUntouched(unittest.TestCase):
@@ -205,45 +243,39 @@ class OrdinaryChaisesAreUntouched(unittest.TestCase):
             "body at every orientation is back")
 
 
-class TheInputOrientationIsTheRealLoungers(unittest.TestCase):
-    def test_the_drop_route_describes_one_placement_not_a_hybrid(self):
-        """receiveInfo must describe the lounger under the villager entirely.
+class EachRouteUsesOnePlacement(unittest.TestCase):
+    def test_the_drop_route_uses_the_linked_record_whole(self):
+        """Nothing is patched between the link and the plan.
 
-        LinkPeepToFurniture(eObjectChaise, ...) can resolve a different
-        ordinary chaise. Patching only the orientation (an earlier revision)
-        left a hybrid: orientation from one placement, point and handle from
-        another, so the walk target, nudge, hold release and treatment
-        disagreed. Review caught it. The receiving handler's pattern is
-        copied: re-resolve at this lounger's point, VERIFY the handle, then
-        take the whole record.
+        LinkPeepToFurniture is the reservation and cannot be re-anchored:
+        it takes no point, and UnlinkPeepFromFurniture does not exist
+        (AGENTS.md). Two revisions tried to correct receiveInfo from the slot
+        under the villager -- one field, then a read-only FindFurniture
+        substitute -- and review rejected both as leaving the reservation on
+        one chaise and the villager on another. The hypothesis behind them
+        was disproved in round 21 (the body table was the defect).
         """
         src = _strip_comments(_source())
         h = _function(src, "static bool VF2HandleMobileInvisibleSpaLounger(CVillager &villager)")
-        for needle, why in (
-            ("VF2SpaLoungerRecordUnderVillager(villager)",
-             "the drop route no longer looks up the lounger under the villager"),
-            ("if (receiveInfo.unknown0 != spaHandle) {",
-             "the drop route no longer checks whether the shared-object link "
-             "resolved a different chaise"),
-            ("FurnitureManager.FindFurniture(",
-             "the drop route no longer re-resolves at the real lounger's point"),
-            ("ownInfo.unknown0 == spaHandle) {",
-             "the re-resolved placement is not verified against the handle"),
-            ("receiveInfo = ownInfo;",
-             "the WHOLE record is not adopted -- a hybrid is possible again"),
-            ("receiveInfo.orientation = *reinterpret_cast<int *>(spaRecord + 0x10);",
-             "orientation is not read from the verified record"),
-        ):
-            self.assertIn(needle, h, why)
-        for correction in (
-                "receiveInfo = ownInfo;",
-                "receiveInfo.orientation = *reinterpret_cast<int *>(spaRecord + 0x10);"):
-            self.assertLess(h.index(correction), h.index("VF2SpaTreatmentPoint("),
-                            "the placement is corrected after the walk target "
-                            "is computed, so the nudge targets the wrong "
-                            "furniture: " + correction)
-        self.assertNotIn("actualOrientation", h,
-                         "the one-field patch that produced the hybrid is back")
+        after_link = h[h.index("LinkPeepToFurniture("):]
+        self.assertNotRegex(after_link, r"receiveInfo(\.\w+)?\s*=[^=]",
+                            "a field of the linked record is patched after "
+                            "the link: that is the hybrid, in some form")
+        for bad in ("FindFurniture(", "UnderVillager(", "spaRecord",
+                    "actualOrientation", "ownInfo"):
+            self.assertNotIn(bad, after_link,
+                             "the drop route second-guesses the link (%s)" % bad)
+        self.assertNotIn("VF2SpaLoungerRecordUnderVillager", src)
+        self.assertNotIn("VF2SpaLoungerOrientationUnderVillager", src)
+
+    def test_the_autonomous_route_reads_the_verified_record(self):
+        src = _strip_comments(_source())
+        h = _function(src, "static bool VF2HandleMobileSpaLoungerReceiving(CVillager &villager)")
+        self.assertIn(
+            "info.orientation = *reinterpret_cast<int *>(spaRecord + 0x10);", h)
+        self.assertLess(h.index("!= info.unknown0) return false;"),
+                        h.index("info.orientation ="),
+                        "the record is trusted before its handle is verified")
 
     def test_the_nudge_is_per_orientation(self):
         """Three owner requests, each from a screenshot of a confirmed pose:
