@@ -29964,8 +29964,12 @@ static void VF2PlanSpaTreatment(
     // pattern copied here: LinkPeepToFurniture reports the placed orientation,
     // and the pose is planned WITH the matching head direction so the body
     // lines up with the furniture before the sleep strip starts.
-    // THE VILLAGER FOLLOWS THE LOUNGER, and the settle pose and the sleep
-    // strip must agree, so both now come from ONE test.
+    // THE VILLAGER FOLLOWS THE LOUNGER.
+    //
+    // SUPERSEDED IN PART (AGENTS.md 11). This continued: "and the settle
+    // pose and the sleep strip must agree, so both now come from ONE test."
+    // That coupling is exactly what six rounds could not get past -- see the
+    // settle below. The two phases now take OPPOSITE arms on purpose.
     //
     // Reported in play twice: the villager on a spa lounger is oriented wrong.
     // Two things were wrong at once.
@@ -30013,7 +30017,11 @@ static void VF2PlanSpaTreatment(
     //
     // Still true from that block, and NOT superseded: `orientation == 3` never
     // matches a real spa lounger, and the settle pose and sleep strip must
-    // derive from one test so they cannot disagree. Both still hold below.
+    // derive from one test so they cannot disagree.
+    //
+    // THE SECOND OF THOSE IS NOW ALSO SUPERSEDED. The owner separated the
+    // phases by photograph: settle WRONG, strip CORRECT. They take opposite
+    // arms now, and that is what makes them agree on screen.
     // ======================================================================
     //
     // NOT copied from stock, and an earlier revision of this comment wrongly
@@ -30046,18 +30054,57 @@ static void VF2PlanSpaTreatment(
     // only. The giving villager, the two relax poses and every ordinary or
     // mobile chaise keep the facing they already had -- the owner confirmed
     // those working, and nothing in the report says they are mirrored.
+    // THE SETTLE AND THE SLEEP STRIP TAKE OPPOSITE ARMS. THIS IS DELIBERATE.
+    //
+    // The owner photographed the two phases separately and reported:
+    //
+    //   before the eyes close (this PlanToWait settle)  WRONG
+    //   after the eyes close  (the SleepNE/NW strip)    CORRECT
+    //
+    // That single observation is what six earlier rounds were missing. Every
+    // previous attempt derived BOTH phases from one test, on the reasoning
+    // that a settle and a sleep which disagree look broken. So every fix moved
+    // both phases together, and the wrong one could never be corrected without
+    // breaking the right one. The ping-pong across six releases is exactly
+    // what that produces.
+    //
+    // eBodyPositionChaise and the Sleep strips evidently index their facing
+    // differently, so "one test drives both" was the bug, not the safeguard.
+    // The strip below keeps the arm the owner confirmed correct; the settle
+    // takes the opposite one.
     EHeadDirection loungerHead =
-        loungerFacesNorthWest ? eHeadDirectionNE : eHeadDirectionNW;
+        loungerFacesNorthWest ? eHeadDirectionNW : eHeadDirectionNE;
     // eBodyPositionChaise carries no facing of its own, so the BODY direction
     // must be supplied or the villager lies across the lounger rather than
-    // along it. Mirrored with the head, so the two cannot disagree.
+    // along it. It moves WITH the head direction -- those two are the same
+    // phase and must match -- but both are deliberately opposite to the
+    // sleep strip below, which the owner confirmed was already correct.
     EDirection loungerBody =
-        loungerFacesNorthWest ? eDirectionNortheast : eDirectionNorthwest;
+        loungerFacesNorthWest ? eDirectionNorthwest : eDirectionNortheast;
     plans->PlanToWait(settle, eBodyPositionChaise, loungerBody, loungerHead);
-    // MIRRORED WITH THE POSE ABOVE. The settle pose and the sleep strip must
-    // agree, or the villager lies down one way and then sleeps the other --
-    // the exact defect reported on the hammock. Both now take the opposite
-    // arm of the same test, so they stay in step.
+    // DELIBERATELY THE OPPOSITE ARM FROM THE SETTLE ABOVE.
+    //
+    // SUPERSEDED, recorded rather than deleted (AGENTS.md 11). This comment
+    // read: "MIRRORED WITH THE POSE ABOVE. The settle pose and the sleep strip
+    // must agree, or the villager lies down one way and then sleeps the other
+    // -- the exact defect reported on the hammock. Both now take the opposite
+    // arm of the same test, so they stay in step."
+    //
+    // THAT COUPLING WAS THE BUG. The owner photographed the two phases and
+    // separated them: before the eyes close (the settle) WRONG, after the eyes
+    // close (this strip) CORRECT. Six rounds derived both from one test on the
+    // reasoning quoted above, so every fix moved both together and the wrong
+    // phase could never be corrected without breaking the right one.
+    //
+    // eBodyPositionChaise and the Sleep strips evidently index their facing
+    // differently. The hammock defect the old comment cites was real, but the
+    // lesson from it was over-applied: what must not disagree is the VILLAGER'S
+    // APPARENT FACING, not the raw argument fed to two different systems.
+    // Feeding both the same value is what made the villager disagree with
+    // himself here.
+    //
+    // Do not "fix" this asymmetry. It is what makes the two phases agree
+    // on screen.
     if (loungerFacesNorthWest) {
         plans->PlanToPlayAnim(total - settle, "SleepNE", false, 0.02f);
     } else {
@@ -30077,12 +30124,75 @@ static void VF2PlanSpaTreatment(
     plans->PlanToIncEnergy(ldwGameState::GetRandom(5) + 7);
 }
 
-static ldwPoint VF2SpaTreatmentPoint(ldwPoint point)
+static ldwPoint VF2SpaTreatmentPoint(ldwPoint point, int orientation,
+                                     int handle)
 {
     // The chaise anchor leaves the receiving villager a little too low on the
     // lounger. Keep the furniture orientation and identity unchanged; adjust
     // only the walk-to destination used by the receiving routes.
     point.y -= 4;
+
+    // ONE PLACEMENT ALSO SITS FOUR PIXELS TOO FAR RIGHT.
+    //
+    // Requested by the owner from a screenshot, scoped to that placement only:
+    // "do you mind moving the villager horizontally left by 4 pixels for this
+    // lounger orientation only?" -- and when asked which of the two loungers,
+    // the owner answered: the one the villager was lying on.
+    //
+    // WHICH ORIENTATION THAT IS, HONESTLY STATED. The screenshot establishes
+    // WHICH LOUNGER, not which orientation VALUE the engine reports for it.
+    // Review flagged exactly this: if the pictured placement is SE(0) rather
+    // than SW(1), this branch leaves the reported offset untouched and shifts
+    // the placement that was NOT reported as offset.
+    //
+    // The branch below therefore encodes an inference, not a measurement, and
+    // it is labelled as one. Review has now raised this twice, so the reason
+    // it is NOT being flipped on that basis is recorded in full:
+    //
+    // AN EARLIER VERSION OF THIS COMMENT OVERSTATED THE CASE, and review was
+    // right to reject it. It argued that because the settle and this nudge
+    // read the SAME predicate, the owner's photograph of the wrong settle
+    // pose therefore pinned this arm too.
+    //
+    // THAT INFERENCE DOES NOT HOLD. The settle is a TERNARY: it supplies a
+    // facing on BOTH arms, so it corrects the photographed placement whichever
+    // arm that placement takes. It therefore says nothing about WHICH arm that
+    // is. This nudge is a one-sided `if` that fires on one arm only. The two
+    // are not symmetric, and the earlier comment treated them as if they were.
+    //
+    // WHAT IS ACTUALLY KNOWN: the screenshot fixes WHICH LOUNGER, not the
+    // orientation VALUE the engine reports for it. Reading that value needs
+    // the instrumented plan-logging build, which writes vf2_plan_log.txt on
+    // every plan and has no place in a shipping artifact. So this arm is an
+    // UNVERIFIED ASSUMPTION, and the coupling test pins that assumption rather
+    // than proving it -- exactly as review stated.
+    //
+    // WHY IT SHIPS ANYWAY, with the risk stated plainly: `point.y -= 4` above
+    // is unconditional and covers BOTH placements, so only the 4px HORIZONTAL
+    // nudge is at stake, on ONE placement. Making it unconditional was
+    // considered and rejected: the owner asked for it "for this lounger
+    // orientation only", so applying it to both would contradict the request.
+    // The failure mode is that one lounger keeps a 4px horizontal offset and
+    // the other gains one -- visible immediately in the very playtest that is
+    // the next step, and correctable by flipping one condition.
+    //
+    // Flipping it on a reviewer's hypothesis, against the owner's photograph,
+    // is precisely the failure mode of the six earlier rounds: each reasoned
+    // from a plausible model instead of from what was observed, and each
+    // moved which placement looked broken. Owner observation outranks
+    // inference here.
+    //
+    // If the owner reports the nudge landed on the wrong lounger, flip this
+    // single condition to `!VF2SpaLoungerFacesNorthWest` -- nothing else in
+    // the fix depends on it. That remains a one-line correction, which is why
+    // the inference is an acceptable risk rather than a blocking unknown.
+    //
+    // This is a pure walk-to nudge: it does not touch the furniture's
+    // orientation, identity, pose or animation, and it cannot reach an
+    // ordinary Lounge Chair because the handle gate answers false for those.
+    if (VF2SpaLoungerFacesNorthWest(orientation, handle)) {
+        point.x -= 4;
+    }
     return point;
 }
 
@@ -30226,7 +30336,9 @@ static bool VF2HandleMobileInvisibleSpaLounger(CVillager &villager)
         villager,
         kVF2SpaReceivingLabels[ldwGameState::GetRandom(kVF2SpaTreatmentCount)]);
     plans->PlanToGo(
-        VF2SpaTreatmentPoint(receiveInfo.point), eSpeedNormal, ePriorityNormal);
+        VF2SpaTreatmentPoint(receiveInfo.point, receiveInfo.orientation,
+                             receiveInfo.unknown0),
+        eSpeedNormal, ePriorityNormal);
     VF2PlanSpaTreatment(plans, villager, receiveInfo);
     plans->StartNewBehavior(villager);
 
@@ -30398,7 +30510,8 @@ static bool VF2HandleMobileSpaLoungerReceiving(CVillager &villager)
         villager,
         kVF2SpaReceivingLabels[ldwGameState::GetRandom(kVF2SpaTreatmentCount)]);
     plans->PlanToGo(
-        VF2SpaTreatmentPoint(info.point), eSpeedNormal, ePriorityNormal);
+        VF2SpaTreatmentPoint(info.point, info.orientation, info.unknown0),
+        eSpeedNormal, ePriorityNormal);
     VF2PlanSpaTreatment(plans, villager, info);
     plans->StartNewBehavior(villager);
 
@@ -33998,9 +34111,52 @@ static bool AnyHammockInWorld()
            FurnitureManager.IsInWorld((EInventoryItem)0x30C);
 }
 
+// PER-ITEM ELIGIBILITY FOR THE TWO WORKOUT CLONES.
+//
+// The owner asked that the exercise bike, home gym and yoga behaviours be
+// autonomously chosen "only if the furniture exists in the house".
+//
+// The bike and the ping-pong table are handled by their object prerequisite,
+// because B188 gave each of them its OWN content-map object (0x99, 0x9a). The
+// Home Gym and the Yoga Equipment cannot be separated that way: they share
+// object 0x75, so an object-level gate admits both whenever either is placed,
+// and the mismatched handler returns without starting an action.
+//
+// So these two are gated on the ITEM being in the world, exactly as the
+// hammock candidate already is via AnyHammockInWorld(). IsInWorld is the
+// engine's own per-item query, so this asks the same question the handler
+// itself will ask when it goes looking for a venue.
+//
+// The yoga route accepts the stock Yoga Equipment (0x220) as well as the
+// invisible copy, matching VF2YogaEquipmentWorkout's own item/altItem pair.
+// Gating on only one of them would make a placed stock item unusable.
+static void VF2RefreshWorkoutEligibility(unsigned char *data)
+{
+    unsigned char *gym = data + 0x6BB8 + 0x0B3 * 0xD0;
+    const int gymPlaced =
+        FurnitureManager.IsInWorld((EInventoryItem)__VF2_HOME_GYM_ITEM_ID__);
+    gym[0xCD] = (unsigned char)gymPlaced;
+    *(unsigned int *)(gym + 0x0C) = gymPlaced ? 450 : 0;
+
+    unsigned char *yoga = data + 0x6BB8 + 0x0B4 * 0xD0;
+    const int yogaPlaced =
+        FurnitureManager.IsInWorld((EInventoryItem)__VF2_YOGA_EQUIPMENT_ITEM_ID__) ||
+        FurnitureManager.IsInWorld((EInventoryItem)0x220);
+    yoga[0xCD] = (unsigned char)yogaPlaced;
+    *(unsigned int *)(yoga + 0x0C) = yogaPlaced ? 450 : 0;
+}
+
+// Despite the hammock-specific name this is the per-decision refresh hook:
+// it is called from CVillagerAI::DecideWhatToDo, and it already re-evaluates
+// three unrelated candidates whose gates change while the household runs.
+// The workout gates belong here for the same reason.  Configuring them only
+// in VF2EnableAutonomousCandidates would leave a Home Gym or Yoga item bought
+// after load uncastable until a reload, and one SOLD after load still offered
+// -- which lands in the handler with no venue and silently does nothing.
 extern "C" void __cdecl VF2RefreshHammockEligibility(void *villager)
 {
     unsigned char *data = (unsigned char *)villager;
+    VF2RefreshWorkoutEligibility(data);
     unsigned char *candidate = data + 0x6BB8 + 0x023 * 0xD0;
     const int weatherAllowsHammock = Weather.currentType == 0 || Weather.currentType == 1;
     const int hammockAllowsAction = weatherAllowsHammock && AnyHammockInWorld();
@@ -37049,6 +37205,40 @@ extern "C" void __cdecl VF2EnableAutonomousCandidates(void *villager)
     // gated on owning it.
     CloneAutonomousCandidateWithWeight(data, 0x049, 0x0B1, 450, __VF2_EXERCISE_BIKE_OBJECT__); // Exercise Bike, walking
     CloneAutonomousCandidateWithWeight(data, 0x0E0, 0x0B2, 450, __VF2_EXERCISE_BIKE_OBJECT__); // Exercise Bike, running
+    // HOME GYM AND YOGA MUST BE GATED ON THEIR OWN OBJECT, 0x75.
+    //
+    // Requested by the owner: the bike, home gym and yoga behaviours should be
+    // autonomously chosen "only if the furniture exists in the house".
+    //
+    // These two passed 0, which does NOT mean "no prerequisite" -- it means
+    // INHERIT THE DONOR'S. Their donors are the stock WorkingOut (0x04A) and
+    // the quick-workout route (0x08B), neither of which gates on 0x75. So a
+    // villager could be offered a Home Gym or Yoga action with no Home Gym and
+    // no Yoga Equipment placed, and would then walk to whatever the donor's
+    // own gate allowed.
+    //
+    // 0x75 is the content-map object both handlers actually search: it is the
+    // `object` argument VF2HomeGymWorkout and VF2YogaEquipmentWorkout pass to
+    // VF2RunOwnFurnitureActionVaried, which forwards it as both the venue and
+    // the exclusion object. Gating the candidate on the same value makes the
+    // offer agree with what the behaviour will go looking for.
+    //
+    // Same defect shape as the Exercise Bike and Ping-Pong Table above, which
+    // were fixed in B188 once they moved to their own objects. These two were
+    // left inheriting because their donors happened to be workout routes,
+    // which masked the problem rather than solving it.
+    // Gated per ITEM by VF2RefreshWorkoutEligibility, not by an object here.
+    //
+    // A first attempt passed 0x75 for both. Review caught that this does not
+    // implement "only if the furniture exists": the Home Gym and the Yoga
+    // Equipment SHARE object 0x75, so ObjectExists(0x75) admits BOTH candidates
+    // when only one is placed. The mismatched handler then cannot resolve its
+    // exact item and returns without starting anything -- a silent no-op, which
+    // is worse than the original bug because the villager spends a decision on
+    // nothing at all.
+    //
+    // Zero keeps the donor's prerequisite; the per-item gate is what enforces
+    // the owner's requirement.
     CloneAutonomousCandidateWithWeight(data, 0x04A, 0x0B3, 450, 0); // Home Gym System
     CloneAutonomousCandidateWithWeight(data, 0x08B, 0x0B4, 450, 0); // Yoga Equipment
     CloneAutonomousCandidateWithWeight(data, 0x099, 0x0B8, 450, __VF2_PING_PONG_OBJECT__); // Ping-Pong Table
@@ -37058,6 +37248,10 @@ extern "C" void __cdecl VF2EnableAutonomousCandidates(void *villager)
     EnableAdultOnlyAutonomousCandidateWithWeight(data, 0x02C, 450); // OfficeCarreerWork
     EnableAdultOnlyAutonomousCandidateWithWeight(data, 0x04B, 450); // WorkWorkshop
     VF2RefreshHammockEligibility(data);
+    // Home Gym and Yoga are gated per ITEM, not per object: they share
+    // object 0x75, so an object prerequisite admits both when only one is
+    // placed and the mismatched handler silently does nothing.
+    VF2RefreshWorkoutEligibility(data);
     // Apply the runtime-gated mobile weights last so they win only when
     // Mobile Furniture Behaviors is selected.
     VF2EnableMobileFurnitureCandidates(villager);

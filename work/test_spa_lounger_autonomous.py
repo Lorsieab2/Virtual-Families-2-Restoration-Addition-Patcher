@@ -144,7 +144,7 @@ class TestOnlyReceivingIsAutonomous(unittest.TestCase):
             "hotspot offset, not be assigned from the record",
         )
         self.assertNotIn("info.point.y = ", body)
-        self.assertIn("VF2SpaTreatmentPoint(info.point)", body)
+        self.assertIn("VF2SpaTreatmentPoint(info.point, info.orientation, info.unknown0)", body)
 
     def test_the_lookup_is_the_read_only_one(self):
         # FindFurniture reserves nothing, so asking it costs nothing and
@@ -588,13 +588,245 @@ class TestOnlyReceivingIsAutonomous(unittest.TestCase):
         self.assertIn('PlanToPlayAnim(total - settle, "SleepNW"', body)
         self.assertIn('PlanToPlayAnim(total - settle, "SleepNE"', body)
 
+    def test_added_furniture_candidates_require_their_own_furniture(self):
+        """Each added item is offered only when ITS OWN furniture is placed.
+
+        The owner asked for exactly this: the exercise bike, home gym and yoga
+        behaviours should be autonomously chosen "only if the furniture exists
+        in the house".
+
+        TWO MECHANISMS, because one does not cover both cases.
+
+        The Exercise Bike and the Ping-Pong Table each have their OWN
+        content-map object (0x99, 0x9a, assigned in B188), so an object
+        prerequisite at +0xC4 separates them cleanly.
+
+        The Home Gym and the Yoga Equipment SHARE object 0x75. A first attempt
+        gated both on 0x75 and review caught that it does not implement the
+        requirement at all: ObjectExists(0x75) admits BOTH candidates when
+        either item is placed, and the mismatched handler then cannot resolve
+        its exact item and returns without starting anything. That is a silent
+        no-op -- worse than the original bug, because the villager spends a
+        decision on nothing.
+
+        So those two are gated per ITEM via FurnitureManager.IsInWorld, the
+        same query the hammock candidate already uses through
+        AnyHammockInWorld(), and the same question the handler itself asks when
+        it looks for a venue.
+
+        THE TRAP for anyone changing this: the fifth argument of
+        CloneAutonomousCandidateWithWeight is not "no prerequisite" when zero.
+        It means INHERIT THE DONOR'S, because the clone copies the donor's
+        whole 0xD0-byte record including +0xC4.
+        """
+        src = _source()
+
+        # Object-gated: each has its own content-map object.
+        for donor, target, prereq, name in (
+            ("0x049", "0x0B1", "__VF2_EXERCISE_BIKE_OBJECT__", "Exercise Bike walking"),
+            ("0x0E0", "0x0B2", "__VF2_EXERCISE_BIKE_OBJECT__", "Exercise Bike running"),
+            ("0x099", "0x0B8", "__VF2_PING_PONG_OBJECT__", "Ping-Pong Table"),
+        ):
+            with self.subTest(item=name):
+                call = ("CloneAutonomousCandidateWithWeight(data, %s, %s, 450, %s)"
+                        % (donor, target, prereq))
+                self.assertIn(
+                    call, src,
+                    "%s is not gated on its own object; passing 0 inherits the "
+                    "donor's prerequisite, so the action can be offered with "
+                    "none of that furniture placed" % name)
+
+        # Item-gated: Home Gym and Yoga share object 0x75, so the object
+        # prerequisite CANNOT separate them.
+        helper_start = src.index("static void VF2RefreshWorkoutEligibility(")
+        helper = src[helper_start:src.index(chr(10) + "}" + chr(10), helper_start)]
+
+        with self.subTest(item="Home Gym System"):
+            self.assertIn(
+                "FurnitureManager.IsInWorld((EInventoryItem)__VF2_HOME_GYM_ITEM_ID__)",
+                helper,
+                "the Home Gym is not gated on its own item being in the world")
+            self.assertIn("0x0B3 * 0xD0", helper)
+
+        with self.subTest(item="Yoga Equipment"):
+            self.assertIn(
+                "FurnitureManager.IsInWorld((EInventoryItem)__VF2_YOGA_EQUIPMENT_ITEM_ID__)",
+                helper,
+                "the Yoga Equipment is not gated on its own item")
+            self.assertIn(
+                "FurnitureManager.IsInWorld((EInventoryItem)0x220)", helper,
+                "the STOCK Yoga Equipment (0x220) is not accepted, so a placed "
+                "stock item would leave the behaviour unreachable")
+            self.assertIn("0x0B4 * 0xD0", helper)
+
+        # Neither may be gated on the shared object again.
+        with self.subTest(item="shared object rejected"):
+            self.assertNotIn(
+                "0x0B3, 450, 0x75", src,
+                "Home Gym is gated on the SHARED object 0x75 again; that "
+                "admits the Yoga candidate too and yields a silent no-op")
+            self.assertNotIn("0x0B4, 450, 0x75", src)
+
+        # The refresh must actually run, and run OFTEN ENOUGH.
+        #
+        # Review caught this: configuring the gates only in
+        # VF2EnableAutonomousCandidates is not sufficient, because its emitted
+        # call sites are the CVillager::InitAI and LoadAI epilogues -- once per
+        # load. Furniture is bought and sold while the household runs, so a
+        # Home Gym placed after load stayed uncastable until a reload, and one
+        # sold after load stayed offered and landed in the handler with no
+        # venue: the exact silent no-op this gating exists to prevent.
+        #
+        # The fix reuses the existing per-decision hook rather than adding a
+        # second patch site. VF2RefreshHammockEligibility is what
+        # CVillagerAI::DecideWhatToDo calls, and despite its name it is the
+        # general "re-evaluate volatile gates" routine -- it already refreshes
+        # the hammock, playhouse and snow candidates.
+        #
+        # Asserting the call merely appears SOMEWHERE in the source is what
+        # allowed the defect through: the load-time call satisfied it. Pin the
+        # per-decision hook by name.
+        with self.subTest(item="refresh runs at load"):
+            self.assertIn("VF2RefreshWorkoutEligibility(data);", src)
+
+        with self.subTest(item="refresh runs per decision"):
+            hook_start = src.index(
+                'extern "C" void __cdecl VF2RefreshHammockEligibility(')
+            hook = src[hook_start:src.index(chr(10) + "}" + chr(10), hook_start)]
+            self.assertIn(
+                "VF2RefreshWorkoutEligibility(data);", hook,
+                "the workout gates are refreshed only at family load. "
+                "Furniture bought after load leaves the candidate disabled "
+                "until a reload, and furniture sold after load leaves it "
+                "enabled and able to produce a silent no-op. Call the workout "
+                "refresh from the per-decision hook as well.")
+
+        with self.subTest(item="per-decision hook is wired to DecideWhatToDo"):
+            self.assertIn(
+                '_VF2RefreshHammockEligibility', src,
+                "the per-decision refresh symbol is gone, so nothing "
+                "re-evaluates the volatile gates during play")
+            self.assertIn("?DecideWhatToDo@CVillagerAI@@AAEXAAVCVillager@@@Z", src)
+
+        # The three object-gated ones must not fall back to inheriting.
+        for target in ("0x0B1", "0x0B2", "0x0B8"):
+            with self.subTest(target=target):
+                self.assertNotIn(
+                    ", %s, 450, 0);" % target, src,
+                    "candidate %s inherits its donor's object prerequisite "
+                    "again" % target)
+
+    def test_the_nudge_and_the_settle_select_the_same_lounger(self):
+        """The 4px nudge and the settle pose must key off the SAME predicate.
+
+        The owner's evidence for both is ONE photograph of ONE lounger: they
+        showed the wrong settle pose, then asked for the nudge on "the one
+        he's lying on". So the two corrections target the same placement by
+        construction, not by coincidence.
+
+        WHAT THIS TEST DOES NOT DO, stated plainly because an earlier version
+        of this docstring claimed otherwise. It does NOT prove the arm is
+        correct. Review pointed out the flaw in that argument: the settle is a
+        TERNARY supplying a facing on both arms, so it corrects the
+        photographed placement whichever arm that placement takes, and
+        therefore says nothing about which arm it is. The nudge is a one-sided
+        `if`. The two are not symmetric.
+
+        So the arm remains an UNVERIFIED ASSUMPTION -- reading the real value
+        needs the instrumented plan-logging build, which has no place in a
+        shipping artifact. What this test actually protects is narrower and
+        still worth having: that the two stay on the SAME predicate, so a
+        future edit cannot move one without the other and split the settle and
+        the nudge across different loungers.
+        """
+        src = _source()
+
+        # The settle selects on loungerFacesNorthWest.
+        self.assertIn(
+            "loungerFacesNorthWest ? eHeadDirectionNW : eHeadDirectionNE", src,
+            "the settle head no longer selects on loungerFacesNorthWest")
+        self.assertIn(
+            "loungerFacesNorthWest ? eDirectionNorthwest : eDirectionNortheast",
+            src, "the settle body no longer selects on loungerFacesNorthWest")
+
+        # The nudge selects on the SAME predicate.
+        self.assertIn(
+            "if (VF2SpaLoungerFacesNorthWest(orientation, handle)) {", src,
+            "the nudge no longer selects on the spa-gated predicate, so it "
+            "can now disagree with the settle about which lounger to correct")
+
+        # And it must not have been negated on its own.
+        self.assertNotIn(
+            "if (!VF2SpaLoungerFacesNorthWest(orientation, handle)) {", src,
+            "the nudge arm was flipped WITHOUT flipping the settle. Those two "
+            "are driven by the owner's single photograph of a single lounger; "
+            "moving one alone puts the settle and the nudge on different "
+            "placements.")
+
+    def test_every_receiving_label_is_reachable_from_both_routes(self):
+        """The autonomous route must roll across ALL of the labels.
+
+        The owner asked for this directly: "make sure the autonomous spa
+        receiving behaviors reach all the labels too". The autonomous route is
+        VF2HandleMobileSpaLoungerReceiving, and it was already rolling the full
+        range -- the owner observed "Relaxing in the spa", the LAST entry, on a
+        villager who chose the lounger himself.
+
+        Nothing pinned that, though. If a tenth label were appended and the
+        count left at nine, the new one would be silently unreachable and the
+        loss would be invisible: every existing label would still appear, so
+        play would look fine while one treatment never occurred.
+
+        The count constant and the array length must therefore agree, and both
+        receiving routes must roll across the full count.
+        """
+        src = _source()
+        array = src[src.index("kVF2SpaReceivingLabels[] = {"):]
+        array = array[:array.index("};")]
+        labels = [l for l in array.splitlines() if l.strip().startswith('"')]
+
+        m = re.search(r"static int const kVF2SpaTreatmentCount = (\d+);", src)
+        self.assertIsNotNone(m, "the treatment count constant is gone")
+        count = int(m.group(1))
+
+        self.assertEqual(
+            count, len(labels),
+            "kVF2SpaTreatmentCount is %d but there are %d receiving labels; "
+            "the surplus labels can never be rolled and the shortfall is "
+            "invisible in play because every other label still appears"
+            % (count, len(labels)))
+
+        # Both receiving routes -- the visible lounger and the invisible
+        # sibling -- must roll the FULL count, not a hardcoded smaller number.
+        self.assertEqual(
+            src.count(
+                "kVF2SpaReceivingLabels[ldwGameState::GetRandom("
+                "kVF2SpaTreatmentCount)]"), 2,
+            "a receiving route is not rolling across the full label set")
+
+        # The label the owner actually observed on an autonomous villager.
+        self.assertIn('"Relaxing in the spa"', array)
+
     def test_both_receiving_routes_raise_the_walk_target_slightly(self):
         src = _source()
-        self.assertIn("static ldwPoint VF2SpaTreatmentPoint(ldwPoint point)", src)
-        self.assertEqual(src.count("VF2SpaTreatmentPoint(receiveInfo.point)"), 1)
-        self.assertEqual(src.count("VF2SpaTreatmentPoint(info.point)"), 1)
+        self.assertIn("static ldwPoint VF2SpaTreatmentPoint(ldwPoint point, int orientation,", src)
+        self.assertEqual(
+            src.count("VF2SpaTreatmentPoint(receiveInfo.point, receiveInfo.orientation,"), 1)
+        self.assertEqual(
+            src.count("VF2SpaTreatmentPoint(info.point, info.orientation, info.unknown0)"), 1)
         helper = src[src.index("static ldwPoint VF2SpaTreatmentPoint"):src.index("static char const *const kVF2SpaReceivingLabels", src.index("static ldwPoint VF2SpaTreatmentPoint"))]
         self.assertIn("point.y -= 4;", helper)
+
+        # ONE ORIENTATION ALSO MOVES 4px LEFT, requested by the owner from a
+        # screenshot and scoped to that placement only. The vertical nudge
+        # above still applies to BOTH placements; only the horizontal one is
+        # conditional, so the placement the owner did not report as offset
+        # must not move sideways.
+        self.assertIn("point.x -= 4;", helper)
+        self.assertIn(
+            "if (VF2SpaLoungerFacesNorthWest(orientation, handle)) {", helper,
+            "the horizontal nudge is no longer scoped to one orientation, so "
+            "it would move a placement the owner did not report as offset")
 
     def test_manual_giving_uses_the_same_one_minute_duration(self):
         src = _source()
@@ -982,53 +1214,63 @@ class TheTreatmentPoseFollowsTheLounger(unittest.TestCase):
             text,
             "the spa settle pose does not supply a body direction")
 
-    def test_the_receiving_pose_is_mirrored_and_internally_consistent(self):
-        """The receiving pose takes the MIRROR arm, and all three agree.
+    def test_the_settle_and_the_sleep_strip_take_opposite_arms(self):
+        """The two phases are DELIBERATELY opposite. This is the sixth fix.
 
-        The owner playtested B189 and reported the villager still lying across
-        the lounger, with the diagnosis: "flip the villager orientation
-        horizontally for the spa receiving actions."
+        The owner photographed the treatment twice and separated the phases:
 
-        WHY FIVE EARLIER ROUNDS MISSED THIS. Every previous attempt argued
-        about WHICH orientation should take WHICH strip -- northeast versus
-        northwest -- and B189 added a handle gate so the spa rule could not
-        reach ordinary chaises. None of it could work, because the receiving
-        pose needs the MIRROR of whatever the lounger's facing selects. Both
-        placements were wrong together, so tuning the selector could only swap
-        which one looked wrong.
+            before the eyes close (the PlanToWait settle)  WRONG
+            after the eyes close  (the SleepNE/NW strip)   CORRECT
 
-        NE(0) and NW(3) are the horizontal mirror pair for both EDirection and
-        EHeadDirection, so the flip is taking the opposite arm of the same
-        test.
+        WHY SIX ROUNDS FAILED. Every earlier attempt derived BOTH phases from
+        one test, on the reasoning that a settle and a sleep which disagree
+        would look broken -- the defect originally reported on the hammock. So
+        every fix moved both phases together. The wrong phase could never be
+        corrected without breaking the right one, and each release swapped
+        which half looked wrong. That is precisely the ping-pong the owner
+        described across B185 through B190.
 
-        Two properties are pinned here. First the mirror itself. Second the
-        original property this test protected and which still matters: body,
-        head and sleep strip all derive from ONE test, so a body facing NE
-        under a head facing NW is impossible.
+        eBodyPositionChaise and the Sleep animation strips evidently index
+        their facing differently, so "one test drives both" was the bug rather
+        than the safeguard.
+
+        The settle now matches the ordinary coloured loungers, which the owner
+        confirmed correct, and the strip keeps the arm the owner confirmed
+        correct. They are opposite ON PURPOSE.
         """
         text = _source()
         start = text.index("static void VF2PlanSpaTreatment(")
-        end = text.index("\n}\n", start)
+        end = text.index(chr(10) + "}" + chr(10), start)
         body = text[start:end]
 
+        # SETTLE: must match the working coloured-lounger relax pose.
         self.assertIn(
-            "loungerFacesNorthWest ? eDirectionNortheast : eDirectionNorthwest",
+            "loungerFacesNorthWest ? eDirectionNorthwest : eDirectionNortheast",
             body,
-            "the receiving body direction is not mirrored; the villager will "
-            "lie across the lounger, which is what the owner reported on B189")
+            "the settle body direction no longer matches the ordinary "
+            "loungers the owner confirmed correct")
         self.assertIn(
-            "loungerFacesNorthWest ? eHeadDirectionNE : eHeadDirectionNW",
+            "loungerFacesNorthWest ? eHeadDirectionNW : eHeadDirectionNE",
             body,
-            "the receiving head direction is not mirrored")
+            "the settle head direction no longer matches the ordinary "
+            "loungers the owner confirmed correct")
 
-        # The strip must mirror WITH them, or the villager settles one way and
-        # sleeps the other -- the defect originally reported on the hammock.
+        # STRIP: must keep the arm the owner confirmed correct, which is the
+        # OPPOSITE one.
         anim = body[body.index("if (loungerFacesNorthWest) {"):]
         anim = anim[:anim.index("}", anim.index("else"))]
         self.assertLess(
             anim.index('"SleepNE"'), anim.index('"SleepNW"'),
-            "the sleep strip is not mirrored with the pose, so the settle and "
-            "the sleep disagree")
+            "the sleep strip changed; the owner confirmed the post-eyes-closed "
+            "phase was already correct, so it must not move")
+
+        # And the two must NOT be derived identically -- that coupling is the
+        # bug this test exists to prevent from returning.
+        self.assertNotIn(
+            "loungerFacesNorthWest ? eDirectionNortheast : eDirectionNorthwest",
+            body,
+            "the settle has been re-coupled to the sleep strip's arm; the "
+            "owner reported that phase wrong while the strip was right")
 
     def test_edirection_is_not_confused_with_furniture_orientation(self):
         """The two enums order their values DIFFERENTLY and must not be swapped.
