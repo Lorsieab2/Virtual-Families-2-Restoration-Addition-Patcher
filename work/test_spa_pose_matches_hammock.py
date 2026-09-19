@@ -36,6 +36,7 @@ ones, and the receiving treatment uses `PlanToLieDown` for its full
 duration.
 """
 import pathlib
+import re
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -76,10 +77,12 @@ class TestSpaLoungersCopyTheNormalOnes(unittest.TestCase):
         """The spa treatment poses the villager the normal lounger's way."""
         spa = _spa_body(_source())
         self.assertIn(
-            "plans->PlanToLieDown(settleTicks);", spa,
-            "the spa receiving treatment no longer uses PlanToLieDown for "
-            "its full duration. The normal chaise loungers -- the ones the "
-            "owner confirmed working -- use PlanToLieDown and nothing else.")
+            "plans->PlanToWait(", spa,
+            "the spa treatment no longer settles with PlanToWait. "
+            "PlanToLieDown cannot be used here: the disassembly shows it "
+            "writes action 0x25 with the direction and head fields ZERO, so "
+            "it supplies no facing and the sleep strip then imposes its own "
+            "-- the villager turns when the eyes close.")
 
     def test_the_treatment_lies_down_and_then_sleeps(self):
         """Owner: "they should lie down AND sleep too."
@@ -100,24 +103,20 @@ class TestSpaLoungersCopyTheNormalOnes(unittest.TestCase):
         """
         spa = _spa_body(_source())
         self.assertIn(
-            "plans->PlanToLieDown(settleTicks);", spa,
-            "the treatment no longer settles with PlanToLieDown")
+            "plans->PlanToWait(", spa,
+            "the treatment no longer settles with a facing-carrying call")
         self.assertIn(
             "PlanToPlayAnim(", spa,
             "the treatment lies down but never sleeps")
         self.assertIn(
-            'info.orientation == 3 ? "SleepNW" : "SleepNE"', spa,
-            "the sleep strip does not use the HAMMOCK'S condition. The "
-            "hammock tests `info.orientation == 3` (NW), not == 1. A spa "
-            "lounger only occupies orientations 0 and 1, so under that rule "
-            "both spa placements take SleepNE. Writing `== 1 ? SleepNW` is a "
-            "substitution, not the hammock's logic, and it gave orientation 1 "
-            "the strip the owner photographed as wrong.")
-        self.assertNotIn(
+            'loungerFacesNorthWest ? "SleepNW" : "SleepNE"', spa,
+            "the sleep strip is not driven by the same predicate as the "
+            "settle. Both phases must come from ONE value or they disagree "
+            "and the villager turns when the eyes close.")
+        self.assertIn(
             "eBodyPositionChaise", spa,
-            "the treatment supplies a chaise body position again. "
-            "PlanToLieDown places the body; that is the whole point of "
-            "copying the ordinary loungers.")
+            "the treatment must supply the chaise body position; the "
+            "4-argument PlanToWait is what carries the facing")
 
     def test_spa_loungers_are_not_forced_off_the_lie_down_path(self):
         """The relax branch must not special-case the spa handle.
@@ -141,9 +140,9 @@ class TestSpaLoungersCopyTheNormalOnes(unittest.TestCase):
             "PlanToLieDown plus an orientation-aware Sleep strip, not two "
             "different pose mechanisms.")
         self.assertEqual(
-            src.count("plans->PlanToLieDown(settleTicks);"), 3,
+            src.count("plans->PlanToWait(" + chr(10) + "        settleTicks,"), 3,
             "expected all three lounger sites (two relax, one treatment) to "
-            "settle with PlanToLieDown")
+            "settle with the facing-carrying PlanToWait")
 
     def test_every_route_into_the_lounger_uses_the_same_wiring(self):
         """Manual drop AND autonomous must share one pose implementation.
@@ -328,6 +327,54 @@ class TestSpaLoungersCopyTheNormalOnes(unittest.TestCase):
             handler,
             "the autonomous route no longer reads orientation from the spa "
             "lounger record it verified")
+
+    def test_every_pose_site_drives_body_head_and_strip_from_one_predicate(self):
+        """PER-SITE coverage. v8 shipped with 1 of 3 sites fixed.
+
+        That build compiled, passed the suite, and was handed over -- while
+        two of the three pose sites still used PlanToLieDown (which supplies
+        NO facing: it writes action 0x25 with the direction and head fields
+        zeroed) plus `orientation == 3`, which is never true for a spa
+        lounger. The villager therefore turned when the eyes closed.
+
+        A test that passes with 2 of 3 sites broken is worthless, so this
+        one checks EACH site independently and counts them.
+        """
+        src = _strip_comments(_source())
+
+        sites = re.findall(
+            r"plans->PlanToWait\(\s*settleTicks,(.{0,400}?)0\.02f\);",
+            src, re.S)
+        self.assertEqual(
+            len(sites), 3,
+            "expected exactly 3 lounger pose sites (two chaise relax poses "
+            "and the spa treatment); found %d. A missing site means a code "
+            "path still poses the villager some other way." % len(sites))
+
+        for n, body in enumerate(sites, 1):
+            flat = " ".join(body.split())
+            with self.subTest(site=n):
+                self.assertIn(
+                    "eBodyPositionChaise", flat,
+                    "site %d does not use the chaise body position" % n)
+                self.assertEqual(
+                    flat.count("loungerFacesNorthWest"), 3,
+                    "site %d does not drive the body direction, the head "
+                    "AND the sleep strip from the same predicate. Anything "
+                    "less lets the two phases disagree, which is the visible "
+                    "flip when the eyes close. Site was: %s" % (n, flat[:160]))
+
+        # The two mechanisms that produced the flip must be gone everywhere.
+        self.assertNotIn(
+            "plans->PlanToLieDown(settleTicks);", src,
+            "a pose site still settles with PlanToLieDown, which supplies no "
+            "facing at all -- the strip then imposes its own and the villager "
+            "turns when the eyes close")
+        self.assertNotIn(
+            'info.orientation == 3 ? "SleepNW"', src,
+            "a site still selects the strip with `orientation == 3`, which is "
+            "NEVER true for a spa lounger (they occupy 0 and 1), so every "
+            "lounger got SleepNE regardless of which way it faced")
 
     def test_the_spa_behaviours_are_still_present(self):
         """Copying the normal pose must not delete the spa feature."""

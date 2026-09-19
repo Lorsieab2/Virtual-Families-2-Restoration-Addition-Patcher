@@ -27281,25 +27281,31 @@ static bool VF2HandleMobileChaise(CVillager &villager)
     // used and what the owner confirmed working -- so it replaces the
     // hammock's PlanToWait, and the strip follows the orientation the same
     // way the hammock's does.
+    // ONE SOURCE OF FACING FOR BOTH PHASES.
+    //
+    // WHY IT FLIPPED WHEN THE EYES CLOSED, from the disassembly:
+    // PlanToLieDown writes action type 0x25 with the direction and head
+    // fields ZERO -- it supplies NO facing, so the engine derives one. A
+    // Sleep strip that then picks its own facing makes the villager
+    // visibly turn at the transition.
+    //
+    // The hammock never flips because BOTH its phases come from one value.
+    // Same here: one predicate drives the body, the head and the strip.
+    //
+    // Spa loungers occupy orientation 0 or 1 and the live capture recorded
+    // facing AS the orientation: 0 -> NE, 1 -> NW. `orientation == 3` was
+    // never true for them, so every lounger got SleepNE regardless of which
+    // way it faced.
+    bool const loungerFacesNorthWest = info.orientation == 1;
     int const settleTicks = duration > 10 ? 10 : duration;
-    plans->PlanToLieDown(settleTicks);
+    plans->PlanToWait(
+        settleTicks,
+        eBodyPositionChaise,
+        loungerFacesNorthWest ? eDirectionNorthwest : eDirectionNortheast,
+        loungerFacesNorthWest ? eHeadDirectionNW : eHeadDirectionNE);
     plans->PlanToPlayAnim(
         duration > settleTicks ? duration - settleTicks : 1,
-        // THE HAMMOCK'S OWN CONDITION, COPIED UNCHANGED.
-        //
-        //     bool const hammockFacesNorthWest = info.orientation == 3;
-        //     char const *sleepAnim =
-        //         hammockFacesNorthWest ? "SleepNW" : "SleepNE";
-        //
-        // It tests orientation == 3 (NW), NOT == 1. A spa lounger only ever
-        // occupies orientations 0 and 1, so under the hammock's rule BOTH
-        // spa placements are "not NW" and both take SleepNE.
-        //
-        // Writing `orientation == 1 ? "SleepNW"` was my own substitution,
-        // not the hammock's logic, and it gave orientation 1 the strip the
-        // owner photographed as wrong. Copy the working route; do not
-        // re-derive it.
-        info.orientation == 3 ? "SleepNW" : "SleepNE",
+        loungerFacesNorthWest ? "SleepNW" : "SleepNE",
         false,
         0.02f);
     if (dirtiness) plans->PlanToIncDirtiness(dirtiness);
@@ -29650,25 +29656,31 @@ static void VF2PlanLinkedChaiseAction(
     // used and what the owner confirmed working -- so it replaces the
     // hammock's PlanToWait, and the strip follows the orientation the same
     // way the hammock's does.
+    // ONE SOURCE OF FACING FOR BOTH PHASES.
+    //
+    // WHY IT FLIPPED WHEN THE EYES CLOSED, from the disassembly:
+    // PlanToLieDown writes action type 0x25 with the direction and head
+    // fields ZERO -- it supplies NO facing, so the engine derives one. A
+    // Sleep strip that then picks its own facing makes the villager
+    // visibly turn at the transition.
+    //
+    // The hammock never flips because BOTH its phases come from one value.
+    // Same here: one predicate drives the body, the head and the strip.
+    //
+    // Spa loungers occupy orientation 0 or 1 and the live capture recorded
+    // facing AS the orientation: 0 -> NE, 1 -> NW. `orientation == 3` was
+    // never true for them, so every lounger got SleepNE regardless of which
+    // way it faced.
+    bool const loungerFacesNorthWest = info.orientation == 1;
     int const settleTicks = duration > 10 ? 10 : duration;
-    plans->PlanToLieDown(settleTicks);
+    plans->PlanToWait(
+        settleTicks,
+        eBodyPositionChaise,
+        loungerFacesNorthWest ? eDirectionNorthwest : eDirectionNortheast,
+        loungerFacesNorthWest ? eHeadDirectionNW : eHeadDirectionNE);
     plans->PlanToPlayAnim(
         duration > settleTicks ? duration - settleTicks : 1,
-        // THE HAMMOCK'S OWN CONDITION, COPIED UNCHANGED.
-        //
-        //     bool const hammockFacesNorthWest = info.orientation == 3;
-        //     char const *sleepAnim =
-        //         hammockFacesNorthWest ? "SleepNW" : "SleepNE";
-        //
-        // It tests orientation == 3 (NW), NOT == 1. A spa lounger only ever
-        // occupies orientations 0 and 1, so under the hammock's rule BOTH
-        // spa placements are "not NW" and both take SleepNE.
-        //
-        // Writing `orientation == 1 ? "SleepNW"` was my own substitution,
-        // not the hammock's logic, and it gave orientation 1 the strip the
-        // owner photographed as wrong. Copy the working route; do not
-        // re-derive it.
-        info.orientation == 3 ? "SleepNW" : "SleepNE",
+        loungerFacesNorthWest ? "SleepNW" : "SleepNE",
         false,
         0.02f);
     if (dirtiness) plans->PlanToIncDirtiness(dirtiness);
@@ -29949,8 +29961,32 @@ static void VF2PlanSpaTreatment(
     // PlanToLieDown alone leaves the villager awake for the whole
     // treatment; the strip follows the orientation exactly as the
     // hammock's does.
+    // ONE SOURCE OF FACING FOR BOTH PHASES.
+    //
+    // WHY IT FLIPPED WHEN THE EYES CLOSED, from the disassembly:
+    // PlanToLieDown writes action type 0x25 and leaves the direction and
+    // head fields ZERO ([ebp-14h] and [ebp-10h] both cleared). It supplies
+    // NO facing -- the engine derives one. The Sleep strip then imposed a
+    // different facing, so the villager visibly turned at the transition.
+    //
+    // The hammock never flips because BOTH its phases come from one value:
+    //
+    //     bool const facesNorthWest = info.orientation == 3;
+    //     PlanToWait(10, eBodyPositionRestingHammock,
+    //                facesNorthWest ? eHeadDirectionNW : eHeadDirectionNE);
+    //     PlanToPlayAnim(rest, facesNorthWest ? "SleepNW" : "SleepNE", ...);
+    //
+    // Same shape here, with the facing read from the lounger the villager
+    // is actually on (info.orientation is corrected by the caller before
+    // this runs). A spa lounger occupies orientation 0 or 1, and the live
+    // capture recorded facing AS the orientation: 0 -> NE, 1 -> NW.
+    bool const loungerFacesNorthWest = info.orientation == 1;
     int const settleTicks = total > 10 ? 10 : total;
-    plans->PlanToLieDown(settleTicks);
+    plans->PlanToWait(
+        settleTicks,
+        eBodyPositionChaise,
+        loungerFacesNorthWest ? eDirectionNorthwest : eDirectionNortheast,
+        loungerFacesNorthWest ? eHeadDirectionNW : eHeadDirectionNE);
     plans->PlanToPlayAnim(
         total > settleTicks ? total - settleTicks : 1,
         // THE HAMMOCK'S OWN CONDITION, COPIED UNCHANGED.
@@ -29967,7 +30003,7 @@ static void VF2PlanSpaTreatment(
         // not the hammock's logic, and it gave orientation 1 the strip the
         // owner photographed as wrong. Copy the working route; do not
         // re-derive it.
-        info.orientation == 3 ? "SleepNW" : "SleepNE",
+        loungerFacesNorthWest ? "SleepNW" : "SleepNE",
         false,
         0.02f);
     plans->PlanToPlaySound(
