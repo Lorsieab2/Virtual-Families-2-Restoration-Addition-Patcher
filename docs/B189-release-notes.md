@@ -25,7 +25,14 @@ rather than on any check in this repository.
 
 ## The one fix
 
-### Spa lounger orientation (#330)
+### Spa lounger orientation (#330) — DID NOT FIX IT
+
+> **EVERYTHING IN THIS SECTION IS HISTORICAL.** The owner playtested B189 and
+> the villager was **still lying across the lounger**. Do not follow any rule
+> stated below; it is recorded as the approach that failed. The current rule is
+> the mirrored receiving pose — see issue #330 and the B190 notes.
+
+What B189 believed, and shipped:
 
 `VF2FurnitureFacesNorthWest` tested `orientation == 3`. The owner confirmed a
 lounger only ever occupies **two** orientations, and a live capture of the
@@ -34,8 +41,12 @@ real lounger, and **both** placements took the northeast arm. Orientation 0
 wants northeast, so it looked right by luck; orientation 1 wants northwest and
 was the one reported wrong.
 
-The rule, as the owner stated it — *the villager faces the way the lounger
-faces, head and body*:
+That reasoning is sound as far as it goes, and it is still true that `== 3`
+never matched. It just was not the defect: the receiving pose needed a mirror,
+not a different arm of the selector.
+
+The rule B189 believed, as stated at the time — *the villager faces the way the
+lounger faces, head and body*:
 
 > **SUPERSEDED — B189 SHIPPED THIS MAPPING AND IT WAS WRONG.** The owner
 > playtested this release and the villager was **still lying across the
@@ -128,8 +139,18 @@ B188, not that the lounger fix works.
 
 ## What to check
 
-Drop a villager on each spa lounger. Both should lie **along** the lounger,
-facing the way the furniture faces, head at the raised end.
+> **SUPERSEDED.** This instruction was written for B189 and its expectation was
+> wrong. It told testers to expect the unmirrored pose, which is the pose the
+> owner then reported as still broken. Retained as the record of what this
+> release asked for.
+>
+> > *Drop a villager on each spa lounger. Both should lie along the lounger,
+> > facing the way the furniture faces, head at the raised end.*
+
+The outcome: the villager still lay **across** the lounger. The spa receiving
+pose needs a **horizontal mirror**, fixed after this release.
+
+The second check below was and remains correct:
 
 Worth a glance too, since they share the same code branch: ordinary and mobile
 Lounge Chairs should behave exactly as they did in B188.

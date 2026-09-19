@@ -29972,20 +29972,38 @@ static void VF2PlanSpaTreatment(
     //
     // This route serves the INVISIBLE Spa Lounger too -- it is the same item
     // with different art and shares this handler.
-    // SAME EAST/WEST CORRECTION AS THE OTHER TWO LOUNGER POSES.
+    // ================= SUPERSEDED, KEPT AS THE FAILED APPROACH =============
+    // Everything in this block describes the rule B189 SHIPPED. The owner
+    // playtested B189 and the villager was STILL lying across the lounger, so
+    // none of it is the current rule. It is retained rather than deleted
+    // (AGENTS.md 11) because the way it failed is the useful part, and because
+    // deleting it would invite a seventh attempt down the same path.
     //
-    // `orientation == 3` collapsed SE(0), SW(1) and NE(2) onto one pose and
-    // one sleep strip. The pair is east/west: {SE(0), NE(2)} east,
-    // {SW(1), NW(3)} west. This drives BOTH the settle head direction and the
-    // SleepNW/SleepNE animation, so the two stay in agreement.
-    // ORIENTATION 3 ALONE TAKES THE NW STRIP. See the relax poses above for
-    // the full reasoning and for the corrected stock table.
+    //   "SAME EAST/WEST CORRECTION AS THE OTHER TWO LOUNGER POSES.
     //
-    // Confirmed in play across two releases: SE(0) wants SleepNE. B188 shipped
-    // `orientation == 3` here, which never matches a real spa lounger, so SW(1)
-    // also got SleepNE -- and that is the placement the owner reported wrong.
-    // SW(1) wants SleepNW, matching the live capture where the facing IS the
-    // orientation.
+    //    `orientation == 3` collapsed SE(0), SW(1) and NE(2) onto one pose and
+    //    one sleep strip. The pair is east/west: {SE(0), NE(2)} east,
+    //    {SW(1), NW(3)} west. This drives BOTH the settle head direction and
+    //    the SleepNW/SleepNE animation, so the two stay in agreement.
+    //    ORIENTATION 3 ALONE TAKES THE NW STRIP.
+    //
+    //    Confirmed in play across two releases: SE(0) wants SleepNE. B188
+    //    shipped `orientation == 3` here, which never matches a real spa
+    //    lounger, so SW(1) also got SleepNE -- and that is the placement the
+    //    owner reported wrong. SW(1) wants SleepNW, matching the live capture
+    //    where the facing IS the orientation."
+    //
+    // WHAT WAS ACTUALLY WRONG WITH IT. Every claim above is about WHICH
+    // orientation takes WHICH strip. The receiving pose needs the MIRROR of
+    // whatever that selector picks, so both placements were wrong together and
+    // tuning the selector could only swap which one looked wrong. The "one
+    // correct, one wrong" symptom on B188 was TWO STACKED DEFECTS: the
+    // selector wrong for one placement, on top of the mirror wrong for both.
+    //
+    // Still true from that block, and NOT superseded: `orientation == 3` never
+    // matches a real spa lounger, and the settle pose and sleep strip must
+    // derive from one test so they cannot disagree. Both still hold below.
+    // ======================================================================
     //
     // NOT copied from stock, and an earlier revision of this comment wrongly
     // said it was. Stock RestingBody is a four-way PARITY dispatch that plays
