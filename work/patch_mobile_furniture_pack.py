@@ -30046,13 +30046,31 @@ static void VF2PlanSpaTreatment(
     // only. The giving villager, the two relax poses and every ordinary or
     // mobile chaise keep the facing they already had -- the owner confirmed
     // those working, and nothing in the report says they are mirrored.
+    // THE SETTLE AND THE SLEEP STRIP TAKE OPPOSITE ARMS. THIS IS DELIBERATE.
+    //
+    // The owner photographed the two phases separately and reported:
+    //
+    //   before the eyes close (this PlanToWait settle)  WRONG
+    //   after the eyes close  (the SleepNE/NW strip)    CORRECT
+    //
+    // That single observation is what six earlier rounds were missing. Every
+    // previous attempt derived BOTH phases from one test, on the reasoning
+    // that a settle and a sleep which disagree look broken. So every fix moved
+    // both phases together, and the wrong one could never be corrected without
+    // breaking the right one. The ping-pong across six releases is exactly
+    // what that produces.
+    //
+    // eBodyPositionChaise and the Sleep strips evidently index their facing
+    // differently, so "one test drives both" was the bug, not the safeguard.
+    // The strip below keeps the arm the owner confirmed correct; the settle
+    // takes the opposite one.
     EHeadDirection loungerHead =
-        loungerFacesNorthWest ? eHeadDirectionNE : eHeadDirectionNW;
+        loungerFacesNorthWest ? eHeadDirectionNW : eHeadDirectionNE;
     // eBodyPositionChaise carries no facing of its own, so the BODY direction
     // must be supplied or the villager lies across the lounger rather than
     // along it. Mirrored with the head, so the two cannot disagree.
     EDirection loungerBody =
-        loungerFacesNorthWest ? eDirectionNortheast : eDirectionNorthwest;
+        loungerFacesNorthWest ? eDirectionNorthwest : eDirectionNortheast;
     plans->PlanToWait(settle, eBodyPositionChaise, loungerBody, loungerHead);
     // MIRRORED WITH THE POSE ABOVE. The settle pose and the sleep strip must
     // agree, or the villager lies down one way and then sleeps the other --
@@ -30077,12 +30095,27 @@ static void VF2PlanSpaTreatment(
     plans->PlanToIncEnergy(ldwGameState::GetRandom(5) + 7);
 }
 
-static ldwPoint VF2SpaTreatmentPoint(ldwPoint point)
+static ldwPoint VF2SpaTreatmentPoint(ldwPoint point, int orientation,
+                                     int handle)
 {
     // The chaise anchor leaves the receiving villager a little too low on the
     // lounger. Keep the furniture orientation and identity unchanged; adjust
     // only the walk-to destination used by the receiving routes.
     point.y -= 4;
+
+    // ONE ORIENTATION ALSO SITS FOUR PIXELS TOO FAR RIGHT.
+    //
+    // Requested by the owner from a screenshot, and scoped to that placement
+    // only: "do you mind moving the villager horizontally left by 4 pixels for
+    // this lounger orientation only?"
+    //
+    // The other placement was not reported as offset, so it must not move.
+    // This is a pure walk-to nudge -- it does not touch the furniture's
+    // orientation, identity, pose or animation, and it cannot reach an
+    // ordinary Lounge Chair because the handle gate answers false for those.
+    if (VF2SpaLoungerFacesNorthWest(orientation, handle)) {
+        point.x -= 4;
+    }
     return point;
 }
 
@@ -30226,7 +30259,9 @@ static bool VF2HandleMobileInvisibleSpaLounger(CVillager &villager)
         villager,
         kVF2SpaReceivingLabels[ldwGameState::GetRandom(kVF2SpaTreatmentCount)]);
     plans->PlanToGo(
-        VF2SpaTreatmentPoint(receiveInfo.point), eSpeedNormal, ePriorityNormal);
+        VF2SpaTreatmentPoint(receiveInfo.point, receiveInfo.orientation,
+                             receiveInfo.unknown0),
+        eSpeedNormal, ePriorityNormal);
     VF2PlanSpaTreatment(plans, villager, receiveInfo);
     plans->StartNewBehavior(villager);
 
@@ -30398,7 +30433,8 @@ static bool VF2HandleMobileSpaLoungerReceiving(CVillager &villager)
         villager,
         kVF2SpaReceivingLabels[ldwGameState::GetRandom(kVF2SpaTreatmentCount)]);
     plans->PlanToGo(
-        VF2SpaTreatmentPoint(info.point), eSpeedNormal, ePriorityNormal);
+        VF2SpaTreatmentPoint(info.point, info.orientation, info.unknown0),
+        eSpeedNormal, ePriorityNormal);
     VF2PlanSpaTreatment(plans, villager, info);
     plans->StartNewBehavior(villager);
 
@@ -37049,8 +37085,30 @@ extern "C" void __cdecl VF2EnableAutonomousCandidates(void *villager)
     // gated on owning it.
     CloneAutonomousCandidateWithWeight(data, 0x049, 0x0B1, 450, __VF2_EXERCISE_BIKE_OBJECT__); // Exercise Bike, walking
     CloneAutonomousCandidateWithWeight(data, 0x0E0, 0x0B2, 450, __VF2_EXERCISE_BIKE_OBJECT__); // Exercise Bike, running
-    CloneAutonomousCandidateWithWeight(data, 0x04A, 0x0B3, 450, 0); // Home Gym System
-    CloneAutonomousCandidateWithWeight(data, 0x08B, 0x0B4, 450, 0); // Yoga Equipment
+    // HOME GYM AND YOGA MUST BE GATED ON THEIR OWN OBJECT, 0x75.
+    //
+    // Requested by the owner: the bike, home gym and yoga behaviours should be
+    // autonomously chosen "only if the furniture exists in the house".
+    //
+    // These two passed 0, which does NOT mean "no prerequisite" -- it means
+    // INHERIT THE DONOR'S. Their donors are the stock WorkingOut (0x04A) and
+    // the quick-workout route (0x08B), neither of which gates on 0x75. So a
+    // villager could be offered a Home Gym or Yoga action with no Home Gym and
+    // no Yoga Equipment placed, and would then walk to whatever the donor's
+    // own gate allowed.
+    //
+    // 0x75 is the content-map object both handlers actually search: it is the
+    // `object` argument VF2HomeGymWorkout and VF2YogaEquipmentWorkout pass to
+    // VF2RunOwnFurnitureActionVaried, which forwards it as both the venue and
+    // the exclusion object. Gating the candidate on the same value makes the
+    // offer agree with what the behaviour will go looking for.
+    //
+    // Same defect shape as the Exercise Bike and Ping-Pong Table above, which
+    // were fixed in B188 once they moved to their own objects. These two were
+    // left inheriting because their donors happened to be workout routes,
+    // which masked the problem rather than solving it.
+    CloneAutonomousCandidateWithWeight(data, 0x04A, 0x0B3, 450, 0x75); // Home Gym System
+    CloneAutonomousCandidateWithWeight(data, 0x08B, 0x0B4, 450, 0x75); // Yoga Equipment
     CloneAutonomousCandidateWithWeight(data, 0x099, 0x0B8, 450, __VF2_PING_PONG_OBJECT__); // Ping-Pong Table
     EnableAdultOnlyAutonomousCandidateWithWeight(data, 0x047, 450); // WorkKitchenDispatch
     CloneAutonomousCandidateWithWeight(data, 0x047, 0x048, 450, 0); // WorkKitchen0, with kitchen career gates
