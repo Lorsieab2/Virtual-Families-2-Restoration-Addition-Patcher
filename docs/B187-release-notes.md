@@ -114,6 +114,28 @@ lounger genuinely changed nothing for most of them, which is what "no change"
 looks like from the player's side. The two head directions are an east/west
 pair, so the split is now `{SE, NE}` against `{SW, NW}`.
 
+> **SUPERSEDED FOR THE SPA RECEIVING POSE ONLY.** "Applied at all three lounger
+> sites" was true of B187 and is no longer the rule. The owner playtested B189
+> and the villager was still lying across the spa lounger; the **receiving**
+> pose needs the **mirror** of whatever the orientation test picks, so it takes
+> the opposite arm from the two relax poses. Do not re-apply the unmirrored
+> mapping to `VF2PlanSpaTreatment`. See issue #330.
+>
+> **Two predicates, and they are not the same one.** An earlier version of this
+> note said the east/west split "still governs the shared predicate", which is
+> wrong and would have sent a maintainer at the wrong function:
+>
+> | predicate | value | drives |
+> |---|---|---|
+> | `VF2FurnitureFacesNorthWest` | `orientation == 3` | shared chaise and hammock rule, **unchanged since B187** |
+> | `VF2SpaLoungerFacesNorthWest` | `orientation == 1`, handle-gated | the two spa relax poses (direct) and the spa receiving pose (**mirrored**) |
+>
+> The 0/1 mapping belongs to the spa-gated predicate, not the shared one.
+>
+> Still true and NOT superseded: the settle pose and the sleep strip must
+> derive from ONE test so they cannot disagree. That property is preserved by
+> mirroring both together.
+
 Applied at all three lounger sites. The spa settle pose and the
 `SleepNW`/`SleepNE` strip now derive from one test so they cannot disagree, and
 the invisible Spa Lounger is covered because `VF2SpaLoungerHasHandle` matches

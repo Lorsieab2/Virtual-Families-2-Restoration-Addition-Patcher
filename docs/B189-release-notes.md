@@ -25,7 +25,23 @@ rather than on any check in this repository.
 
 ## The one fix
 
-### Spa lounger orientation (#330)
+### Spa lounger orientation (#330) — DID NOT FIX IT
+
+> **THE MAPPING IN THIS SECTION IS HISTORICAL. THE HANDLE GATE IS NOT.** The
+> owner playtested B189 and the villager was **still lying across the
+> lounger**, so the NE/NW mapping recorded below is the approach that failed.
+> The current rule is the mirrored receiving pose — see issue #330 and the B190
+> notes.
+>
+> **Do not discard the whole section.** B189's other change — gating the spa
+> rule on the spa-lounger handle so it cannot reach ordinary Lounge Chairs —
+> is **correct, current, and still relied on** by the implementation. It is
+> described further down this section and remains in force. Removing it would
+> reintroduce a regression on furniture the owner confirmed working.
+>
+> Read below as: mapping ❌ historical · handle gate ✅ current.
+
+What B189 believed, and shipped:
 
 `VF2FurnitureFacesNorthWest` tested `orientation == 3`. The owner confirmed a
 lounger only ever occupies **two** orientations, and a live capture of the
@@ -34,13 +50,39 @@ real lounger, and **both** placements took the northeast arm. Orientation 0
 wants northeast, so it looked right by luck; orientation 1 wants northwest and
 was the one reported wrong.
 
-The rule, as the owner stated it — *the villager faces the way the lounger
-faces, head and body*:
+That reasoning is sound as far as it goes, and it is still true that `== 3`
+never matched. It just was not the defect: the receiving pose needed a mirror,
+not a different arm of the selector.
 
-| orientation | direction | head | strip |
-|---|---|---|---|
-| 0 (SE) | NE | NE | `SleepNE` |
-| 1 (SW) | **NW** | **NW** | **`SleepNW`** |
+The rule B189 believed, as stated at the time — *the villager faces the way the
+lounger faces, head and body*:
+
+> **SUPERSEDED — B189 SHIPPED THIS MAPPING AND IT WAS WRONG.** The owner
+> playtested this release and the villager was **still lying across the
+> lounger**. Kept here because it is what B189 actually shipped, and because
+> the way it failed is the useful part. It read:
+>
+> > | orientation | direction | head | strip |
+> > |---|---|---|---|
+> > | 0 (SE) | NE | NE | `SleepNE` |
+> > | 1 (SW) | **NW** | **NW** | **`SleepNW`** |
+>
+> The owner's diagnosis: the spa **receiving** pose needs a **horizontal
+> mirror**, not a different choice of orientation.
+>
+> **Why this mapping could not have worked.** It — and the five rounds before
+> it — argued about *which* orientation takes *which* strip. The receiving
+> pose needs the MIRROR of whatever that selector picks, so both placements
+> were wrong together, and tuning the selector could only swap which one
+> looked wrong. The "one correct, one wrong" symptom on B188 was two stacked
+> defects: the selector wrong for one placement, on top of the mirror wrong
+> for both. Fixing the selector here made both consistently wrong instead.
+>
+> The current rule is in `VF2PlanSpaTreatment`: head, body and sleep strip all
+> take the **opposite** arm of the orientation test. See issue #330.
+>
+> The handle gate this release added is **still correct** and still in place.
+> It was never the problem.
 
 **The fix is gated, and the gating is the substance of it.** Review caught
 that the reclined-pose branch
@@ -106,8 +148,18 @@ B188, not that the lounger fix works.
 
 ## What to check
 
-Drop a villager on each spa lounger. Both should lie **along** the lounger,
-facing the way the furniture faces, head at the raised end.
+> **SUPERSEDED.** This instruction was written for B189 and its expectation was
+> wrong. It told testers to expect the unmirrored pose, which is the pose the
+> owner then reported as still broken. Retained as the record of what this
+> release asked for.
+>
+> > *Drop a villager on each spa lounger. Both should lie along the lounger,
+> > facing the way the furniture faces, head at the raised end.*
+
+The outcome: the villager still lay **across** the lounger. The spa receiving
+pose needs a **horizontal mirror**, fixed after this release.
+
+The second check below was and remains correct:
 
 Worth a glance too, since they share the same code branch: ordinary and mobile
 Lounge Chairs should behave exactly as they did in B188.

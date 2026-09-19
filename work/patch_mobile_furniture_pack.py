@@ -26352,6 +26352,13 @@ static bool VF2SpaLoungerFacesNorthWest(int orientation, int handle)
     //   orientation 0 (SE)  ->  EDirection 0 = NE, EHeadDirection 0 = NE
     //   orientation 1 (SW)  ->  EDirection 3 = NW, EHeadDirection 3 = NW
     //
+    // READ THIS BEFORE USING THE RETURN VALUE. What this predicate reports is
+    // the LOUNGER's facing. The spa RECEIVING pose does not use it directly --
+    // VF2PlanSpaTreatment takes the MIRROR, because the owner playtested B189
+    // with the unmirrored mapping and the villager was still lying across the
+    // lounger. Returning the lounger's facing here is correct; assuming the
+    // villager takes the same facing is what was wrong.
+    //
     // Orientation 0 was already correct in B188; orientation 1 is the one
     // the owner reported wrong, and it wants the northwest strip.
     return orientation == 1;
@@ -27292,14 +27299,16 @@ static bool VF2HandleMobileChaise(CVillager &villager)
         // and body direction were not being supplied with the pose at all --
         // and the sleep strip was never the defect for SW.
         //
-        // CURRENT EXPECTED MAPPING, per the owner's B188 verdict:
+        // MAPPING FOR THIS RELAX POSE, per the owner's B188 verdict:
         //
         //   orientation=0 (SE)  ->  NE direction, NE head, SleepNE
         //   orientation=1 (SW)  ->  NW direction, NW head, SleepNW
         //
-        // which is exactly "the villager faces the way the lounger faces",
-        // the rule the owner stated. It lives in VF2SpaLoungerFacesNorthWest
-        // and applies only when the handle is a spa lounger.
+        // SCOPE, and this distinction cost six rounds: the mapping above is
+        // correct for THIS pose. It is NOT the rule for the spa RECEIVING
+        // pose, which the owner playtested in B189 and found still wrong.
+        // VF2PlanSpaTreatment takes the MIRROR of this mapping. Do not
+        // "unify" the two -- they are deliberately opposite.
         //
         // SUPERSEDED CLAIM, recorded rather than deleted (AGENTS.md 11). An
         // earlier revision of this comment asserted that stock
@@ -29701,14 +29710,16 @@ static void VF2PlanLinkedChaiseAction(
         // and body direction were not being supplied with the pose at all --
         // and the sleep strip was never the defect for SW.
         //
-        // CURRENT EXPECTED MAPPING, per the owner's B188 verdict:
+        // MAPPING FOR THIS RELAX POSE, per the owner's B188 verdict:
         //
         //   orientation=0 (SE)  ->  NE direction, NE head, SleepNE
         //   orientation=1 (SW)  ->  NW direction, NW head, SleepNW
         //
-        // which is exactly "the villager faces the way the lounger faces",
-        // the rule the owner stated. It lives in VF2SpaLoungerFacesNorthWest
-        // and applies only when the handle is a spa lounger.
+        // SCOPE, and this distinction cost six rounds: the mapping above is
+        // correct for THIS pose. It is NOT the rule for the spa RECEIVING
+        // pose, which the owner playtested in B189 and found still wrong.
+        // VF2PlanSpaTreatment takes the MIRROR of this mapping. Do not
+        // "unify" the two -- they are deliberately opposite.
         //
         // SUPERSEDED CLAIM, recorded rather than deleted (AGENTS.md 11). An
         // earlier revision of this comment asserted that stock
@@ -29972,20 +29983,38 @@ static void VF2PlanSpaTreatment(
     //
     // This route serves the INVISIBLE Spa Lounger too -- it is the same item
     // with different art and shares this handler.
-    // SAME EAST/WEST CORRECTION AS THE OTHER TWO LOUNGER POSES.
+    // ================= SUPERSEDED, KEPT AS THE FAILED APPROACH =============
+    // Everything in this block describes the rule B189 SHIPPED. The owner
+    // playtested B189 and the villager was STILL lying across the lounger, so
+    // none of it is the current rule. It is retained rather than deleted
+    // (AGENTS.md 11) because the way it failed is the useful part, and because
+    // deleting it would invite a seventh attempt down the same path.
     //
-    // `orientation == 3` collapsed SE(0), SW(1) and NE(2) onto one pose and
-    // one sleep strip. The pair is east/west: {SE(0), NE(2)} east,
-    // {SW(1), NW(3)} west. This drives BOTH the settle head direction and the
-    // SleepNW/SleepNE animation, so the two stay in agreement.
-    // ORIENTATION 3 ALONE TAKES THE NW STRIP. See the relax poses above for
-    // the full reasoning and for the corrected stock table.
+    //   "SAME EAST/WEST CORRECTION AS THE OTHER TWO LOUNGER POSES.
     //
-    // Confirmed in play across two releases: SE(0) wants SleepNE. B188 shipped
-    // `orientation == 3` here, which never matches a real spa lounger, so SW(1)
-    // also got SleepNE -- and that is the placement the owner reported wrong.
-    // SW(1) wants SleepNW, matching the live capture where the facing IS the
-    // orientation.
+    //    `orientation == 3` collapsed SE(0), SW(1) and NE(2) onto one pose and
+    //    one sleep strip. The pair is east/west: {SE(0), NE(2)} east,
+    //    {SW(1), NW(3)} west. This drives BOTH the settle head direction and
+    //    the SleepNW/SleepNE animation, so the two stay in agreement.
+    //    ORIENTATION 3 ALONE TAKES THE NW STRIP.
+    //
+    //    Confirmed in play across two releases: SE(0) wants SleepNE. B188
+    //    shipped `orientation == 3` here, which never matches a real spa
+    //    lounger, so SW(1) also got SleepNE -- and that is the placement the
+    //    owner reported wrong. SW(1) wants SleepNW, matching the live capture
+    //    where the facing IS the orientation."
+    //
+    // WHAT WAS ACTUALLY WRONG WITH IT. Every claim above is about WHICH
+    // orientation takes WHICH strip. The receiving pose needs the MIRROR of
+    // whatever that selector picks, so both placements were wrong together and
+    // tuning the selector could only swap which one looked wrong. The "one
+    // correct, one wrong" symptom on B188 was TWO STACKED DEFECTS: the
+    // selector wrong for one placement, on top of the mirror wrong for both.
+    //
+    // Still true from that block, and NOT superseded: `orientation == 3` never
+    // matches a real spa lounger, and the settle pose and sleep strip must
+    // derive from one test so they cannot disagree. Both still hold below.
+    // ======================================================================
     //
     // NOT copied from stock, and an earlier revision of this comment wrongly
     // said it was. Stock RestingBody is a four-way PARITY dispatch that plays
@@ -29997,19 +30026,42 @@ static void VF2PlanSpaTreatment(
     // Lounge Chairs depend on it and were confirmed working.
     bool const loungerFacesNorthWest =
         VF2SpaLoungerFacesNorthWest(info.orientation, info.unknown0);
+    // THE RECEIVING POSE IS MIRRORED HORIZONTALLY. This is the owner's own
+    // diagnosis after playtesting B189: "flip the villager orientation
+    // horizontally for the spa receiving actions."
+    //
+    // WHY EVERY EARLIER ROUND MISSED IT. Five rounds argued about WHICH
+    // orientation should take WHICH strip, and B189 added a gate so the spa
+    // rule could not reach ordinary chaises. All of that was choosing between
+    // northeast and northwest. None of it helped, because the receiving pose
+    // needs the MIRROR of whatever the lounger's facing selects -- so both
+    // placements were wrong together and tuning the selector could only ever
+    // swap which one looked wrong.
+    //
+    // NE(0) and NW(3) are the horizontal mirror pair on this isometric grid,
+    // for both EDirection and EHeadDirection, so the flip is simply taking the
+    // opposite arm of the same test.
+    //
+    // Scoped to VF2PlanSpaTreatment deliberately. This is the RECEIVING pose
+    // only. The giving villager, the two relax poses and every ordinary or
+    // mobile chaise keep the facing they already had -- the owner confirmed
+    // those working, and nothing in the report says they are mirrored.
     EHeadDirection loungerHead =
-        loungerFacesNorthWest ? eHeadDirectionNW : eHeadDirectionNE;
-    // Same correction as the two relax poses: eBodyPositionChaise carries no
-    // facing, so the BODY direction has to be supplied or the villager lies
-    // across the lounger rather than along it. Derived from the same test that
-    // picks the head direction and the sleep strip, so all three agree.
+        loungerFacesNorthWest ? eHeadDirectionNE : eHeadDirectionNW;
+    // eBodyPositionChaise carries no facing of its own, so the BODY direction
+    // must be supplied or the villager lies across the lounger rather than
+    // along it. Mirrored with the head, so the two cannot disagree.
     EDirection loungerBody =
-        loungerFacesNorthWest ? eDirectionNorthwest : eDirectionNortheast;
+        loungerFacesNorthWest ? eDirectionNortheast : eDirectionNorthwest;
     plans->PlanToWait(settle, eBodyPositionChaise, loungerBody, loungerHead);
+    // MIRRORED WITH THE POSE ABOVE. The settle pose and the sleep strip must
+    // agree, or the villager lies down one way and then sleeps the other --
+    // the exact defect reported on the hammock. Both now take the opposite
+    // arm of the same test, so they stay in step.
     if (loungerFacesNorthWest) {
-        plans->PlanToPlayAnim(total - settle, "SleepNW", false, 0.02f);
-    } else {
         plans->PlanToPlayAnim(total - settle, "SleepNE", false, 0.02f);
+    } else {
+        plans->PlanToPlayAnim(total - settle, "SleepNW", false, 0.02f);
     }
 
     // The sigh is deliberately NOT interleaved with the rest any more.

@@ -982,21 +982,53 @@ class TheTreatmentPoseFollowsTheLounger(unittest.TestCase):
             text,
             "the spa settle pose does not supply a body direction")
 
-    def test_the_body_and_head_directions_agree(self):
-        """A body facing NE under a head facing NW would look wrong either way.
+    def test_the_receiving_pose_is_mirrored_and_internally_consistent(self):
+        """The receiving pose takes the MIRROR arm, and all three agree.
 
-        Both come from the SAME orientation test at every site, so they cannot
-        disagree -- the property the settle pose and the sleep strip already
-        share.
+        The owner playtested B189 and reported the villager still lying across
+        the lounger, with the diagnosis: "flip the villager orientation
+        horizontally for the spa receiving actions."
+
+        WHY FIVE EARLIER ROUNDS MISSED THIS. Every previous attempt argued
+        about WHICH orientation should take WHICH strip -- northeast versus
+        northwest -- and B189 added a handle gate so the spa rule could not
+        reach ordinary chaises. None of it could work, because the receiving
+        pose needs the MIRROR of whatever the lounger's facing selects. Both
+        placements were wrong together, so tuning the selector could only swap
+        which one looked wrong.
+
+        NE(0) and NW(3) are the horizontal mirror pair for both EDirection and
+        EHeadDirection, so the flip is taking the opposite arm of the same
+        test.
+
+        Two properties are pinned here. First the mirror itself. Second the
+        original property this test protected and which still matters: body,
+        head and sleep strip all derive from ONE test, so a body facing NE
+        under a head facing NW is impossible.
         """
         text = _source()
-        start = text.index("EDirection loungerBody =")
-        body = text[start:start + 200]
+        start = text.index("static void VF2PlanSpaTreatment(")
+        end = text.index("\n}\n", start)
+        body = text[start:end]
+
         self.assertIn(
-            "loungerFacesNorthWest ? eDirectionNorthwest : eDirectionNortheast",
+            "loungerFacesNorthWest ? eDirectionNortheast : eDirectionNorthwest",
             body,
-            "the settle body direction is no longer derived from the same test "
-            "as the head direction and the sleep strip")
+            "the receiving body direction is not mirrored; the villager will "
+            "lie across the lounger, which is what the owner reported on B189")
+        self.assertIn(
+            "loungerFacesNorthWest ? eHeadDirectionNE : eHeadDirectionNW",
+            body,
+            "the receiving head direction is not mirrored")
+
+        # The strip must mirror WITH them, or the villager settles one way and
+        # sleeps the other -- the defect originally reported on the hammock.
+        anim = body[body.index("if (loungerFacesNorthWest) {"):]
+        anim = anim[:anim.index("}", anim.index("else"))]
+        self.assertLess(
+            anim.index('"SleepNE"'), anim.index('"SleepNW"'),
+            "the sleep strip is not mirrored with the pose, so the settle and "
+            "the sleep disagree")
 
     def test_edirection_is_not_confused_with_furniture_orientation(self):
         """The two enums order their values DIFFERENTLY and must not be swapped.
@@ -1089,15 +1121,27 @@ class TheTreatmentPoseFollowsTheLounger(unittest.TestCase):
         # `orientation == 3` gave both placements the NE strip and SW came
         # back wrong while SE came back right.
         #
-        # FOURTH QUESTION, and the one the owner stated outright: the villager
-        # faces the way the lounger faces, head and body.
+        # SUPERSEDED, KEPT AS THE FAILED APPROACH (AGENTS.md 11). This read:
         #
-        #   orientation 0 (SE) -> NE direction, NE head, SleepNE
-        #   orientation 1 (SW) -> NW direction, NW head, SleepNW
+        #   "FOURTH QUESTION, and the one the owner stated outright: the
+        #    villager faces the way the lounger faces, head and body.
         #
-        # Asked of VF2SpaLoungerFacesNorthWest, which answers only for a spa
-        # lounger handle so ordinary Lounge Chairs sharing this branch keep
-        # the NE strip they were confirmed working with. Both
+        #      orientation 0 (SE) -> NE direction, NE head, SleepNE
+        #      orientation 1 (SW) -> NW direction, NW head, SleepNW"
+        #
+        # B189 shipped exactly that and the owner playtested it: the villager
+        # was STILL lying across the lounger. The receiving pose needs the
+        # MIRROR of whatever the orientation test picks, so both placements
+        # were wrong together and no choice of arm could have fixed it.
+        #
+        # FIFTH AND CURRENT: the receiving pose takes the OPPOSITE arm --
+        # orientation 0 -> NW, orientation 1 -> NE -- pinned by
+        # test_the_receiving_pose_is_mirrored_and_internally_consistent.
+        #
+        # Still asked of VF2SpaLoungerFacesNorthWest, which answers only for a
+        # spa lounger handle so ordinary Lounge Chairs sharing this branch keep
+        # the strip they were confirmed working with. That gate is unchanged
+        # and still correct. Both
         # the settle pose and the sleep strip still derive from a SINGLE test,
         # which is what makes it impossible for the two to disagree -- the
         # exact defect the owner reported on the hammock, where the lie-down
