@@ -119,6 +119,15 @@ Lounge Chairs should behave exactly as they did in B188.
     bytes   144,562,636
     built from main at 3a598d2 (PR #348)
 
+The build itself ran from the pre-merge branch commit `d0d1fd7`, which the
+squash merge replaced with `3a598d2`. That is stated rather than glossed,
+because `d0d1fd7` does not resolve in the published repository and a release
+should not cite a checkout nobody can obtain. The two are equivalent, and it
+was checked rather than assumed: the generator blob is identical at both
+revisions (`1552440a5e18019c278f82c28517d8ca4eedc29c`) and a tree-wide
+`git diff d0d1fd7 3a598d2` is empty. `3a598d2` is therefore the revision to
+audit this artifact against.
+
 All three gates passed on this exact file: the repository release gate with
 `--require-identities` (32 variants, 7467 members, identities authenticated),
 an artifact verifier (8 checks, 0 failed) and a comparator against the B188
