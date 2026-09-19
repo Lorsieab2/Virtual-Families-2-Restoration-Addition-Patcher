@@ -276,11 +276,16 @@ class EveryRouteUsesIt(unittest.TestCase):
             "plans->PlanToWork(ldwGameState::GetRandom(11) + 55);", drop,
             "the GIVING villager's duration changed, so the two halves no "
             "longer match -- update both or record why they differ")
-        self.assertRegex(
-            src,
-            r"PlanToPlayAnim\(ldwGameState::GetRandom\(180\) \+ 180, sleepAnim",
-            "the hammock's sleep length changed; the treatment copies it, so "
-            "either update both or record why they now differ")
+        # The treatment copies the hammock's strip length verbatim, so pin the
+        # hammock's own helper. (Matched inside VF2PlanHammockRest rather than
+        # against a variable name: the hammock rest was rewritten to the native
+        # drop's table and its `sleepAnim` local went away, which broke a
+        # source-wide regex that was really asking about the DURATION.)
+        hammock = _function(src, "static void VF2PlanHammockRest(")
+        self.assertIn(
+            "ldwGameState::GetRandom(180) + 180,", hammock,
+            "the hammock's sleep length changed; the spa treatment copies it, "
+            "so either update both or record why they now differ")
 
     def test_the_strip_length_is_independent_of_the_tick_budget(self):
         """PlanToPlayAnim frames and PlanToWait ticks are different units."""
