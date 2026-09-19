@@ -34112,9 +34112,17 @@ static void VF2RefreshWorkoutEligibility(unsigned char *data)
     *(unsigned int *)(yoga + 0x0C) = yogaPlaced ? 450 : 0;
 }
 
+// Despite the hammock-specific name this is the per-decision refresh hook:
+// it is called from CVillagerAI::DecideWhatToDo, and it already re-evaluates
+// three unrelated candidates whose gates change while the household runs.
+// The workout gates belong here for the same reason.  Configuring them only
+// in VF2EnableAutonomousCandidates would leave a Home Gym or Yoga item bought
+// after load uncastable until a reload, and one SOLD after load still offered
+// -- which lands in the handler with no venue and silently does nothing.
 extern "C" void __cdecl VF2RefreshHammockEligibility(void *villager)
 {
     unsigned char *data = (unsigned char *)villager;
+    VF2RefreshWorkoutEligibility(data);
     unsigned char *candidate = data + 0x6BB8 + 0x023 * 0xD0;
     const int weatherAllowsHammock = Weather.currentType == 0 || Weather.currentType == 1;
     const int hammockAllowsAction = weatherAllowsHammock && AnyHammockInWorld();

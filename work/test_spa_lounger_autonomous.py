@@ -667,9 +667,46 @@ class TestOnlyReceivingIsAutonomous(unittest.TestCase):
                 "admits the Yoga candidate too and yields a silent no-op")
             self.assertNotIn("0x0B4, 450, 0x75", src)
 
-        # The refresh must actually run.
-        with self.subTest(item="refresh is called"):
+        # The refresh must actually run, and run OFTEN ENOUGH.
+        #
+        # Review caught this: configuring the gates only in
+        # VF2EnableAutonomousCandidates is not sufficient, because its emitted
+        # call sites are the CVillager::InitAI and LoadAI epilogues -- once per
+        # load. Furniture is bought and sold while the household runs, so a
+        # Home Gym placed after load stayed uncastable until a reload, and one
+        # sold after load stayed offered and landed in the handler with no
+        # venue: the exact silent no-op this gating exists to prevent.
+        #
+        # The fix reuses the existing per-decision hook rather than adding a
+        # second patch site. VF2RefreshHammockEligibility is what
+        # CVillagerAI::DecideWhatToDo calls, and despite its name it is the
+        # general "re-evaluate volatile gates" routine -- it already refreshes
+        # the hammock, playhouse and snow candidates.
+        #
+        # Asserting the call merely appears SOMEWHERE in the source is what
+        # allowed the defect through: the load-time call satisfied it. Pin the
+        # per-decision hook by name.
+        with self.subTest(item="refresh runs at load"):
             self.assertIn("VF2RefreshWorkoutEligibility(data);", src)
+
+        with self.subTest(item="refresh runs per decision"):
+            hook_start = src.index(
+                'extern "C" void __cdecl VF2RefreshHammockEligibility(')
+            hook = src[hook_start:src.index(chr(10) + "}" + chr(10), hook_start)]
+            self.assertIn(
+                "VF2RefreshWorkoutEligibility(data);", hook,
+                "the workout gates are refreshed only at family load. "
+                "Furniture bought after load leaves the candidate disabled "
+                "until a reload, and furniture sold after load leaves it "
+                "enabled and able to produce a silent no-op. Call the workout "
+                "refresh from the per-decision hook as well.")
+
+        with self.subTest(item="per-decision hook is wired to DecideWhatToDo"):
+            self.assertIn(
+                '_VF2RefreshHammockEligibility', src,
+                "the per-decision refresh symbol is gone, so nothing "
+                "re-evaluates the volatile gates during play")
+            self.assertIn("?DecideWhatToDo@CVillagerAI@@AAEXAAVCVillager@@@Z", src)
 
         # The three object-gated ones must not fall back to inheriting.
         for target in ("0x0B1", "0x0B2", "0x0B8"):
