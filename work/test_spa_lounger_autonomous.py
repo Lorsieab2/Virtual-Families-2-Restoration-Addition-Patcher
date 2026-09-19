@@ -552,33 +552,47 @@ class TestOnlyReceivingIsAutonomous(unittest.TestCase):
         self.assertIn("if (VF2SpaOccupantIndex(villager, slot, 0)) continue;", body)
 
     def test_the_treatment_matches_the_nap(self):
-        """SUPERSEDED by the round-11 fix. Kept as a no-op marker.
+        """SUPERSEDED. Kept as a no-op marker so the history stays visible.
 
-        This pinned the PlanToWait/Sleep-strip approach that failed ten
-        playtest rounds. The owner's instruction was to copy the normal
-        chaise loungers, which use PlanToLieDown and supply no pose,
-        direction, head or strip at all.
+        This pinned an approach that failed in play: it hardcoded body
+        position 0x17 (eBodyPositionChaise) for BOTH lounger orientations
+        and then varied the direction, head or sleep strip. The body sprite
+        is itself orientation-dependent -- the stock chaise dispatch uses
+        0x17 at orientation 1 and 9 (eBodyPositionRestingHammock) otherwise
+        -- so no direction value could ever correct an orientation-0 lounger.
 
-        The replacement rules live in
-        work/test_spa_pose_matches_hammock.py.
+        A PlanToLieDown-only variant was also tried and rejected: it supplies
+        no facing, so the villager turned when the eyes closed.
+
+        The current rules are pinned in work/test_spa_lounger_pose.py: one
+        helper, VF2PlanSpaLoungerRest, with body by orientation, head and
+        strip from the same predicate, and the 3-argument PlanToWait.
         """
         self.skipTest(
-            "superseded: the spa treatment now copies the normal lounger "
-            "(PlanToLieDown); see test_spa_pose_matches_hammock.py")
+            "superseded: the spa pose now selects the BODY POSITION by "
+            "orientation via VF2PlanSpaLoungerRest; see "
+            "work/test_spa_lounger_pose.py")
     def test_receiving_uses_sleep_animation_and_preserves_total_duration(self):
-        """SUPERSEDED by the round-11 fix. Kept as a no-op marker.
+        """SUPERSEDED. Kept as a no-op marker so the history stays visible.
 
-        This pinned the PlanToWait/Sleep-strip approach that failed ten
-        playtest rounds. The owner's instruction was to copy the normal
-        chaise loungers, which use PlanToLieDown and supply no pose,
-        direction, head or strip at all.
+        This pinned an approach that failed in play: it hardcoded body
+        position 0x17 (eBodyPositionChaise) for BOTH lounger orientations
+        and then varied the direction, head or sleep strip. The body sprite
+        is itself orientation-dependent -- the stock chaise dispatch uses
+        0x17 at orientation 1 and 9 (eBodyPositionRestingHammock) otherwise
+        -- so no direction value could ever correct an orientation-0 lounger.
 
-        The replacement rules live in
-        work/test_spa_pose_matches_hammock.py.
+        A PlanToLieDown-only variant was also tried and rejected: it supplies
+        no facing, so the villager turned when the eyes closed.
+
+        The current rules are pinned in work/test_spa_lounger_pose.py: one
+        helper, VF2PlanSpaLoungerRest, with body by orientation, head and
+        strip from the same predicate, and the 3-argument PlanToWait.
         """
         self.skipTest(
-            "superseded: the spa treatment now copies the normal lounger "
-            "(PlanToLieDown); see test_spa_pose_matches_hammock.py")
+            "superseded: the spa pose now selects the BODY POSITION by "
+            "orientation via VF2PlanSpaLoungerRest; see "
+            "work/test_spa_lounger_pose.py")
     def test_added_furniture_candidates_require_their_own_furniture(self):
         """Each added item is offered only when ITS OWN furniture is placed.
 
@@ -708,19 +722,26 @@ class TestOnlyReceivingIsAutonomous(unittest.TestCase):
                     "again" % target)
 
     def test_the_nudge_and_the_settle_select_the_same_lounger(self):
-        """SUPERSEDED by the round-11 fix. Kept as a no-op marker.
+        """SUPERSEDED. Kept as a no-op marker so the history stays visible.
 
-        This pinned the PlanToWait/Sleep-strip approach that failed ten
-        playtest rounds. The owner's instruction was to copy the normal
-        chaise loungers, which use PlanToLieDown and supply no pose,
-        direction, head or strip at all.
+        This pinned an approach that failed in play: it hardcoded body
+        position 0x17 (eBodyPositionChaise) for BOTH lounger orientations
+        and then varied the direction, head or sleep strip. The body sprite
+        is itself orientation-dependent -- the stock chaise dispatch uses
+        0x17 at orientation 1 and 9 (eBodyPositionRestingHammock) otherwise
+        -- so no direction value could ever correct an orientation-0 lounger.
 
-        The replacement rules live in
-        work/test_spa_pose_matches_hammock.py.
+        A PlanToLieDown-only variant was also tried and rejected: it supplies
+        no facing, so the villager turned when the eyes closed.
+
+        The current rules are pinned in work/test_spa_lounger_pose.py: one
+        helper, VF2PlanSpaLoungerRest, with body by orientation, head and
+        strip from the same predicate, and the 3-argument PlanToWait.
         """
         self.skipTest(
-            "superseded: the spa treatment now copies the normal lounger "
-            "(PlanToLieDown); see test_spa_pose_matches_hammock.py")
+            "superseded: the spa pose now selects the BODY POSITION by "
+            "orientation via VF2PlanSpaLoungerRest; see "
+            "work/test_spa_lounger_pose.py")
     def test_every_receiving_label_is_reachable_from_both_routes(self):
         """The autonomous route must roll across ALL of the labels.
 
@@ -775,16 +796,13 @@ class TestOnlyReceivingIsAutonomous(unittest.TestCase):
         helper = src[src.index("static ldwPoint VF2SpaTreatmentPoint"):src.index("static char const *const kVF2SpaReceivingLabels", src.index("static ldwPoint VF2SpaTreatmentPoint"))]
         self.assertIn("point.y -= 4;", helper)
 
-        # ONE ORIENTATION ALSO MOVES 4px LEFT, requested by the owner from a
-        # screenshot and scoped to that placement only. The vertical nudge
-        # above still applies to BOTH placements; only the horizontal one is
-        # conditional, so the placement the owner did not report as offset
-        # must not move sideways.
-        self.assertIn("point.x -= 4;", helper)
+        # THE HORIZONTAL NUDGE IS PER ORIENTATION: 4px left at orientation 1,
+        # 2px left at orientation 0, each from an owner screenshot of the
+        # confirmed pose. Pinned in detail by work/test_spa_lounger_pose.py.
+        self.assertIn("if (VF2SpaLoungerHasHandle(handle)) {", helper)
         self.assertIn(
-            "if (!VF2SpaLoungerFacesNorthWest(orientation, handle)) {", helper,
-            "the horizontal nudge is no longer scoped to one orientation, so "
-            "it would move a placement the owner did not report as offset")
+            "point.x -= VF2SpaLoungerFacesNorthWest(orientation, handle) ? 4 : 2;",
+            helper)
 
     def test_manual_giving_uses_the_same_one_minute_duration(self):
         src = _source()
@@ -1134,33 +1152,47 @@ class TheTreatmentPoseFollowsTheLounger(unittest.TestCase):
             if not line.lstrip().startswith("//"))
 
     def test_the_chaise_pose_supplies_a_body_direction(self):
-        """SUPERSEDED by the round-11 fix. Kept as a no-op marker.
+        """SUPERSEDED. Kept as a no-op marker so the history stays visible.
 
-        This pinned the PlanToWait/Sleep-strip approach that failed ten
-        playtest rounds. The owner's instruction was to copy the normal
-        chaise loungers, which use PlanToLieDown and supply no pose,
-        direction, head or strip at all.
+        This pinned an approach that failed in play: it hardcoded body
+        position 0x17 (eBodyPositionChaise) for BOTH lounger orientations
+        and then varied the direction, head or sleep strip. The body sprite
+        is itself orientation-dependent -- the stock chaise dispatch uses
+        0x17 at orientation 1 and 9 (eBodyPositionRestingHammock) otherwise
+        -- so no direction value could ever correct an orientation-0 lounger.
 
-        The replacement rules live in
-        work/test_spa_pose_matches_hammock.py.
+        A PlanToLieDown-only variant was also tried and rejected: it supplies
+        no facing, so the villager turned when the eyes closed.
+
+        The current rules are pinned in work/test_spa_lounger_pose.py: one
+        helper, VF2PlanSpaLoungerRest, with body by orientation, head and
+        strip from the same predicate, and the 3-argument PlanToWait.
         """
         self.skipTest(
-            "superseded: the spa treatment now copies the normal lounger "
-            "(PlanToLieDown); see test_spa_pose_matches_hammock.py")
+            "superseded: the spa pose now selects the BODY POSITION by "
+            "orientation via VF2PlanSpaLoungerRest; see "
+            "work/test_spa_lounger_pose.py")
     def test_the_settle_and_the_strip_have_DIFFERENT_mappings(self):
-        """SUPERSEDED by the round-11 fix. Kept as a no-op marker.
+        """SUPERSEDED. Kept as a no-op marker so the history stays visible.
 
-        This pinned the PlanToWait/Sleep-strip approach that failed ten
-        playtest rounds. The owner's instruction was to copy the normal
-        chaise loungers, which use PlanToLieDown and supply no pose,
-        direction, head or strip at all.
+        This pinned an approach that failed in play: it hardcoded body
+        position 0x17 (eBodyPositionChaise) for BOTH lounger orientations
+        and then varied the direction, head or sleep strip. The body sprite
+        is itself orientation-dependent -- the stock chaise dispatch uses
+        0x17 at orientation 1 and 9 (eBodyPositionRestingHammock) otherwise
+        -- so no direction value could ever correct an orientation-0 lounger.
 
-        The replacement rules live in
-        work/test_spa_pose_matches_hammock.py.
+        A PlanToLieDown-only variant was also tried and rejected: it supplies
+        no facing, so the villager turned when the eyes closed.
+
+        The current rules are pinned in work/test_spa_lounger_pose.py: one
+        helper, VF2PlanSpaLoungerRest, with body by orientation, head and
+        strip from the same predicate, and the 3-argument PlanToWait.
         """
         self.skipTest(
-            "superseded: the spa treatment now copies the normal lounger "
-            "(PlanToLieDown); see test_spa_pose_matches_hammock.py")
+            "superseded: the spa pose now selects the BODY POSITION by "
+            "orientation via VF2PlanSpaLoungerRest; see "
+            "work/test_spa_lounger_pose.py")
     def test_edirection_is_not_confused_with_furniture_orientation(self):
         """The two enums order their values DIFFERENTLY and must not be swapped.
 
@@ -1179,58 +1211,86 @@ class TheTreatmentPoseFollowsTheLounger(unittest.TestCase):
                          "direction")
 
     def test_the_treatment_never_uses_the_flat_lying_pose(self):
-        """SUPERSEDED by the round-11 fix. Kept as a no-op marker.
+        """SUPERSEDED. Kept as a no-op marker so the history stays visible.
 
-        This pinned the PlanToWait/Sleep-strip approach that failed ten
-        playtest rounds. The owner's instruction was to copy the normal
-        chaise loungers, which use PlanToLieDown and supply no pose,
-        direction, head or strip at all.
+        This pinned an approach that failed in play: it hardcoded body
+        position 0x17 (eBodyPositionChaise) for BOTH lounger orientations
+        and then varied the direction, head or sleep strip. The body sprite
+        is itself orientation-dependent -- the stock chaise dispatch uses
+        0x17 at orientation 1 and 9 (eBodyPositionRestingHammock) otherwise
+        -- so no direction value could ever correct an orientation-0 lounger.
 
-        The replacement rules live in
-        work/test_spa_pose_matches_hammock.py.
+        A PlanToLieDown-only variant was also tried and rejected: it supplies
+        no facing, so the villager turned when the eyes closed.
+
+        The current rules are pinned in work/test_spa_lounger_pose.py: one
+        helper, VF2PlanSpaLoungerRest, with body by orientation, head and
+        strip from the same predicate, and the 3-argument PlanToWait.
         """
         self.skipTest(
-            "superseded: the spa treatment now copies the normal lounger "
-            "(PlanToLieDown); see test_spa_pose_matches_hammock.py")
+            "superseded: the spa pose now selects the BODY POSITION by "
+            "orientation via VF2PlanSpaLoungerRest; see "
+            "work/test_spa_lounger_pose.py")
     def test_both_orientations_use_the_reclined_pose(self):
-        """SUPERSEDED by the round-11 fix. Kept as a no-op marker.
+        """SUPERSEDED. Kept as a no-op marker so the history stays visible.
 
-        This pinned the PlanToWait/Sleep-strip approach that failed ten
-        playtest rounds. The owner's instruction was to copy the normal
-        chaise loungers, which use PlanToLieDown and supply no pose,
-        direction, head or strip at all.
+        This pinned an approach that failed in play: it hardcoded body
+        position 0x17 (eBodyPositionChaise) for BOTH lounger orientations
+        and then varied the direction, head or sleep strip. The body sprite
+        is itself orientation-dependent -- the stock chaise dispatch uses
+        0x17 at orientation 1 and 9 (eBodyPositionRestingHammock) otherwise
+        -- so no direction value could ever correct an orientation-0 lounger.
 
-        The replacement rules live in
-        work/test_spa_pose_matches_hammock.py.
+        A PlanToLieDown-only variant was also tried and rejected: it supplies
+        no facing, so the villager turned when the eyes closed.
+
+        The current rules are pinned in work/test_spa_lounger_pose.py: one
+        helper, VF2PlanSpaLoungerRest, with body by orientation, head and
+        strip from the same predicate, and the 3-argument PlanToWait.
         """
         self.skipTest(
-            "superseded: the spa treatment now copies the normal lounger "
-            "(PlanToLieDown); see test_spa_pose_matches_hammock.py")
+            "superseded: the spa pose now selects the BODY POSITION by "
+            "orientation via VF2PlanSpaLoungerRest; see "
+            "work/test_spa_lounger_pose.py")
     def test_the_shared_chaise_paths_recline_on_a_spa_lounger(self):
-        """SUPERSEDED by the round-11 fix. Kept as a no-op marker.
+        """SUPERSEDED. Kept as a no-op marker so the history stays visible.
 
-        This pinned the PlanToWait/Sleep-strip approach that failed ten
-        playtest rounds. The owner's instruction was to copy the normal
-        chaise loungers, which use PlanToLieDown and supply no pose,
-        direction, head or strip at all.
+        This pinned an approach that failed in play: it hardcoded body
+        position 0x17 (eBodyPositionChaise) for BOTH lounger orientations
+        and then varied the direction, head or sleep strip. The body sprite
+        is itself orientation-dependent -- the stock chaise dispatch uses
+        0x17 at orientation 1 and 9 (eBodyPositionRestingHammock) otherwise
+        -- so no direction value could ever correct an orientation-0 lounger.
 
-        The replacement rules live in
-        work/test_spa_pose_matches_hammock.py.
+        A PlanToLieDown-only variant was also tried and rejected: it supplies
+        no facing, so the villager turned when the eyes closed.
+
+        The current rules are pinned in work/test_spa_lounger_pose.py: one
+        helper, VF2PlanSpaLoungerRest, with body by orientation, head and
+        strip from the same predicate, and the 3-argument PlanToWait.
         """
         self.skipTest(
-            "superseded: the spa treatment now copies the normal lounger "
-            "(PlanToLieDown); see test_spa_pose_matches_hammock.py")
+            "superseded: the spa pose now selects the BODY POSITION by "
+            "orientation via VF2PlanSpaLoungerRest; see "
+            "work/test_spa_lounger_pose.py")
     def test_the_orientation_still_picks_the_animation(self):
-        """SUPERSEDED by the round-11 fix. Kept as a no-op marker.
+        """SUPERSEDED. Kept as a no-op marker so the history stays visible.
 
-        This pinned the PlanToWait/Sleep-strip approach that failed ten
-        playtest rounds. The owner's instruction was to copy the normal
-        chaise loungers, which use PlanToLieDown and supply no pose,
-        direction, head or strip at all.
+        This pinned an approach that failed in play: it hardcoded body
+        position 0x17 (eBodyPositionChaise) for BOTH lounger orientations
+        and then varied the direction, head or sleep strip. The body sprite
+        is itself orientation-dependent -- the stock chaise dispatch uses
+        0x17 at orientation 1 and 9 (eBodyPositionRestingHammock) otherwise
+        -- so no direction value could ever correct an orientation-0 lounger.
 
-        The replacement rules live in
-        work/test_spa_pose_matches_hammock.py.
+        A PlanToLieDown-only variant was also tried and rejected: it supplies
+        no facing, so the villager turned when the eyes closed.
+
+        The current rules are pinned in work/test_spa_lounger_pose.py: one
+        helper, VF2PlanSpaLoungerRest, with body by orientation, head and
+        strip from the same predicate, and the 3-argument PlanToWait.
         """
         self.skipTest(
-            "superseded: the spa treatment now copies the normal lounger "
-            "(PlanToLieDown); see test_spa_pose_matches_hammock.py")
+            "superseded: the spa pose now selects the BODY POSITION by "
+            "orientation via VF2PlanSpaLoungerRest; see "
+            "work/test_spa_lounger_pose.py")

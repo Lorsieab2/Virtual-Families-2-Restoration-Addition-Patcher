@@ -428,19 +428,26 @@ class OrientationComesFromTheOrientationField(unittest.TestCase):
         self.assertIn("eHeadDirectionNW = 3", SOURCE)
 
     def test_the_lounger_facing_follows_the_furniture_for_both_placements(self):
-        """SUPERSEDED by the round-11 fix. Kept as a no-op marker.
+        """SUPERSEDED. Kept as a no-op marker so the history stays visible.
 
-        This pinned the PlanToWait/Sleep-strip approach that failed ten
-        playtest rounds. The owner's instruction was to copy the normal
-        chaise loungers, which use PlanToLieDown and supply no pose,
-        direction, head or strip at all.
+        This pinned an approach that failed in play: it hardcoded body
+        position 0x17 (eBodyPositionChaise) for BOTH lounger orientations
+        and then varied the direction, head or sleep strip. The body sprite
+        is itself orientation-dependent -- the stock chaise dispatch uses
+        0x17 at orientation 1 and 9 (eBodyPositionRestingHammock) otherwise
+        -- so no direction value could ever correct an orientation-0 lounger.
 
-        The replacement rules live in
-        work/test_spa_pose_matches_hammock.py.
+        A PlanToLieDown-only variant was also tried and rejected: it supplies
+        no facing, so the villager turned when the eyes closed.
+
+        The current rules are pinned in work/test_spa_lounger_pose.py: one
+        helper, VF2PlanSpaLoungerRest, with body by orientation, head and
+        strip from the same predicate, and the 3-argument PlanToWait.
         """
         self.skipTest(
-            "superseded: the spa treatment now copies the normal lounger "
-            "(PlanToLieDown); see test_spa_pose_matches_hammock.py")
+            "superseded: the spa pose now selects the BODY POSITION by "
+            "orientation via VF2PlanSpaLoungerRest; see "
+            "work/test_spa_lounger_pose.py")
     def test_resting_body_targets_all_four_colored_loungers(self):
         chaise = next(
             spec for spec in patcher.MOBILE_FURNITURE_MANUAL_BINDING_SPECS

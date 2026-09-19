@@ -206,28 +206,70 @@ class OrdinaryChaisesAreUntouched(unittest.TestCase):
 
 
 class TheInputOrientationIsTheRealLoungers(unittest.TestCase):
-    def test_the_drop_route_reads_the_lounger_under_the_villager(self):
+    def test_the_drop_route_describes_one_placement_not_a_hybrid(self):
+        """receiveInfo must describe the lounger under the villager entirely.
+
+        LinkPeepToFurniture(eObjectChaise, ...) can resolve a different
+        ordinary chaise. Patching only the orientation (an earlier revision)
+        left a hybrid: orientation from one placement, point and handle from
+        another, so the walk target, nudge, hold release and treatment
+        disagreed. Review caught it. The receiving handler's pattern is
+        copied: re-resolve at this lounger's point, VERIFY the handle, then
+        take the whole record.
+        """
         src = _strip_comments(_source())
         h = _function(src, "static bool VF2HandleMobileInvisibleSpaLounger(CVillager &villager)")
-        self.assertIn("receiveInfo.orientation = actualOrientation;", h,
-                      "receiveInfo comes from LinkPeepToFurniture(eObjectChaise), "
-                      "which any ordinary chaise satisfies; without this the "
-                      "pose follows the wrong furniture's orientation")
-        self.assertLess(h.index("receiveInfo.orientation = actualOrientation;"),
-                        h.index("VF2PlanSpaTreatment("))
+        for needle, why in (
+            ("VF2SpaLoungerRecordUnderVillager(villager)",
+             "the drop route no longer looks up the lounger under the villager"),
+            ("if (receiveInfo.unknown0 != spaHandle) {",
+             "the drop route no longer checks whether the shared-object link "
+             "resolved a different chaise"),
+            ("FurnitureManager.FindFurniture(",
+             "the drop route no longer re-resolves at the real lounger's point"),
+            ("ownInfo.unknown0 == spaHandle) {",
+             "the re-resolved placement is not verified against the handle"),
+            ("receiveInfo = ownInfo;",
+             "the WHOLE record is not adopted -- a hybrid is possible again"),
+            ("receiveInfo.orientation = *reinterpret_cast<int *>(spaRecord + 0x10);",
+             "orientation is not read from the verified record"),
+        ):
+            self.assertIn(needle, h, why)
+        for correction in (
+                "receiveInfo = ownInfo;",
+                "receiveInfo.orientation = *reinterpret_cast<int *>(spaRecord + 0x10);"):
+            self.assertLess(h.index(correction), h.index("VF2SpaTreatmentPoint("),
+                            "the placement is corrected after the walk target "
+                            "is computed, so the nudge targets the wrong "
+                            "furniture: " + correction)
+        self.assertNotIn("actualOrientation", h,
+                         "the one-field patch that produced the hybrid is back")
 
-    def test_the_autonomous_route_reads_the_verified_record(self):
+    def test_the_nudge_is_per_orientation(self):
+        """Three owner requests, each from a screenshot of a confirmed pose:
+        orientation 1 (head upper-right) 4px left; orientation 0 (head
+        upper-left) 4px left in round 8, then 2px right, net 2px left."""
         src = _strip_comments(_source())
-        h = _function(src, "static bool VF2HandleMobileSpaLoungerReceiving(CVillager &villager)")
+        f = _function(src, "static ldwPoint VF2SpaTreatmentPoint(")
+        self.assertIn("point.y -= 4;", f)
+        self.assertIn("if (VF2SpaLoungerHasHandle(handle)) {", f,
+                      "the horizontal nudge no longer covers both spa "
+                      "orientations")
         self.assertIn(
-            "info.orientation = *reinterpret_cast<int *>(spaRecord + 0x10);", h)
+            "point.x -= VF2SpaLoungerFacesNorthWest(orientation, handle) ? 4 : 2;",
+            f,
+            "orientation 1 must move 4px left and orientation 0 2px left; "
+            "any other split contradicts one of the owner's screenshots")
+        self.assertNotIn("point.x -= 4;", f,
+                         "the one-orientation nudge is back")
 
 
 class NothingElseWasLost(unittest.TestCase):
     def test_spa_behaviours_and_gates_are_present(self):
         src = _source()
         for needle in ("VF2PlanSpaTreatment", "VF2SpaLoungerHasHandle",
-                       "point.y -= 4;", "point.x -= 4;",
+                       "point.y -= 4;",
+                       "point.x -= VF2SpaLoungerFacesNorthWest(orientation, handle) ? 4 : 2;",
                        '"Relaxing in the spa"', '"Getting a massage"',
                        "bool spaLoungerInWorld ="):
             self.assertIn(needle, src, needle)

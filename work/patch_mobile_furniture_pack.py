@@ -30073,72 +30073,26 @@ static ldwPoint VF2SpaTreatmentPoint(ldwPoint point, int orientation,
     // only the walk-to destination used by the receiving routes.
     point.y -= 4;
 
-    // ONE PLACEMENT ALSO SITS FOUR PIXELS TOO FAR RIGHT.
+    // THE HORIZONTAL NUDGE IS PER ORIENTATION, from three owner requests, each
+    // made from a screenshot with the pose already confirmed correct. The
+    // orientation in each screenshot was read from the verified pose model
+    // (orientation 1 lies SleepNE, head at the upper-RIGHT end; orientation 0
+    // lies SleepNW, head at the upper-LEFT end), not guessed:
     //
-    // Requested by the owner from a screenshot, scoped to that placement only:
-    // "do you mind moving the villager horizontally left by 4 pixels for this
-    // lounger orientation only?" -- and when asked which of the two loungers,
-    // the owner answered: the one the villager was lying on.
+    //   orientation 0 (head upper-left):  round 8 asked 4px left, confirmed
+    //     in play; then, 2026-09-19, from a screenshot of the corrected pose:
+    //     "nudge this villagers position 2 pixels right for this furniture
+    //     orientation". Net: 2px left.
+    //   orientation 1 (head upper-right): 2026-09-19, from a screenshot of
+    //     the corrected pose: "now do you mind moving this villager's
+    //     position 4 px to the left for this furniture orientation only?"
+    //     Net: 4px left.
     //
-    // WHICH ORIENTATION THAT IS, HONESTLY STATED. The screenshot establishes
-    // WHICH LOUNGER, not which orientation VALUE the engine reports for it.
-    // Review flagged exactly this: if the pictured placement is SE(0) rather
-    // than SW(1), this branch leaves the reported offset untouched and shifts
-    // the placement that was NOT reported as offset.
-    //
-    // The branch below therefore encodes an inference, not a measurement, and
-    // it is labelled as one. Review has now raised this twice, so the reason
-    // it is NOT being flipped on that basis is recorded in full:
-    //
-    // AN EARLIER VERSION OF THIS COMMENT OVERSTATED THE CASE, and review was
-    // right to reject it. It argued that because the settle and this nudge
-    // read the SAME predicate, the owner's photograph of the wrong settle
-    // pose therefore pinned this arm too.
-    //
-    // THAT INFERENCE DOES NOT HOLD. The settle is a TERNARY: it supplies a
-    // facing on BOTH arms, so it corrects the photographed placement whichever
-    // arm that placement takes. It therefore says nothing about WHICH arm that
-    // is. This nudge is a one-sided `if` that fires on one arm only. The two
-    // are not symmetric, and the earlier comment treated them as if they were.
-    //
-    // WHAT IS ACTUALLY KNOWN: the screenshot fixes WHICH LOUNGER, not the
-    // orientation VALUE the engine reports for it. Reading that value needs
-    // the instrumented plan-logging build, which writes vf2_plan_log.txt on
-    // every plan and has no place in a shipping artifact. So this arm is an
-    // UNVERIFIED ASSUMPTION, and the coupling test pins that assumption rather
-    // than proving it -- exactly as review stated.
-    //
-    // WHY IT SHIPS ANYWAY, with the risk stated plainly: `point.y -= 4` above
-    // is unconditional and covers BOTH placements, so only the 4px HORIZONTAL
-    // nudge is at stake, on ONE placement. Making it unconditional was
-    // considered and rejected: the owner asked for it "for this lounger
-    // orientation only", so applying it to both would contradict the request.
-    // The failure mode is that one lounger keeps a 4px horizontal offset and
-    // the other gains one -- visible immediately in the very playtest that is
-    // the next step, and correctable by flipping one condition.
-    //
-    // Flipping it on a reviewer's hypothesis, against the owner's photograph,
-    // is precisely the failure mode of the six earlier rounds: each reasoned
-    // from a plausible model instead of from what was observed, and each
-    // moved which placement looked broken. Owner observation outranks
-    // inference here.
-    //
-    // If the owner reports the nudge landed on the wrong lounger, flip this
-    // single condition to `!VF2SpaLoungerFacesNorthWest` -- nothing else in
-    // the fix depends on it. That remains a one-line correction, which is why
-    // the inference is an acceptable risk rather than a blocking unknown.
-    //
-    // This is a pure walk-to nudge: it does not touch the furniture's
-    // orientation, identity, pose or animation, and it cannot reach an
-    // ordinary Lounge Chair because the handle gate answers false for those.
-    // FLIPPED on the owner's round-8 playtest: "ALSO YOUR NUDGING OF THE
-    // POSITION FOR THE OTHER SPA LOUNGER ORIENTATION DIDN'T WORK!"
-    //
-    // The previous arm was an acknowledged inference, and review flagged it
-    // twice as unproven. It was wrong. This is now the arm the owner
-    // confirmed in play, which is the evidence that was missing before.
-    if (!VF2SpaLoungerFacesNorthWest(orientation, handle)) {
-        point.x -= 4;
+    // A pure walk-to nudge: furniture orientation, identity, pose and
+    // animation are untouched. It cannot reach an ordinary Lounge Chair: the
+    // handle gate answers false there.
+    if (VF2SpaLoungerHasHandle(handle)) {
+        point.x -= VF2SpaLoungerFacesNorthWest(orientation, handle) ? 4 : 2;
     }
     return point;
 }
@@ -30217,51 +30171,35 @@ static bool VF2SpaOccupantIndex(CVillager &dropped, int loungerSlot, CVillager *
     return false;
 }
 
-// THE SPA LOUNGER THE VILLAGER IS ACTUALLY ON.
+// THE SPA LOUNGER RECORD UNDER THE VILLAGER, or 0.
 //
-// ROOT CAUSE OF THE REPEATED POSE BUG, established by tracing the runtime
-// path rather than by guessing constants:
+// VF2HandleMobileInvisibleSpaLounger is the only handler registered for the
+// spa lounger item ids, and it builds receiveInfo from
+// LinkPeepToFurniture(eObjectChaise, ...). eObjectChaise is shared by EVERY
+// ordinary chaise and that call resolves purely by object, so receiveInfo can
+// describe different furniture than the lounger the villager is lying on.
+// The handler already computes the exact slot under the villager for its
+// occupancy checks; this returns that slot's record when it is a spa lounger.
 //
-//   VF2HandleMobileInvisibleSpaLounger is the ONLY handler registered for
-//   the spa lounger item ids (0x32F, 0x330). It computes the exact slot
-//   under the villager's feet for its occupancy checks --
-//   VF2FurnitureSlotUnderVillager -- and then THROWS IT AWAY, posing from
-//   LinkPeepToFurniture(eObjectChaise, ...) instead.
-//
-//   eObjectChaise is shared by EVERY ordinary chaise. LinkPeepToFurniture
-//   resolves purely by object, so receiveInfo can describe a DIFFERENT
-//   piece of furniture than the lounger the villager is lying on. The pose
-//   then follows that other chaise's orientation.
-//
-// This is why no choice of strip constant could ever be right: the
-// orientation feeding the pose was not the lounger's. It is the same
-// shared-object defect as the Exercise Bike / Treadmill bug (B188), which
-// was fixed by separating the lookup rather than by tuning the consumer.
-//
-// The hammock never had this problem because eObjectHammock belongs to
-// hammocks alone, so its info.orientation is genuinely its own.
-//
-// Field offsets are copied from the working reader at
-// VF2AddedFurniturePlacement: slot records are manager + 0x1008 + i * 0x40,
-// item id at +0x00, handle at +0x04, placed flag bit 0 at +0x0C,
-// orientation at +0x10.
-static bool VF2SpaLoungerOrientationUnderVillager(
-    CVillager &villager, int &outOrientation)
+// Field offsets are copied from the existing reader in
+// VF2AddedFurniturePlacement: records at manager + 0x1008 + i * 0x40, item id
+// +0x00, handle +0x04, placed bit 0 at +0x0C, orientation +0x10, point
+// +0x14/+0x18.
+static unsigned char *VF2SpaLoungerRecordUnderVillager(CVillager &villager)
 {
     int slot = VF2FurnitureSlotUnderVillager(villager);
-    if (slot < 0) return false;
+    if (slot < 0) return 0;
     unsigned char *manager = reinterpret_cast<unsigned char *>(&FurnitureManager);
     int count = *reinterpret_cast<int *>(manager + 0x1004);
-    if (slot >= count) return false;
+    if (slot >= count) return 0;
     unsigned char *record = manager + 0x1008 + slot * 0x40;
-    if ((*reinterpret_cast<unsigned int *>(record + 0x0C) & 1) == 0) return false;
+    if ((*reinterpret_cast<unsigned int *>(record + 0x0C) & 1) == 0) return 0;
     int itemId = *reinterpret_cast<int *>(record);
     if (itemId != __VF2_INVISIBLE_SPA_LOUNGER_ITEM_ID__ &&
         itemId != __VF2_SPA_LOUNGER_ITEM_ID__) {
-        return false;
+        return 0;
     }
-    outOrientation = *reinterpret_cast<int *>(record + 0x10);
-    return true;
+    return record;
 }
 
 static bool VF2HandleMobileInvisibleSpaLounger(CVillager &villager)
@@ -30313,6 +30251,41 @@ static bool VF2HandleMobileInvisibleSpaLounger(CVillager &villager)
         return false;
     }
 
+    // MAKE receiveInfo DESCRIBE THE LOUNGER THE VILLAGER IS ACTUALLY ON --
+    // all of it, not one field. Review caught that patching only the
+    // orientation left a HYBRID: orientation from the dropped-on lounger,
+    // point and handle from whatever chaise the shared-object link resolved.
+    // The walk target, the nudge, the hold release and the treatment would
+    // then operate on two different placements.
+    //
+    // This is the receiving handler's own pattern, copied: re-resolve at
+    // this lounger's placement point, then VERIFY the handle matches before
+    // trusting anything. If the villager is not on a spa lounger, receiveInfo
+    // is left exactly as the stock link produced it.
+    if (unsigned char *spaRecord = VF2SpaLoungerRecordUnderVillager(villager)) {
+        int const spaHandle = *reinterpret_cast<int *>(spaRecord + 0x04);
+        if (receiveInfo.unknown0 != spaHandle) {
+            ldwPoint loungerPlacement = {
+                *reinterpret_cast<int *>(spaRecord + 0x14),
+                *reinterpret_cast<int *>(spaRecord + 0x18)};
+            // FindFurniture is the read-only lookup: it reserves nothing, so
+            // it is safe to ask after the link above has already reserved.
+            // If it does not land on THIS handle the stock record stands --
+            // the link is already made and cannot be given back, so refusing
+            // the drop here would only strand it.
+            sFurnitureInfo2 ownInfo = {};
+            if (FurnitureManager.FindFurniture(
+                    CContentMap::eObjectChaise, loungerPlacement, ownInfo,
+                    true, 0, 0) &&
+                ownInfo.unknown0 == spaHandle) {
+                receiveInfo = ownInfo;
+            }
+        }
+        // The pose is what the player sees, so it follows the lounger under
+        // the villager even in the fallback above.
+        receiveInfo.orientation = *reinterpret_cast<int *>(spaRecord + 0x10);
+    }
+
     // This is a PLAYER DROP, so it wins. An autonomous recipient may already
     // be walking to this lounger -- VF2SpaOccupantIndex cannot see them, and
     // the link above cannot see the custom hold either -- but refusing the
@@ -30324,20 +30297,6 @@ static bool VF2HandleMobileInvisibleSpaLounger(CVillager &villager)
     // walker is left to re-evaluate the way any other interrupted behaviour
     // does. Only the claim on THIS lounger goes; a walker heading elsewhere
     // keeps theirs.
-    // CORRECT THE ORIENTATION BEFORE IT REACHES THE POSE.
-    //
-    // receiveInfo came from LinkPeepToFurniture(eObjectChaise, ...), which
-    // resolves by an object EVERY ordinary chaise shares, so its
-    // orientation may belong to different furniture entirely. The slot
-    // under the villager's feet is the lounger they are actually on, and
-    // the handler already computes it above for the occupancy checks.
-    //
-    // If the villager is not on a spa lounger, leave receiveInfo alone:
-    // that is the stock path and it is not this fix's business.
-    int actualOrientation = 0;
-    if (VF2SpaLoungerOrientationUnderVillager(villager, actualOrientation)) {
-        receiveInfo.orientation = actualOrientation;
-    }
     VF2SpaReleaseHoldOnLounger(receiveInfo.unknown0, &villager);
     plans->ForgetPlans(villager, false);
     VF2SetActionLabel(
