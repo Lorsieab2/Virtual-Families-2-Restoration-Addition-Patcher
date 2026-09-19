@@ -1,18 +1,118 @@
 # VF2 B190 release notes
 
-**The patcher bundle.** Prerelease for testing.
+**The patcher bundle.** Prerelease for testing. **Updated in place** — this
+release was first published from `94bcf83` (PR #350) and has been rebuilt from
+`d4215ca` with PRs #352 and #353; the artifact identity at the bottom names
+the bundle that is actually attached.
 
-B190 exists for **one** defect: the spa lounger orientation (#330), on its
-**sixth** attempt.
+B190 exists for **one** defect: the spa lounger pose (#330). The first
+published build was the sixth attempt and did not fix it. The rebuild ships
+the twenty-first, which the owner confirmed in play.
 
-## What the owner reported
+## What actually fixed it (PR #353)
+
+The stock game's own chaise dispatch, decoded from the shipped binary at
+`.text+0x37444`:
+
+    orientation == 1 -> body 0x17 (eBodyPositionChaise)         + SleepNE
+    otherwise        -> body 9    (eBodyPositionRestingHammock) + SleepNW
+
+**The body position is orientation-dependent.** Every earlier round — all six
+published attempts and the fourteen probe builds after them — hardcoded body
+`0x17` for **both** orientations and then varied the direction, the head or
+the sleep strip. `0x17` is the orientation-1 sprite; on an orientation-0
+lounger it lies *across* the furniture whatever direction is supplied. A
+direction argument cannot fix a wrong body sprite, which is why "one lounger
+right, one wrong" survived every permutation of the other three arguments.
+
+The spa loungers now use one body table, `VF2PlanSpaLoungerPose`, at every
+route that puts a villager on one (both chaise relax sites and the spa
+treatment), with the head selected from the same predicate through the
+3-argument `PlanToWait` — the hammock's shape. The spa treatment settles
+through that table and only then plays the sleep strip; the relax rolls
+(reading, studying, sitting) hold the pose awake for their full duration, as
+the ordinary chaise does.
+
+Everything below the **History** heading describes models that were published
+or proposed and are now known to be wrong. They are kept, marked, because
+each one was re-derived from scratch at least once when its predecessor was
+deleted.
+
+## Also in this rebuild
+
+| change | PR |
+|---|---|
+| Walk-target nudges on the spa loungers, per orientation: head-at-upper-right placement 4px left; head-at-upper-left placement net 2px left. Both from the owner's screenshots of the confirmed pose. | #353 |
+| The drop route uses the placement the engine linked, whole — review caught two revisions that patched it from the slot under the villager and left a hybrid record. | #353 |
+| Autonomous spa treatment is offered only while a spa lounger (visible or invisible) is in the house. | #353 |
+| Home Gym and Yoga Mat autonomous workouts gated on their object being placed. | #352 |
+
+## What to check
+
+Drop a villager on **each** spa lounger, and let one pick the spa on its own.
+
+**Pass:** the villager lies **along** the lounger with the head at the raised
+end, on both placements, and the pose does **not** change when the eyes
+close. A villager who picks "Reading a book" or "Studying on the lounger" on
+a spa lounger stays awake for it.
+
+**Fail:** lying *across* the lounger on either placement; the pose flipping
+when the eyes close; a reader falling asleep after ten ticks.
+
+Ordinary and mobile **Lounge Chairs** should behave exactly as they did in
+B189 — their branches are byte-identical to what shipped.
+
+## Evidence
+
+| Check | Result |
+|---|---|
+| Owner playtest of the pose | confirmed on probe v10, commit `2a0bbbb` |
+| Spa pose, autonomous and orientation suites | 79 passed, 10 skipped (pose 20, autonomous, orientation) |
+| Full regression suite | 1142 passed, 31 skipped, 8577 subtests, 0 failed (13:34) |
+| Mutations caught | 23 of 23 (body table, strip, call shape, each relax site, the hybrid, awake rolls sleeping, naps eyes-open, the drop link landing on an ordinary chaise, three wrong nudge splits) |
+| Codex review rounds on #353 | 9 rounds on #353, 17 findings, each fixed and answered in its thread; a tenth request drew no response in 40 minutes |
+| Matrix build | 32/32 linked, EXIT=0, 54 min, 0 executables inherited from B189 |
+| Export | 8226 of 8226 Images/Assets files reproduced byte-for-byte; 7455 payload files |
+| Repository gate, identities enforced | PASS — 32 variants authenticated, 7467 members, no features lost vs 10 retained releases |
+
+The pose fix is a property of the emitted instruction stream, not of any
+string or file, so the identity gates above establish that the rebuild did
+not regress B189; the owner's playtest is what establishes the fix.
+
+## Artifact identity
+
+    VF2-B190-Release.zip
+    sha256  6456dc8eeddcf52a6d06eb2578f6a2bfe5d61978cad57ac91c481e27362b6189
+    bytes   144,548,873
+    built from main at d4215ca (PR #353)
+    tree    e82df5255f372c9555e19dc2309fedf63a3502d3
+
+> **Superseded identity** — the bundle first attached to this release:
+>
+>     sha256  971d7da169ed8374b3a25b9cb769a16f069f90bfeeeb83d943cbc9cb84e7953f
+>     bytes   144,562,545
+>     built from main at 94bcf83 (PR #350)
+>     tree    c133f411076f7ad29321094ec710cb60ae9067ac
+>
+> That build carried the mirror model below and failed the owner's playtest.
+
+---
+
+## History — superseded models, kept as written
+
+> **EVERYTHING FROM HERE DOWN IS SUPERSEDED** by the body-table fix above.
+> Each block was the published or proposed explanation at the time and was
+> disproved in play. The common error in all of them: body `0x17` on both
+> orientations.
+
+### What the owner reported
 
 The owner playtested the published B189 patcher, photographed the villager
 **still lying across the lounger**, and diagnosed it directly:
 
 > flip the villager orientation horizontally for the spa receiving actions
 
-## Why five earlier rounds could not have worked
+### Why five earlier rounds could not have worked
 
 Every previous attempt argued about **which** orientation takes **which**
 animation strip — northeast versus northwest — and B189 added a handle gate so
@@ -28,7 +128,7 @@ the selector wrong for one placement, on top of the mirror wrong for both.
 Fixing the selector in B189 made both consistently wrong instead of fixing
 either.
 
-## The fix
+### The fix
 
 `NE(0)` and `NW(3)` are the horizontal mirror pair for both `EDirection` and
 `EHeadDirection`, so the flip is taking the opposite arm of the same test.
@@ -62,7 +162,7 @@ either.
 > the defect, which is why the original wording is retained and marked rather
 > than deleted.
 
-## Scope — what was deliberately not touched
+### Scope — what was deliberately not touched
 
 `VF2PlanSpaTreatment` only, which is the **receiving** pose. Traced rather than
 assumed: it has exactly two callers, both receiving routes, and there are
@@ -75,7 +175,7 @@ exactly three `eBodyPositionChaise` pose sites in the generator.
 | shared `VF2FurnitureFacesNorthWest` | still `orientation == 3`, unchanged since B187 |
 | B189's handle gate | **still in force** — it was never the problem |
 
-## Evidence, and its limits
+### Evidence, and its limits
 
 | Check | Result |
 |---|---|
@@ -100,7 +200,7 @@ the suite.
 > not a defect. The first two mutations still stand. This one is recorded as
 > wrong so nobody reinstates it as a guard against the current behaviour.
 
-## What is NOT claimed
+### What is NOT claimed
 
 **Corrected claim.** This section originally said the fix was "not verifiable
 from the artifact". That was **overstated**, and review was right to push back:
@@ -143,7 +243,7 @@ a villager lying correctly on a lounger.
 
 **Issue #330 stays open until the owner confirms it in play.**
 
-## What to check
+### What to check
 
 > **SUPERSEDED — this section told the tester to expect the wrong thing.**
 > It originally read: *"Both should lie **along** the lounger, facing the way
@@ -212,7 +312,7 @@ Worth a glance too, since they share the same code branch: ordinary and mobile
 **Lounge Chairs** should behave exactly as they did in B189 — those were
 confirmed working and are deliberately untouched.
 
-## Artifact identity
+### Artifact identity
 
     VF2-B190-Release.zip
     sha256  971d7da169ed8374b3a25b9cb769a16f069f90bfeeeb83d943cbc9cb84e7953f
