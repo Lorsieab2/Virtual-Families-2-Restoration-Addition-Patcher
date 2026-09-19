@@ -27344,6 +27344,19 @@ static bool VF2HandleMobileChaise(CVillager &villager)
             VF2PlanSpaLoungerPose(plans, info.orientation, duration);
         }
     } else if (info.orientation == 1) {
+        // ORDINARY AND MOBILE LOUNGE CHAIRS ONLY. Spa loungers no longer
+        // reach this branch: the handle test above routes them to
+        // VF2PlanSpaLoungerPose / VF2PlanSpaLoungerRest. Everything below
+        // this line was written while they still did, so its claims that
+        // this route "reaches the INVISIBLE Spa Lounger", that the
+        // three-argument wait caused the body misalignment, and that
+        // VF2PlanSpaTreatment takes a mirrored mapping are SUPERSEDED: the
+        // spa pose uses the three-argument form and the stock chaise's own
+        // orientation mapping, by decision, and the misalignment was the
+        // body sprite. The code of this branch is kept exactly as shipped
+        // and as the owner confirmed working; the history stays in place
+        // per AGENTS.md 11 and is not guidance for the spa loungers.
+        //
         // Plan the pose WITH a head direction. eBodyPositionChaise carries
         // no facing of its own, so a two-argument wait leaves the villager
         // pointing wherever they walked in from -- which is the "lying
@@ -29795,6 +29808,19 @@ static void VF2PlanLinkedChaiseAction(
             VF2PlanSpaLoungerPose(plans, info.orientation, duration);
         }
     } else if (info.orientation == 1) {
+        // ORDINARY AND MOBILE LOUNGE CHAIRS ONLY. Spa loungers no longer
+        // reach this branch: the handle test above routes them to
+        // VF2PlanSpaLoungerPose / VF2PlanSpaLoungerRest. Everything below
+        // this line was written while they still did, so its claims that
+        // this route "reaches the INVISIBLE Spa Lounger", that the
+        // three-argument wait caused the body misalignment, and that
+        // VF2PlanSpaTreatment takes a mirrored mapping are SUPERSEDED: the
+        // spa pose uses the three-argument form and the stock chaise's own
+        // orientation mapping, by decision, and the misalignment was the
+        // body sprite. The code of this branch is kept exactly as shipped
+        // and as the owner confirmed working; the history stays in place
+        // per AGENTS.md 11 and is not guidance for the spa loungers.
+        //
         // Plan the pose WITH a head direction. eBodyPositionChaise carries
         // no facing of its own, so a two-argument wait leaves the villager
         // pointing wherever they walked in from -- which is the "lying
