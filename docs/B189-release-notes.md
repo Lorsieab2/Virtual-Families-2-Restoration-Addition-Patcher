@@ -27,10 +27,19 @@ rather than on any check in this repository.
 
 ### Spa lounger orientation (#330) — DID NOT FIX IT
 
-> **EVERYTHING IN THIS SECTION IS HISTORICAL.** The owner playtested B189 and
-> the villager was **still lying across the lounger**. Do not follow any rule
-> stated below; it is recorded as the approach that failed. The current rule is
-> the mirrored receiving pose — see issue #330 and the B190 notes.
+> **THE MAPPING IN THIS SECTION IS HISTORICAL. THE HANDLE GATE IS NOT.** The
+> owner playtested B189 and the villager was **still lying across the
+> lounger**, so the NE/NW mapping recorded below is the approach that failed.
+> The current rule is the mirrored receiving pose — see issue #330 and the B190
+> notes.
+>
+> **Do not discard the whole section.** B189's other change — gating the spa
+> rule on the spa-lounger handle so it cannot reach ordinary Lounge Chairs —
+> is **correct, current, and still relied on** by the implementation. It is
+> described further down this section and remains in force. Removing it would
+> reintroduce a regression on furniture the owner confirmed working.
+>
+> Read below as: mapping ❌ historical · handle gate ✅ current.
 
 What B189 believed, and shipped:
 

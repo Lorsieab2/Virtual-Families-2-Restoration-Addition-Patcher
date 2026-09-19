@@ -38,9 +38,11 @@ visual description.
 > The owner also confirmed a lounger only ever occupies **two** orientations,
 > so the "2 and 3 unobserved" caveat described states that do not exist.
 >
-> **SUPERSEDED AGAIN — this mapping was also wrong.** It is kept here because
-> it was the conclusion at the time, and because the way it failed is the
-> useful part. It read:
+> **SUPERSEDED FOR THE SPA RECEIVING POSE ONLY — the mapping itself is still
+> correct for the two chaise relax poses.** Read that scope carefully: the
+> table below is NOT wrong everywhere. Applying it to the receiving pose is
+> what was disproved. A maintainer who reads this as "the mapping is wrong"
+> could go and "fix" the relax poses, which work. It read:
 >
 > > *Current expected mapping, and the rule the owner stated — the villager
 > > faces the way the lounger faces, head and body:*
@@ -50,10 +52,17 @@ visual description.
 > > | 0 (SE) | NE | NE | `SleepNE` |
 > > | 1 (SW) | NW | NW | `SleepNW` |
 >
-> B189 shipped that mapping and the owner playtested it: the villager was
-> **still lying across the lounger**. The owner's diagnosis was that the spa
-> **receiving** pose needs a **horizontal mirror**, not a different choice of
-> orientation.
+> B189 applied that mapping to the spa RECEIVING pose as well, and the owner
+> playtested it: the villager was **still lying across the lounger**. The
+> owner's diagnosis was that the receiving pose needs a **horizontal mirror**,
+> not a different choice of orientation.
+>
+> **Current scope of this mapping:**
+>
+> | site | mapping |
+> |---|---|
+> | two chaise relax poses | the table above, **unchanged and correct** |
+> | spa receiving pose (`VF2PlanSpaTreatment`) | the **mirror** of it |
 >
 > **Why every round up to here failed.** All of them, including this table,
 > argued about *which* orientation takes *which* strip. The receiving pose
