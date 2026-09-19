@@ -76,34 +76,45 @@ class TestSpaLoungersCopyTheNormalOnes(unittest.TestCase):
         """The spa treatment poses the villager the normal lounger's way."""
         spa = _spa_body(_source())
         self.assertIn(
-            "plans->PlanToLieDown(total);", spa,
+            "plans->PlanToLieDown(settleTicks);", spa,
             "the spa receiving treatment no longer uses PlanToLieDown for "
             "its full duration. The normal chaise loungers -- the ones the "
             "owner confirmed working -- use PlanToLieDown and nothing else.")
 
-    def test_the_receiving_treatment_plans_no_pose_or_strip(self):
-        """No PlanToWait, no Sleep strip: the normal loungers use neither.
+    def test_the_treatment_lies_down_and_then_sleeps(self):
+        """Owner: "they should lie down AND sleep too."
 
-        Ten rounds were spent tuning those arguments. The normal loungers
-        never supply them at all.
+        And: "the hammock already does the orientation-aware actions
+        correctly. use that."
+
+        The hammock's shape is a short settle that places the body, then
+        the orientation-matched Sleep strip for the remainder:
+
+            plans->PlanToWait(10, eBodyPositionRestingHammock, head);
+            char const *anim = facesNorthWest ? "SleepNW" : "SleepNE";
+            plans->PlanToPlayAnim(rest, anim, false, 0.02f);
+
+        The loungers use PlanToLieDown as their settle -- what the ordinary
+        chaises have always used -- then the same orientation-aware strip.
+        PlanToLieDown alone leaves the villager lying there awake.
         """
         spa = _spa_body(_source())
+        self.assertIn(
+            "plans->PlanToLieDown(settleTicks);", spa,
+            "the treatment no longer settles with PlanToLieDown")
+        self.assertIn(
+            "PlanToPlayAnim(", spa,
+            "the treatment lies down but never sleeps")
+        self.assertIn(
+            'info.orientation == 1 ? "SleepNW" : "SleepNE"', spa,
+            "the sleep strip is not orientation-aware. The hammock picks its "
+            "strip from the orientation; the loungers must do the same, or "
+            "one placement sleeps facing the wrong way.")
         self.assertNotIn(
-            "PlanToWait", spa,
-            "the spa treatment plans a PlanToWait pose again. Normal "
-            "loungers do not; they call PlanToLieDown and let the engine "
-            "derive the facing from the furniture.")
-        self.assertNotIn(
-            "Sleep", spa,
-            "the spa treatment plans a Sleep animation strip again. Normal "
-            "loungers plan no strip at all.")
-        for bad in ("eBodyPositionChaise", "eDirectionNorth",
-                    "eHeadDirection"):
-            self.assertNotIn(
-                bad, spa,
-                "the spa treatment supplies %s again. The normal loungers "
-                "supply no body position, direction or head -- that is the "
-                "whole point of copying them." % bad)
+            "eBodyPositionChaise", spa,
+            "the treatment supplies a chaise body position again. "
+            "PlanToLieDown places the body; that is the whole point of "
+            "copying the ordinary loungers.")
 
     def test_spa_loungers_are_not_forced_off_the_lie_down_path(self):
         """The relax branch must not special-case the spa handle.
@@ -121,9 +132,15 @@ class TestSpaLoungersCopyTheNormalOnes(unittest.TestCase):
             "them into the PlanToWait branch that every ordinary lounger "
             "avoids. That is the ten-round regression.")
         self.assertEqual(
-            src.count("if (info.orientation == 1) {"), 2,
-            "expected both chaise relax sites to use the stock "
-            "orientation-only condition")
+            src.count("if (info.orientation == 1) {"), 0,
+            "a chaise relax site branches on orientation again. Owner: "
+            "\"they should use the same plan\" -- both orientations take "
+            "PlanToLieDown plus an orientation-aware Sleep strip, not two "
+            "different pose mechanisms.")
+        self.assertEqual(
+            src.count("plans->PlanToLieDown(settleTicks);"), 3,
+            "expected all three lounger sites (two relax, one treatment) to "
+            "settle with PlanToLieDown")
 
     def test_every_route_into_the_lounger_uses_the_same_wiring(self):
         """Manual drop AND autonomous must share one pose implementation.
