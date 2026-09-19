@@ -30149,18 +30149,32 @@ static ldwPoint VF2SpaTreatmentPoint(ldwPoint point, int orientation,
     // it is labelled as one. Review has now raised this twice, so the reason
     // it is NOT being flipped on that basis is recorded in full:
     //
-    // THE NUDGE AND THE SETTLE ARE STRUCTURALLY COUPLED. Both key off the
-    // SAME predicate -- the settle through `loungerFacesNorthWest` and this
-    // through `VF2SpaLoungerFacesNorthWest`, which is that same test. They
-    // cannot select different loungers. And the owner's evidence for the two
-    // is ONE photograph of ONE lounger: they showed the wrong settle pose,
-    // then asked for the 4px nudge on "the one he's lying on".
+    // AN EARLIER VERSION OF THIS COMMENT OVERSTATED THE CASE, and review was
+    // right to reject it. It argued that because the settle and this nudge
+    // read the SAME predicate, the owner's photograph of the wrong settle
+    // pose therefore pinned this arm too.
     //
-    // So the arm is constrained by something already observed in play. If
-    // this branch were on the wrong placement, the SETTLE would also be
-    // correcting the wrong placement -- and the settle is the phase the owner
-    // photographed as wrong. Flipping the nudge alone would break that
-    // agreement and put the two phases on different loungers.
+    // THAT INFERENCE DOES NOT HOLD. The settle is a TERNARY: it supplies a
+    // facing on BOTH arms, so it corrects the photographed placement whichever
+    // arm that placement takes. It therefore says nothing about WHICH arm that
+    // is. This nudge is a one-sided `if` that fires on one arm only. The two
+    // are not symmetric, and the earlier comment treated them as if they were.
+    //
+    // WHAT IS ACTUALLY KNOWN: the screenshot fixes WHICH LOUNGER, not the
+    // orientation VALUE the engine reports for it. Reading that value needs
+    // the instrumented plan-logging build, which writes vf2_plan_log.txt on
+    // every plan and has no place in a shipping artifact. So this arm is an
+    // UNVERIFIED ASSUMPTION, and the coupling test pins that assumption rather
+    // than proving it -- exactly as review stated.
+    //
+    // WHY IT SHIPS ANYWAY, with the risk stated plainly: `point.y -= 4` above
+    // is unconditional and covers BOTH placements, so only the 4px HORIZONTAL
+    // nudge is at stake, on ONE placement. Making it unconditional was
+    // considered and rejected: the owner asked for it "for this lounger
+    // orientation only", so applying it to both would contradict the request.
+    // The failure mode is that one lounger keeps a 4px horizontal offset and
+    // the other gains one -- visible immediately in the very playtest that is
+    // the next step, and correctable by flipping one condition.
     //
     // Flipping it on a reviewer's hypothesis, against the owner's photograph,
     // is precisely the failure mode of the six earlier rounds: each reasoned

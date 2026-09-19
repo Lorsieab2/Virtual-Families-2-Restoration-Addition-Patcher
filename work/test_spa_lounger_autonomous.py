@@ -724,14 +724,20 @@ class TestOnlyReceivingIsAutonomous(unittest.TestCase):
         he's lying on". So the two corrections target the same placement by
         construction, not by coincidence.
 
-        Review twice suggested flipping the nudge arm on the grounds that the
-        screenshot does not establish the engine's orientation VALUE. That is
-        true and is labelled as an inference in the source. But flipping the
-        nudge ALONE would put the two phases on different loungers, and the
-        settle is the phase the owner actually photographed as wrong.
+        WHAT THIS TEST DOES NOT DO, stated plainly because an earlier version
+        of this docstring claimed otherwise. It does NOT prove the arm is
+        correct. Review pointed out the flaw in that argument: the settle is a
+        TERNARY supplying a facing on both arms, so it corrects the
+        photographed placement whichever arm that placement takes, and
+        therefore says nothing about which arm it is. The nudge is a one-sided
+        `if`. The two are not symmetric.
 
-        This pins the coupling so the two cannot silently diverge. If the arm
-        ever does need to change, BOTH must move together.
+        So the arm remains an UNVERIFIED ASSUMPTION -- reading the real value
+        needs the instrumented plan-logging build, which has no place in a
+        shipping artifact. What this test actually protects is narrower and
+        still worth having: that the two stay on the SAME predicate, so a
+        future edit cannot move one without the other and split the settle and
+        the nudge across different loungers.
         """
         src = _source()
 
