@@ -1214,32 +1214,47 @@ class TheTreatmentPoseFollowsTheLounger(unittest.TestCase):
             text,
             "the spa settle pose does not supply a body direction")
 
-    def test_the_settle_and_the_sleep_strip_take_the_same_arm(self):
-        """SUPERSEDED RULE REPLACED. They must AGREE, not oppose.
+    def test_the_settle_and_the_strip_have_DIFFERENT_mappings(self):
+        """They are NOT the same mapping, and that is deliberate.
 
-        An earlier round made the settle deliberately take the OPPOSITE arm
-        from the sleep strip. That was built on the belief that the settle's
-        direction argument was reaching the engine. The decoded binary
-        (work/VillagerPlans_patched_disasm.txt) showed the real cause: the
-        3-argument PlanToWait writes -1 into the body-direction field, so a
-        3-arg call supplies no facing at all.
+        Two rules, established from different evidence, and it is easy to
+        "tidy" them into agreement and break the fix:
 
-        With the 4-argument overload restored, body, head and strip are one
-        coherent phase and must take the SAME arm -- exactly as the working
-        hammock does (NW head with SleepNW).
+          SETTLE (body + head), eyes OPEN
+              true -> eDirectionNorthwest + eHeadDirectionNW
+            The body direction must be supplied via the FOUR-argument
+            PlanToWait; the 3-argument overload writes -1 into that field
+            (work/VillagerPlans_patched_disasm.txt), which is what left the
+            villager lying ACROSS the lounger.
 
-        Pinned in detail by work/test_spa_pose_matches_hammock.py.
+          SLEEP STRIP, eyes CLOSED
+              true -> "SleepNE"
+            This is B190's PLAYTESTED mapping. The owner confirmed this
+            phase correct: "once they close their eyes the position is
+            correct." It was never the broken one.
+
+        An earlier revision inverted the strip to make it match the head,
+        reasoning from the hammock's shape rather than from runtime
+        evidence. Review caught that it would break the confirmed-working
+        phase. The head and the strip evidently index facing differently.
+
+        DO NOT align them without new runtime evidence.
         """
         src = _source()
         self.assertIn(
             "loungerFacesNorthWest ? eHeadDirectionNW : eHeadDirectionNE",
-            src, "the head no longer maps NW on the true arm")
+            src, "the settle head no longer maps NW on the true arm")
         self.assertIn(
             "loungerFacesNorthWest ? eDirectionNorthwest : eDirectionNortheast",
-            src, "the body direction is missing or no longer matches the head")
+            src,
+            "the settle body direction is missing or no longer matches the "
+            "head; without it the 4-argument PlanToWait has nothing to place "
+            "in the body-direction field")
         self.assertIn(
             'loungerFacesNorthWest ? "SleepNE" : "SleepNW"', src,
-            "the sleep strip no longer takes the same arm as the head")
+            "the sleep strip no longer uses the PLAYTESTED arms "
+            "(true -> SleepNE). Inverting it to match the head breaks the "
+            "phase the owner confirmed correct in play.")
 
     def test_edirection_is_not_confused_with_furniture_orientation(self):
         """The two enums order their values DIFFERENTLY and must not be swapped.

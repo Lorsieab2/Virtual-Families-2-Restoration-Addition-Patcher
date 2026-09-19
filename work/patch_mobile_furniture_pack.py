@@ -27351,12 +27351,16 @@ static bool VF2HandleMobileChaise(CVillager &villager)
         // only so both strips stay reachable for the owner's next rotation
         // test; flattening everything to SleepNE would make that test
         // impossible to interpret.
-        // THREE ARGUMENTS, matching the working hammock. The engine exports
-        // only PlanToWait(int, EBodyPosition); the 3-arg (duration, body,
-        // head) form is what the hammock uses and it poses correctly. This
-        // site previously passed a 4th EDirection, which does not reach the
-        // function -- so the head value was discarded and the villager kept
-        // whatever facing they walked in with.
+        // FOUR ARGUMENTS. SUPERSEDED CLAIM, recorded rather than deleted
+        // (AGENTS.md 11): a round-9 detour dropped this to 3 arguments on
+        // the claim that "the engine exports only PlanToWait(int,
+        // EBodyPosition)" and that a 4th EDirection "does not reach the
+        // function". BOTH statements are FALSE. The decoded
+        // work/VillagerPlans_patched_disasm.txt shows the 4-argument
+        // overload exists and fills the body-direction field, while the
+        // 3-argument overload writes -1 into that field. Since
+        // eBodyPositionChaise carries no facing of its own, dropping to 3
+        // arguments is what leaves the villager lying ACROSS the furniture.
         plans->PlanToWait(
             duration, eBodyPositionChaise,
             VF2SpaLoungerFacesNorthWest(info.orientation, info.unknown0)
@@ -29773,12 +29777,16 @@ static void VF2PlanLinkedChaiseAction(
         // only so both strips stay reachable for the owner's next rotation
         // test; flattening everything to SleepNE would make that test
         // impossible to interpret.
-        // THREE ARGUMENTS, matching the working hammock. The engine exports
-        // only PlanToWait(int, EBodyPosition); the 3-arg (duration, body,
-        // head) form is what the hammock uses and it poses correctly. This
-        // site previously passed a 4th EDirection, which does not reach the
-        // function -- so the head value was discarded and the villager kept
-        // whatever facing they walked in with.
+        // FOUR ARGUMENTS. SUPERSEDED CLAIM, recorded rather than deleted
+        // (AGENTS.md 11): a round-9 detour dropped this to 3 arguments on
+        // the claim that "the engine exports only PlanToWait(int,
+        // EBodyPosition)" and that a 4th EDirection "does not reach the
+        // function". BOTH statements are FALSE. The decoded
+        // work/VillagerPlans_patched_disasm.txt shows the 4-argument
+        // overload exists and fills the body-direction field, while the
+        // 3-argument overload writes -1 into that field. Since
+        // eBodyPositionChaise carries no facing of its own, dropping to 3
+        // arguments is what leaves the villager lying ACROSS the furniture.
         plans->PlanToWait(
             duration, eBodyPositionChaise,
             VF2SpaLoungerFacesNorthWest(info.orientation, info.unknown0)
@@ -30113,16 +30121,21 @@ static void VF2PlanSpaTreatment(
     //     plans->PlanToWait(10, eBodyPositionRestingHammock, head);   // 3 ARGS
     //     char const *anim = facesNW ? "SleepNW" : "SleepNE";         // MATCHES head
     //
-    // Two differences from what this code had been doing for eight rounds:
+    // BOTH POINTS BELOW WERE WRONG AND ARE SUPERSEDED (AGENTS.md 11).
+    // They are kept because acting on them nearly shipped the defect again.
     //
-    // 1. THREE arguments, not four. The engine exports only
-    //    PlanToWait(int, EBodyPosition); the 3-arg form is what the working
-    //    hammock uses. Passing a 4th EDirection corrupted the call, so the
-    //    head value never took effect -- which is why BOTH arms of the
-    //    predicate produced the identical wrong pose in the screenshots.
+    // 1. WRONG: "THREE arguments, not four; the engine exports only
+    //    PlanToWait(int, EBodyPosition)". The decoded disassembly shows the
+    //    4-argument overload exists and fills the body-direction field,
+    //    while the 3-argument one writes -1 into it. The reclined pose
+    //    REQUIRES 4 arguments. The claim came from grepping this file for
+    //    referenced symbols instead of reading the binary.
     //
-    // 2. The head and the sleep strip go the SAME way. NW head with SleepNW.
-    //    This code had them deliberately OPPOSITE, which was wrong.
+    // 2. WRONG: "the head and the sleep strip go the SAME way". The strip
+    //    keeps its PLAYTESTED arms (true -> SleepNE), which the owner
+    //    confirmed correct in play. Only the SETTLE was ever wrong. The two
+    //    phases index facing differently; do not align them without
+    //    runtime evidence.
     EHeadDirection loungerHead =
         loungerFacesNorthWest ? eHeadDirectionNW : eHeadDirectionNE;
     // FOUR arguments, because the 3-arg overload stores -1 in the body
