@@ -1,28 +1,41 @@
-"""The spa receiving pose must supply a BODY DIRECTION, not just a head.
+"""The spa loungers must pose EXACTLY like the normal chaise loungers.
 
-GROUND TRUTH is work/VillagerPlans_patched_disasm.txt, which decodes the
-shipped CVillagerPlans. BOTH overloads exist:
+THE OWNER'S INSTRUCTION, after ten failed rounds:
 
-    3-arg  ?PlanToWait@CVillagerPlans@@QAEXHW4EBodyPosition@@W4EHeadDirection@@@Z
-    4-arg  ?PlanToWait@CVillagerPlans@@QAEXHW4EBodyPosition@@W4EDirection@@W4EHeadDirection@@@Z
+    "just copy the villager orientation/sleeping action data from the
+     normal chaise loungers."
 
-THE DECISIVE DETAIL: the 3-argument implementation writes -1 (0FFFFFFFFh)
-into the body-direction field at [ebp-3Ch]. It DISCARDS direction. The
-4-argument version fills that same field from its EDirection argument.
+WHAT THE NORMAL LOUNGERS ACTUALLY DO. `VF2HandleMobileChaise` is the
+handler driving the loungers the owner has confirmed working. Its pose
+branch is:
 
-eBodyPositionChaise carries no facing of its own, so a reclined pose that
-must align to the furniture REQUIRES the 4-argument overload. Calling the
-3-arg form leaves the villager lying ACROSS the lounger -- the defect the
-owner reported across nine playtest rounds.
+    if (info.orientation == 1) {
+        plans->PlanToWait(duration, eBodyPositionChaise, dir, head);
+    } else {
+        plans->PlanToLieDown(duration);        <-- normal loungers
+    }
 
-An earlier version of this file asserted the OPPOSITE, on the mistaken
-belief that only a 2-argument symbol existed. That belief came from
-grepping the generator for referenced symbols instead of reading the
-binary. Review caught it with the disassembly. Ground truth is the decoded
-implementation, not what the generator happens to mention.
+Ordinary loungers fall through to `PlanToLieDown` and nothing else: no
+`eBodyPositionChaise`, no supplied direction, no head, no Sleep strip.
+The engine derives the facing from the furniture itself. That is why
+those placements were never reported wrong.
+
+WHY TEN ROUNDS FAILED. The condition used to read
+
+    if (info.orientation == 1 || VF2SpaLoungerHasHandle(info.unknown0))
+
+which FORCED spa loungers into the `PlanToWait` branch while every
+ordinary lounger took `PlanToLieDown`. Every round then argued about
+which constants to feed that branch -- NE vs NW, coupled vs opposite
+arms, 3-arg vs 4-arg. The arguments were never the issue. The spa
+loungers were the only furniture routed into the only branch ever
+reported broken.
+
+These tests pin the fix: spa loungers take the same path as the normal
+ones, and the receiving treatment uses `PlanToLieDown` for its full
+duration.
 """
 import pathlib
-import re
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -44,122 +57,201 @@ def _strip_comments(text):
     return "\n".join(out)
 
 
-def _pred(match):
-    """Normalize a captured predicate: strip whitespace, keep any '!'.
-
-    Capturing the optional '!' is what makes a NEGATED predicate a different
-    token, so flipping one ternary alone is caught. Review showed that
-    without it, `!loungerFacesNorthWest` compared equal to the plain name
-    and the known-bad mutation passed.
-    """
-    return "".join(match.group(1).split())
-
-
 def _spa_body(src):
     start = src.index("static void VF2PlanSpaTreatment(")
     return _strip_comments(src[start:src.index("\n}\n", start)])
 
 
-class TestSpaPoseSuppliesBodyDirection(unittest.TestCase):
-    def test_the_engine_really_exports_the_four_argument_overload(self):
-        """Pin the ground truth so nobody re-derives it from the wrong place."""
+class TestSpaLoungersCopyTheNormalOnes(unittest.TestCase):
+    def test_plan_to_lie_down_is_a_real_engine_function(self):
+        """Ground truth, so nobody re-derives it from the generator."""
         if not DISASM.is_file():
             self.skipTest("disassembly not present in this checkout")
         text = DISASM.read_text(encoding="utf-8", errors="replace")
         self.assertIn(
-            "?PlanToWait@CVillagerPlans@@QAEXHW4EBodyPosition@@"
-            "W4EDirection@@W4EHeadDirection@@@Z", text,
-            "the 4-argument PlanToWait is missing from the decoded binary")
+            "?PlanToLieDown@CVillagerPlans@@QAEXH@Z", text,
+            "PlanToLieDown is missing from the decoded binary")
 
-    def test_the_spa_pose_passes_a_body_direction(self):
+    def test_the_receiving_treatment_uses_plan_to_lie_down(self):
+        """The spa treatment poses the villager the normal lounger's way."""
         spa = _spa_body(_source())
-        calls = re.findall(r"PlanToWait\(([^;]*)\);", spa, re.S)
-        self.assertTrue(calls, "VF2PlanSpaTreatment plans no pose at all")
-        for call in calls:
-            flat = re.sub(r"VF2SpaLoungerFacesNorthWest\([^)]*\)", "X", call)
-            argc = flat.count(",") + 1
-            self.assertEqual(
-                argc, 4,
-                "the spa pose passes %d arguments to PlanToWait. It must pass "
-                "4 (duration, body, DIRECTION, head): the 3-argument overload "
-                "writes -1 into the body-direction field, and "
-                "eBodyPositionChaise supplies no facing of its own, so the "
-                "villager ends up lying ACROSS the lounger. Call: %s"
-                % (argc, " ".join(flat.split())[:90]))
-        self.assertTrue(
-            re.search(r"eDirectionNorth(west|east)", spa),
-            "the spa pose passes no EDirection at all")
+        self.assertIn(
+            "plans->PlanToLieDown(total);", spa,
+            "the spa receiving treatment no longer uses PlanToLieDown for "
+            "its full duration. The normal chaise loungers -- the ones the "
+            "owner confirmed working -- use PlanToLieDown and nothing else.")
 
-    def test_body_and_head_take_the_same_arm(self):
-        """Body and head are ONE phase: they must not disagree.
+    def test_the_receiving_treatment_plans_no_pose_or_strip(self):
+        """No PlanToWait, no Sleep strip: the normal loungers use neither.
 
-        Checks the ternary PREDICATES, not token order. Review caught that
-        comparing first-occurrence positions let a flipped predicate pass.
+        Ten rounds were spent tuning those arguments. The normal loungers
+        never supply them at all.
         """
         spa = _spa_body(_source())
-        head = re.search(
-            r"(!?\s*\w+)\s*\?\s*eHeadDirectionNW\s*:\s*eHeadDirectionNE", spa)
-        body = re.search(
-            r"(!?\s*\w+)\s*\?\s*eDirectionNorthwest\s*:\s*eDirectionNortheast", spa)
-        self.assertIsNotNone(
-            head, "no 'pred ? eHeadDirectionNW : eHeadDirectionNE' found, so "
-                  "a flipped or restructured head mapping is not pinned")
-        self.assertIsNotNone(
-            body, "no 'pred ? eDirectionNorthwest : eDirectionNortheast' "
-                  "found, so a flipped body mapping is not pinned")
-        self.assertEqual(
-            _pred(head), _pred(body),
-            "the head and the body direction are driven by DIFFERENT "
-            "predicates (%s vs %s). They are the same phase and must agree, "
-            "or the villager's head and body point different ways."
-            % (_pred(head), _pred(body)))
+        self.assertNotIn(
+            "PlanToWait", spa,
+            "the spa treatment plans a PlanToWait pose again. Normal "
+            "loungers do not; they call PlanToLieDown and let the engine "
+            "derive the facing from the furniture.")
+        self.assertNotIn(
+            "Sleep", spa,
+            "the spa treatment plans a Sleep animation strip again. Normal "
+            "loungers plan no strip at all.")
+        for bad in ("eBodyPositionChaise", "eDirectionNorth",
+                    "eHeadDirection"):
+            self.assertNotIn(
+                bad, spa,
+                "the spa treatment supplies %s again. The normal loungers "
+                "supply no body position, direction or head -- that is the "
+                "whole point of copying them." % bad)
 
-    def test_the_sleep_strip_keeps_the_playtested_mapping(self):
-        """The strip is true -> SleepNE, false -> SleepNW. Do not "align" it.
+    def test_spa_loungers_are_not_forced_off_the_lie_down_path(self):
+        """The relax branch must not special-case the spa handle.
 
-        This is what B190 shipped and what the owner confirmed correct in
-        play: "once they close their eyes the position is correct." Only the
-        SETTLE was ever reported wrong.
-
-        An earlier revision inverted this to match the hammock's head/strip
-        pairing. That reasoning had no runtime evidence behind it, and review
-        caught that it would break the one phase already confirmed working.
-        The head and the strip evidently index their facing differently, so
-        they are NOT required to agree -- the owner separated the two phases
-        by photograph.
+        `|| VF2SpaLoungerHasHandle(info.unknown0)` is what routed spa
+        loungers into the PlanToWait branch while ordinary loungers took
+        PlanToLieDown. It is the reason they were the only furniture
+        exhibiting this bug.
         """
-        spa = _spa_body(_source())
-        anim = re.search(
-            r"(!?\s*\w+)\s*\?\s*\"(Sleep\w+)\"\s*:\s*\"(Sleep\w+)\"", spa)
-        if anim is None:
-            anim = re.search(
-                r"if\s*\(\s*(!?\s*\w+)\s*\)\s*\{[^}]*\"(Sleep\w+)\"[^}]*\}"
-                r"\s*else\s*\{[^}]*\"(Sleep\w+)\"", spa, re.S)
-        self.assertIsNotNone(
-            anim, "no sleep-strip selection found in the spa pose")
+        src = _strip_comments(_source())
+        self.assertNotIn(
+            "info.orientation == 1 || VF2SpaLoungerHasHandle(info.unknown0)",
+            src,
+            "the relax pose branch special-cases spa loungers again, forcing "
+            "them into the PlanToWait branch that every ordinary lounger "
+            "avoids. That is the ten-round regression.")
         self.assertEqual(
-            _pred(anim), "loungerFacesNorthWest",
-            "the strip is no longer driven by the plain lounger predicate")
+            src.count("if (info.orientation == 1) {"), 2,
+            "expected both chaise relax sites to use the stock "
+            "orientation-only condition")
+
+    def test_every_route_into_the_lounger_uses_the_same_wiring(self):
+        """Manual drop AND autonomous must share one pose implementation.
+
+        The owner asked for this directly: "make sure both manual drops and
+        autonomous behaviors if they exist use that same wiring."
+
+        There are two handlers that pose a villager on a spa lounger:
+
+          VF2HandleMobileInvisibleSpaLounger    manual drop, invisible item
+          VF2HandleMobileSpaLoungerReceiving    visible item, and the
+                                                registered AUTONOMOUS handler
+
+        Both must delegate to VF2PlanSpaTreatment rather than posing the
+        villager themselves, so a future fix cannot correct one route and
+        leave the other broken.
+        """
+        src = _strip_comments(_source())
+
+        for handler in ("VF2HandleMobileInvisibleSpaLounger",
+                        "VF2HandleMobileSpaLoungerReceiving"):
+            # The DEFINITION, not the forward declaration: match the
+            # opening brace, since both share the same signature line.
+            start = src.index(
+                "static bool %s(CVillager &villager)%s{" % (handler, chr(10)))
+            body = src[start:src.index(chr(10) + "}" + chr(10), start)]
+            self.assertIn(
+                "VF2PlanSpaTreatment(", body,
+                "%s no longer delegates to VF2PlanSpaTreatment, so it can "
+                "drift away from the other route's pose" % handler)
+            for bad in ("PlanToWait", "PlanToLieDown", "SleepN"):
+                self.assertNotIn(
+                    bad, body,
+                    "%s poses the villager itself (%s). Both routes must go "
+                    "through VF2PlanSpaTreatment so there is exactly one "
+                    "implementation to keep correct." % (handler, bad))
+
         self.assertEqual(
-            anim.group(2), "SleepNE",
-            "the strip's TRUE arm is %s, but the playtested B190 mapping is "
-            "SleepNE. The owner confirmed the eyes-closed phase CORRECT; "
-            "inverting it breaks the one phase that worked."
-            % anim.group(2))
+            src.count("VF2PlanSpaTreatment(plans, villager,"), 2,
+            "expected exactly two call sites -- the manual-drop handler and "
+            "the autonomous/receiving handler")
+
+        self.assertIn(
+            '"handler": "VF2HandleMobileSpaLoungerReceiving"', _source(),
+            "the autonomous registration no longer points at the receiving "
+            "handler, so autonomous selection would use a different path")
+
+    def test_the_autonomous_route_needs_a_spa_lounger_in_the_house(self):
+        """Owner: the autonomous route must require a spa lounger present.
+
+        "the autonomous route should depend on either the spa lounger or the
+        invisible spa lounger being present in the house."
+
+        The candidate is gated on eObjectChaise, which EVERY ordinary
+        lounger shares. Without an item-level gate the spa behaviour could
+        be selected with no spa lounger placed at all;
+        VF2FindFreeSpaLoungerSlot would then refuse it, but only after the
+        villager had spent a decision on it -- the same silent no-op the
+        Home Gym and Yoga gating exists to prevent.
+        """
+        src = _strip_comments(_source())
+        self.assertIn("bool spaLoungerInWorld =", src,
+                      "the spa autonomous eligibility flag is gone")
+
+        # Check the GATE EXPRESSION itself, not merely that the macro name
+        # appears somewhere in the file -- it appears in the slot finder too,
+        # so a file-wide search passes even when the gate tests only one id.
+        gs = src.index("bool spaLoungerInWorld =")
+        gate = src[gs:src.index(";", gs)]
+        for macro in ("__VF2_INVISIBLE_SPA_LOUNGER_ITEM_ID__",
+                      "__VF2_SPA_LOUNGER_ITEM_ID__"):
+            self.assertIn(
+                macro, gate,
+                "the spa gate expression does not test %s. BOTH the visible "
+                "and the invisible lounger must satisfy it, exactly as "
+                "VF2FindFreeSpaLoungerSlot tests both. Gate was: %s"
+                % (macro, " ".join(gate.split())))
         self.assertEqual(
-            anim.group(3), "SleepNW",
-            "the strip's FALSE arm is %s, expected SleepNW" % anim.group(3))
+            gate.count("IsInWorld"), 2,
+            "expected exactly two IsInWorld tests in the spa gate, one per "
+            "lounger item; got: %s" % " ".join(gate.split()))
+
+        self.assertIn(
+            "VF2HandleMobileSpaLoungerReceiving,%s            spaLoungerInWorld"
+            % chr(10), src,
+            "the autonomous candidate no longer uses spaLoungerInWorld as "
+            "its eligibility, so it can be offered with no spa lounger "
+            "placed")
+
+    def test_invisible_furniture_pairs_with_its_visible_twin(self):
+        """Owner: apply the same wiring to the other invisible furniture.
+
+        Every invisible item must be registered alongside its visible twin
+        so either one satisfies the behaviour. Checked rather than assumed,
+        because a handler that lists only one id silently ignores the other.
+        """
+        src = _source()
+        for invisible, visible in (
+            ("INVISIBLE_SPA_LOUNGER_ITEM_ID", "SPA_LOUNGER_ITEM_ID"),
+            ("INVISIBLE_PATIO_TABLE_ITEM_ID", "MOBILE_PATIO_TABLE_ITEM_ID"),
+            ("INVISIBLE_PICNIC_TABLE_ITEM_ID", "MOBILE_PICNIC_TABLE_ITEM_ID"),
+        ):
+            with self.subTest(item=invisible):
+                paired = ("%s, %s" % (invisible, visible) in src
+                          or "%s, %s" % (visible, invisible) in src)
+                self.assertTrue(
+                    paired,
+                    "%s is not registered together with %s, so one of the "
+                    "two items would not trigger the behaviour"
+                    % (invisible, visible))
+
+        # The invisible Lounger rides the shared chaise list.
+        self.assertIn("INVISIBLE_LOUNGER_ITEM_ID,", src)
+        # Yoga accepts the patcher item and the stock one.
+        self.assertIn("__VF2_YOGA_EQUIPMENT_ITEM_ID__", src)
+        self.assertIn("(EInventoryItem)0x220", src)
 
     def test_the_spa_behaviours_are_still_present(self):
-        """A pose fix must not delete the spa feature."""
+        """Copying the normal pose must not delete the spa feature."""
         src = _source()
         self.assertIn("VF2PlanSpaTreatment", src)
-        self.assertIn("VF2SpaLoungerHasHandle", src)
-        self.assertIn("eBodyPositionChaise", _spa_body(src),
-                      "the spa pose must keep the CHAISE body position")
+        self.assertIn("VF2SpaLoungerHasHandle", src,
+                      "the spa handle gate is still needed elsewhere, e.g. "
+                      "for the walk-target nudge")
         self.assertIn("point.y -= 4;", src)
         self.assertIn("point.x -= 4;", src)
         self.assertIn('"Relaxing in the spa"', src)
+        self.assertIn('"Getting a massage"', src)
 
 
 if __name__ == "__main__":

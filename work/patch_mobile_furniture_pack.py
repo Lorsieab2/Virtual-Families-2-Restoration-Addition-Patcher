@@ -26466,11 +26466,18 @@ extern CSceneManager SceneManager;
 class CFurnitureManager;
 int __cdecl VF2PtOnFurnitureIndex(CFurnitureManager &, ldwPoint);
 
+// Needed by the autonomous spa-lounger gate below, which asks whether either
+// Spa Lounger item is actually in the house. vf2_spontaneous_behaviors.cpp
+// declares the same pair for the Home Gym / Yoga gates; this unit needs its
+// own declarations because the two are separate translation units.
+enum EInventoryItem { eInventoryItemPlaceholder = 0 };
+
 class CFurnitureManager {
 private:
     int PtOnFurniture(ldwPoint);
     friend int __cdecl VF2PtOnFurnitureIndex(CFurnitureManager &, ldwPoint);
 public:
+    bool IsInWorld(EInventoryItem item);
     bool FindFurniture(
         CContentMap::EObject,
         ldwPoint,
@@ -27235,7 +27242,18 @@ static bool VF2HandleMobileChaise(CVillager &villager)
     // Scoped to the spa loungers deliberately: a stock chaise keeps the flat
     // pose it has always used here. Changing that would alter base-game
     // furniture, which is the owner's call and not this fix's.
-    if (info.orientation == 1 || VF2SpaLoungerHasHandle(info.unknown0)) {
+    // SPA LOUNGERS NOW TAKE THE SAME PATH AS THE NORMAL ONES.
+    //
+    // Owner instruction after round 10: "just copy the villager
+    // orientation/sleeping action data from the normal chaise loungers."
+    //
+    // This condition used to add `|| VF2SpaLoungerHasHandle(info.unknown0)`,
+    // which FORCED spa loungers into the PlanToWait branch while every
+    // ordinary lounger fell through to PlanToLieDown. That branch is the
+    // only one ever reported broken, across ten rounds, and the spa
+    // loungers were the only furniture routed into it. The orientation==1
+    // arm is stock behaviour and is left exactly as it was.
+    if (info.orientation == 1) {
         // Plan the pose WITH a head direction. eBodyPositionChaise carries
         // no facing of its own, so a two-argument wait leaves the villager
         // pointing wherever they walked in from -- which is the "lying
@@ -29176,6 +29194,26 @@ extern "C" bool __cdecl VF2TryStartMobileFurnitureAutonomous(
     int energy = VF2VillagerValue(villager, 0x6B28);
     int happiness = VF2VillagerValue(villager, 0x6B2C);
     int hunger = VF2VillagerValue(villager, 0x6B34);
+    // THE AUTONOMOUS SPA ROUTE REQUIRES A SPA LOUNGER IN THE HOUSE.
+    //
+    // Owner instruction: "the autonomous route should depend on either the
+    // spa lounger or the invisible spa lounger being present in the house."
+    //
+    // The candidate below is gated on eObjectChaise, which EVERY ordinary
+    // lounger shares, so without this the spa behaviour could be selected
+    // with no spa lounger placed at all. VF2FindFreeSpaLoungerSlot would
+    // then refuse it -- but only AFTER the villager had already spent a
+    // decision on it. This gates at the candidate level so it is never
+    // offered, matching how the Home Gym and Yoga candidates are gated.
+    //
+    // Both item ids count, exactly as the slot finder tests:
+    //   0x32F invisible Spa Lounger
+    //   0x330 visible Spa Lounger
+    bool spaLoungerInWorld =
+        FurnitureManager.IsInWorld(
+            (EInventoryItem)__VF2_INVISIBLE_SPA_LOUNGER_ITEM_ID__) ||
+        FurnitureManager.IsInWorld(
+            (EInventoryItem)__VF2_SPA_LOUNGER_ITEM_ID__);
     bool treeAutonomousEligible =
         state0C >= 20 &&
         happiness >= 20 &&
@@ -29274,7 +29312,7 @@ extern "C" bool __cdecl VF2TryStartMobileFurnitureAutonomous(
             0x7FFFFFFF,
             mobileWeights->weights[13],
             VF2HandleMobileSpaLoungerReceiving,
-            true
+            spaLoungerInWorld
         },
     };
 
@@ -29661,7 +29699,18 @@ static void VF2PlanLinkedChaiseAction(
     // Scoped to the spa loungers deliberately: a stock chaise keeps the flat
     // pose it has always used here. Changing that would alter base-game
     // furniture, which is the owner's call and not this fix's.
-    if (info.orientation == 1 || VF2SpaLoungerHasHandle(info.unknown0)) {
+    // SPA LOUNGERS NOW TAKE THE SAME PATH AS THE NORMAL ONES.
+    //
+    // Owner instruction after round 10: "just copy the villager
+    // orientation/sleeping action data from the normal chaise loungers."
+    //
+    // This condition used to add `|| VF2SpaLoungerHasHandle(info.unknown0)`,
+    // which FORCED spa loungers into the PlanToWait branch while every
+    // ordinary lounger fell through to PlanToLieDown. That branch is the
+    // only one ever reported broken, across ten rounds, and the spa
+    // loungers were the only furniture routed into it. The orientation==1
+    // arm is stock behaviour and is left exactly as it was.
+    if (info.orientation == 1) {
         // Plan the pose WITH a head direction. eBodyPositionChaise carries
         // no facing of its own, so a two-argument wait leaves the villager
         // pointing wherever they walked in from -- which is the "lying
@@ -29969,7 +30018,6 @@ static void VF2PlanSpaTreatment(
 {
     (void)villager;
     int const total = ldwGameState::GetRandom(11) + 55;
-    int const settle = 10;
 
     // ONE rest for the whole treatment, not a slice per sigh.
     //
@@ -30073,98 +30121,7 @@ static void VF2PlanSpaTreatment(
     // This handler is the spa treatment, so it asks the spa rule directly.
     // The shared VF2FurnitureFacesNorthWest is left alone because ordinary
     // Lounge Chairs depend on it and were confirmed working.
-    bool const loungerFacesNorthWest =
-        VF2SpaLoungerFacesNorthWest(info.orientation, info.unknown0);
-    // THE RECEIVING POSE IS MIRRORED HORIZONTALLY. This is the owner's own
-    // diagnosis after playtesting B189: "flip the villager orientation
-    // horizontally for the spa receiving actions."
-    //
-    // WHY EVERY EARLIER ROUND MISSED IT. Five rounds argued about WHICH
-    // orientation should take WHICH strip, and B189 added a gate so the spa
-    // rule could not reach ordinary chaises. All of that was choosing between
-    // northeast and northwest. None of it helped, because the receiving pose
-    // needs the MIRROR of whatever the lounger's facing selects -- so both
-    // placements were wrong together and tuning the selector could only ever
-    // swap which one looked wrong.
-    //
-    // NE(0) and NW(3) are the horizontal mirror pair on this isometric grid,
-    // for both EDirection and EHeadDirection, so the flip is simply taking the
-    // opposite arm of the same test.
-    //
-    // Scoped to VF2PlanSpaTreatment deliberately. This is the RECEIVING pose
-    // only. The giving villager, the two relax poses and every ordinary or
-    // mobile chaise keep the facing they already had -- the owner confirmed
-    // those working, and nothing in the report says they are mirrored.
-    // THE SETTLE AND THE SLEEP STRIP TAKE OPPOSITE ARMS. THIS IS DELIBERATE.
-    //
-    // The owner photographed the two phases separately and reported:
-    //
-    //   before the eyes close (this PlanToWait settle)  WRONG
-    //   after the eyes close  (the SleepNE/NW strip)    CORRECT
-    //
-    // That single observation is what six earlier rounds were missing. Every
-    // previous attempt derived BOTH phases from one test, on the reasoning
-    // that a settle and a sleep which disagree look broken. So every fix moved
-    // both phases together, and the wrong one could never be corrected without
-    // breaking the right one. The ping-pong across six releases is exactly
-    // what that produces.
-    //
-    // eBodyPositionChaise and the Sleep strips evidently index their facing
-    // differently, so "one test drives both" was the bug, not the safeguard.
-    // The strip below keeps the arm the owner confirmed correct; the settle
-    // takes the opposite one.
-    // ROUND 9 -- COPY THE HAMMOCK EXACTLY. It works; this did not.
-    //
-    // The hammock, which poses correctly relative to its furniture, does:
-    //
-    //     EHeadDirection head = facesNW ? eHeadDirectionNW : eHeadDirectionNE;
-    //     plans->PlanToWait(10, eBodyPositionRestingHammock, head);   // 3 ARGS
-    //     char const *anim = facesNW ? "SleepNW" : "SleepNE";         // MATCHES head
-    //
-    // BOTH POINTS BELOW WERE WRONG AND ARE SUPERSEDED (AGENTS.md 11).
-    // They are kept because acting on them nearly shipped the defect again.
-    //
-    // 1. WRONG: "THREE arguments, not four; the engine exports only
-    //    PlanToWait(int, EBodyPosition)". The decoded disassembly shows the
-    //    4-argument overload exists and fills the body-direction field,
-    //    while the 3-argument one writes -1 into it. The reclined pose
-    //    REQUIRES 4 arguments. The claim came from grepping this file for
-    //    referenced symbols instead of reading the binary.
-    //
-    // 2. WRONG: "the head and the sleep strip go the SAME way". The strip
-    //    keeps its PLAYTESTED arms (true -> SleepNE), which the owner
-    //    confirmed correct in play. Only the SETTLE was ever wrong. The two
-    //    phases index facing differently; do not align them without
-    //    runtime evidence.
-    EHeadDirection loungerHead =
-        loungerFacesNorthWest ? eHeadDirectionNW : eHeadDirectionNE;
-    // FOUR arguments, because the 3-arg overload stores -1 in the body
-    // direction field (disasm 3449-3467) and eBodyPositionChaise carries no
-    // facing of its own -- so a 3-arg call leaves the villager lying ACROSS
-    // the lounger. The body direction moves WITH the head.
-    EDirection loungerBody =
-        loungerFacesNorthWest ? eDirectionNorthwest : eDirectionNortheast;
-    plans->PlanToWait(settle, eBodyPositionChaise, loungerBody, loungerHead);
-    // THE PLAYTESTED STRIP MAPPING. true -> SleepNE, false -> SleepNW.
-    //
-    // This is what B190 shipped and what the owner confirmed correct in play:
-    // "once they close their eyes the position is correct". It was inverted
-    // during the 3-argument detour on the reasoning that it should match the
-    // hammock. That reasoning had no runtime evidence behind it and this
-    // phase was never reported broken, so the playtested arms are restored.
-    //
-    // DO NOT "align" this with the head without runtime evidence. The head
-    // and the strip index their facing differently; the owner separated the
-    // two phases by photograph, and only the settle was ever wrong.
-    char const *loungerAnim = loungerFacesNorthWest ? "SleepNE" : "SleepNW";
-    plans->PlanToPlayAnim(total - settle, loungerAnim, false, 0.02f);
-
-    // The sigh is deliberately NOT interleaved with the rest any more.
-    //
-    // It was previously emitted once per slice, so it fired on every restart
-    // of the loop above -- which made it read as tied to the action rather
-    // than to the villager enjoying the chair. Planned once here, it plays
-    // while the rest is already under way instead of punctuating it.
+    plans->PlanToLieDown(total);
     plans->PlanToPlaySound(
         static_cast<ESound>(0x101), 1.0f, eSoundTypeEffects);
     // A treatment is restful, so it pays the nap's own energy and dirtiness.

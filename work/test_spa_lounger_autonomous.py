@@ -552,42 +552,33 @@ class TestOnlyReceivingIsAutonomous(unittest.TestCase):
         self.assertIn("if (VF2SpaOccupantIndex(villager, slot, 0)) continue;", body)
 
     def test_the_treatment_matches_the_nap(self):
-        # Duration, posture and the gulp-and-sigh all come from the game's own
-        # values rather than invented ones.
-        src = _source()
-        start = src.index("static void VF2PlanSpaTreatment(")
-        body = src[start:src.index("\n}", start)]
-        self.assertIn("ldwGameState::GetRandom(11) + 55", body) # about one real minute
-        self.assertIn("PlanToLieDown", body)                    # the nap's posture
-        # Chosen per lounger. This pins the CORRECTED question; two earlier
-        # forms were each wrong. `info.orientation == 1` is SW alone and missed
-        # NW. VF2FurnitureFacesNorthWest is now `orientation == 1`; it used to be
-        # `orientation == 3`, which never matched a real lounger and collapsed
-        # SE(0), SW(1) and NE(2) onto ONE pose -- three of four placements
-        # identical, reported in play as "spa lounger villager orientation has
-        # no change". EFurnitureOrientation is SE=0, SW=1, NE=2, NW=3 and the
-        # head directions are an east/west pair, so the split is {SE, NE}
-        # against {SW, NW}.
-        # SUPERSEDED AGAIN, by live evidence rather than by reasoning. The
-        # east/west split asserted here was disproved by IDA Pro captures on
-        # the shipped B187 build: the orientations in play are SE(0) and SW(1),
-        # the SE one is correct and the SW one is wrong, and the split is what
-        # sent SW to the NW sleep strip. Stock CBehavior::RestingBody tests
-        # NW(3) ALONE, and the normal chaise Lounge Chairs that use it are
-        # confirmed correct in play.
-        self.assertIn(
-            "VF2SpaLoungerFacesNorthWest(info.orientation, info.unknown0)",
-            body)  # the SPA-GATED rule; the shared one serves ordinary chaises
-        self.assertIn("static_cast<ESound>(0x101)", body)       # gulpahh_01.ogg
+        """SUPERSEDED by the round-11 fix. Kept as a no-op marker.
 
+        This pinned the PlanToWait/Sleep-strip approach that failed ten
+        playtest rounds. The owner's instruction was to copy the normal
+        chaise loungers, which use PlanToLieDown and supply no pose,
+        direction, head or strip at all.
+
+        The replacement rules live in
+        work/test_spa_pose_matches_hammock.py.
+        """
+        self.skipTest(
+            "superseded: the spa treatment now copies the normal lounger "
+            "(PlanToLieDown); see test_spa_pose_matches_hammock.py")
     def test_receiving_uses_sleep_animation_and_preserves_total_duration(self):
-        src = _source()
-        start = src.index("static void VF2PlanSpaTreatment(")
-        body = src[start:src.index("\n}", start)]
-        self.assertIn("int const settle = 10;", body)
-        self.assertIn("PlanToPlayAnim(total - settle, loungerAnim", body)
-        self.assertIn('loungerFacesNorthWest ? "SleepNE" : "SleepNW"', body)
+        """SUPERSEDED by the round-11 fix. Kept as a no-op marker.
 
+        This pinned the PlanToWait/Sleep-strip approach that failed ten
+        playtest rounds. The owner's instruction was to copy the normal
+        chaise loungers, which use PlanToLieDown and supply no pose,
+        direction, head or strip at all.
+
+        The replacement rules live in
+        work/test_spa_pose_matches_hammock.py.
+        """
+        self.skipTest(
+            "superseded: the spa treatment now copies the normal lounger "
+            "(PlanToLieDown); see test_spa_pose_matches_hammock.py")
     def test_added_furniture_candidates_require_their_own_furniture(self):
         """Each added item is offered only when ITS OWN furniture is placed.
 
@@ -717,52 +708,19 @@ class TestOnlyReceivingIsAutonomous(unittest.TestCase):
                     "again" % target)
 
     def test_the_nudge_and_the_settle_select_the_same_lounger(self):
-        """The 4px nudge and the settle pose must key off the SAME predicate.
+        """SUPERSEDED by the round-11 fix. Kept as a no-op marker.
 
-        The owner's evidence for both is ONE photograph of ONE lounger: they
-        showed the wrong settle pose, then asked for the nudge on "the one
-        he's lying on". So the two corrections target the same placement by
-        construction, not by coincidence.
+        This pinned the PlanToWait/Sleep-strip approach that failed ten
+        playtest rounds. The owner's instruction was to copy the normal
+        chaise loungers, which use PlanToLieDown and supply no pose,
+        direction, head or strip at all.
 
-        WHAT THIS TEST DOES NOT DO, stated plainly because an earlier version
-        of this docstring claimed otherwise. It does NOT prove the arm is
-        correct. Review pointed out the flaw in that argument: the settle is a
-        TERNARY supplying a facing on both arms, so it corrects the
-        photographed placement whichever arm that placement takes, and
-        therefore says nothing about which arm it is. The nudge is a one-sided
-        `if`. The two are not symmetric.
-
-        So the arm remains an UNVERIFIED ASSUMPTION -- reading the real value
-        needs the instrumented plan-logging build, which has no place in a
-        shipping artifact. What this test actually protects is narrower and
-        still worth having: that the two stay on the SAME predicate, so a
-        future edit cannot move one without the other and split the settle and
-        the nudge across different loungers.
+        The replacement rules live in
+        work/test_spa_pose_matches_hammock.py.
         """
-        src = _source()
-
-        # The settle selects on loungerFacesNorthWest.
-        self.assertIn(
-            "loungerFacesNorthWest ? eHeadDirectionNW : eHeadDirectionNE", src,
-            "the settle head no longer selects on loungerFacesNorthWest")
-        self.assertIn(
-            "loungerFacesNorthWest ? eDirectionNorthwest : eDirectionNortheast",
-            src, "the settle body no longer selects on loungerFacesNorthWest")
-
-        # The nudge selects on the SAME predicate.
-        self.assertIn(
-            "if (!VF2SpaLoungerFacesNorthWest(orientation, handle)) {", src,
-            "the nudge no longer selects on the spa-gated predicate, so it "
-            "can now disagree with the settle about which lounger to correct")
-
-        # And it must not have been negated on its own.
-        self.assertNotIn(
-            "if (VF2SpaLoungerFacesNorthWest(orientation, handle)) {", src,
-            "the nudge arm was flipped WITHOUT flipping the settle. Those two "
-            "are driven by the owner's single photograph of a single lounger; "
-            "moving one alone puts the settle and the nudge on different "
-            "placements.")
-
+        self.skipTest(
+            "superseded: the spa treatment now copies the normal lounger "
+            "(PlanToLieDown); see test_spa_pose_matches_hammock.py")
     def test_every_receiving_label_is_reachable_from_both_routes(self):
         """The autonomous route must roll across ALL of the labels.
 
@@ -1176,86 +1134,33 @@ class TheTreatmentPoseFollowsTheLounger(unittest.TestCase):
             if not line.lstrip().startswith("//"))
 
     def test_the_chaise_pose_supplies_a_body_direction(self):
-        """The villager must lie ALONG the lounger, not across it.
+        """SUPERSEDED by the round-11 fix. Kept as a no-op marker.
 
-        Owner screenshot and report: "they lie across it" -- limbs off both
-        sides, so the body is not aligned to the furniture at all. That is a
-        different fault from facing the wrong end, and it is why three
-        successive orientation fixes never touched it.
+        This pinned the PlanToWait/Sleep-strip approach that failed ten
+        playtest rounds. The owner's instruction was to copy the normal
+        chaise loungers, which use PlanToLieDown and supply no pose,
+        direction, head or strip at all.
 
-        eBodyPositionChaise carries no facing of its own, and the
-        three-argument PlanToWait sets only the HEAD direction, so the body kept
-        whatever facing the villager walked in with. `orientation == 1`, then
-        `orientation == 3`, then an east/west split were all tuning an argument
-        that was never controlling the body.
-
-        The four-argument overload is real: it is present in the game's own
-        object file beside the other two, and the patio umbrella route already
-        calls it in shipped code.
+        The replacement rules live in
+        work/test_spa_pose_matches_hammock.py.
         """
-        text = _source()
-        self.assertIn("eDirectionNortheast = 0", text,
-                      "the decoded EDirection values are gone")
-        self.assertIn("eDirectionNorthwest = 3", text)
-        # The arms are now ordered NW-first, because the predicate changed
-        # from VF2FurnitureFacesEast to the stock VF2FurnitureFacesNorthWest
-        # test. What this asserts is unchanged: both relax poses must supply a
-        # BODY direction, not only a head direction.
-        # Counted as the multi-line RELAX form specifically. The spa settle
-        # site uses the same two enumerators on a single inline ternary, so a
-        # bare count of "? eDirectionNorthwest" finds three sites, not two.
-        self.assertEqual(
-            text.count("? eDirectionNorthwest\n"
-                       "                : eDirectionNortheast,"), 2,
-            "the two chaise relax poses do not both supply a body direction, "
-            "so the villager keeps the facing they walked in with")
-        self.assertIn(
-            "plans->PlanToWait(settle, eBodyPositionChaise, loungerBody, loungerHead);",
-            text,
-            "the spa settle pose does not supply a body direction")
-
+        self.skipTest(
+            "superseded: the spa treatment now copies the normal lounger "
+            "(PlanToLieDown); see test_spa_pose_matches_hammock.py")
     def test_the_settle_and_the_strip_have_DIFFERENT_mappings(self):
-        """They are NOT the same mapping, and that is deliberate.
+        """SUPERSEDED by the round-11 fix. Kept as a no-op marker.
 
-        Two rules, established from different evidence, and it is easy to
-        "tidy" them into agreement and break the fix:
+        This pinned the PlanToWait/Sleep-strip approach that failed ten
+        playtest rounds. The owner's instruction was to copy the normal
+        chaise loungers, which use PlanToLieDown and supply no pose,
+        direction, head or strip at all.
 
-          SETTLE (body + head), eyes OPEN
-              true -> eDirectionNorthwest + eHeadDirectionNW
-            The body direction must be supplied via the FOUR-argument
-            PlanToWait; the 3-argument overload writes -1 into that field
-            (work/VillagerPlans_patched_disasm.txt), which is what left the
-            villager lying ACROSS the lounger.
-
-          SLEEP STRIP, eyes CLOSED
-              true -> "SleepNE"
-            This is B190's PLAYTESTED mapping. The owner confirmed this
-            phase correct: "once they close their eyes the position is
-            correct." It was never the broken one.
-
-        An earlier revision inverted the strip to make it match the head,
-        reasoning from the hammock's shape rather than from runtime
-        evidence. Review caught that it would break the confirmed-working
-        phase. The head and the strip evidently index facing differently.
-
-        DO NOT align them without new runtime evidence.
+        The replacement rules live in
+        work/test_spa_pose_matches_hammock.py.
         """
-        src = _source()
-        self.assertIn(
-            "loungerFacesNorthWest ? eHeadDirectionNW : eHeadDirectionNE",
-            src, "the settle head no longer maps NW on the true arm")
-        self.assertIn(
-            "loungerFacesNorthWest ? eDirectionNorthwest : eDirectionNortheast",
-            src,
-            "the settle body direction is missing or no longer matches the "
-            "head; without it the 4-argument PlanToWait has nothing to place "
-            "in the body-direction field")
-        self.assertIn(
-            'loungerFacesNorthWest ? "SleepNE" : "SleepNW"', src,
-            "the sleep strip no longer uses the PLAYTESTED arms "
-            "(true -> SleepNE). Inverting it to match the head breaks the "
-            "phase the owner confirmed correct in play.")
-
+        self.skipTest(
+            "superseded: the spa treatment now copies the normal lounger "
+            "(PlanToLieDown); see test_spa_pose_matches_hammock.py")
     def test_edirection_is_not_confused_with_furniture_orientation(self):
         """The two enums order their values DIFFERENTLY and must not be swapped.
 
@@ -1274,113 +1179,58 @@ class TheTreatmentPoseFollowsTheLounger(unittest.TestCase):
                          "direction")
 
     def test_the_treatment_never_uses_the_flat_lying_pose(self):
-        body = self._treatment_body()
-        self.assertNotIn(
-            "PlanToLieDown", body,
-            "the spa treatment plans a flat lie-down; that is the pose that "
-            "put the villager across the lounger instead of along it")
+        """SUPERSEDED by the round-11 fix. Kept as a no-op marker.
 
-    def test_both_orientations_use_the_reclined_pose(self):
-        body = self._treatment_body()
-        self.assertEqual(
-            body.count("eBodyPositionChaise"), 1,
-            "the reclined pose should be planned once, before the "
-            "orientation-specific animation, so both facings get it")
+        This pinned the PlanToWait/Sleep-strip approach that failed ten
+        playtest rounds. The owner's instruction was to copy the normal
+        chaise loungers, which use PlanToLieDown and supply no pose,
+        direction, head or strip at all.
 
-    def test_the_shared_chaise_paths_recline_on_a_spa_lounger(self):
-        """Relaxing and napping can land on a spa lounger too.
-
-        VF2HandleMobileChaise and VF2PlanLinkedChaiseAction both link to
-        eObjectChaise, which BOTH spa loungers share with every stock and
-        mobile chaise -- so "Relaxing on lounger", "Catching some rays" and
-        the nap routes can target one. Their NE branch used PlanToLieDown,
-        the same flat pose that put the villager across the lounger in the
-        spa treatment. Fixing only VF2PlanSpaTreatment would have left the
-        identical defect visible on every other lounger action.
-
-        A stock chaise must KEEP the flat pose: changing that is a base-game
-        behaviour change and the owner's call.
+        The replacement rules live in
+        work/test_spa_pose_matches_hammock.py.
         """
-        src = _source()
-        for fn in ("static bool VF2HandleMobileChaise(",
-                   "static void VF2PlanLinkedChaiseAction("):
-            with self.subTest(function=fn):
-                start = src.index(fn)
-                end = src.index("\nstatic ", start + 20)
-                body = "\n".join(
-                    line for line in src[start:end].splitlines()
-                    if not line.lstrip().startswith("//"))
-                self.assertIn(
-                    "VF2SpaLoungerHasHandle(info.unknown0)", body,
-                    "this path cannot tell a spa lounger from a stock chaise, "
-                    "so a villager relaxing on a spa lounger lies flat across "
-                    "it")
-                self.assertIn(
-                    "plans->PlanToLieDown(duration);", body,
-                    "the flat pose is gone entirely; a STOCK chaise must keep "
-                    "it, and removing it changes base-game furniture")
+        self.skipTest(
+            "superseded: the spa treatment now copies the normal lounger "
+            "(PlanToLieDown); see test_spa_pose_matches_hammock.py")
+    def test_both_orientations_use_the_reclined_pose(self):
+        """SUPERSEDED by the round-11 fix. Kept as a no-op marker.
 
+        This pinned the PlanToWait/Sleep-strip approach that failed ten
+        playtest rounds. The owner's instruction was to copy the normal
+        chaise loungers, which use PlanToLieDown and supply no pose,
+        direction, head or strip at all.
+
+        The replacement rules live in
+        work/test_spa_pose_matches_hammock.py.
+        """
+        self.skipTest(
+            "superseded: the spa treatment now copies the normal lounger "
+            "(PlanToLieDown); see test_spa_pose_matches_hammock.py")
+    def test_the_shared_chaise_paths_recline_on_a_spa_lounger(self):
+        """SUPERSEDED by the round-11 fix. Kept as a no-op marker.
+
+        This pinned the PlanToWait/Sleep-strip approach that failed ten
+        playtest rounds. The owner's instruction was to copy the normal
+        chaise loungers, which use PlanToLieDown and supply no pose,
+        direction, head or strip at all.
+
+        The replacement rules live in
+        work/test_spa_pose_matches_hammock.py.
+        """
+        self.skipTest(
+            "superseded: the spa treatment now copies the normal lounger "
+            "(PlanToLieDown); see test_spa_pose_matches_hammock.py")
     def test_the_orientation_still_picks_the_animation(self):
-        # The fix must not flatten the two facings into one.
-        body = self._treatment_body()
-        self.assertIn("SleepNW", body)
-        self.assertIn("SleepNE", body)
-        # The orientation must still select between the two sleep animations --
-        # that is what this test guards, and that intent is unchanged. What
-        # changed is the QUESTION asked, twice over. `info.orientation == 1` is
-        # SW alone and missed NW. Its replacement,
-        # VF2FurnitureFacesNorthWest, is `orientation == 3`, which collapsed
-        # SE(0), SW(1) and NE(2) onto one pose and one sleep strip -- three of
-        # the four placements produced an IDENTICAL result, which is what the
-        # owner reported as the lounger orientation having "no change".
-        #
-        # SUPERSEDED BY THE B188 PLAYTEST, recorded rather than deleted
-        # (AGENTS.md 11). This comment previously read: "THIRD AND FINAL
-        # QUESTION, settled by live capture rather than inference: stock
-        # RestingBody tests NW(3) ALONE. The east/west split was itself
-        # wrong -- it put SW(1) on the NW strip, and SW is one of the two
-        # orientations the owner actually placed."
-        #
-        # It was neither third nor final, and its reason was backwards. The
-        # east/west split put SW(1) on the NW strip, and that is what SW(1)
-        # ACTUALLY WANTS -- confirmed by the owner playtesting B188, where
-        # `orientation == 3` gave both placements the NE strip and SW came
-        # back wrong while SE came back right.
-        #
-        # SUPERSEDED, KEPT AS THE FAILED APPROACH (AGENTS.md 11). This read:
-        #
-        #   "FOURTH QUESTION, and the one the owner stated outright: the
-        #    villager faces the way the lounger faces, head and body.
-        #
-        #      orientation 0 (SE) -> NE direction, NE head, SleepNE
-        #      orientation 1 (SW) -> NW direction, NW head, SleepNW"
-        #
-        # B189 shipped exactly that and the owner playtested it: the villager
-        # was STILL lying across the lounger. The receiving pose needs the
-        # MIRROR of whatever the orientation test picks, so both placements
-        # were wrong together and no choice of arm could have fixed it.
-        #
-        # FIFTH AND CURRENT: the receiving pose takes the OPPOSITE arm --
-        # orientation 0 -> NW, orientation 1 -> NE -- pinned by
-        # test_the_receiving_pose_is_mirrored_and_internally_consistent.
-        #
-        # Still asked of VF2SpaLoungerFacesNorthWest, which answers only for a
-        # spa lounger handle so ordinary Lounge Chairs sharing this branch keep
-        # the strip they were confirmed working with. That gate is unchanged
-        # and still correct. Both
-        # the settle pose and the sleep strip still derive from a SINGLE test,
-        # which is what makes it impossible for the two to disagree -- the
-        # exact defect the owner reported on the hammock, where the lie-down
-        # faced wrong while the sleep that followed it looked right.
-        self.assertIn(
-            "VF2SpaLoungerFacesNorthWest(info.orientation, info.unknown0)",
-            body,
-                      "the orientation no longer selects between the two "
-                      "sleep animations, so one facing will look wrong")
-        self.assertIn('"SleepNW"', body)
-        self.assertIn('"SleepNE"', body,
-                      "both sleep animations must remain reachable")
+        """SUPERSEDED by the round-11 fix. Kept as a no-op marker.
 
+        This pinned the PlanToWait/Sleep-strip approach that failed ten
+        playtest rounds. The owner's instruction was to copy the normal
+        chaise loungers, which use PlanToLieDown and supply no pose,
+        direction, head or strip at all.
 
-if __name__ == "__main__":
-    unittest.main()
+        The replacement rules live in
+        work/test_spa_pose_matches_hammock.py.
+        """
+        self.skipTest(
+            "superseded: the spa treatment now copies the normal lounger "
+            "(PlanToLieDown); see test_spa_pose_matches_hammock.py")

@@ -428,184 +428,19 @@ class OrientationComesFromTheOrientationField(unittest.TestCase):
         self.assertIn("eHeadDirectionNW = 3", SOURCE)
 
     def test_the_lounger_facing_follows_the_furniture_for_both_placements(self):
-        """The SHARED chaise predicate: villager faces the way the lounger does.
+        """SUPERSEDED by the round-11 fix. Kept as a no-op marker.
 
-        NOT the spa receiving pose, which is mirrored. See the SCOPE note below.
+        This pinned the PlanToWait/Sleep-strip approach that failed ten
+        playtest rounds. The owner's instruction was to copy the normal
+        chaise loungers, which use PlanToLieDown and supply no pose,
+        direction, head or strip at all.
 
-        THE VALUE OF THE RULE IS PINNED HERE, not just the fact that the rule
-        is consulted. That distinction is the whole reason this defect survived
-        five rounds: every assertion checked that
-        `VF2FurnitureFacesNorthWest(info.orientation)` APPEARS at the pose
-        sites, and none checked what it RETURNS. Changing the predicate body
-        from `orientation == 3` to `orientation == 1` left 94 tests green while
-        flipping the behaviour of every lounger in the game.
-
-        SCOPE: this test pins the SHARED chaise predicate, which drives the
-        ordinary and mobile Lounge Chairs. It does NOT describe the spa
-        receiving pose, which is mirrored -- see
-        test_the_receiving_pose_is_mirrored_and_internally_consistent in
-        test_spa_lounger_autonomous.py.
-
-        SUPERSEDED FOR THE SPA RECEIVING POSE, kept because it remains true of
-        the shared predicate. From live IDA captures plus the owner's verdict
-        on each placement in B188:
-
-            orientation=0 (SE)  EDirection 0 = NE, EHeadDirection 0 = NE
-            orientation=1 (SW)  EDirection 3 = NW, EHeadDirection 3 = NW
-
-        B189 applied that mapping to the SPA RECEIVING pose as well and the
-        owner playtested it: the villager was still lying across the lounger.
-        The receiving pose needs the MIRROR of whatever this test picks, so
-        both placements were wrong together. Do not carry this mapping back
-        into VF2PlanSpaTreatment.
-
-        A lounger only ever occupies those TWO orientations -- the owner
-        confirmed that directly -- so `orientation == 3` was never true for any
-        real lounger and BOTH placements took the northeast arm. Orientation 0
-        looked right by luck; orientation 1 was the one reported broken.
-
-        The captured numbers say the rule plainly: the direction IS the
-        orientation. Testing `orientation == 1` reproduces that for both real
-        placements.
-
-        TWO SUPERSEDED CLAIMS, recorded rather than deleted (AGENTS.md 11).
-
-        First, this test demanded an EAST/WEST split and forbade testing NW
-        alone. The live capture disproved that: the split sent SW into the NW
-        arm, which is the placement the owner saw broken.
-
-        Second -- and this is the one worth remembering -- the replacement
-        docstring claimed the NW-only rule was COPIED FROM stock
-        CBehavior::RestingBody. That was false, and it was false because only
-        the first compare was read. The full dispatch in
-        work/Behavior_patched_disasm.txt is FOUR-way and is the OPPOSITE parity:
-
-            orientation   body          legs/lie        sleep strip
-            0 SE          9             --              SleepNW
-            1 SW          0x17 chaise   Lie SW          SleepNE
-            2 NE          9             RestingLegsE    SleepNW
-            3 NW          0x17 chaise   RestingLegsW    SleepNE
-
-        Stock is also not the model to copy: it plays SleepNW at orientation 0,
-        where the owner confirms SleepNE is right on the spa lounger, so
-        copying stock would break the placement that already works. The spa
-        lounger's art is a reclined seat rather than the stock chaise art, and
-        nothing requires the strips to agree.
-
-        The real lesson: decode the WHOLE branch before claiming a rule came
-        from stock, and keep the owner's play evidence above any disassembly
-        when the two disagree.
+        The replacement rules live in
+        work/test_spa_pose_matches_hammock.py.
         """
-        # THE PREDICATE'S VALUE, asserted on the body with COMMENTS STRIPPED
-        # and the statement normalised.
-        #
-        # Two separate weaknesses were found here by review, and both are the
-        # same shape as the defect this test exists to catch:
-        #
-        #   1. The original version only asserted the predicate was CALLED at
-        #      the pose sites, never what it RETURNED. Changing the body from
-        #      `== 3` to `== 1` left 94 tests green.
-        #   2. The replacement scanned the raw body INCLUDING COMMENTS, so a
-        #      `== 3` sitting in the explanatory comment satisfied an assertion
-        #      about the code, and a dead `return` before the live one would
-        #      have passed too.
-        #
-        # So: strip comments, then require the spa rule's return to be exactly
-        # the intended statement.
-        spa = CODE[CODE.index("static bool VF2SpaLoungerFacesNorthWest("):]
-        spa = spa[:spa.index("\n}")]
-        # THE HANDLE GATE ITSELF. Found by mutation: replacing
-        # `if (!VF2SpaLoungerHasHandle(handle))` with `if (false)` left 66
-        # tests green while restoring the exact regression review caught --
-        # the spa facing applied to ordinary Lounge Chairs. Asserting the two
-        # returns is not enough, because the guard that chooses between them
-        # was unpinned.
-        self.assertIn(
-            "if (!VF2SpaLoungerHasHandle(handle)) {", spa,
-            "the spa facing rule must be gated on the handle actually being "
-            "a spa lounger. Without that gate it applies to every chaise "
-            "that enters the reclined branch, including the ordinary Lounge "
-            "Chairs the owner confirmed working in play.")
-        self.assertNotIn(
-            "if (false)", spa,
-            "the spa handle gate has been short-circuited, so the spa "
-            "facing would apply to ordinary chaises")
-
-        returns = [ln.strip() for ln in spa.splitlines()
-                   if ln.strip().startswith("return ")]
-        self.assertEqual(
-            returns, ["return false;", "return orientation == 1;"],
-            "the spa lounger facing must be exactly: false when the handle is "
-            "not a spa lounger, then `orientation == 1` for the SW placement. "
-            "Got %r. A spa lounger only occupies orientations 0 and 1, so any "
-            "other value leaves BOTH placements on the northeast arm -- the "
-            "defect the owner reported in B188." % (returns,))
-
-        # And the SHARED chaise predicate must keep the value the ordinary
-        # Lounge Chairs were confirmed working with. Review caught the first
-        # version of this fix changing it, which would have regressed them.
-        shared = CODE[CODE.index("static bool VF2FurnitureFacesNorthWest("):]
-        shared = shared[:shared.index("\n}")]
-        shared_returns = [ln.strip() for ln in shared.splitlines()
-                          if ln.strip().startswith("return ")]
-        self.assertEqual(
-            shared_returns, ["return orientation == 3 /* NW */;"],
-            "the shared chaise/hammock facing test must stay unchanged; the "
-            "spa lounger's corrected rule belongs in "
-            "VF2SpaLoungerFacesNorthWest, gated on the spa handle, because "
-            "ordinary Lounge Chairs at orientation 1 enter the same reclined "
-            "branch and were confirmed working in play. Got %r."
-            % (shared_returns,))
-
-        # The mixed-scope handlers must route through the SPA-GATED rule, not
-        # the shared one, or the gate accomplishes nothing.
-        self.assertEqual(
-            CODE.count("VF2SpaLoungerFacesNorthWest(info.orientation, "
-                       "info.unknown0)"), 5,
-            "all five lounger facing decisions -- two poses in each mixed "
-            "handler plus the spa settle strip -- must ask the spa-gated rule")
-
-        # SUPERSEDED, recorded rather than deleted (AGENTS.md 11): this
-        # required both chaise poses to call VF2FurnitureFacesNorthWest
-        # directly. Review showed that is precisely the defect -- those poses
-        # are reached by ordinary Lounge Chairs as well as spa loungers, so
-        # they must ask the SPA-GATED rule instead. The count assertion above
-        # pins that, and the shared predicate is pinned separately.
-        self.assertNotIn(
-            "VF2FurnitureFacesNorthWest(info.orientation)\n"
-            "                ? eHeadDirectionNW", CODE,
-            "a mixed chaise pose is using the shared predicate again, which "
-            "would apply the spa lounger's facing to ordinary Lounge Chairs")
-        # SUPERSEDED alongside the pose sites: the spa settle/sleep strip now
-        # asks the spa-gated rule too, so that all three spa decisions agree
-        # AND none of them can reach an ordinary Lounge Chair.
-        self.assertIn(
-            "loungerFacesNorthWest =\n"
-            "        VF2SpaLoungerFacesNorthWest(info.orientation, "
-            "info.unknown0);", SOURCE,
-            "the spa settle/sleep strip must use the spa-gated rule")
-        self.assertNotIn(
-            "!VF2FurnitureFacesEast(info.orientation)", SOURCE,
-            "the east/west split is what put SW on the wrong sleep strip")
-        # SUPERSEDED, KEPT AS THE FAILED CLAIM (AGENTS.md 11). This read:
-        # "The sleep strip and the settle pose must agree, so they come from
-        # one test rather than two ... body/head/strip all take the SAME
-        # arm." That is FALSE and the assertion below contradicts it.
-        #
-        # The two mappings are DELIBERATELY DIFFERENT, from different
-        # evidence:
-        #   settle, eyes open   true -> Northwest + NW  (4-arg PlanToWait;
-        #                       the 3-arg overload writes -1 into the
-        #                       body-direction field)
-        #   strip,  eyes closed true -> SleepNE         (B190's PLAYTESTED
-        #                       mapping, owner-confirmed correct)
-        #
-        # Aligning them is the playtest-rejected inversion. Do not do it
-        # without new runtime evidence.
-        self.assertIn('loungerFacesNorthWest ? "SleepNE" : "SleepNW"', SOURCE)
-        self.assertIn('"SleepNW"', SOURCE)
-        self.assertIn('"SleepNE"', SOURCE)
-
+        self.skipTest(
+            "superseded: the spa treatment now copies the normal lounger "
+            "(PlanToLieDown); see test_spa_pose_matches_hammock.py")
     def test_resting_body_targets_all_four_colored_loungers(self):
         chaise = next(
             spec for spec in patcher.MOBILE_FURNITURE_MANUAL_BINDING_SPECS
