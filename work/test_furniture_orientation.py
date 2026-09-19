@@ -587,11 +587,21 @@ class OrientationComesFromTheOrientationField(unittest.TestCase):
         self.assertNotIn(
             "!VF2FurnitureFacesEast(info.orientation)", SOURCE,
             "the east/west split is what put SW on the wrong sleep strip")
-        # The sleep strip and the settle pose must agree, so they come from
-        # one test rather than two.
-        # The strip is now selected by a ternary into loungerAnim rather than
-        # an if/else, and body/head/strip all take the SAME arm. The old
-        # if/else form belonged to the superseded "opposite arms" rule.
+        # SUPERSEDED, KEPT AS THE FAILED CLAIM (AGENTS.md 11). This read:
+        # "The sleep strip and the settle pose must agree, so they come from
+        # one test rather than two ... body/head/strip all take the SAME
+        # arm." That is FALSE and the assertion below contradicts it.
+        #
+        # The two mappings are DELIBERATELY DIFFERENT, from different
+        # evidence:
+        #   settle, eyes open   true -> Northwest + NW  (4-arg PlanToWait;
+        #                       the 3-arg overload writes -1 into the
+        #                       body-direction field)
+        #   strip,  eyes closed true -> SleepNE         (B190's PLAYTESTED
+        #                       mapping, owner-confirmed correct)
+        #
+        # Aligning them is the playtest-rejected inversion. Do not do it
+        # without new runtime evidence.
         self.assertIn('loungerFacesNorthWest ? "SleepNE" : "SleepNW"', SOURCE)
         self.assertIn('"SleepNW"', SOURCE)
         self.assertIn('"SleepNE"', SOURCE)
