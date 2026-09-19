@@ -123,20 +123,26 @@ The build itself ran from the pre-merge branch commit `d0d1fd7`, which the
 squash merge replaced with `3a598d2`. That is stated rather than glossed,
 because a release should not cite a checkout nobody can obtain.
 
-**The equivalence is checkable, not asserted.** Both revisions have the same
-tree object:
+**The equivalence is compared, not asserted.** The build checkout is preserved
+as the annotated tag `b189-build-checkout`, so both sides resolve:
 
 ```
-git rev-parse 3a598d2^{tree}
-ca7338d233fe0cf3044c0c11bfc8edf4a4729ff0
+git rev-parse b189-build-checkout^{tree}   ca7338d233fe0cf3044c0c11bfc8edf4a4729ff0
+git rev-parse 3a598d2^{tree}               ca7338d233fe0cf3044c0c11bfc8edf4a4729ff0
 ```
 
-That single object id covers the whole tree and is reachable from `3a598d2`
-alone, so anyone holding only the published repository can verify it. An
-earlier version of these notes recorded the generator blob plus a claim that
-the rest of the tree matched; review pointed out that an auditor cannot repeat
-a `git diff` against a commit they cannot resolve, so the rest of the tree was
-being trusted rather than verified.
+The first resolves the **actual build checkout**, the second the merged
+revision. A tag is a durable ref, so this does not depend on the pre-merge
+branch continuing to exist.
+
+This took three review rounds, and every earlier attempt failed the same way:
+recording provenance that could not be checked. Citing `d0d1fd7` alone was
+unresolvable after the squash merge. Citing the generator blob plus a claim
+about the rest of the tree still required trust. Citing only `3a598d2^{tree}`
+proved what the *merged* revision contains but not what the *build checkout*
+contained. Each was verified against a working copy that still held the
+squashed commit — checking from a vantage point no auditor occupies is what
+made the earlier attempts look correct.
 
 `3a598d2` is the revision to audit this artifact against.
 
