@@ -589,37 +589,42 @@ class TestOnlyReceivingIsAutonomous(unittest.TestCase):
         self.assertIn('PlanToPlayAnim(total - settle, "SleepNE"', body)
 
     def test_added_furniture_candidates_require_their_own_furniture(self):
-        """Every added item must be offered only when ITS furniture is placed.
+        """Each added item is offered only when ITS OWN furniture is placed.
 
         The owner asked for exactly this: the exercise bike, home gym and yoga
         behaviours should be autonomously chosen "only if the furniture exists
         in the house".
 
-        THE TRAP is that the fifth argument of CloneAutonomousCandidateWithWeight
-        is not "no prerequisite" when it is zero -- it means INHERIT THE
-        DONOR'S. The clone copies the donor's whole 0xD0-byte record, including
-        the object prerequisite at +0xC4, and CVillagerAI::DecideWhatToDo
-        rejects a candidate whose object is not present. Passing zero therefore
-        silently adopts whatever the donor gates on.
+        TWO MECHANISMS, because one does not cover both cases.
 
-        Home Gym and Yoga passed zero. Their donors are the stock WorkingOut
-        route and the quick-workout route, neither of which gates on 0x75, so
-        both could be offered with none of that furniture placed. That is the
-        same defect B188 fixed for the bike and the ping-pong table once those
-        moved to their own objects; these two were masked because their donors
-        happened to be workout routes too.
+        The Exercise Bike and the Ping-Pong Table each have their OWN
+        content-map object (0x99, 0x9a, assigned in B188), so an object
+        prerequisite at +0xC4 separates them cleanly.
 
-        0x75 is the object the handlers themselves search -- it is what
-        VF2HomeGymWorkout and VF2YogaEquipmentWorkout pass to
-        VF2RunOwnFurnitureActionVaried as the venue and exclusion object -- so
-        gating the offer on it makes the candidate agree with the behaviour.
+        The Home Gym and the Yoga Equipment SHARE object 0x75. A first attempt
+        gated both on 0x75 and review caught that it does not implement the
+        requirement at all: ObjectExists(0x75) admits BOTH candidates when
+        either item is placed, and the mismatched handler then cannot resolve
+        its exact item and returns without starting anything. That is a silent
+        no-op -- worse than the original bug, because the villager spends a
+        decision on nothing.
+
+        So those two are gated per ITEM via FurnitureManager.IsInWorld, the
+        same query the hammock candidate already uses through
+        AnyHammockInWorld(), and the same question the handler itself asks when
+        it looks for a venue.
+
+        THE TRAP for anyone changing this: the fifth argument of
+        CloneAutonomousCandidateWithWeight is not "no prerequisite" when zero.
+        It means INHERIT THE DONOR'S, because the clone copies the donor's
+        whole 0xD0-byte record including +0xC4.
         """
         src = _source()
+
+        # Object-gated: each has its own content-map object.
         for donor, target, prereq, name in (
             ("0x049", "0x0B1", "__VF2_EXERCISE_BIKE_OBJECT__", "Exercise Bike walking"),
             ("0x0E0", "0x0B2", "__VF2_EXERCISE_BIKE_OBJECT__", "Exercise Bike running"),
-            ("0x04A", "0x0B3", "0x75", "Home Gym System"),
-            ("0x08B", "0x0B4", "0x75", "Yoga Equipment"),
             ("0x099", "0x0B8", "__VF2_PING_PONG_OBJECT__", "Ping-Pong Table"),
         ):
             with self.subTest(item=name):
@@ -631,8 +636,43 @@ class TestOnlyReceivingIsAutonomous(unittest.TestCase):
                     "donor's prerequisite, so the action can be offered with "
                     "none of that furniture placed" % name)
 
-        # And none of the five may fall back to the inherit-the-donor form.
-        for target in ("0x0B1", "0x0B2", "0x0B3", "0x0B4", "0x0B8"):
+        # Item-gated: Home Gym and Yoga share object 0x75, so the object
+        # prerequisite CANNOT separate them.
+        helper_start = src.index("static void VF2RefreshWorkoutEligibility(")
+        helper = src[helper_start:src.index(chr(10) + "}" + chr(10), helper_start)]
+
+        with self.subTest(item="Home Gym System"):
+            self.assertIn(
+                "FurnitureManager.IsInWorld((EInventoryItem)__VF2_HOME_GYM_ITEM_ID__)",
+                helper,
+                "the Home Gym is not gated on its own item being in the world")
+            self.assertIn("0x0B3 * 0xD0", helper)
+
+        with self.subTest(item="Yoga Equipment"):
+            self.assertIn(
+                "FurnitureManager.IsInWorld((EInventoryItem)__VF2_YOGA_EQUIPMENT_ITEM_ID__)",
+                helper,
+                "the Yoga Equipment is not gated on its own item")
+            self.assertIn(
+                "FurnitureManager.IsInWorld((EInventoryItem)0x220)", helper,
+                "the STOCK Yoga Equipment (0x220) is not accepted, so a placed "
+                "stock item would leave the behaviour unreachable")
+            self.assertIn("0x0B4 * 0xD0", helper)
+
+        # Neither may be gated on the shared object again.
+        with self.subTest(item="shared object rejected"):
+            self.assertNotIn(
+                "0x0B3, 450, 0x75", src,
+                "Home Gym is gated on the SHARED object 0x75 again; that "
+                "admits the Yoga candidate too and yields a silent no-op")
+            self.assertNotIn("0x0B4, 450, 0x75", src)
+
+        # The refresh must actually run.
+        with self.subTest(item="refresh is called"):
+            self.assertIn("VF2RefreshWorkoutEligibility(data);", src)
+
+        # The three object-gated ones must not fall back to inheriting.
+        for target in ("0x0B1", "0x0B2", "0x0B8"):
             with self.subTest(target=target):
                 self.assertNotIn(
                     ", %s, 450, 0);" % target, src,
