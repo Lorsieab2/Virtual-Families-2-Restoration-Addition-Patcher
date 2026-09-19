@@ -26379,8 +26379,9 @@ public:
     bool PlanToGo(CContentMap::EObject, ESpeed, EPriority, bool);
     void PlanToGo(ldwPoint, ESpeed, EPriority);
     void PlanToWait(int, EBodyPosition);
-    void PlanToWait(int, EBodyPosition, EHeadDirection);
-    void PlanToWait(int, EBodyPosition, EDirection, EHeadDirection);
+    // NOTE: the engine exports ONLY PlanToWait(int, EBodyPosition).
+    // Overloads taking EDirection/EHeadDirection do not exist; declaring
+    // them compiled fine and discarded the arguments at runtime.
     void PlanToLieDown(int);
     void PlanToCarry(ECarrying);
     void PlanToSay(StringId);
@@ -27335,11 +27336,14 @@ static bool VF2HandleMobileChaise(CVillager &villager)
         // only so both strips stay reachable for the owner's next rotation
         // test; flattening everything to SleepNE would make that test
         // impossible to interpret.
+        // THREE ARGUMENTS, matching the working hammock. The engine exports
+        // only PlanToWait(int, EBodyPosition); the 3-arg (duration, body,
+        // head) form is what the hammock uses and it poses correctly. This
+        // site previously passed a 4th EDirection, which does not reach the
+        // function -- so the head value was discarded and the villager kept
+        // whatever facing they walked in with.
         plans->PlanToWait(
             duration, eBodyPositionChaise,
-            VF2SpaLoungerFacesNorthWest(info.orientation, info.unknown0)
-                ? eDirectionNorthwest
-                : eDirectionNortheast,
             VF2SpaLoungerFacesNorthWest(info.orientation, info.unknown0)
                 ? eHeadDirectionNW
                 : eHeadDirectionNE);
@@ -29746,11 +29750,14 @@ static void VF2PlanLinkedChaiseAction(
         // only so both strips stay reachable for the owner's next rotation
         // test; flattening everything to SleepNE would make that test
         // impossible to interpret.
+        // THREE ARGUMENTS, matching the working hammock. The engine exports
+        // only PlanToWait(int, EBodyPosition); the 3-arg (duration, body,
+        // head) form is what the hammock uses and it poses correctly. This
+        // site previously passed a 4th EDirection, which does not reach the
+        // function -- so the head value was discarded and the villager kept
+        // whatever facing they walked in with.
         plans->PlanToWait(
             duration, eBodyPositionChaise,
-            VF2SpaLoungerFacesNorthWest(info.orientation, info.unknown0)
-                ? eDirectionNorthwest
-                : eDirectionNortheast,
             VF2SpaLoungerFacesNorthWest(info.orientation, info.unknown0)
                 ? eHeadDirectionNW
                 : eHeadDirectionNE);
@@ -30072,44 +30079,29 @@ static void VF2PlanSpaTreatment(
     // differently, so "one test drives both" was the bug, not the safeguard.
     // The strip below keeps the arm the owner confirmed correct; the settle
     // takes the opposite one.
+    // ROUND 9 -- COPY THE HAMMOCK EXACTLY. It works; this did not.
+    //
+    // The hammock, which poses correctly relative to its furniture, does:
+    //
+    //     EHeadDirection head = facesNW ? eHeadDirectionNW : eHeadDirectionNE;
+    //     plans->PlanToWait(10, eBodyPositionRestingHammock, head);   // 3 ARGS
+    //     char const *anim = facesNW ? "SleepNW" : "SleepNE";         // MATCHES head
+    //
+    // Two differences from what this code had been doing for eight rounds:
+    //
+    // 1. THREE arguments, not four. The engine exports only
+    //    PlanToWait(int, EBodyPosition); the 3-arg form is what the working
+    //    hammock uses. Passing a 4th EDirection corrupted the call, so the
+    //    head value never took effect -- which is why BOTH arms of the
+    //    predicate produced the identical wrong pose in the screenshots.
+    //
+    // 2. The head and the sleep strip go the SAME way. NW head with SleepNW.
+    //    This code had them deliberately OPPOSITE, which was wrong.
     EHeadDirection loungerHead =
         loungerFacesNorthWest ? eHeadDirectionNW : eHeadDirectionNE;
-    // eBodyPositionChaise carries no facing of its own, so the BODY direction
-    // must be supplied or the villager lies across the lounger rather than
-    // along it. It moves WITH the head direction -- those two are the same
-    // phase and must match -- but both are deliberately opposite to the
-    // sleep strip below, which the owner confirmed was already correct.
-    EDirection loungerBody =
-        loungerFacesNorthWest ? eDirectionNorthwest : eDirectionNortheast;
-    plans->PlanToWait(settle, eBodyPositionChaise, loungerBody, loungerHead);
-    // DELIBERATELY THE OPPOSITE ARM FROM THE SETTLE ABOVE.
-    //
-    // SUPERSEDED, recorded rather than deleted (AGENTS.md 11). This comment
-    // read: "MIRRORED WITH THE POSE ABOVE. The settle pose and the sleep strip
-    // must agree, or the villager lies down one way and then sleeps the other
-    // -- the exact defect reported on the hammock. Both now take the opposite
-    // arm of the same test, so they stay in step."
-    //
-    // THAT COUPLING WAS THE BUG. The owner photographed the two phases and
-    // separated them: before the eyes close (the settle) WRONG, after the eyes
-    // close (this strip) CORRECT. Six rounds derived both from one test on the
-    // reasoning quoted above, so every fix moved both together and the wrong
-    // phase could never be corrected without breaking the right one.
-    //
-    // eBodyPositionChaise and the Sleep strips evidently index their facing
-    // differently. The hammock defect the old comment cites was real, but the
-    // lesson from it was over-applied: what must not disagree is the VILLAGER'S
-    // APPARENT FACING, not the raw argument fed to two different systems.
-    // Feeding both the same value is what made the villager disagree with
-    // himself here.
-    //
-    // Do not "fix" this asymmetry. It is what makes the two phases agree
-    // on screen.
-    if (loungerFacesNorthWest) {
-        plans->PlanToPlayAnim(total - settle, "SleepNE", false, 0.02f);
-    } else {
-        plans->PlanToPlayAnim(total - settle, "SleepNW", false, 0.02f);
-    }
+    plans->PlanToWait(settle, eBodyPositionChaise, loungerHead);
+    char const *loungerAnim = loungerFacesNorthWest ? "SleepNW" : "SleepNE";
+    plans->PlanToPlayAnim(total - settle, loungerAnim, false, 0.02f);
 
     // The sigh is deliberately NOT interleaved with the rest any more.
     //
@@ -30190,7 +30182,13 @@ static ldwPoint VF2SpaTreatmentPoint(ldwPoint point, int orientation,
     // This is a pure walk-to nudge: it does not touch the furniture's
     // orientation, identity, pose or animation, and it cannot reach an
     // ordinary Lounge Chair because the handle gate answers false for those.
-    if (VF2SpaLoungerFacesNorthWest(orientation, handle)) {
+    // FLIPPED on the owner's round-8 playtest: "ALSO YOUR NUDGING OF THE
+    // POSITION FOR THE OTHER SPA LOUNGER ORIENTATION DIDN'T WORK!"
+    //
+    // The previous arm was an acknowledged inference, and review flagged it
+    // twice as unproven. It was wrong. This is now the arm the owner
+    // confirmed in play, which is the evidence that was missing before.
+    if (!VF2SpaLoungerFacesNorthWest(orientation, handle)) {
         point.x -= 4;
     }
     return point;
