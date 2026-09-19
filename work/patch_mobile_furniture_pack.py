@@ -27133,8 +27133,11 @@ static int VF2FurnitureItemAtSlot(int slot)
     return *reinterpret_cast<int *>(manager + 0x1008 + slot * 0x40);
 }
 
-// The unique handle AddToWorld stamps at +0x04 of a placement record, or 0
-// when the slot is unknown. Same record layout as VF2FurnitureItemAtSlot.
+// The unique handle AddToWorld stamps at +0x04 of a placement record. Same
+// record layout as VF2FurnitureItemAtSlot. ZERO IS A REAL HANDLE -- the first
+// placement gets it -- so callers must test `slot >= 0` themselves rather
+// than treat the value as a sentinel; the 0 returned for a negative slot is
+// only there to keep the read in bounds.
 static int VF2FurnitureHandleAtSlot(int slot)
 {
     if (slot < 0) return 0;
@@ -30344,15 +30347,23 @@ static bool VF2HandleMobileInvisibleSpaLounger(CVillager &villager)
     // chaise relax on the chaise that was linked, never the spa treatment,
     // which belongs on the lounger the player dropped the villager on. So
     // the linked handle must be a spa lounger AND the dropped-on slot's own
-    // handle. When the slot under the villager could not be sampled, the
-    // exact match cannot be made and any spa lounger is accepted, as
-    // before. Any earlier hold this villager had on a spa lounger is
-    // released, because they are not going to one.
+    // handle. Whether that slot is known is a separate flag: handle 0 is a
+    // real handle (the first placement's), not "unknown". Only when the slot
+    // under the villager could not be sampled is the exact match impossible
+    // and any spa lounger accepted, as before.
+    //
+    // The fallback consumes the reservation, so it first evicts an
+    // autonomous recipient already walking to the linked lounger -- custom
+    // walk holds are invisible to LinkPeepToFurniture -- exactly as the spa
+    // path does below; then this villager's own earlier hold on some spa
+    // lounger is released, because they are not going to one.
+    bool const droppedOnKnown = loungerSlot >= 0;
     int const droppedOn = VF2FurnitureHandleAtSlot(loungerSlot);
     bool const linkedTheDroppedOnLounger =
         VF2SpaLoungerHasHandle(receiveInfo.unknown0) &&
-        (droppedOn == 0 || receiveInfo.unknown0 == droppedOn);
+        (!droppedOnKnown || receiveInfo.unknown0 == droppedOn);
     if (!linkedTheDroppedOnLounger) {
+        VF2SpaReleaseHoldOnLounger(receiveInfo.unknown0, &villager);
         VF2SpaReleaseLoungerHold(villager);
         VF2PlanLinkedChaiseAction(
             villager, receiveInfo, "Relaxing on lounger",

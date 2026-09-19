@@ -316,13 +316,24 @@ class EachRouteUsesOnePlacement(unittest.TestCase):
         # ...and against the EXACT lounger the player dropped on. With two
         # spa loungers the link can land on the other one (review, round 8).
         self.assertIn(
+            "    bool const droppedOnKnown = loungerSlot >= 0;\n", after_link,
+            "whether the dropped-on slot is known must come from the slot "
+            "index: handle 0 is a REAL handle (the first placement's), so a "
+            "zero test would accept a mismatch there (review, round 9)")
+        self.assertIn(
             "        VF2SpaLoungerHasHandle(receiveInfo.unknown0) &&\n"
-            "        (droppedOn == 0 || receiveInfo.unknown0 == droppedOn);\n"
+            "        (!droppedOnKnown || receiveInfo.unknown0 == droppedOn);\n"
             "    if (!linkedTheDroppedOnLounger) {",
             after_link,
             "the guard accepts any spa lounger; it must require the "
             "dropped-on slot's own handle, and take the fallback otherwise")
-        fallback = after_link[guard:after_link.index("VF2SpaReleaseHoldOnLounger(")]
+        fallback = after_link[guard:after_link.index("return true;", guard) + len("return true;")]
+        self.assertLess(
+            fallback.index("VF2SpaReleaseHoldOnLounger(receiveInfo.unknown0, &villager);"),
+            fallback.index("VF2PlanLinkedChaiseAction("),
+            "the fallback consumes the reservation without evicting a walker "
+            "already heading to the linked lounger; the spa path does, and "
+            "custom holds are invisible to the link (review, round 9)")
         self.assertIn("VF2SpaReleaseLoungerHold(villager);", fallback)
         self.assertIn('VF2PlanLinkedChaiseAction(\n            villager, receiveInfo, "Relaxing on lounger",', fallback)
         self.assertIn("return true;", fallback,
