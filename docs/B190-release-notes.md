@@ -66,7 +66,8 @@ B189 — their branches are byte-identical to what shipped.
 
 | Check | Result |
 |---|---|
-| Owner playtest of the pose | confirmed on probe v10, commit `2a0bbbb` |
+| Owner playtest of the pose | confirmed on a probe build of this fix (PR #353 round 21) |
+| **Decoded from the shipped B190 executable** | the pose is present and correct — see below |
 | Spa pose, autonomous and orientation suites | 79 passed, 10 skipped (pose 20, autonomous, orientation) |
 | Full regression suite | 1142 passed, 31 skipped, 8577 subtests, 0 failed (13:34) |
 | Mutations caught | 23 of 23 (body table, strip, call shape, each relax site, the hybrid, awake rolls sleeping, naps eyes-open, the drop link landing on an ordinary chaise, three wrong nudge splits) |
@@ -76,8 +77,60 @@ B189 — their branches are byte-identical to what shipped.
 | Repository gate, identities enforced | PASS — 32 variants authenticated, 7467 members, no features lost vs 10 retained releases |
 
 The pose fix is a property of the emitted instruction stream, not of any
-string or file, so the identity gates above establish that the rebuild did
-not regress B189; the owner's playtest is what establishes the fix.
+string or file, so the identity gates above cannot see it. B190 therefore
+does not rest on them: the pose was decoded **out of the shipped
+`behavior_patches` executable in this bundle**, at `.text+0B3FF0`.
+
+`VF2PlanSpaLoungerRest` with `VF2PlanSpaLoungerPose` inlined into it:
+
+    004B4000  0F 4C DD            cmovl  ebx, ebp        ; settle = max(settle, 1)
+    004B4003  8B 7C 24 14         mov    edi, [esp+14h]  ; orientation
+    004B4007  B9 17 00 00 00      mov    ecx, 17h        ; eBodyPositionChaise
+    004B400C  8D 47 FF            lea    eax, [edi-1]
+    004B400F  F7 D8               neg    eax
+    004B4011  1B C0               sbb    eax, eax
+    004B4013  83 E0 03            and    eax, 3          ; head = (orientation==1) ? 0 : 3
+    004B4016  83 FF 01            cmp    edi, 1
+    004B4019  50                  push   eax             ; arg3  head
+    004B401A  B8 09 00 00 00      mov    eax, 9          ; eBodyPositionRestingHammock
+    004B401F  0F 44 C1            cmove  eax, ecx        ; body = (orientation==1) ? 17h : 9
+    004B4022  8B 4C 24 14         mov    ecx, [esp+14h]  ; this = plans
+    004B4026  50                  push   eax             ; arg2  body
+    004B4027  53                  push   ebx             ; arg1  settle
+    004B4028  E8 B3 93 01 00      call   PlanToWait      ; the THREE-argument overload
+    ...
+    004B4042  B9 34 4A 53 00      mov    ecx, offset "SleepNW"
+    004B4047  83 FF 01            cmp    edi, 1
+    004B404A  6A 00               push   0               ; loop = false
+    004B404C  B8 2C 4A 53 00      mov    eax, offset "SleepNE"
+    004B4051  0F 45 C1            cmovne eax, ecx        ; strip = (orientation==1) ? NE : NW
+    004B4059  55                  push   ebp             ; the remainder of the stay
+    004B405A  E8 91 89 01 00      call   PlanToPlayAnim
+
+Read off the instructions, both arms:
+
+| orientation | body | head | strip |
+|---|---|---|---|
+| `1` | `17h` eBodyPositionChaise | `0` NE | `SleepNE` |
+| anything else | `09h` eBodyPositionRestingHammock | `3` NW | `SleepNW` |
+
+That is the stock chaise table, and it is the fix. The compare is against
+`1`, the two body constants are both materialised and selected by that
+compare, and the call is the three-argument `PlanToWait`. Immediately
+after, at `004B4070`, the spa treatment computes `GetRandom(0Bh) + 37h`
+(55–65 ticks), passes `info+04`, calls this function, and then plays sound
+`101h`, adds 2 dirtiness and `GetRandom(5)+7` energy.
+
+A build that omitted or miscompiled the body table could not produce these
+bytes, so this is the artifact-level evidence the earlier release notes
+said was missing. The same check runs in CI against the compiled object:
+`TheCompiledArtifact` in `work/test_spa_lounger_pose.py` executes the
+compiled helpers per orientation and reads the arguments they hand over.
+
+What is still **not** claimed: nobody has played this exact bundle. The
+owner confirmed the pose on a probe build of the same fix, and the shipped
+bytes above are that fix; the playtest of this artifact is the remaining
+step.
 
 ## Artifact identity
 
