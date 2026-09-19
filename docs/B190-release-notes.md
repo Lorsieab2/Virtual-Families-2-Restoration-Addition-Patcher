@@ -174,6 +174,17 @@ head at the raised end — not sprawled *across* it, which is the defect.
 > above would reject the corrected settle and accept the known-bad coupled
 > pose.
 
+> **WHICH BUILD THESE APPLY TO — read this first.** These criteria describe
+> the **post-#352** patcher, *not* the artifact whose sha256 was originally
+> listed under **Artifact identity** below. That earlier zip was built from
+> `94bcf83`, where the settle and the sleep strip still take the **same** arm.
+> Its open-eye settle is the pose the owner photographed as wrong, so it
+> **cannot** pass the settle criterion below — it is the build that failed it.
+>
+> The opposite-arm behaviour arrives with PR #352. Check these criteria only
+> against a bundle whose Artifact identity names a commit that includes #352;
+> the identity block below is updated when that bundle is built.
+
 **There are TWO phases and they are expected to look different.** That is the
 whole fix; it is not a glitch.
 
