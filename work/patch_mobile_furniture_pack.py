@@ -30132,14 +30132,28 @@ static ldwPoint VF2SpaTreatmentPoint(ldwPoint point, int orientation,
     // only the walk-to destination used by the receiving routes.
     point.y -= 4;
 
-    // ONE ORIENTATION ALSO SITS FOUR PIXELS TOO FAR RIGHT.
+    // ONE PLACEMENT ALSO SITS FOUR PIXELS TOO FAR RIGHT.
     //
-    // Requested by the owner from a screenshot, and scoped to that placement
-    // only: "do you mind moving the villager horizontally left by 4 pixels for
-    // this lounger orientation only?"
+    // Requested by the owner from a screenshot, scoped to that placement only:
+    // "do you mind moving the villager horizontally left by 4 pixels for this
+    // lounger orientation only?" -- and when asked which of the two loungers,
+    // the owner answered: the one the villager was lying on.
     //
-    // The other placement was not reported as offset, so it must not move.
-    // This is a pure walk-to nudge -- it does not touch the furniture's
+    // WHICH ORIENTATION THAT IS, HONESTLY STATED. The screenshot establishes
+    // WHICH LOUNGER, not which orientation VALUE the engine reports for it.
+    // Review flagged exactly this: if the pictured placement is SE(0) rather
+    // than SW(1), this branch leaves the reported offset untouched and shifts
+    // the placement that was NOT reported as offset.
+    //
+    // The branch below therefore encodes an inference, not a measurement, and
+    // it is labelled as one. Two things make it the safer of the two choices:
+    // the owner's close-up of the wrong settle pose and the 4px request are
+    // the SAME lounger, and the settle fix and this nudge consequently want
+    // the same arm. If the owner reports the nudge landed on the wrong
+    // lounger, flip this single condition to `!VF2SpaLoungerFacesNorthWest`
+    // -- nothing else in the fix depends on it.
+    //
+    // This is a pure walk-to nudge: it does not touch the furniture's
     // orientation, identity, pose or animation, and it cannot reach an
     // ordinary Lounge Chair because the handle gate answers false for those.
     if (VF2SpaLoungerFacesNorthWest(orientation, handle)) {
