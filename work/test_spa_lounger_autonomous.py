@@ -982,21 +982,53 @@ class TheTreatmentPoseFollowsTheLounger(unittest.TestCase):
             text,
             "the spa settle pose does not supply a body direction")
 
-    def test_the_body_and_head_directions_agree(self):
-        """A body facing NE under a head facing NW would look wrong either way.
+    def test_the_receiving_pose_is_mirrored_and_internally_consistent(self):
+        """The receiving pose takes the MIRROR arm, and all three agree.
 
-        Both come from the SAME orientation test at every site, so they cannot
-        disagree -- the property the settle pose and the sleep strip already
-        share.
+        The owner playtested B189 and reported the villager still lying across
+        the lounger, with the diagnosis: "flip the villager orientation
+        horizontally for the spa receiving actions."
+
+        WHY FIVE EARLIER ROUNDS MISSED THIS. Every previous attempt argued
+        about WHICH orientation should take WHICH strip -- northeast versus
+        northwest -- and B189 added a handle gate so the spa rule could not
+        reach ordinary chaises. None of it could work, because the receiving
+        pose needs the MIRROR of whatever the lounger's facing selects. Both
+        placements were wrong together, so tuning the selector could only swap
+        which one looked wrong.
+
+        NE(0) and NW(3) are the horizontal mirror pair for both EDirection and
+        EHeadDirection, so the flip is taking the opposite arm of the same
+        test.
+
+        Two properties are pinned here. First the mirror itself. Second the
+        original property this test protected and which still matters: body,
+        head and sleep strip all derive from ONE test, so a body facing NE
+        under a head facing NW is impossible.
         """
         text = _source()
-        start = text.index("EDirection loungerBody =")
-        body = text[start:start + 200]
+        start = text.index("static void VF2PlanSpaTreatment(")
+        end = text.index("\n}\n", start)
+        body = text[start:end]
+
         self.assertIn(
-            "loungerFacesNorthWest ? eDirectionNorthwest : eDirectionNortheast",
+            "loungerFacesNorthWest ? eDirectionNortheast : eDirectionNorthwest",
             body,
-            "the settle body direction is no longer derived from the same test "
-            "as the head direction and the sleep strip")
+            "the receiving body direction is not mirrored; the villager will "
+            "lie across the lounger, which is what the owner reported on B189")
+        self.assertIn(
+            "loungerFacesNorthWest ? eHeadDirectionNE : eHeadDirectionNW",
+            body,
+            "the receiving head direction is not mirrored")
+
+        # The strip must mirror WITH them, or the villager settles one way and
+        # sleeps the other -- the defect originally reported on the hammock.
+        anim = body[body.index("if (loungerFacesNorthWest) {"):]
+        anim = anim[:anim.index("}", anim.index("else"))]
+        self.assertLess(
+            anim.index('"SleepNE"'), anim.index('"SleepNW"'),
+            "the sleep strip is not mirrored with the pose, so the settle and "
+            "the sleep disagree")
 
     def test_edirection_is_not_confused_with_furniture_orientation(self):
         """The two enums order their values DIFFERENTLY and must not be swapped.

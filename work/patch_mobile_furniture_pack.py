@@ -29997,19 +29997,42 @@ static void VF2PlanSpaTreatment(
     // Lounge Chairs depend on it and were confirmed working.
     bool const loungerFacesNorthWest =
         VF2SpaLoungerFacesNorthWest(info.orientation, info.unknown0);
+    // THE RECEIVING POSE IS MIRRORED HORIZONTALLY. This is the owner's own
+    // diagnosis after playtesting B189: "flip the villager orientation
+    // horizontally for the spa receiving actions."
+    //
+    // WHY EVERY EARLIER ROUND MISSED IT. Five rounds argued about WHICH
+    // orientation should take WHICH strip, and B189 added a gate so the spa
+    // rule could not reach ordinary chaises. All of that was choosing between
+    // northeast and northwest. None of it helped, because the receiving pose
+    // needs the MIRROR of whatever the lounger's facing selects -- so both
+    // placements were wrong together and tuning the selector could only ever
+    // swap which one looked wrong.
+    //
+    // NE(0) and NW(3) are the horizontal mirror pair on this isometric grid,
+    // for both EDirection and EHeadDirection, so the flip is simply taking the
+    // opposite arm of the same test.
+    //
+    // Scoped to VF2PlanSpaTreatment deliberately. This is the RECEIVING pose
+    // only. The giving villager, the two relax poses and every ordinary or
+    // mobile chaise keep the facing they already had -- the owner confirmed
+    // those working, and nothing in the report says they are mirrored.
     EHeadDirection loungerHead =
-        loungerFacesNorthWest ? eHeadDirectionNW : eHeadDirectionNE;
-    // Same correction as the two relax poses: eBodyPositionChaise carries no
-    // facing, so the BODY direction has to be supplied or the villager lies
-    // across the lounger rather than along it. Derived from the same test that
-    // picks the head direction and the sleep strip, so all three agree.
+        loungerFacesNorthWest ? eHeadDirectionNE : eHeadDirectionNW;
+    // eBodyPositionChaise carries no facing of its own, so the BODY direction
+    // must be supplied or the villager lies across the lounger rather than
+    // along it. Mirrored with the head, so the two cannot disagree.
     EDirection loungerBody =
-        loungerFacesNorthWest ? eDirectionNorthwest : eDirectionNortheast;
+        loungerFacesNorthWest ? eDirectionNortheast : eDirectionNorthwest;
     plans->PlanToWait(settle, eBodyPositionChaise, loungerBody, loungerHead);
+    // MIRRORED WITH THE POSE ABOVE. The settle pose and the sleep strip must
+    // agree, or the villager lies down one way and then sleeps the other --
+    // the exact defect reported on the hammock. Both now take the opposite
+    // arm of the same test, so they stay in step.
     if (loungerFacesNorthWest) {
-        plans->PlanToPlayAnim(total - settle, "SleepNW", false, 0.02f);
-    } else {
         plans->PlanToPlayAnim(total - settle, "SleepNE", false, 0.02f);
+    } else {
+        plans->PlanToPlayAnim(total - settle, "SleepNW", false, 0.02f);
     }
 
     // The sigh is deliberately NOT interleaved with the rest any more.
