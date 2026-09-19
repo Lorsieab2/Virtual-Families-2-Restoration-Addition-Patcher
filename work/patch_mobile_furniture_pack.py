@@ -27199,10 +27199,11 @@ static bool VF2SpaLoungerHasHandle(int handle);
 // both arms in play, and neither working reference uses it.
 //
 // Pose holds the position for the whole duration and adds nothing else. The
-// chaise relax sites use it directly because their rolls are AWAKE activities
-// -- reading, studying, needing to sit -- which the ordinary chaise holds for
-// the full duration too. Review caught an earlier revision that sent every
-// relax roll to sleep after ten ticks.
+// chaise relax sites use it for their AWAKE rolls -- reading, studying,
+// needing to sit -- which the ordinary chaise holds for the full duration
+// too, and VF2PlanSpaLoungerRest for their nap and sleep rolls. Review caught
+// one revision that sent every relax roll to sleep after ten ticks, and the
+// next that kept naps eyes-open.
 static void VF2PlanSpaLoungerPose(
     CVillagerPlans *plans, int orientation, int duration)
 {
@@ -27213,16 +27214,23 @@ static void VF2PlanSpaLoungerPose(
         liesNorthEast ? eHeadDirectionNE : eHeadDirectionNW);
 }
 
-// THE SPA TREATMENT'S REST: settle into the pose, then sleep. The strip
-// mapping (1 -> SleepNE, else SleepNW) matches stock AND the mapping the owner
-// confirmed correct in play on B190. It was inverted twice in later rounds,
-// and that inversion is what the last several builds shipped. Only the
-// treatment sleeps; see VF2PlanSpaLoungerPose for the relax sites.
+// SETTLE INTO THE POSE, THEN SLEEP. Used by the spa treatment and by the
+// relax sites' nap and sleep rolls only; awake rolls use VF2PlanSpaLoungerPose
+// directly. The strip mapping (1 -> SleepNE, else SleepNW) matches stock AND
+// the mapping the owner confirmed correct in play on B190. It was inverted
+// twice in later rounds, and that inversion is what the last several builds
+// shipped.
 static void VF2PlanSpaLoungerRest(
     CVillagerPlans *plans, int orientation, int duration)
 {
     bool const liesNorthEast = orientation == 1;
-    int const settle = duration > 10 ? 10 : duration;
+    // Settle for up to ten ticks, but never more than half the stay: the
+    // treatment (55-65 ticks) still settles ten, while a five-tick nap from
+    // the relax roll settles two and sleeps three instead of settling five
+    // and sleeping one.
+    int settle = duration / 2;
+    if (settle > 10) settle = 10;
+    if (settle < 1) settle = 1;
     VF2PlanSpaLoungerPose(plans, orientation, settle);
     plans->PlanToPlayAnim(
         duration > settle ? duration - settle : 1,
@@ -27265,6 +27273,7 @@ static bool VF2HandleMobileChaise(CVillager &villager)
     int energyGain = 0;
     ECarrying carrying = static_cast<ECarrying>(0);
     bool applySitDownLabelVariants = false;
+    bool sleeping = false;
     if (roll < 20) {
         VF2SetActionLabel(villager, "Relaxing on lounger");
         duration = ldwGameState::GetRandom(15) + 15;
@@ -27290,11 +27299,13 @@ static bool VF2HandleMobileChaise(CVillager &villager)
         duration = ldwGameState::GetRandom(5) + 5;
         dirtiness = 2;
         energyGain = ldwGameState::GetRandom(5) + 7;
+        sleeping = true;
     } else {
         VF2SetActionLabel(villager, "Getting some sleep");
         duration = ldwGameState::GetRandom(10) + 10;
         dirtiness = 2;
         energyGain = 10;
+        sleeping = true;
     }
 
     plans->PlanToGo(info.point, eSpeedNormal, ePriorityNormal);
@@ -27317,7 +27328,11 @@ static bool VF2HandleMobileChaise(CVillager &villager)
     // `|| VF2SpaLoungerHasHandle(...)` is what forced spa loungers into
     // the orientation-1 body at every orientation.
     if (VF2SpaLoungerHasHandle(info.unknown0)) {
-        VF2PlanSpaLoungerPose(plans, info.orientation, duration);
+        if (sleeping) {
+            VF2PlanSpaLoungerRest(plans, info.orientation, duration);
+        } else {
+            VF2PlanSpaLoungerPose(plans, info.orientation, duration);
+        }
     } else if (info.orientation == 1) {
         // Plan the pose WITH a head direction. eBodyPositionChaise carries
         // no facing of its own, so a two-argument wait leaves the villager
@@ -29727,6 +29742,9 @@ static bool VF2TryLinkMobileChaise(CVillager &villager, sFurnitureInfo2 &info)
     return true;
 }
 
+// `sleeping` selects the sleep strip on a SPA lounger only -- an ordinary
+// chaise takes the same branch it always has whatever the value. The two
+// sleep callers pass true; every awake caller leaves the default.
 static void VF2PlanLinkedChaiseAction(
     CVillager &villager,
     sFurnitureInfo2 const &info,
@@ -29735,7 +29753,8 @@ static void VF2PlanLinkedChaiseAction(
     ECarrying carrying,
     int dirtiness,
     int happiness,
-    int energy)
+    int energy,
+    bool sleeping = false)
 {
     CVillagerPlans *plans = reinterpret_cast<CVillagerPlans *>(&villager);
     plans->ForgetPlans(villager, false);
@@ -29760,7 +29779,11 @@ static void VF2PlanLinkedChaiseAction(
     // `|| VF2SpaLoungerHasHandle(...)` is what forced spa loungers into
     // the orientation-1 body at every orientation.
     if (VF2SpaLoungerHasHandle(info.unknown0)) {
-        VF2PlanSpaLoungerPose(plans, info.orientation, duration);
+        if (sleeping) {
+            VF2PlanSpaLoungerRest(plans, info.orientation, duration);
+        } else {
+            VF2PlanSpaLoungerPose(plans, info.orientation, duration);
+        }
     } else if (info.orientation == 1) {
         // Plan the pose WITH a head direction. eBodyPositionChaise carries
         // no facing of its own, so a two-argument wait leaves the villager
@@ -29933,12 +29956,12 @@ extern "C" void __cdecl VF2MobileNappingCouch(CVillager &villager)
         ldwGameState::GetRandom(napWeight + sleepWeight) >= napWeight) {
         VF2PlanLinkedChaiseAction(
             villager, info, "Getting some sleep", ldwGameState::GetRandom(10) + 10,
-            static_cast<ECarrying>(0), 2, 0, 10);
+            static_cast<ECarrying>(0), 2, 0, 10, true);
         return;
     }
     VF2PlanLinkedChaiseAction(
         villager, info, "Taking a nap", ldwGameState::GetRandom(5) + 5,
-        static_cast<ECarrying>(0), 2, 0, ldwGameState::GetRandom(5) + 7);
+        static_cast<ECarrying>(0), 2, 0, ldwGameState::GetRandom(5) + 7, true);
 }
 
 extern "C" void __cdecl VF2MobileRestingBody(CVillager &villager)
@@ -30242,6 +30265,23 @@ static bool VF2HandleMobileInvisibleSpaLounger(CVillager &villager)
     // another. The hypothesis behind those revisions, that the pose was fed
     // the wrong lounger's orientation, was disproved in round 21: the defect
     // was the body table (see VF2PlanSpaLoungerPose), not the source.
+    //
+    // BUT THE LINK CAN LAND ON AN ORDINARY CHAISE. eObjectChaise is shared,
+    // and the link skips a placement with no free peep slot -- a reader the
+    // spa occupancy check does not count, say -- and takes the next chaise.
+    // The reservation is already made and cannot be given back, so the only
+    // honest disposition is to USE it as what it is: an ordinary chaise
+    // relax on the chaise that was linked, never the spa treatment there.
+    // Any earlier hold this villager had on a spa lounger is released,
+    // because they are not going to one.
+    if (!VF2SpaLoungerHasHandle(receiveInfo.unknown0)) {
+        VF2SpaReleaseLoungerHold(villager);
+        VF2PlanLinkedChaiseAction(
+            villager, receiveInfo, "Relaxing on lounger",
+            ldwGameState::GetRandom(15) + 15, static_cast<ECarrying>(0),
+            4, 1, 2);
+        return true;
+    }
 
     // This is a PLAYER DROP, so it wins. An autonomous recipient may already
     // be walking to this lounger -- VF2SpaOccupantIndex cannot see them, and

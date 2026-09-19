@@ -22,9 +22,11 @@ orientations, head + strip from one predicate, 3-argument PlanToWait).
 These tests pin:
   * ONE body table, VF2PlanSpaLoungerPose, with the hammock's head pairing
     and call shape, held for the full duration and nothing else;
-  * the spa treatment's VF2PlanSpaLoungerRest, which settles THROUGH that
-    table and only then sleeps -- the relax sites never sleep, because their
-    rolls are awake activities (reading, studying, sitting);
+  * VF2PlanSpaLoungerRest, which settles THROUGH that table and only then
+    sleeps -- used by the spa treatment and by the relax sites' nap and sleep
+    rolls only; awake rolls (reading, studying, sitting) hold the pose;
+  * the drop route verifies the link landed on a spa lounger, and otherwise
+    uses the linked chaise for an ordinary relax rather than the treatment;
   * EVERY route that poses a villager on a spa lounger goes through the one
     table -- both chaise relax sites and the spa treatment;
   * each route uses ONE placement whole: the drop route the record the
@@ -180,19 +182,55 @@ class EveryRouteUsesIt(unittest.TestCase):
                     "if (VF2SpaLoungerHasHandle(info.unknown0)) {", body,
                     "relax site %d no longer tests for a spa lounger first" % n)
                 self.assertIn(
-                    "VF2PlanSpaLoungerPose(plans, info.orientation, duration);",
-                    body, "relax site %d does not use the one body table" % n)
-                self.assertNotIn(
-                    "VF2PlanSpaLoungerRest(", body,
-                    "relax site %d sleeps. Its rolls are awake activities -- "
-                    "reading, studying, sitting -- which the ordinary chaise "
-                    "holds for the full duration; the sleep strip belongs to "
-                    "the spa treatment only (review, round 2)" % n)
+                    "        if (sleeping) {\n"
+                    "            VF2PlanSpaLoungerRest(plans, info.orientation, duration);\n"
+                    "        } else {\n"
+                    "            VF2PlanSpaLoungerPose(plans, info.orientation, duration);\n"
+                    "        }",
+                    body,
+                    "relax site %d does not split on the roll: nap and sleep "
+                    "rolls must sleep (Rest), awake rolls -- reading, "
+                    "studying, sitting -- must hold the pose (Pose), as the "
+                    "ordinary chaise does. Review caught each half once." % n)
                 self.assertLess(
                     body.index("VF2SpaLoungerHasHandle(info.unknown0)) {"),
                     body.index("info.orientation == 1"),
                     "relax site %d tests orientation before the spa handle, so "
                     "a spa lounger at orientation 1 takes the ordinary branch" % n)
+
+    def test_the_sleeping_flag_comes_from_the_nap_and_sleep_rolls_only(self):
+        src = _strip_comments(_source())
+        site1 = _function(src, "static bool VF2HandleMobileChaise(CVillager &villager)")
+        self.assertEqual(site1.count("sleeping = true;"), 2,
+                         "site 1 must flag exactly the nap and sleep rolls")
+        for label in ('"Taking a nap"', '"Getting some sleep"'):
+            i = site1.index(label)
+            self.assertLess(i, site1.index("sleeping = true;", i),
+                            "%s does not set the flag" % label)
+        for label in ('"Reading a book"', '"Studying on the lounger"',
+                      '"Needs to sit down"', '"Relaxing on lounger"'):
+            i = site1.index(label)
+            nxt = site1.index("} else", i)
+            self.assertNotIn("sleeping = true;", site1[i:nxt],
+                             "%s is flagged as sleeping" % label)
+        self.assertIn("bool sleeping = false)", src,
+                      "site 2 no longer takes the flag as a defaulted parameter")
+        calls = []
+        i = 0
+        while True:
+            i = src.find("VF2PlanLinkedChaiseAction(", i + 1)
+            if i < 0:
+                break
+            calls.append(src[i:src.index(");", i) + 2])
+        sleeping_calls = [c for c in calls if c.endswith(", true);")]
+        self.assertEqual(
+            len(sleeping_calls), 2,
+            "exactly the two sleep callers of VF2PlanLinkedChaiseAction pass "
+            "true; found %d of %d calls" % (len(sleeping_calls), len(calls)))
+        for label in ('"Getting some sleep"', '"Taking a nap"'):
+            i = src.index('villager, info, ' + label)
+            self.assertIn(", true);", src[i:src.index(");", i) + 2],
+                          "%s caller does not pass sleeping" % label)
 
     def test_the_spa_treatment_uses_the_helper_and_nothing_else(self):
         spa = _strip_comments(_spa_treatment(_source()))
@@ -212,6 +250,9 @@ class EveryRouteUsesIt(unittest.TestCase):
         self.assertEqual(
             src.count("VF2PlanSpaLoungerRest(plans, info.orientation, total);"), 1,
             "expected the rest at exactly the spa treatment")
+        self.assertEqual(
+            src.count("VF2PlanSpaLoungerRest(plans, info.orientation, duration);"), 2,
+            "expected the rest under `if (sleeping)` at exactly the two relax sites")
         self.assertEqual(
             src.count("VF2PlanSpaLoungerPose("), 4,
             "declaration, two relax sites and the rest's own delegation; "
@@ -265,6 +306,19 @@ class EachRouteUsesOnePlacement(unittest.TestCase):
                     "actualOrientation", "ownInfo"):
             self.assertNotIn(bad, after_link,
                              "the drop route second-guesses the link (%s)" % bad)
+        # ...but it does VERIFY what the link landed on. eObjectChaise is
+        # shared and the link skips a placement with no free peep slot, so a
+        # drop on a spa lounger can link an ordinary chaise. That chaise is
+        # used as what it is -- an ordinary relax -- never for the treatment.
+        guard = after_link.index("if (!VF2SpaLoungerHasHandle(receiveInfo.unknown0)) {")
+        self.assertLess(guard, after_link.index("VF2SpaTreatmentPoint("),
+                        "the handle is checked after the treatment is planned")
+        fallback = after_link[guard:after_link.index("VF2SpaReleaseHoldOnLounger(")]
+        self.assertIn("VF2SpaReleaseLoungerHold(villager);", fallback)
+        self.assertIn('VF2PlanLinkedChaiseAction(\n            villager, receiveInfo, "Relaxing on lounger",', fallback)
+        self.assertIn("return true;", fallback,
+                      "the fallback falls through into the spa treatment")
+        self.assertNotIn("VF2PlanSpaTreatment", fallback)
         self.assertNotIn("VF2SpaLoungerRecordUnderVillager", src)
         self.assertNotIn("VF2SpaLoungerOrientationUnderVillager", src)
 
