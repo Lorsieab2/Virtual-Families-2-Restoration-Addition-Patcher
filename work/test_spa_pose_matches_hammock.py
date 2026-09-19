@@ -56,9 +56,14 @@ class TestSpaPoseMatchesHammock(unittest.TestCase):
         self.assertTrue(calls, "VF2PlanSpaTreatment plans no pose at all")
         for call in calls:
             argc = call.count(",") + 1
-            self.assertLessEqual(
+            # EXACTLY three, not "at most three". Review caught that
+            # assertLessEqual also accepts the 2-argument overload, so
+            # dropping the head entirely would have kept this test green --
+            # silently discarding the head is the very defect being pinned.
+            self.assertEqual(
                 argc, 3,
-                "the spa pose passes %d arguments to PlanToWait. The engine "
+                "the spa pose passes %d arguments to PlanToWait; it must pass "
+                "exactly 3 (duration, body, head). The engine "
                 "exports only PlanToWait(int, EBodyPosition) and the working "
                 "hammock uses the 3-argument (duration, body, head) form. A "
                 "4th EDirection argument does not reach the function, so the "
@@ -94,6 +99,28 @@ class TestSpaPoseMatchesHammock(unittest.TestCase):
             "the OPPOSITE arm. The working hammock pairs them the same way "
             "(NW head with SleepNW), so the villager settles and sleeps "
             "facing consistently.")
+
+    def test_no_call_site_passes_four_arguments(self):
+        """EVERY PlanToWait in the generator must be a supported shape.
+
+        Removing the fabricated 4-argument declaration broke an unrelated
+        site -- the patio umbrella -- with C2661, because it was still
+        passing four arguments. Review caught it; this pins it so the whole
+        emitted translation unit stays compilable, not just the spa handler.
+        """
+        src = _strip_comments(_source())
+        for m in re.finditer(r"plans->PlanToWait\(([^;]*)\);", src, re.S):
+            call = m.group(1)
+            # A predicate call inside an argument contributes its own comma.
+            flat = re.sub(r"VF2SpaLoungerFacesNorthWest\([^)]*\)", "X", call)
+            argc = flat.count(",") + 1
+            self.assertLessEqual(
+                argc, 3,
+                "a PlanToWait call passes %d arguments: %s. The engine "
+                "exports only PlanToWait(int, EBodyPosition) and the 3-arg "
+                "(duration, body, head) overload; a 4th argument fails to "
+                "compile once the fabricated declaration is gone."
+                % (argc, " ".join(flat.split())[:90]))
 
     def test_the_spa_behaviours_are_still_present(self):
         """Copying the hammock must not delete the spa feature."""

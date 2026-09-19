@@ -27382,10 +27382,17 @@ static bool VF2HandleMobilePatioUmbrella(CVillager &villager)
         ePriorityNormal,
         false);
     plans->PlanToWait(1, eBodyPositionUmbrella);
+    // Dropped to the real 3-argument form. This site previously passed a
+    // 4th EDirection, which the engine's PlanToWait does not take: the only
+    // exported symbol is PlanToWait(int, EBodyPosition) and the working
+    // hammock uses the 3-arg (duration, body, head) overload. The extra
+    // argument never reached the function, so removing it CANNOT change
+    // behaviour -- and eDirectionUmbrella and eHeadDirectionUmbrella are
+    // both 3 in any case. Kept minimal deliberately: this site is unrelated
+    // to the spa defect and its shipped behaviour must not change.
     plans->PlanToWait(
         3,
         eBodyPositionStanding,
-        eDirectionUmbrella,
         eHeadDirectionUmbrella);
     plans->StartNewBehavior(villager);
     return true;
