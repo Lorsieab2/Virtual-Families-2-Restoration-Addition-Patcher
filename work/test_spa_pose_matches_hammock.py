@@ -106,10 +106,13 @@ class TestSpaLoungersCopyTheNormalOnes(unittest.TestCase):
             "PlanToPlayAnim(", spa,
             "the treatment lies down but never sleeps")
         self.assertIn(
-            'info.orientation == 1 ? "SleepNW" : "SleepNE"', spa,
-            "the sleep strip is not orientation-aware. The hammock picks its "
-            "strip from the orientation; the loungers must do the same, or "
-            "one placement sleeps facing the wrong way.")
+            'info.orientation == 3 ? "SleepNW" : "SleepNE"', spa,
+            "the sleep strip does not use the HAMMOCK'S condition. The "
+            "hammock tests `info.orientation == 3` (NW), not == 1. A spa "
+            "lounger only occupies orientations 0 and 1, so under that rule "
+            "both spa placements take SleepNE. Writing `== 1 ? SleepNW` is a "
+            "substitution, not the hammock's logic, and it gave orientation 1 "
+            "the strip the owner photographed as wrong.")
         self.assertNotIn(
             "eBodyPositionChaise", spa,
             "the treatment supplies a chaise body position again. "
@@ -257,6 +260,74 @@ class TestSpaLoungersCopyTheNormalOnes(unittest.TestCase):
         # Yoga accepts the patcher item and the stock one.
         self.assertIn("__VF2_YOGA_EQUIPMENT_ITEM_ID__", src)
         self.assertIn("(EInventoryItem)0x220", src)
+
+    def test_the_pose_uses_the_lounger_under_the_villager(self):
+        """ROOT CAUSE TEST. The pose must not follow a shared-object lookup.
+
+        VF2HandleMobileInvisibleSpaLounger is the ONLY handler registered
+        for the spa lounger item ids, and it builds receiveInfo from
+        LinkPeepToFurniture(eObjectChaise, ...). eObjectChaise is shared by
+        EVERY ordinary chaise and that call resolves purely by object, so
+        receiveInfo can describe DIFFERENT furniture than the lounger the
+        villager is lying on -- and the pose then follows the wrong
+        orientation.
+
+        That is why no choice of Sleep strip constant could ever be right,
+        across roughly twenty attempts. The same shared-object defect was
+        behind the Exercise Bike / Treadmill bug in B188, and was fixed the
+        same way: correct the lookup, not the consumer.
+
+        The handler already computes the exact slot under the villager for
+        its occupancy checks, so the correct orientation is available; it
+        was simply being discarded.
+        """
+        src = _strip_comments(_source())
+
+        self.assertIn(
+            "static bool VF2SpaLoungerOrientationUnderVillager(", src,
+            "the helper that reads the orientation of the lounger actually "
+            "under the villager is gone")
+
+        start = src.index(
+            "static bool VF2HandleMobileInvisibleSpaLounger(CVillager &villager)"
+            + chr(10) + "{")
+        handler = src[start:src.index(chr(10) + "}" + chr(10), start)]
+
+        self.assertIn(
+            "VF2SpaLoungerOrientationUnderVillager(villager, actualOrientation)",
+            handler,
+            "the drop handler no longer corrects the orientation, so the "
+            "pose again follows whatever chaise LinkPeepToFurniture happened "
+            "to resolve rather than the lounger under the villager")
+        self.assertIn(
+            "receiveInfo.orientation = actualOrientation;", handler,
+            "the corrected orientation is computed but never applied")
+
+        # The correction must happen BEFORE the pose is planned.
+        self.assertLess(
+            handler.index("receiveInfo.orientation = actualOrientation;"),
+            handler.index("VF2PlanSpaTreatment("),
+            "the orientation is corrected after the pose is already planned, "
+            "so the pose still uses the wrong value")
+
+    def test_the_autonomous_route_reads_one_orientation_source(self):
+        """The autonomous route reads orientation from the record it verified.
+
+        It already rejects any info whose handle does not match the spa
+        lounger's own slot record, and reads the walk point from that
+        record (+0x14, +0x18). Orientation now comes from the same record
+        (+0x10) so the two cannot drift apart.
+        """
+        src = _strip_comments(_source())
+        start = src.index(
+            "static bool VF2HandleMobileSpaLoungerReceiving(CVillager &villager)"
+            + chr(10) + "{")
+        handler = src[start:src.index(chr(10) + "}" + chr(10), start)]
+        self.assertIn(
+            "info.orientation = *reinterpret_cast<int *>(spaRecord + 0x10);",
+            handler,
+            "the autonomous route no longer reads orientation from the spa "
+            "lounger record it verified")
 
     def test_the_spa_behaviours_are_still_present(self):
         """Copying the normal pose must not delete the spa feature."""

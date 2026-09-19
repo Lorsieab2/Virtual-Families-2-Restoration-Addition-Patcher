@@ -27285,7 +27285,21 @@ static bool VF2HandleMobileChaise(CVillager &villager)
     plans->PlanToLieDown(settleTicks);
     plans->PlanToPlayAnim(
         duration > settleTicks ? duration - settleTicks : 1,
-        info.orientation == 1 ? "SleepNW" : "SleepNE",
+        // THE HAMMOCK'S OWN CONDITION, COPIED UNCHANGED.
+        //
+        //     bool const hammockFacesNorthWest = info.orientation == 3;
+        //     char const *sleepAnim =
+        //         hammockFacesNorthWest ? "SleepNW" : "SleepNE";
+        //
+        // It tests orientation == 3 (NW), NOT == 1. A spa lounger only ever
+        // occupies orientations 0 and 1, so under the hammock's rule BOTH
+        // spa placements are "not NW" and both take SleepNE.
+        //
+        // Writing `orientation == 1 ? "SleepNW"` was my own substitution,
+        // not the hammock's logic, and it gave orientation 1 the strip the
+        // owner photographed as wrong. Copy the working route; do not
+        // re-derive it.
+        info.orientation == 3 ? "SleepNW" : "SleepNE",
         false,
         0.02f);
     if (dirtiness) plans->PlanToIncDirtiness(dirtiness);
@@ -29640,7 +29654,21 @@ static void VF2PlanLinkedChaiseAction(
     plans->PlanToLieDown(settleTicks);
     plans->PlanToPlayAnim(
         duration > settleTicks ? duration - settleTicks : 1,
-        info.orientation == 1 ? "SleepNW" : "SleepNE",
+        // THE HAMMOCK'S OWN CONDITION, COPIED UNCHANGED.
+        //
+        //     bool const hammockFacesNorthWest = info.orientation == 3;
+        //     char const *sleepAnim =
+        //         hammockFacesNorthWest ? "SleepNW" : "SleepNE";
+        //
+        // It tests orientation == 3 (NW), NOT == 1. A spa lounger only ever
+        // occupies orientations 0 and 1, so under the hammock's rule BOTH
+        // spa placements are "not NW" and both take SleepNE.
+        //
+        // Writing `orientation == 1 ? "SleepNW"` was my own substitution,
+        // not the hammock's logic, and it gave orientation 1 the strip the
+        // owner photographed as wrong. Copy the working route; do not
+        // re-derive it.
+        info.orientation == 3 ? "SleepNW" : "SleepNE",
         false,
         0.02f);
     if (dirtiness) plans->PlanToIncDirtiness(dirtiness);
@@ -29925,7 +29953,21 @@ static void VF2PlanSpaTreatment(
     plans->PlanToLieDown(settleTicks);
     plans->PlanToPlayAnim(
         total > settleTicks ? total - settleTicks : 1,
-        info.orientation == 1 ? "SleepNW" : "SleepNE",
+        // THE HAMMOCK'S OWN CONDITION, COPIED UNCHANGED.
+        //
+        //     bool const hammockFacesNorthWest = info.orientation == 3;
+        //     char const *sleepAnim =
+        //         hammockFacesNorthWest ? "SleepNW" : "SleepNE";
+        //
+        // It tests orientation == 3 (NW), NOT == 1. A spa lounger only ever
+        // occupies orientations 0 and 1, so under the hammock's rule BOTH
+        // spa placements are "not NW" and both take SleepNE.
+        //
+        // Writing `orientation == 1 ? "SleepNW"` was my own substitution,
+        // not the hammock's logic, and it gave orientation 1 the strip the
+        // owner photographed as wrong. Copy the working route; do not
+        // re-derive it.
+        info.orientation == 3 ? "SleepNW" : "SleepNE",
         false,
         0.02f);
     plans->PlanToPlaySound(
@@ -30087,6 +30129,53 @@ static bool VF2SpaOccupantIndex(CVillager &dropped, int loungerSlot, CVillager *
     return false;
 }
 
+// THE SPA LOUNGER THE VILLAGER IS ACTUALLY ON.
+//
+// ROOT CAUSE OF THE REPEATED POSE BUG, established by tracing the runtime
+// path rather than by guessing constants:
+//
+//   VF2HandleMobileInvisibleSpaLounger is the ONLY handler registered for
+//   the spa lounger item ids (0x32F, 0x330). It computes the exact slot
+//   under the villager's feet for its occupancy checks --
+//   VF2FurnitureSlotUnderVillager -- and then THROWS IT AWAY, posing from
+//   LinkPeepToFurniture(eObjectChaise, ...) instead.
+//
+//   eObjectChaise is shared by EVERY ordinary chaise. LinkPeepToFurniture
+//   resolves purely by object, so receiveInfo can describe a DIFFERENT
+//   piece of furniture than the lounger the villager is lying on. The pose
+//   then follows that other chaise's orientation.
+//
+// This is why no choice of strip constant could ever be right: the
+// orientation feeding the pose was not the lounger's. It is the same
+// shared-object defect as the Exercise Bike / Treadmill bug (B188), which
+// was fixed by separating the lookup rather than by tuning the consumer.
+//
+// The hammock never had this problem because eObjectHammock belongs to
+// hammocks alone, so its info.orientation is genuinely its own.
+//
+// Field offsets are copied from the working reader at
+// VF2AddedFurniturePlacement: slot records are manager + 0x1008 + i * 0x40,
+// item id at +0x00, handle at +0x04, placed flag bit 0 at +0x0C,
+// orientation at +0x10.
+static bool VF2SpaLoungerOrientationUnderVillager(
+    CVillager &villager, int &outOrientation)
+{
+    int slot = VF2FurnitureSlotUnderVillager(villager);
+    if (slot < 0) return false;
+    unsigned char *manager = reinterpret_cast<unsigned char *>(&FurnitureManager);
+    int count = *reinterpret_cast<int *>(manager + 0x1004);
+    if (slot >= count) return false;
+    unsigned char *record = manager + 0x1008 + slot * 0x40;
+    if ((*reinterpret_cast<unsigned int *>(record + 0x0C) & 1) == 0) return false;
+    int itemId = *reinterpret_cast<int *>(record);
+    if (itemId != __VF2_INVISIBLE_SPA_LOUNGER_ITEM_ID__ &&
+        itemId != __VF2_SPA_LOUNGER_ITEM_ID__) {
+        return false;
+    }
+    outOrientation = *reinterpret_cast<int *>(record + 0x10);
+    return true;
+}
+
 static bool VF2HandleMobileInvisibleSpaLounger(CVillager &villager)
 {
     CVillagerPlans *plans = reinterpret_cast<CVillagerPlans *>(&villager);
@@ -30147,6 +30236,20 @@ static bool VF2HandleMobileInvisibleSpaLounger(CVillager &villager)
     // walker is left to re-evaluate the way any other interrupted behaviour
     // does. Only the claim on THIS lounger goes; a walker heading elsewhere
     // keeps theirs.
+    // CORRECT THE ORIENTATION BEFORE IT REACHES THE POSE.
+    //
+    // receiveInfo came from LinkPeepToFurniture(eObjectChaise, ...), which
+    // resolves by an object EVERY ordinary chaise shares, so its
+    // orientation may belong to different furniture entirely. The slot
+    // under the villager's feet is the lounger they are actually on, and
+    // the handler already computes it above for the occupancy checks.
+    //
+    // If the villager is not on a spa lounger, leave receiveInfo alone:
+    // that is the stock path and it is not this fix's business.
+    int actualOrientation = 0;
+    if (VF2SpaLoungerOrientationUnderVillager(villager, actualOrientation)) {
+        receiveInfo.orientation = actualOrientation;
+    }
     VF2SpaReleaseHoldOnLounger(receiveInfo.unknown0, &villager);
     plans->ForgetPlans(villager, false);
     VF2SetActionLabel(
@@ -30320,6 +30423,11 @@ static bool VF2HandleMobileSpaLoungerReceiving(CVillager &villager)
     // returning here costs nothing.
     if (*reinterpret_cast<int *>(spaRecord + 0x04) != info.unknown0) return false;
     if (!VF2SpaLoungerHasHandle(info.unknown0)) return false;
+    info.orientation = *reinterpret_cast<int *>(spaRecord + 0x10);
+    // Take the orientation from the SAME record this route already
+    // verified, rather than from info. The two agree here because of the
+    // handle check above, but reading one source removes any chance of
+    // drift -- and it matches how the x/y above are read (+0x14, +0x18).
 
     CVillagerPlans *plans = reinterpret_cast<CVillagerPlans *>(&villager);
     plans->ForgetPlans(villager, false);
