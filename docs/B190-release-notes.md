@@ -75,11 +75,41 @@ the suite.
 
 ## What is NOT claimed
 
-**This fix is not verifiable from the artifact, and that was measured rather
-than assumed.** It is a compare constant inside compiled code. No symbol
-survives linking, and `SleepNE`/`SleepNW` appear in all 32 executables — they
-appeared in B188 and B189 too. The fix changes *which orientation selects
-which*, and no check on the archive can observe that.
+**Corrected claim.** This section originally said the fix was "not verifiable
+from the artifact". That was **overstated**, and review was right to push back:
+the absence of *symbols* does not make the change unobservable. The compare
+constant and the branch that selects each animation are still present in the
+shipped instruction stream and can be decoded from it.
+
+What is accurately true is narrower: **no string, hash or file-level check can
+observe this fix.** `SleepNE`/`SleepNW` appear in all 32 executables and
+appeared in B188 and B189 too, so their presence proves nothing. The fix
+changes *which orientation selects which*, which is a property of the
+instructions, not of the strings.
+
+The consequence matters and is stated plainly: **a build in which this mapping
+was omitted or miscompiled would still satisfy every hash, rebuild and
+string-presence gate reported above.** Those gates establish that B190 did not
+regress B189; they do not establish that the fix reached the artifact.
+
+**What a decode of the shipped executable has established so far.** The
+`SleepNE`/`SleepNW` literals are referenced **18 times** in `.text` — 7 as
+`push imm32` and 11 as `mov reg, imm32`. A scan for pushes alone finds 7 and is
+the wrong denominator. Around those references the orientation compare and the
+body-position constant decode cleanly, and the method reproduces the **stock**
+`CBehavior::RestingBody` mapping at two independent sites — orientation 0 to
+body 9 with `SleepNW`, orientation 1 to body `0x17` (chaise) with `SleepNE` —
+which is known-good ground truth documented in the generator. A method that
+could not reproduce the control would not be trusted for anything else.
+
+**What it has NOT yet established.** `VF2PlanSpaTreatment` is `static` and is
+inlined into its two callers, so it has no prologue to anchor on, and the
+strip selection nearest the spa call sites compiles to a branchless
+conditional move rather than a compare-and-jump. Four candidate blocks were
+decoded and each turned out to be a stock or relax pose, not the spa mapping.
+So the spa mapping specifically is **not yet confirmed present in the
+artifact** — that is an open verification gap, stated here rather than papered
+over, and it is tracked separately from the behavioural fix itself.
 
 Everything above establishes that B190 did not *regress* B189. None of it shows
 a villager lying correctly on a lounger.
@@ -88,11 +118,34 @@ a villager lying correctly on a lounger.
 
 ## What to check
 
+> **SUPERSEDED — this section told the tester to expect the wrong thing.**
+> It originally read: *"Both should lie **along** the lounger, facing the way
+> the furniture faces, head at the raised end."*
+>
+> "Facing the way the furniture faces" is the **B189** rule, and B189 was
+> disproved in play. B190 ships the **mirror** of it — the receiving villager
+> deliberately takes the *opposite* arm of the lounger-facing predicate.
+> A tester following the old sentence would **reject the intended pose as
+> broken and accept the superseded one as correct**, on a defect that has
+> already failed six rounds. That is why this is corrected here rather than
+> quietly dropped.
+
 Drop a villager on **each** spa lounger. Both should lie **along** the lounger,
-facing the way the furniture faces, head at the raised end.
+head at the raised end — not sprawled *across* it, which is the defect.
+
+The villager's facing is the **mirror** of the furniture's, not a match to it:
+
+| lounger placement | expected villager facing | strip |
+|---|---|---|
+| SE (orientation 0) | **NW** | `SleepNW` |
+| SW (orientation 1) | **NE** | `SleepNE` |
+
+If a villager faces the *same* way as the lounger, that is B189's behaviour
+and this release did not take effect.
 
 Worth a glance too, since they share the same code branch: ordinary and mobile
-**Lounge Chairs** should behave exactly as they did in B189.
+**Lounge Chairs** should behave exactly as they did in B189 — those were
+confirmed working and are deliberately untouched.
 
 ## Artifact identity
 
