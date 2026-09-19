@@ -121,12 +121,24 @@ Lounge Chairs should behave exactly as they did in B188.
 
 The build itself ran from the pre-merge branch commit `d0d1fd7`, which the
 squash merge replaced with `3a598d2`. That is stated rather than glossed,
-because `d0d1fd7` does not resolve in the published repository and a release
-should not cite a checkout nobody can obtain. The two are equivalent, and it
-was checked rather than assumed: the generator blob is identical at both
-revisions (`1552440a5e18019c278f82c28517d8ca4eedc29c`) and a tree-wide
-`git diff d0d1fd7 3a598d2` is empty. `3a598d2` is therefore the revision to
-audit this artifact against.
+because a release should not cite a checkout nobody can obtain.
+
+**The equivalence is checkable, not asserted.** Both revisions have the same
+tree object:
+
+```
+git rev-parse 3a598d2^{tree}
+ca7338d233fe0cf3044c0c11bfc8edf4a4729ff0
+```
+
+That single object id covers the whole tree and is reachable from `3a598d2`
+alone, so anyone holding only the published repository can verify it. An
+earlier version of these notes recorded the generator blob plus a claim that
+the rest of the tree matched; review pointed out that an auditor cannot repeat
+a `git diff` against a commit they cannot resolve, so the rest of the tree was
+being trusted rather than verified.
+
+`3a598d2` is the revision to audit this artifact against.
 
 All three gates passed on this exact file: the repository release gate with
 `--require-identities` (32 variants, 7467 members, identities authenticated),
