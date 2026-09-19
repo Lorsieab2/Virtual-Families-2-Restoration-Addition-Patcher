@@ -1,20 +1,25 @@
-"""The spa receiving pose must use the SAME call shape as the hammock.
+"""The spa receiving pose must supply a BODY DIRECTION, not just a head.
 
-WHY THIS EXISTS. Nine playtest rounds were spent changing direction values
-inside a call that was discarding them. The owner had to relaunch the game
-every time to discover nothing had changed.
+GROUND TRUTH is work/VillagerPlans_patched_disasm.txt, which decodes the
+shipped CVillagerPlans. BOTH overloads exist:
 
-The engine exports exactly ONE PlanToWait symbol:
+    3-arg  ?PlanToWait@CVillagerPlans@@QAEXHW4EBodyPosition@@W4EHeadDirection@@@Z
+    4-arg  ?PlanToWait@CVillagerPlans@@QAEXHW4EBodyPosition@@W4EDirection@@W4EHeadDirection@@@Z
 
-    ?PlanToWait@CVillagerPlans@@QAEXHW4EBodyPosition@@@Z
+THE DECISIVE DETAIL: the 3-argument implementation writes -1 (0FFFFFFFFh)
+into the body-direction field at [ebp-3Ch]. It DISCARDS direction. The
+4-argument version fills that same field from its EDirection argument.
 
-The working hammock pose uses the 3-argument form
-(duration, body, head). The spa receiving pose was using a FOUR-argument
-form with an extra EDirection, which does not match and meant the head
-value never took effect -- so BOTH arms of the orientation predicate
-rendered the identical wrong pose.
+eBodyPositionChaise carries no facing of its own, so a reclined pose that
+must align to the furniture REQUIRES the 4-argument overload. Calling the
+3-arg form leaves the villager lying ACROSS the lounger -- the defect the
+owner reported across nine playtest rounds.
 
-These tests fail on that mistake instead of making the owner find it.
+An earlier version of this file asserted the OPPOSITE, on the mistaken
+belief that only a 2-argument symbol existed. That belief came from
+grepping the generator for referenced symbols instead of reading the
+binary. Review caught it with the disassembly. Ground truth is the decoded
+implementation, not what the generator happens to mention.
 """
 import pathlib
 import re
@@ -22,6 +27,7 @@ import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 GEN = ROOT / "work" / "patch_mobile_furniture_pack.py"
+DISASM = ROOT / "work" / "VillagerPlans_patched_disasm.txt"
 
 
 def _source():
@@ -29,13 +35,24 @@ def _source():
 
 
 def _strip_comments(text):
-    """Judge CODE, not prose: comments here quote the OLD wrong forms."""
+    """Judge CODE, not prose: comments here quote the old wrong forms."""
     out = []
     for line in text.splitlines():
-        if line.lstrip().startswith(chr(47)*2):
+        if line.lstrip().startswith("//"):
             continue
-        out.append(line.split(chr(47)*2)[0] if chr(47)*2 in line else line)
-    return chr(10).join(out)
+        out.append(line.split("//")[0] if "//" in line else line)
+    return "\n".join(out)
+
+
+def _pred(match):
+    """Normalize a captured predicate: strip whitespace, keep any '!'.
+
+    Capturing the optional '!' is what makes a NEGATED predicate a different
+    token, so flipping one ternary alone is caught. Review showed that
+    without it, `!loungerFacesNorthWest` compared equal to the plain name
+    and the known-bad mutation passed.
+    """
+    return "".join(match.group(1).split())
 
 
 def _spa_body(src):
@@ -43,93 +60,101 @@ def _spa_body(src):
     return _strip_comments(src[start:src.index("\n}\n", start)])
 
 
-def _hammock_body(src):
-    start = src.index("bool const hammockFacesNorthWest")
-    return _strip_comments(src[start:start + 800])
+class TestSpaPoseSuppliesBodyDirection(unittest.TestCase):
+    def test_the_engine_really_exports_the_four_argument_overload(self):
+        """Pin the ground truth so nobody re-derives it from the wrong place."""
+        if not DISASM.is_file():
+            self.skipTest("disassembly not present in this checkout")
+        text = DISASM.read_text(encoding="utf-8", errors="replace")
+        self.assertIn(
+            "?PlanToWait@CVillagerPlans@@QAEXHW4EBodyPosition@@"
+            "W4EDirection@@W4EHeadDirection@@@Z", text,
+            "the 4-argument PlanToWait is missing from the decoded binary")
 
-
-class TestSpaPoseMatchesHammock(unittest.TestCase):
-    def test_the_spa_pose_call_takes_three_arguments(self):
-        """A 4-argument PlanToWait does not match the exported symbol."""
+    def test_the_spa_pose_passes_a_body_direction(self):
         spa = _spa_body(_source())
         calls = re.findall(r"PlanToWait\(([^;]*)\);", spa, re.S)
         self.assertTrue(calls, "VF2PlanSpaTreatment plans no pose at all")
         for call in calls:
-            argc = call.count(",") + 1
-            # EXACTLY three, not "at most three". Review caught that
-            # assertLessEqual also accepts the 2-argument overload, so
-            # dropping the head entirely would have kept this test green --
-            # silently discarding the head is the very defect being pinned.
-            self.assertEqual(
-                argc, 3,
-                "the spa pose passes %d arguments to PlanToWait; it must pass "
-                "exactly 3 (duration, body, head). The engine "
-                "exports only PlanToWait(int, EBodyPosition) and the working "
-                "hammock uses the 3-argument (duration, body, head) form. A "
-                "4th EDirection argument does not reach the function, so the "
-                "head value is silently discarded and BOTH orientations "
-                "render the same wrong pose: %s" % (argc, call.strip()))
-
-    def test_no_edirection_is_passed_to_the_spa_pose(self):
-        spa = _spa_body(_source())
-        for bad in ("eDirectionNortheast", "eDirectionNorthwest",
-                    "eDirectionSoutheast", "eDirectionSouthwest"):
-            self.assertNotIn(
-                bad, spa,
-                "the spa pose still passes %s. PlanToWait takes no "
-                "EDirection; the hammock passes only an EHeadDirection." % bad)
-
-    def test_head_and_sleep_strip_go_the_same_way(self):
-        """The hammock pairs NW head with SleepNW. The spa must match."""
-        src = _source()
-        spa = _spa_body(src)
-        ham = _hammock_body(src)
-
-        ham_head_nw_first = ham.index("eHeadDirectionNW") < ham.index("eHeadDirectionNE")
-        ham_nw_first = ham.index('"SleepNW"') < ham.index('"SleepNE"')
-        self.assertEqual(
-            ham_head_nw_first, ham_nw_first,
-            "the hammock reference itself no longer pairs head with strip")
-
-        spa_head_nw_first = spa.index("eHeadDirectionNW") < spa.index("eHeadDirectionNE")
-        spa_nw_first = spa.index('"SleepNW"') < spa.index('"SleepNE"')
-        self.assertEqual(
-            spa_head_nw_first, spa_nw_first,
-            "the spa pose puts the head on one arm and the sleep strip on "
-            "the OPPOSITE arm. The working hammock pairs them the same way "
-            "(NW head with SleepNW), so the villager settles and sleeps "
-            "facing consistently.")
-
-    def test_no_call_site_passes_four_arguments(self):
-        """EVERY PlanToWait in the generator must be a supported shape.
-
-        Removing the fabricated 4-argument declaration broke an unrelated
-        site -- the patio umbrella -- with C2661, because it was still
-        passing four arguments. Review caught it; this pins it so the whole
-        emitted translation unit stays compilable, not just the spa handler.
-        """
-        src = _strip_comments(_source())
-        for m in re.finditer(r"plans->PlanToWait\(([^;]*)\);", src, re.S):
-            call = m.group(1)
-            # A predicate call inside an argument contributes its own comma.
             flat = re.sub(r"VF2SpaLoungerFacesNorthWest\([^)]*\)", "X", call)
             argc = flat.count(",") + 1
-            self.assertLessEqual(
-                argc, 3,
-                "a PlanToWait call passes %d arguments: %s. The engine "
-                "exports only PlanToWait(int, EBodyPosition) and the 3-arg "
-                "(duration, body, head) overload; a 4th argument fails to "
-                "compile once the fabricated declaration is gone."
+            self.assertEqual(
+                argc, 4,
+                "the spa pose passes %d arguments to PlanToWait. It must pass "
+                "4 (duration, body, DIRECTION, head): the 3-argument overload "
+                "writes -1 into the body-direction field, and "
+                "eBodyPositionChaise supplies no facing of its own, so the "
+                "villager ends up lying ACROSS the lounger. Call: %s"
                 % (argc, " ".join(flat.split())[:90]))
+        self.assertTrue(
+            re.search(r"eDirectionNorth(west|east)", spa),
+            "the spa pose passes no EDirection at all")
+
+    def test_body_and_head_take_the_same_arm(self):
+        """Body and head are ONE phase: they must not disagree.
+
+        Checks the ternary PREDICATES, not token order. Review caught that
+        comparing first-occurrence positions let a flipped predicate pass.
+        """
+        spa = _spa_body(_source())
+        head = re.search(
+            r"(!?\s*\w+)\s*\?\s*eHeadDirectionNW\s*:\s*eHeadDirectionNE", spa)
+        body = re.search(
+            r"(!?\s*\w+)\s*\?\s*eDirectionNorthwest\s*:\s*eDirectionNortheast", spa)
+        self.assertIsNotNone(
+            head, "no 'pred ? eHeadDirectionNW : eHeadDirectionNE' found, so "
+                  "a flipped or restructured head mapping is not pinned")
+        self.assertIsNotNone(
+            body, "no 'pred ? eDirectionNorthwest : eDirectionNortheast' "
+                  "found, so a flipped body mapping is not pinned")
+        self.assertEqual(
+            _pred(head), _pred(body),
+            "the head and the body direction are driven by DIFFERENT "
+            "predicates (%s vs %s). They are the same phase and must agree, "
+            "or the villager's head and body point different ways."
+            % (_pred(head), _pred(body)))
+
+    def test_head_and_sleep_strip_take_the_same_arm(self):
+        """The hammock pairs an NW head with SleepNW. The spa must match.
+
+        Evaluates both predicate ARMS rather than comparing token order, so
+        flipping the animation selection alone is caught.
+        """
+        spa = _spa_body(_source())
+        head = re.search(
+            r"(!?\s*\w+)\s*\?\s*eHeadDirectionNW\s*:\s*eHeadDirectionNE", spa)
+        self.assertIsNotNone(head, "no head mapping found in the spa pose")
+
+        anim = re.search(
+            r"(!?\s*\w+)\s*\?\s*\"(Sleep\w+)\"\s*:\s*\"(Sleep\w+)\"", spa)
+        if anim is None:
+            anim = re.search(
+                r"if\s*\(\s*(!?\s*\w+)\s*\)\s*\{[^}]*\"(Sleep\w+)\"[^}]*\}"
+                r"\s*else\s*\{[^}]*\"(Sleep\w+)\"", spa, re.S)
+        self.assertIsNotNone(
+            anim, "no sleep-strip selection found in the spa pose")
+
+        self.assertEqual(
+            _pred(head), _pred(anim),
+            "the head and the sleep strip are driven by different predicates "
+            "(%s vs %s)" % (_pred(head), _pred(anim)))
+        self.assertEqual(
+            anim.group(2), "SleepNW",
+            "the strip's TRUE arm is %s but the head's TRUE arm is NW. The "
+            "working hammock pairs an NW head with SleepNW; opposite arms "
+            "make the villager settle and sleep facing differently."
+            % anim.group(2))
+        self.assertEqual(
+            anim.group(3), "SleepNE",
+            "the strip's FALSE arm is %s, expected SleepNE" % anim.group(3))
 
     def test_the_spa_behaviours_are_still_present(self):
-        """Copying the hammock must not delete the spa feature."""
+        """A pose fix must not delete the spa feature."""
         src = _source()
         self.assertIn("VF2PlanSpaTreatment", src)
         self.assertIn("VF2SpaLoungerHasHandle", src)
         self.assertIn("eBodyPositionChaise", _spa_body(src),
-                      "the spa pose must keep the CHAISE body position; the "
-                      "hammock's body position belongs to hammock art")
+                      "the spa pose must keep the CHAISE body position")
         self.assertIn("point.y -= 4;", src)
         self.assertIn("point.x -= 4;", src)
         self.assertIn('"Relaxing in the spa"', src)

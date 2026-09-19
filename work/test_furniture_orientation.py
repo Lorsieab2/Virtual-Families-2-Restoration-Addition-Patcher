@@ -589,7 +589,10 @@ class OrientationComesFromTheOrientationField(unittest.TestCase):
             "the east/west split is what put SW on the wrong sleep strip")
         # The sleep strip and the settle pose must agree, so they come from
         # one test rather than two.
-        self.assertIn("if (loungerFacesNorthWest) {", SOURCE)
+        # The strip is now selected by a ternary into loungerAnim rather than
+        # an if/else, and body/head/strip all take the SAME arm. The old
+        # if/else form belonged to the superseded "opposite arms" rule.
+        self.assertIn('loungerFacesNorthWest ? "SleepNW" : "SleepNE"', SOURCE)
         self.assertIn('"SleepNW"', SOURCE)
         self.assertIn('"SleepNE"', SOURCE)
 

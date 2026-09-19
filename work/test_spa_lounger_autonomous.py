@@ -585,8 +585,8 @@ class TestOnlyReceivingIsAutonomous(unittest.TestCase):
         start = src.index("static void VF2PlanSpaTreatment(")
         body = src[start:src.index("\n}", start)]
         self.assertIn("int const settle = 10;", body)
-        self.assertIn('PlanToPlayAnim(total - settle, "SleepNW"', body)
-        self.assertIn('PlanToPlayAnim(total - settle, "SleepNE"', body)
+        self.assertIn("PlanToPlayAnim(total - settle, loungerAnim", body)
+        self.assertIn('loungerFacesNorthWest ? "SleepNW" : "SleepNE"', body)
 
     def test_added_furniture_candidates_require_their_own_furniture(self):
         """Each added item is offered only when ITS OWN furniture is placed.
@@ -751,13 +751,13 @@ class TestOnlyReceivingIsAutonomous(unittest.TestCase):
 
         # The nudge selects on the SAME predicate.
         self.assertIn(
-            "if (VF2SpaLoungerFacesNorthWest(orientation, handle)) {", src,
+            "if (!VF2SpaLoungerFacesNorthWest(orientation, handle)) {", src,
             "the nudge no longer selects on the spa-gated predicate, so it "
             "can now disagree with the settle about which lounger to correct")
 
         # And it must not have been negated on its own.
         self.assertNotIn(
-            "if (!VF2SpaLoungerFacesNorthWest(orientation, handle)) {", src,
+            "if (VF2SpaLoungerFacesNorthWest(orientation, handle)) {", src,
             "the nudge arm was flipped WITHOUT flipping the settle. Those two "
             "are driven by the owner's single photograph of a single lounger; "
             "moving one alone puts the settle and the nudge on different "
@@ -824,7 +824,7 @@ class TestOnlyReceivingIsAutonomous(unittest.TestCase):
         # must not move sideways.
         self.assertIn("point.x -= 4;", helper)
         self.assertIn(
-            "if (VF2SpaLoungerFacesNorthWest(orientation, handle)) {", helper,
+            "if (!VF2SpaLoungerFacesNorthWest(orientation, handle)) {", helper,
             "the horizontal nudge is no longer scoped to one orientation, so "
             "it would move a placement the owner did not report as offset")
 
@@ -1214,63 +1214,32 @@ class TheTreatmentPoseFollowsTheLounger(unittest.TestCase):
             text,
             "the spa settle pose does not supply a body direction")
 
-    def test_the_settle_and_the_sleep_strip_take_opposite_arms(self):
-        """The two phases are DELIBERATELY opposite. This is the sixth fix.
+    def test_the_settle_and_the_sleep_strip_take_the_same_arm(self):
+        """SUPERSEDED RULE REPLACED. They must AGREE, not oppose.
 
-        The owner photographed the treatment twice and separated the phases:
+        An earlier round made the settle deliberately take the OPPOSITE arm
+        from the sleep strip. That was built on the belief that the settle's
+        direction argument was reaching the engine. The decoded binary
+        (work/VillagerPlans_patched_disasm.txt) showed the real cause: the
+        3-argument PlanToWait writes -1 into the body-direction field, so a
+        3-arg call supplies no facing at all.
 
-            before the eyes close (the PlanToWait settle)  WRONG
-            after the eyes close  (the SleepNE/NW strip)   CORRECT
+        With the 4-argument overload restored, body, head and strip are one
+        coherent phase and must take the SAME arm -- exactly as the working
+        hammock does (NW head with SleepNW).
 
-        WHY SIX ROUNDS FAILED. Every earlier attempt derived BOTH phases from
-        one test, on the reasoning that a settle and a sleep which disagree
-        would look broken -- the defect originally reported on the hammock. So
-        every fix moved both phases together. The wrong phase could never be
-        corrected without breaking the right one, and each release swapped
-        which half looked wrong. That is precisely the ping-pong the owner
-        described across B185 through B190.
-
-        eBodyPositionChaise and the Sleep animation strips evidently index
-        their facing differently, so "one test drives both" was the bug rather
-        than the safeguard.
-
-        The settle now matches the ordinary coloured loungers, which the owner
-        confirmed correct, and the strip keeps the arm the owner confirmed
-        correct. They are opposite ON PURPOSE.
+        Pinned in detail by work/test_spa_pose_matches_hammock.py.
         """
-        text = _source()
-        start = text.index("static void VF2PlanSpaTreatment(")
-        end = text.index(chr(10) + "}" + chr(10), start)
-        body = text[start:end]
-
-        # SETTLE: must match the working coloured-lounger relax pose.
-        self.assertIn(
-            "loungerFacesNorthWest ? eDirectionNorthwest : eDirectionNortheast",
-            body,
-            "the settle body direction no longer matches the ordinary "
-            "loungers the owner confirmed correct")
+        src = _source()
         self.assertIn(
             "loungerFacesNorthWest ? eHeadDirectionNW : eHeadDirectionNE",
-            body,
-            "the settle head direction no longer matches the ordinary "
-            "loungers the owner confirmed correct")
-
-        # STRIP: must keep the arm the owner confirmed correct, which is the
-        # OPPOSITE one.
-        anim = body[body.index("if (loungerFacesNorthWest) {"):]
-        anim = anim[:anim.index("}", anim.index("else"))]
-        self.assertLess(
-            anim.index('"SleepNE"'), anim.index('"SleepNW"'),
-            "the sleep strip changed; the owner confirmed the post-eyes-closed "
-            "phase was already correct, so it must not move")
-
-        # And the two must NOT be derived identically -- that coupling is the
-        # bug this test exists to prevent from returning.
-        self.assertNotIn(
-            "loungerFacesNorthWest ? eDirectionNortheast : eDirectionNorthwest",
-            body,
-            "the settle has been re-coupled to the sleep strip's arm; the "
-            "owner reported that phase wrong while the strip was right")
+            src, "the head no longer maps NW on the true arm")
+        self.assertIn(
+            "loungerFacesNorthWest ? eDirectionNorthwest : eDirectionNortheast",
+            src, "the body direction is missing or no longer matches the head")
+        self.assertIn(
+            'loungerFacesNorthWest ? "SleepNW" : "SleepNE"', src,
+            "the sleep strip no longer takes the same arm as the head")
 
     def test_edirection_is_not_confused_with_furniture_orientation(self):
         """The two enums order their values DIFFERENTLY and must not be swapped.

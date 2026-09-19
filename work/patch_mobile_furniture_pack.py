@@ -26386,7 +26386,18 @@ public:
     // argument never reached the function, and the head value was silently
     // discarded -- which is why both orientation arms rendered the identical
     // wrong pose across nine playtest rounds. Do not reintroduce it.
+    // BOTH overloads are REAL. Verified in work/VillagerPlans_patched_disasm.txt:
+    //   3-arg  ?PlanToWait@CVillagerPlans@@QAEXHW4EBodyPosition@@W4EHeadDirection@@@Z
+    //   4-arg  ?PlanToWait@CVillagerPlans@@QAEXHW4EBodyPosition@@W4EDirection@@W4EHeadDirection@@@Z
+    //
+    // CRITICAL: the 3-arg implementation writes -1 (0FFFFFFFFh) into the
+    // BODY DIRECTION field at [ebp-3Ch] -- it explicitly DISCARDS direction.
+    // The 4-arg version fills that same field from its EDirection argument.
+    // So a reclined pose that must align its body to the furniture REQUIRES
+    // the 4-argument overload. Using the 3-arg form leaves the villager
+    // lying ACROSS the lounger, which is the reported defect.
     void PlanToWait(int, EBodyPosition, EHeadDirection);
+    void PlanToWait(int, EBodyPosition, EDirection, EHeadDirection);
     void PlanToLieDown(int);
     void PlanToCarry(ECarrying);
     void PlanToSay(StringId);
@@ -27350,6 +27361,9 @@ static bool VF2HandleMobileChaise(CVillager &villager)
         plans->PlanToWait(
             duration, eBodyPositionChaise,
             VF2SpaLoungerFacesNorthWest(info.orientation, info.unknown0)
+                ? eDirectionNorthwest
+                : eDirectionNortheast,
+            VF2SpaLoungerFacesNorthWest(info.orientation, info.unknown0)
                 ? eHeadDirectionNW
                 : eHeadDirectionNE);
     } else {
@@ -27393,6 +27407,7 @@ static bool VF2HandleMobilePatioUmbrella(CVillager &villager)
     plans->PlanToWait(
         3,
         eBodyPositionStanding,
+        eDirectionUmbrella,
         eHeadDirectionUmbrella);
     plans->StartNewBehavior(villager);
     return true;
@@ -29771,6 +29786,9 @@ static void VF2PlanLinkedChaiseAction(
         plans->PlanToWait(
             duration, eBodyPositionChaise,
             VF2SpaLoungerFacesNorthWest(info.orientation, info.unknown0)
+                ? eDirectionNorthwest
+                : eDirectionNortheast,
+            VF2SpaLoungerFacesNorthWest(info.orientation, info.unknown0)
                 ? eHeadDirectionNW
                 : eHeadDirectionNE);
     } else {
@@ -30111,7 +30129,13 @@ static void VF2PlanSpaTreatment(
     //    This code had them deliberately OPPOSITE, which was wrong.
     EHeadDirection loungerHead =
         loungerFacesNorthWest ? eHeadDirectionNW : eHeadDirectionNE;
-    plans->PlanToWait(settle, eBodyPositionChaise, loungerHead);
+    // FOUR arguments, because the 3-arg overload stores -1 in the body
+    // direction field (disasm 3449-3467) and eBodyPositionChaise carries no
+    // facing of its own -- so a 3-arg call leaves the villager lying ACROSS
+    // the lounger. The body direction moves WITH the head.
+    EDirection loungerBody =
+        loungerFacesNorthWest ? eDirectionNorthwest : eDirectionNortheast;
+    plans->PlanToWait(settle, eBodyPositionChaise, loungerBody, loungerHead);
     char const *loungerAnim = loungerFacesNorthWest ? "SleepNW" : "SleepNE";
     plans->PlanToPlayAnim(total - settle, loungerAnim, false, 0.02f);
 
