@@ -26396,12 +26396,22 @@ public:
     //   3-arg  ?PlanToWait@CVillagerPlans@@QAEXHW4EBodyPosition@@W4EHeadDirection@@@Z
     //   4-arg  ?PlanToWait@CVillagerPlans@@QAEXHW4EBodyPosition@@W4EDirection@@W4EHeadDirection@@@Z
     //
-    // CRITICAL: the 3-arg implementation writes -1 (0FFFFFFFFh) into the
-    // BODY DIRECTION field at [ebp-3Ch] -- it explicitly DISCARDS direction.
-    // The 4-arg version fills that same field from its EDirection argument.
-    // So a reclined pose that must align its body to the furniture REQUIRES
-    // the 4-argument overload. Using the 3-arg form leaves the villager
-    // lying ACROSS the lounger, which is the reported defect.
+    // The 3-arg implementation writes -1 (0FFFFFFFFh) into the BODY
+    // DIRECTION field at [ebp-3Ch] -- it explicitly discards direction. The
+    // 4-arg version fills that same field from its EDirection argument.
+    //
+    // SUPERSEDED, IN TURN: this block then concluded that "a reclined pose
+    // that must align its body to the furniture REQUIRES the 4-argument
+    // overload" and that the 3-arg form "leaves the villager lying ACROSS
+    // the lounger". That inference was WRONG too, and shipped in several
+    // probe builds that failed in play on both arms. The villager lay across
+    // the lounger because the BODY SPRITE was wrong (0x17 on both
+    // orientations), and no direction argument can correct a wrong sprite.
+    // Once the body position is selected by orientation, the 3-arg form is
+    // exactly right -- it is the hammock's shape, the only reference that
+    // was working -- and it is what VF2PlanSpaLoungerPose uses, by
+    // decision, not by omission. Both overloads exist; the spa pose does not
+    // want the direction field.
     void PlanToWait(int, EBodyPosition, EHeadDirection);
     void PlanToWait(int, EBodyPosition, EDirection, EHeadDirection);
     void PlanToLieDown(int);
