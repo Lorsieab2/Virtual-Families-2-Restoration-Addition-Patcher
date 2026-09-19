@@ -15367,7 +15367,10 @@ class SpontaneousLoungerBehaviorTests(unittest.TestCase):
         self.assertIn("static_cast<ECarrying>(0), 4, 1, 2);", rest)
         sleep = self._helper("VF2MobileNappingCouch")
         self.assertIn('"Getting some sleep", ldwGameState::GetRandom(10) + 10,', sleep)
-        self.assertIn("static_cast<ECarrying>(0), 2, 0, 10);", sleep)
+        # The trailing `true` is the sleeping flag, which only selects the
+        # sleep strip on a spa lounger; the manual parameters before it
+        # (dirtiness 2, happiness 0, energy 10) are what this test guards.
+        self.assertIn("static_cast<ECarrying>(0), 2, 0, 10, true);", sleep)
 
     def test_sit_down_variants_still_apply_on_the_autonomous_route(self):
         start = self.SOURCE.index("static void VF2PlanLinkedChaiseAction")
