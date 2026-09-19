@@ -26180,7 +26180,14 @@ enum EBodyPosition {
     //     eBodyPosition_SittingNW 0x12
     eBodyPositionSittingNE = 0x11,
     eBodyPositionSittingNW = 0x12,
-    eBodyPositionChaise = 0x17
+    eBodyPositionChaise = 0x17,
+    // Body 9 is the reclined pose the STOCK chaise dispatch uses at every
+    // orientation other than 1, and the pose the hammock uses at both of its
+    // orientations. Decoded from the shipped binary, not guessed: at
+    // .text+0x37444 the game compares orientation to 1 and pushes 0x17 for the
+    // match, 9 otherwise. Same value as the spontaneous-behaviors unit's
+    // eBodyPositionRestingHammock.
+    eBodyPositionRestingHammock = 9
 };
 // EDirection, decoded from AnimManager.obj's CodeView LF_ENUMERATE records:
 //   eDirection_Northeast = 0, Southeast = 1, Southwest = 2, Northwest = 3
@@ -27162,6 +27169,55 @@ static int VF2CurrentEnergy(CVillager &villager)
 
 static bool VF2SpaLoungerHasHandle(int handle);
 
+// THE ONE SPA-LOUNGER POSE. Settle, then sleep, on the lounger the villager
+// is actually on. Used by every route that poses a villager on a spa lounger,
+// so there is exactly one implementation to keep correct.
+//
+// THE MODEL, and why roughly twenty earlier attempts all failed.
+//
+// The stock game's own chaise dispatch, decoded from the binary at
+// .text+0x37444 (B189 exe; the same result was decoded from B190 earlier):
+//
+//     orientation == 1 -> body 0x17 (eBodyPositionChaise)         + "SleepNE"
+//     otherwise        -> body 9    (eBodyPositionRestingHammock) + "SleepNW"
+//
+// The BODY POSITION is orientation-dependent. Body 0x17 is the orientation-1
+// sprite. Every earlier attempt hardcoded 0x17 for BOTH orientations and then
+// varied the direction, the head or the strip. On an orientation-0 lounger,
+// body 0x17 lies across the furniture whatever direction is supplied -- a
+// direction argument cannot fix a wrong body sprite. That is why "one lounger
+// right, one wrong" survived every permutation of the other three arguments,
+// and why the sleep strip (which replaces the body frames) could look right
+// while the settle did not.
+//
+// Ordinary chaises never had the bug: at orientation 0 they use PlanToLieDown,
+// whose native path picks body 9. Spa loungers were forced into the explicit
+// 0x17 branch by `|| VF2SpaLoungerHasHandle(...)`.
+//
+// The hammock never had it either: it uses body 9 -- the same sprite -- with
+// the head and strip selected from ONE predicate, via the 3-argument
+// PlanToWait. That is the shape copied here. The 4-argument PlanToWait is not
+// used: it failed on both arms in play, and neither working reference uses it.
+//
+// The strip mapping (1 -> SleepNE, else SleepNW) matches stock AND the mapping
+// the owner confirmed correct in play on B190. It was inverted twice in later
+// rounds, and that inversion is what the last several builds shipped.
+static void VF2PlanSpaLoungerRest(
+    CVillagerPlans *plans, int orientation, int duration)
+{
+    bool const liesNorthEast = orientation == 1;
+    int const settle = duration > 10 ? 10 : duration;
+    plans->PlanToWait(
+        settle,
+        liesNorthEast ? eBodyPositionChaise : eBodyPositionRestingHammock,
+        liesNorthEast ? eHeadDirectionNE : eHeadDirectionNW);
+    plans->PlanToPlayAnim(
+        duration > settle ? duration - settle : 1,
+        liesNorthEast ? "SleepNE" : "SleepNW",
+        false,
+        0.02f);
+}
+
 static bool VF2HandleMobileChaise(CVillager &villager)
 {
     CVillagerPlans *plans = reinterpret_cast<CVillagerPlans *>(&villager);
@@ -27242,72 +27298,140 @@ static bool VF2HandleMobileChaise(CVillager &villager)
     // Scoped to the spa loungers deliberately: a stock chaise keeps the flat
     // pose it has always used here. Changing that would alter base-game
     // furniture, which is the owner's call and not this fix's.
-    // SPA LOUNGERS NOW TAKE THE SAME PATH AS THE NORMAL ONES.
-    //
-    // Owner instruction after round 10: "just copy the villager
-    // orientation/sleeping action data from the normal chaise loungers."
-    //
-    // This condition used to add `|| VF2SpaLoungerHasHandle(info.unknown0)`,
-    // which FORCED spa loungers into the PlanToWait branch while every
-    // ordinary lounger fell through to PlanToLieDown. That branch is the
-    // only one ever reported broken, across ten rounds, and the spa
-    // loungers were the only furniture routed into it. The orientation==1
-    // arm is stock behaviour and is left exactly as it was.
-    // ONE PLAN FOR BOTH ORIENTATIONS. Owner: "they should use the same
-    // plan."
-    //
-    // This used to branch: orientation 1 took PlanToWait with supplied
-    // direction/head, everything else took PlanToLieDown. That split is
-    // what produced "one lounger right, one wrong" in every round -- the
-    // two spa orientations were posed by two different mechanisms, so
-    // correcting one could not correct the other.
-    //
-    // PlanToLieDown is what the ordinary loungers have always used and
-    // what the owner confirmed working. Both orientations now use it.
-    // LIE DOWN AND SLEEP, THE HAMMOCK'S WAY. Owner: "they should lie down
-    // AND sleep too" and "the hammock already does the orientation-aware
-    // actions correctly. use that."
-    //
-    // VF2LieInHammockAnchoredRest is the one route that lies a villager
-    // down and sleeps correctly on both orientations:
-    //
-    //     plans->PlanToWait(10, eBodyPositionRestingHammock, head);
-    //     char const *anim = facesNorthWest ? "SleepNW" : "SleepNE";
-    //     plans->PlanToPlayAnim(rest, anim, false, 0.02f);
-    //
-    // Same shape here: a short settle that places the body, then the
-    // orientation-matched Sleep strip for the remainder. PlanToLieDown is
-    // the loungers' own settle -- what the ordinary chaises have always
-    // used and what the owner confirmed working -- so it replaces the
-    // hammock's PlanToWait, and the strip follows the orientation the same
-    // way the hammock's does.
-    // ONE SOURCE OF FACING FOR BOTH PHASES.
-    //
-    // WHY IT FLIPPED WHEN THE EYES CLOSED, from the disassembly:
-    // PlanToLieDown writes action type 0x25 with the direction and head
-    // fields ZERO -- it supplies NO facing, so the engine derives one. A
-    // Sleep strip that then picks its own facing makes the villager
-    // visibly turn at the transition.
-    //
-    // The hammock never flips because BOTH its phases come from one value.
-    // Same here: one predicate drives the body, the head and the strip.
-    //
-    // Spa loungers occupy orientation 0 or 1 and the live capture recorded
-    // facing AS the orientation: 0 -> NE, 1 -> NW. `orientation == 3` was
-    // never true for them, so every lounger got SleepNE regardless of which
-    // way it faced.
-    bool const loungerFacesNorthWest = info.orientation == 1;
-    int const settleTicks = duration > 10 ? 10 : duration;
-    plans->PlanToWait(
-        settleTicks,
-        eBodyPositionChaise,
-        loungerFacesNorthWest ? eDirectionNorthwest : eDirectionNortheast,
-        loungerFacesNorthWest ? eHeadDirectionNW : eHeadDirectionNE);
-    plans->PlanToPlayAnim(
-        duration > settleTicks ? duration - settleTicks : 1,
-        loungerFacesNorthWest ? "SleepNW" : "SleepNE",
-        false,
-        0.02f);
+    // Spa loungers take the one correct pose (see VF2PlanSpaLoungerRest).
+    // Every other chaise keeps the branch below EXACTLY as it shipped and
+    // as the owner confirmed working. The old condition's
+    // `|| VF2SpaLoungerHasHandle(...)` is what forced spa loungers into
+    // the orientation-1 body at every orientation.
+    if (VF2SpaLoungerHasHandle(info.unknown0)) {
+        VF2PlanSpaLoungerRest(plans, info.orientation, duration);
+    } else if (info.orientation == 1) {
+        // Plan the pose WITH a head direction. eBodyPositionChaise carries
+        // no facing of its own, so a two-argument wait leaves the villager
+        // pointing wherever they walked in from -- which is the "lying
+        // across the lounger" the owner reported. The hammock route
+        // already does it this way and lines up correctly.
+        //
+        // THE HEAD DIRECTION FOLLOWS THE FURNITURE, and both constants it
+        // used were wrong. eHeadDirectionNE was declared as 1, which is really
+        // Southeast, and eHeadDirectionNW as 7, which is really UpNE1 -- an
+        // upward gaze. Decoded from theAlignVillagerScene.obj, which indexes a
+        // name table directly by this enum: Northeast(0), Southeast(1),
+        // Southwest(2), Northwest(3). Corroborated by AnimManager.obj's
+        // RandomNorthHeadDirection array, which is {0, 3}. That is why the
+        // lounger never faced along the furniture across two attempted fixes.
+        //
+        // The test was wrong too: `orientation == 1` is SW alone, missing NW.
+        // This reaches the INVISIBLE Spa Lounger as well -- it is the same
+        // item with different art and shares this route.
+        // THE SPLIT IS THE EAST/WEST AXIS, NOT NW ALONE.
+        //
+        // Reported in play again: "spa lounger villager orientation has no
+        // change". VF2FurnitureFacesNorthWest is `orientation == 3`, so SE(0),
+        // SW(1) and NE(2) ALL took eHeadDirectionNE and only NW(3) differed --
+        // three of the four placements produced an IDENTICAL pose, which is
+        // exactly what "no change" looks like when the lounger is rotated.
+        //
+        // EFurnitureOrientation is SE=0, SW=1, NE=2, NW=3. The two head
+        // directions are an east/west pair, so the split is the east half
+        // {SE(0), NE(2)} against the west half {SW(1), NW(3)} -- the same
+        // grouping the picnic meal sprite already uses via
+        // VF2FurnitureFacesEast. Reaches the INVISIBLE Spa Lounger too:
+        // VF2SpaLoungerHasHandle matches both item ids and both share this
+        // route.
+        // THE BODY NEEDS A DIRECTION, NOT JUST THE HEAD.
+        //
+        // Owner screenshot and report: "they lie across it" -- the villager
+        // lies ACROSS the lounger with limbs off both sides, so the body is not
+        // aligned to the furniture at all. eBodyPositionChaise carries no
+        // facing of its own and the three-argument PlanToWait sets only the
+        // HEAD, so the body kept whatever facing the villager walked in with.
+        //
+        // Three earlier attempts argued about which head direction to pass --
+        // `orientation == 1`, then `orientation == 3`, then an east/west split
+        // -- and every one of them was tuning an argument that was never
+        // controlling the body. That is why the defect survived all three.
+        //
+        // The four-argument overload is real and already linked: it is in the
+        // game's own object file, and the patio umbrella route calls it in
+        // shipped code. EDirection is NE=0, SE=1, SW=2, NW=3, which is a
+        // DIFFERENT ordering from EFurnitureOrientation (SE=0, SW=1, NE=2,
+        // NW=3), so the orientation is mapped rather than passed through.
+        // THE STOCK ORIENTATION TEST, NOT AN EAST/WEST SPLIT.
+        //
+        // ORIENTATION 3 ALONE TAKES THE NW STRIP. Two orientations are
+        // confirmed in play; the other two are NOT, and that is said plainly
+        // here rather than dressed up as a derived rule.
+        //
+        // Live IDA capture on the shipped build, with the owner's verdict:
+        //
+        //   orientation=0 (SE)  dir=0 head=0  SleepNE   <- CORRECT in play
+        //   orientation=1 (SW)  dir=3 head=3  SleepNW   <- WRONG in play
+        //
+        // SUPERSEDED BY THE B188 PLAYTEST, recorded rather than deleted
+        // (AGENTS.md 11). This comment concluded: "SE(0) wants SleepNE, and
+        // SW(1) wants the strip it did not get, which is also SleepNE, so
+        // `orientation == 3` satisfies both."
+        //
+        // THAT CONCLUSION WAS WRONG, and B188 is the proof. `orientation == 3`
+        // never matches a real lounger, so BOTH placements got SleepNE -- and
+        // the owner then reported one lounger correct and one wrong. SE(0) was
+        // the correct one; SW(1) was the broken one. So SW(1) wants SleepNW,
+        // which is the strip the capture above shows it already had.
+        //
+        // The misreading: the capture marked orientation=1 SleepNW as "WRONG
+        // in play", so this comment inferred SW wanted the other strip. The
+        // facing was wrong at that moment for a different reason -- the head
+        // and body direction were not being supplied with the pose at all --
+        // and the sleep strip was never the defect for SW.
+        //
+        // MAPPING FOR THIS RELAX POSE, per the owner's B188 verdict:
+        //
+        //   orientation=0 (SE)  ->  NE direction, NE head, SleepNE
+        //   orientation=1 (SW)  ->  NW direction, NW head, SleepNW
+        //
+        // SCOPE, and this distinction cost six rounds: the mapping above is
+        // correct for THIS pose. It is NOT the rule for the spa RECEIVING
+        // pose, which the owner playtested in B189 and found still wrong.
+        // VF2PlanSpaTreatment takes the MIRROR of this mapping. Do not
+        // "unify" the two -- they are deliberately opposite.
+        //
+        // SUPERSEDED CLAIM, recorded rather than deleted (AGENTS.md 11). An
+        // earlier revision of this comment asserted that stock
+        // CBehavior::RestingBody tests `orientation == 3` two-ways and that
+        // this rule was copied from it. THAT WAS WRONG, and it was wrong
+        // because only the first compare was read. The full dispatch in
+        // work/Behavior_patched_disasm.txt is FOUR-way:
+        //
+        //   orientation   body          legs/lie        sleep strip
+        //   0 SE          9             --              SleepNW
+        //   1 SW          0x17 chaise   Lie SW          SleepNE
+        //   2 NE          9             RestingLegsE    SleepNW
+        //   3 NW          0x17 chaise   RestingLegsW    SleepNE
+        //
+        // Stock is a PARITY rule, and it is the OPPOSITE of what was claimed.
+        //
+        // Stock is also NOT the model to copy here. At orientation 0 stock
+        // plays SleepNW, yet the owner confirms SleepNE looks right on the
+        // spa lounger there -- so copying stock would break the placement
+        // that already works. The spa lounger's art is a reclined seat, not
+        // the stock chaise art, and nothing requires the strips to agree.
+        //
+        // NW(3) IS A GUESS. It is unobserved, and it is kept as a separate arm
+        // only so both strips stay reachable for the owner's next rotation
+        // test; flattening everything to SleepNE would make that test
+        // impossible to interpret.
+        plans->PlanToWait(
+            duration, eBodyPositionChaise,
+            VF2SpaLoungerFacesNorthWest(info.orientation, info.unknown0)
+                ? eDirectionNorthwest
+                : eDirectionNortheast,
+            VF2SpaLoungerFacesNorthWest(info.orientation, info.unknown0)
+                ? eHeadDirectionNW
+                : eHeadDirectionNE);
+    } else {
+        plans->PlanToLieDown(duration);
+    }
     if (dirtiness) plans->PlanToIncDirtiness(dirtiness);
     if (happiness) plans->PlanToIncHappinessTrend(happiness);
     if (energyGain) plans->PlanToIncEnergy(energyGain);
@@ -29617,72 +29741,140 @@ static void VF2PlanLinkedChaiseAction(
     // Scoped to the spa loungers deliberately: a stock chaise keeps the flat
     // pose it has always used here. Changing that would alter base-game
     // furniture, which is the owner's call and not this fix's.
-    // SPA LOUNGERS NOW TAKE THE SAME PATH AS THE NORMAL ONES.
-    //
-    // Owner instruction after round 10: "just copy the villager
-    // orientation/sleeping action data from the normal chaise loungers."
-    //
-    // This condition used to add `|| VF2SpaLoungerHasHandle(info.unknown0)`,
-    // which FORCED spa loungers into the PlanToWait branch while every
-    // ordinary lounger fell through to PlanToLieDown. That branch is the
-    // only one ever reported broken, across ten rounds, and the spa
-    // loungers were the only furniture routed into it. The orientation==1
-    // arm is stock behaviour and is left exactly as it was.
-    // ONE PLAN FOR BOTH ORIENTATIONS. Owner: "they should use the same
-    // plan."
-    //
-    // This used to branch: orientation 1 took PlanToWait with supplied
-    // direction/head, everything else took PlanToLieDown. That split is
-    // what produced "one lounger right, one wrong" in every round -- the
-    // two spa orientations were posed by two different mechanisms, so
-    // correcting one could not correct the other.
-    //
-    // PlanToLieDown is what the ordinary loungers have always used and
-    // what the owner confirmed working. Both orientations now use it.
-    // LIE DOWN AND SLEEP, THE HAMMOCK'S WAY. Owner: "they should lie down
-    // AND sleep too" and "the hammock already does the orientation-aware
-    // actions correctly. use that."
-    //
-    // VF2LieInHammockAnchoredRest is the one route that lies a villager
-    // down and sleeps correctly on both orientations:
-    //
-    //     plans->PlanToWait(10, eBodyPositionRestingHammock, head);
-    //     char const *anim = facesNorthWest ? "SleepNW" : "SleepNE";
-    //     plans->PlanToPlayAnim(rest, anim, false, 0.02f);
-    //
-    // Same shape here: a short settle that places the body, then the
-    // orientation-matched Sleep strip for the remainder. PlanToLieDown is
-    // the loungers' own settle -- what the ordinary chaises have always
-    // used and what the owner confirmed working -- so it replaces the
-    // hammock's PlanToWait, and the strip follows the orientation the same
-    // way the hammock's does.
-    // ONE SOURCE OF FACING FOR BOTH PHASES.
-    //
-    // WHY IT FLIPPED WHEN THE EYES CLOSED, from the disassembly:
-    // PlanToLieDown writes action type 0x25 with the direction and head
-    // fields ZERO -- it supplies NO facing, so the engine derives one. A
-    // Sleep strip that then picks its own facing makes the villager
-    // visibly turn at the transition.
-    //
-    // The hammock never flips because BOTH its phases come from one value.
-    // Same here: one predicate drives the body, the head and the strip.
-    //
-    // Spa loungers occupy orientation 0 or 1 and the live capture recorded
-    // facing AS the orientation: 0 -> NE, 1 -> NW. `orientation == 3` was
-    // never true for them, so every lounger got SleepNE regardless of which
-    // way it faced.
-    bool const loungerFacesNorthWest = info.orientation == 1;
-    int const settleTicks = duration > 10 ? 10 : duration;
-    plans->PlanToWait(
-        settleTicks,
-        eBodyPositionChaise,
-        loungerFacesNorthWest ? eDirectionNorthwest : eDirectionNortheast,
-        loungerFacesNorthWest ? eHeadDirectionNW : eHeadDirectionNE);
-    plans->PlanToPlayAnim(
-        duration > settleTicks ? duration - settleTicks : 1,
-        loungerFacesNorthWest ? "SleepNW" : "SleepNE",
-        false,
-        0.02f);
+    // Spa loungers take the one correct pose (see VF2PlanSpaLoungerRest).
+    // Every other chaise keeps the branch below EXACTLY as it shipped and
+    // as the owner confirmed working. The old condition's
+    // `|| VF2SpaLoungerHasHandle(...)` is what forced spa loungers into
+    // the orientation-1 body at every orientation.
+    if (VF2SpaLoungerHasHandle(info.unknown0)) {
+        VF2PlanSpaLoungerRest(plans, info.orientation, duration);
+    } else if (info.orientation == 1) {
+        // Plan the pose WITH a head direction. eBodyPositionChaise carries
+        // no facing of its own, so a two-argument wait leaves the villager
+        // pointing wherever they walked in from -- which is the "lying
+        // across the lounger" the owner reported. The hammock route
+        // already does it this way and lines up correctly.
+        //
+        // THE HEAD DIRECTION FOLLOWS THE FURNITURE, and both constants it
+        // used were wrong. eHeadDirectionNE was declared as 1, which is really
+        // Southeast, and eHeadDirectionNW as 7, which is really UpNE1 -- an
+        // upward gaze. Decoded from theAlignVillagerScene.obj, which indexes a
+        // name table directly by this enum: Northeast(0), Southeast(1),
+        // Southwest(2), Northwest(3). Corroborated by AnimManager.obj's
+        // RandomNorthHeadDirection array, which is {0, 3}. That is why the
+        // lounger never faced along the furniture across two attempted fixes.
+        //
+        // The test was wrong too: `orientation == 1` is SW alone, missing NW.
+        // This reaches the INVISIBLE Spa Lounger as well -- it is the same
+        // item with different art and shares this route.
+        // THE SPLIT IS THE EAST/WEST AXIS, NOT NW ALONE.
+        //
+        // Reported in play again: "spa lounger villager orientation has no
+        // change". VF2FurnitureFacesNorthWest is `orientation == 3`, so SE(0),
+        // SW(1) and NE(2) ALL took eHeadDirectionNE and only NW(3) differed --
+        // three of the four placements produced an IDENTICAL pose, which is
+        // exactly what "no change" looks like when the lounger is rotated.
+        //
+        // EFurnitureOrientation is SE=0, SW=1, NE=2, NW=3. The two head
+        // directions are an east/west pair, so the split is the east half
+        // {SE(0), NE(2)} against the west half {SW(1), NW(3)} -- the same
+        // grouping the picnic meal sprite already uses via
+        // VF2FurnitureFacesEast. Reaches the INVISIBLE Spa Lounger too:
+        // VF2SpaLoungerHasHandle matches both item ids and both share this
+        // route.
+        // THE BODY NEEDS A DIRECTION, NOT JUST THE HEAD.
+        //
+        // Owner screenshot and report: "they lie across it" -- the villager
+        // lies ACROSS the lounger with limbs off both sides, so the body is not
+        // aligned to the furniture at all. eBodyPositionChaise carries no
+        // facing of its own and the three-argument PlanToWait sets only the
+        // HEAD, so the body kept whatever facing the villager walked in with.
+        //
+        // Three earlier attempts argued about which head direction to pass --
+        // `orientation == 1`, then `orientation == 3`, then an east/west split
+        // -- and every one of them was tuning an argument that was never
+        // controlling the body. That is why the defect survived all three.
+        //
+        // The four-argument overload is real and already linked: it is in the
+        // game's own object file, and the patio umbrella route calls it in
+        // shipped code. EDirection is NE=0, SE=1, SW=2, NW=3, which is a
+        // DIFFERENT ordering from EFurnitureOrientation (SE=0, SW=1, NE=2,
+        // NW=3), so the orientation is mapped rather than passed through.
+        // THE STOCK ORIENTATION TEST, NOT AN EAST/WEST SPLIT.
+        //
+        // ORIENTATION 3 ALONE TAKES THE NW STRIP. Two orientations are
+        // confirmed in play; the other two are NOT, and that is said plainly
+        // here rather than dressed up as a derived rule.
+        //
+        // Live IDA capture on the shipped build, with the owner's verdict:
+        //
+        //   orientation=0 (SE)  dir=0 head=0  SleepNE   <- CORRECT in play
+        //   orientation=1 (SW)  dir=3 head=3  SleepNW   <- WRONG in play
+        //
+        // SUPERSEDED BY THE B188 PLAYTEST, recorded rather than deleted
+        // (AGENTS.md 11). This comment concluded: "SE(0) wants SleepNE, and
+        // SW(1) wants the strip it did not get, which is also SleepNE, so
+        // `orientation == 3` satisfies both."
+        //
+        // THAT CONCLUSION WAS WRONG, and B188 is the proof. `orientation == 3`
+        // never matches a real lounger, so BOTH placements got SleepNE -- and
+        // the owner then reported one lounger correct and one wrong. SE(0) was
+        // the correct one; SW(1) was the broken one. So SW(1) wants SleepNW,
+        // which is the strip the capture above shows it already had.
+        //
+        // The misreading: the capture marked orientation=1 SleepNW as "WRONG
+        // in play", so this comment inferred SW wanted the other strip. The
+        // facing was wrong at that moment for a different reason -- the head
+        // and body direction were not being supplied with the pose at all --
+        // and the sleep strip was never the defect for SW.
+        //
+        // MAPPING FOR THIS RELAX POSE, per the owner's B188 verdict:
+        //
+        //   orientation=0 (SE)  ->  NE direction, NE head, SleepNE
+        //   orientation=1 (SW)  ->  NW direction, NW head, SleepNW
+        //
+        // SCOPE, and this distinction cost six rounds: the mapping above is
+        // correct for THIS pose. It is NOT the rule for the spa RECEIVING
+        // pose, which the owner playtested in B189 and found still wrong.
+        // VF2PlanSpaTreatment takes the MIRROR of this mapping. Do not
+        // "unify" the two -- they are deliberately opposite.
+        //
+        // SUPERSEDED CLAIM, recorded rather than deleted (AGENTS.md 11). An
+        // earlier revision of this comment asserted that stock
+        // CBehavior::RestingBody tests `orientation == 3` two-ways and that
+        // this rule was copied from it. THAT WAS WRONG, and it was wrong
+        // because only the first compare was read. The full dispatch in
+        // work/Behavior_patched_disasm.txt is FOUR-way:
+        //
+        //   orientation   body          legs/lie        sleep strip
+        //   0 SE          9             --              SleepNW
+        //   1 SW          0x17 chaise   Lie SW          SleepNE
+        //   2 NE          9             RestingLegsE    SleepNW
+        //   3 NW          0x17 chaise   RestingLegsW    SleepNE
+        //
+        // Stock is a PARITY rule, and it is the OPPOSITE of what was claimed.
+        //
+        // Stock is also NOT the model to copy here. At orientation 0 stock
+        // plays SleepNW, yet the owner confirms SleepNE looks right on the
+        // spa lounger there -- so copying stock would break the placement
+        // that already works. The spa lounger's art is a reclined seat, not
+        // the stock chaise art, and nothing requires the strips to agree.
+        //
+        // NW(3) IS A GUESS. It is unobserved, and it is kept as a separate arm
+        // only so both strips stay reachable for the owner's next rotation
+        // test; flattening everything to SleepNE would make that test
+        // impossible to interpret.
+        plans->PlanToWait(
+            duration, eBodyPositionChaise,
+            VF2SpaLoungerFacesNorthWest(info.orientation, info.unknown0)
+                ? eDirectionNorthwest
+                : eDirectionNortheast,
+            VF2SpaLoungerFacesNorthWest(info.orientation, info.unknown0)
+                ? eHeadDirectionNW
+                : eHeadDirectionNE);
+    } else {
+        plans->PlanToLieDown(duration);
+    }
     if (dirtiness) plans->PlanToIncDirtiness(dirtiness);
     if (happiness) plans->PlanToIncHappinessTrend(happiness);
     if (energy) plans->PlanToIncEnergy(energy);
@@ -29853,162 +30045,22 @@ static void VF2PlanSpaTreatment(
     CVillagerPlans *plans, CVillager &villager, sFurnitureInfo2 const &info)
 {
     (void)villager;
+    // HISTORY, kept short on purpose (AGENTS.md 11). This function went
+    // through roughly twenty revisions -- selector flips, mirrored arms,
+    // coupled and then deliberately opposite settle/strip arms, a 3-argument
+    // detour, PlanToLieDown, and several strip inversions. All of them kept
+    // body 0x17 for BOTH orientations, which is the actual defect; see the
+    // note on VF2PlanSpaLoungerRest. The earlier commentary is in git history
+    // on PR #353 and is not repeated here, because the stack of contradictory
+    // superseded blocks was itself leading each round back into the bug.
+    //
+    // info.orientation is the orientation of the lounger the villager is
+    // actually on: the drop route corrects it from the slot under the
+    // villager, and the autonomous route reads it from the verified record.
     int const total = ldwGameState::GetRandom(11) + 55;
-
-    // ONE rest for the whole treatment, not a slice per sigh.
-    //
-    // Reported from live play: the villager repeated "prepare to lie down"
-    // and never settled. Splitting the rest into three PlanToLieDown calls is
-    // what caused it -- each one restarts the getting-in animation rather than
-    // continuing the previous rest, so the villager perpetually prepared and
-    // never rested. Every working chaise route in this file issues a single
-    // call for the full duration; this now does the same.
-    // THE CHAISE POSE IN BOTH ORIENTATIONS.
-    //
-    // Reported from live play with a screenshot: the villager lies ACROSS the
-    // spa lounger rather than along it, feet and head hanging off the sides.
-    // Cause: the NE branch used PlanToLieDown, which is the FLAT lying pose
-    // the base game uses for a bed or the ground. It is correct for a stock
-    // chaise -- that is the pattern this file copies elsewhere -- but the spa
-    // lounger's art is a reclined seat, so a flat body does not follow it.
-    //
-    // eBodyPositionChaise is the reclined pose and it is orientation-agnostic;
-    // the SleepNW / SleepNE animation below is what carries the facing. So the
-    // pose is now the same in both branches and only the animation differs,
-    // which is what the two furniture frames actually distinguish.
-    // THE POSE NEEDS A HEAD DIRECTION, OR IT KEEPS THE OLD FACING.
-    //
-    // Reported from live play a second time: the villager still does not lie
-    // along the lounger. The previous fix corrected the POSE -- chaise rather
-    // than the flat lying pose -- and that part was right, but it left the
-    // three-argument PlanToWait unused, so the body kept whichever facing the
-    // villager walked in with. eBodyPositionChaise being orientation-agnostic
-    // is exactly why that matters: nothing else in the wait supplies a facing.
-    //
-    // The hammock route in this same file already does it correctly and is the
-    // pattern copied here: LinkPeepToFurniture reports the placed orientation,
-    // and the pose is planned WITH the matching head direction so the body
-    // lines up with the furniture before the sleep strip starts.
-    // THE VILLAGER FOLLOWS THE LOUNGER.
-    //
-    // SUPERSEDED IN PART (AGENTS.md 11). This continued: "and the settle
-    // pose and the sleep strip must agree, so both now come from ONE test."
-    // That coupling is exactly what six rounds could not get past -- see the
-    // settle below. The two phases now take OPPOSITE arms on purpose.
-    //
-    // Reported in play twice: the villager on a spa lounger is oriented wrong.
-    // Two things were wrong at once.
-    //
-    // 1. The head-direction constants. eHeadDirectionNE was declared as 1,
-    //    which is really Southeast, and eHeadDirectionNW as 7, which is really
-    //    UpNE1 -- an upward gaze. Decoded from theAlignVillagerScene.obj,
-    //    which indexes a name table directly by this enum: Northeast(0),
-    //    Southeast(1), Southwest(2), Northwest(3), and corroborated by
-    //    AnimManager.obj's RandomNorthHeadDirection array {0, 3}.
-    // 2. The test. EFurnitureOrientation is SE=0, SW=1, NE=2, NW=3 (CodeView
-    //    LF_ENUMERATE records, identical in FurnitureManager.obj at 0x52e0 and
-    //    Behavior.obj at 0x9cfb), so `orientation == 1` is SW alone: it missed
-    //    NW entirely and answered true for SW.
-    //
-    // This route serves the INVISIBLE Spa Lounger too -- it is the same item
-    // with different art and shares this handler.
-    // ================= SUPERSEDED, KEPT AS THE FAILED APPROACH =============
-    // Everything in this block describes the rule B189 SHIPPED. The owner
-    // playtested B189 and the villager was STILL lying across the lounger, so
-    // none of it is the current rule. It is retained rather than deleted
-    // (AGENTS.md 11) because the way it failed is the useful part, and because
-    // deleting it would invite a seventh attempt down the same path.
-    //
-    //   "SAME EAST/WEST CORRECTION AS THE OTHER TWO LOUNGER POSES.
-    //
-    //    `orientation == 3` collapsed SE(0), SW(1) and NE(2) onto one pose and
-    //    one sleep strip. The pair is east/west: {SE(0), NE(2)} east,
-    //    {SW(1), NW(3)} west. This drives BOTH the settle head direction and
-    //    the SleepNW/SleepNE animation, so the two stay in agreement.
-    //    ORIENTATION 3 ALONE TAKES THE NW STRIP.
-    //
-    //    Confirmed in play across two releases: SE(0) wants SleepNE. B188
-    //    shipped `orientation == 3` here, which never matches a real spa
-    //    lounger, so SW(1) also got SleepNE -- and that is the placement the
-    //    owner reported wrong. SW(1) wants SleepNW, matching the live capture
-    //    where the facing IS the orientation."
-    //
-    // WHAT WAS ACTUALLY WRONG WITH IT. Every claim above is about WHICH
-    // orientation takes WHICH strip. The receiving pose needs the MIRROR of
-    // whatever that selector picks, so both placements were wrong together and
-    // tuning the selector could only swap which one looked wrong. The "one
-    // correct, one wrong" symptom on B188 was TWO STACKED DEFECTS: the
-    // selector wrong for one placement, on top of the mirror wrong for both.
-    //
-    // Still true from that block, and NOT superseded: `orientation == 3` never
-    // matches a real spa lounger, and the settle pose and sleep strip must
-    // derive from one test so they cannot disagree.
-    //
-    // THE SECOND OF THOSE IS NOW ALSO SUPERSEDED. The owner separated the
-    // phases by photograph: settle WRONG, strip CORRECT. They take opposite
-    // arms now, and that is what makes them agree on screen.
-    // ======================================================================
-    //
-    // NOT copied from stock, and an earlier revision of this comment wrongly
-    // said it was. Stock RestingBody is a four-way PARITY dispatch that plays
-    // SleepNW at orientation 0 -- where the owner confirms SleepNE is right on
-    // this item -- so copying it would break the working placement.
-    //
-    // This handler is the spa treatment, so it asks the spa rule directly.
-    // The shared VF2FurnitureFacesNorthWest is left alone because ordinary
-    // Lounge Chairs depend on it and were confirmed working.
-    // LIE DOWN AND SLEEP, same as the relax poses and the hammock.
-    // PlanToLieDown alone leaves the villager awake for the whole
-    // treatment; the strip follows the orientation exactly as the
-    // hammock's does.
-    // ONE SOURCE OF FACING FOR BOTH PHASES.
-    //
-    // WHY IT FLIPPED WHEN THE EYES CLOSED, from the disassembly:
-    // PlanToLieDown writes action type 0x25 and leaves the direction and
-    // head fields ZERO ([ebp-14h] and [ebp-10h] both cleared). It supplies
-    // NO facing -- the engine derives one. The Sleep strip then imposed a
-    // different facing, so the villager visibly turned at the transition.
-    //
-    // The hammock never flips because BOTH its phases come from one value:
-    //
-    //     bool const facesNorthWest = info.orientation == 3;
-    //     PlanToWait(10, eBodyPositionRestingHammock,
-    //                facesNorthWest ? eHeadDirectionNW : eHeadDirectionNE);
-    //     PlanToPlayAnim(rest, facesNorthWest ? "SleepNW" : "SleepNE", ...);
-    //
-    // Same shape here, with the facing read from the lounger the villager
-    // is actually on (info.orientation is corrected by the caller before
-    // this runs). A spa lounger occupies orientation 0 or 1, and the live
-    // capture recorded facing AS the orientation: 0 -> NE, 1 -> NW.
-    bool const loungerFacesNorthWest = info.orientation == 1;
-    int const settleTicks = total > 10 ? 10 : total;
-    plans->PlanToWait(
-        settleTicks,
-        eBodyPositionChaise,
-        loungerFacesNorthWest ? eDirectionNorthwest : eDirectionNortheast,
-        loungerFacesNorthWest ? eHeadDirectionNW : eHeadDirectionNE);
-    plans->PlanToPlayAnim(
-        total > settleTicks ? total - settleTicks : 1,
-        // THE HAMMOCK'S OWN CONDITION, COPIED UNCHANGED.
-        //
-        //     bool const hammockFacesNorthWest = info.orientation == 3;
-        //     char const *sleepAnim =
-        //         hammockFacesNorthWest ? "SleepNW" : "SleepNE";
-        //
-        // It tests orientation == 3 (NW), NOT == 1. A spa lounger only ever
-        // occupies orientations 0 and 1, so under the hammock's rule BOTH
-        // spa placements are "not NW" and both take SleepNE.
-        //
-        // Writing `orientation == 1 ? "SleepNW"` was my own substitution,
-        // not the hammock's logic, and it gave orientation 1 the strip the
-        // owner photographed as wrong. Copy the working route; do not
-        // re-derive it.
-        loungerFacesNorthWest ? "SleepNW" : "SleepNE",
-        false,
-        0.02f);
+    VF2PlanSpaLoungerRest(plans, info.orientation, total);
     plans->PlanToPlaySound(
         static_cast<ESound>(0x101), 1.0f, eSoundTypeEffects);
-    // A treatment is restful, so it pays the nap's own energy and dirtiness.
     plans->PlanToIncDirtiness(2);
     plans->PlanToIncEnergy(ldwGameState::GetRandom(5) + 7);
 }
