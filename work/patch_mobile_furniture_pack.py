@@ -27133,6 +27133,15 @@ static int VF2FurnitureItemAtSlot(int slot)
     return *reinterpret_cast<int *>(manager + 0x1008 + slot * 0x40);
 }
 
+// The unique handle AddToWorld stamps at +0x04 of a placement record, or 0
+// when the slot is unknown. Same record layout as VF2FurnitureItemAtSlot.
+static int VF2FurnitureHandleAtSlot(int slot)
+{
+    if (slot < 0) return 0;
+    unsigned char *manager = reinterpret_cast<unsigned char *>(&FurnitureManager);
+    return *reinterpret_cast<int *>(manager + 0x1008 + slot * 0x40 + 0x04);
+}
+
 static int VF2FurnitureItemAtPoint(ldwPoint point)
 {
     return VF2FurnitureItemAtSlot(VF2FurnitureSlotAtPoint(point));
@@ -30326,15 +30335,24 @@ static bool VF2HandleMobileInvisibleSpaLounger(CVillager &villager)
     // the wrong lounger's orientation, was disproved in round 21: the defect
     // was the body table (see VF2PlanSpaLoungerPose), not the source.
     //
-    // BUT THE LINK CAN LAND ON AN ORDINARY CHAISE. eObjectChaise is shared,
-    // and the link skips a placement with no free peep slot -- a reader the
-    // spa occupancy check does not count, say -- and takes the next chaise.
-    // The reservation is already made and cannot be given back, so the only
-    // honest disposition is to USE it as what it is: an ordinary chaise
-    // relax on the chaise that was linked, never the spa treatment there.
-    // Any earlier hold this villager had on a spa lounger is released,
-    // because they are not going to one.
-    if (!VF2SpaLoungerHasHandle(receiveInfo.unknown0)) {
+    // BUT THE LINK CAN LAND SOMEWHERE ELSE. eObjectChaise is shared, and
+    // the link skips a placement with no free peep slot -- a reader the spa
+    // occupancy check does not count, say -- and takes the next chaise:
+    // an ordinary one, or with two spa loungers in the house, the OTHER spa
+    // lounger. The reservation is already made and cannot be given back, so
+    // the only honest disposition is to USE it as what it is: an ordinary
+    // chaise relax on the chaise that was linked, never the spa treatment,
+    // which belongs on the lounger the player dropped the villager on. So
+    // the linked handle must be a spa lounger AND the dropped-on slot's own
+    // handle. When the slot under the villager could not be sampled, the
+    // exact match cannot be made and any spa lounger is accepted, as
+    // before. Any earlier hold this villager had on a spa lounger is
+    // released, because they are not going to one.
+    int const droppedOn = VF2FurnitureHandleAtSlot(loungerSlot);
+    bool const linkedTheDroppedOnLounger =
+        VF2SpaLoungerHasHandle(receiveInfo.unknown0) &&
+        (droppedOn == 0 || receiveInfo.unknown0 == droppedOn);
+    if (!linkedTheDroppedOnLounger) {
         VF2SpaReleaseLoungerHold(villager);
         VF2PlanLinkedChaiseAction(
             villager, receiveInfo, "Relaxing on lounger",

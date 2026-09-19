@@ -310,9 +310,18 @@ class EachRouteUsesOnePlacement(unittest.TestCase):
         # shared and the link skips a placement with no free peep slot, so a
         # drop on a spa lounger can link an ordinary chaise. That chaise is
         # used as what it is -- an ordinary relax -- never for the treatment.
-        guard = after_link.index("if (!VF2SpaLoungerHasHandle(receiveInfo.unknown0)) {")
+        guard = after_link.index("int const droppedOn = VF2FurnitureHandleAtSlot(loungerSlot);")
         self.assertLess(guard, after_link.index("VF2SpaTreatmentPoint("),
                         "the handle is checked after the treatment is planned")
+        # ...and against the EXACT lounger the player dropped on. With two
+        # spa loungers the link can land on the other one (review, round 8).
+        self.assertIn(
+            "        VF2SpaLoungerHasHandle(receiveInfo.unknown0) &&\n"
+            "        (droppedOn == 0 || receiveInfo.unknown0 == droppedOn);\n"
+            "    if (!linkedTheDroppedOnLounger) {",
+            after_link,
+            "the guard accepts any spa lounger; it must require the "
+            "dropped-on slot's own handle, and take the fallback otherwise")
         fallback = after_link[guard:after_link.index("VF2SpaReleaseHoldOnLounger(")]
         self.assertIn("VF2SpaReleaseLoungerHold(villager);", fallback)
         self.assertIn('VF2PlanLinkedChaiseAction(\n            villager, receiveInfo, "Relaxing on lounger",', fallback)
