@@ -369,5 +369,169 @@ class NothingElseWasLost(unittest.TestCase):
                 self.assertTrue("%s, %s" % (inv, vis) in src or "%s, %s" % (vis, inv) in src)
 
 
+class TheCompiledArtifact(unittest.TestCase):
+    """Decode the pose from the COMPILED unit, not from the generator text.
+
+    Every class above reads work/patch_mobile_furniture_pack.py, so if the
+    dispatch emitter stopped including this code they would keep passing
+    against dead source while the shipped build lost the fix (AGENTS.md
+    L16-20; review on #353 round 6). This class emits the flag-on units the
+    way the build does, compiles the behaviours unit at /Od so the static
+    helpers stay out of line, disassembles the object with dumpbin, and
+    asserts on the instructions:
+
+      * VF2PlanSpaLoungerPose compares the orientation to 1, materialises
+        BOTH body constants (17h and 9) and BOTH head constants (0 and 3),
+        and calls the 3-argument PlanToWait -- never the 4-argument one;
+      * VF2PlanSpaLoungerRest calls the pose, then PlanToPlayAnim, and the
+        object carries both strip names;
+      * every route reaches it: the treatment calls the rest; both relax
+        handlers call the pose and the rest; the drop and receiving handlers
+        call the treatment.
+
+    Skips only for a genuinely absent prerequisite (no toolchain, no build
+    inputs), never on a failure of the generator or compiler.
+    """
+
+    THREE_ARG = "?PlanToWait@CVillagerPlans@@QAEXHW4EBodyPosition@@W4EHeadDirection@@@Z"
+    FOUR_ARG = "?PlanToWait@CVillagerPlans@@QAEXHW4EBodyPosition@@W4EDirection@@W4EHeadDirection@@@Z"
+
+    @classmethod
+    def setUpClass(cls):
+        import subprocess
+        import sys
+        import tempfile
+        sys.path.insert(0, str(ROOT / "work"))
+        import test_generated_cpp_compiles as compiles
+        import test_spa_lounger_autonomous as auto
+
+        cls.skip = None
+        vcvars = None
+        for candidate in getattr(compiles, "VCVARS_CANDIDATES", ()):
+            if pathlib.Path(candidate).is_file():
+                vcvars = candidate
+                break
+        if vcvars is None:
+            cls.skip = "no Visual Studio toolchain on this machine"
+            return
+        result = auto.TheGuardSurvivesIntoTheEmittedArtifact._generate()
+        if result is None or result[0] is None:
+            reason = result[1] if result else "generation failed"
+            if "ENABLE_BEHAVIOR_PATCHES" in reason:
+                raise AssertionError(reason)
+            cls.skip = "cannot emit the C++ in this checkout: %s" % reason
+            return
+        units = [(n, t) for n, t in result[2]
+                 if "static void VF2PlanSpaLoungerPose(" in t]
+        if len(units) != 1:
+            raise AssertionError(
+                "expected exactly one emitted unit to define "
+                "VF2PlanSpaLoungerPose, found %d -- the emitter no longer "
+                "includes the spa pose" % len(units))
+        name, text = units[0]
+        with tempfile.TemporaryDirectory() as tmp:
+            work = pathlib.Path(tmp)
+            (work / name).write_text(text, encoding="ascii")
+            obj = work / (pathlib.Path(name).stem + ".obj")
+            listing = work / "disasm.txt"
+            cmd = ('"%s" >nul 2>&1 && cl /c /nologo /EHsc /Od "%s" && '
+                   'dumpbin /nologo /disasm "%s" > "%s"'
+                   % (vcvars, work / name, obj, listing))
+            run = subprocess.run(cmd, cwd=work, shell=True,
+                                 capture_output=True, text=True)
+            if run.returncode != 0:
+                raise AssertionError(
+                    "the flag-on emission of %s does not compile or "
+                    "disassemble:\n%s" % (name, (run.stdout or "")[-1500:]))
+            cls.object_bytes = obj.read_bytes()
+            disasm = listing.read_text(encoding="utf-8", errors="replace")
+        cls.blocks = {}
+        current = None
+        for line in disasm.splitlines():
+            if line and not line[0].isspace() and line.endswith(":"):
+                current = line[:-1]
+                cls.blocks[current] = []
+            elif current is not None:
+                cls.blocks[current].append(line)
+
+    def setUp(self):
+        if self.skip:
+            self.skipTest(self.skip)
+
+    def _block(self, fragment):
+        keys = [k for k in self.blocks if fragment in k]
+        self.assertEqual(
+            len(keys), 1,
+            "expected one compiled function containing %r, found %s"
+            % (fragment, keys))
+        return "\n".join(self.blocks[keys[0]])
+
+    @staticmethod
+    def _immediates(block):
+        """Every immediate a `mov ..., imm` or `push imm` materialises."""
+        found = set()
+        for m in re.finditer(r"\b(?:mov\s+dword ptr \[[^\]]+\]|push)\s*,?\s*([0-9A-Fa-f]+h?)\s*$",
+                             block, re.M):
+            tok = m.group(1)
+            found.add(int(tok[:-1], 16) if tok.endswith("h") else int(tok))
+        return found
+
+    def test_the_compiled_pose_selects_body_and_head_by_orientation(self):
+        pose = self._block("VF2PlanSpaLoungerPose@@")
+        self.assertRegex(pose, r"cmp\s+dword ptr \[ebp\+0Ch\],1\b",
+                         "the compiled pose does not compare the orientation "
+                         "argument to 1")
+        imm = self._immediates(pose)
+        for value, what in ((0x17, "eBodyPositionChaise"),
+                            (9, "eBodyPositionRestingHammock"),
+                            (0, "eHeadDirectionNE"), (3, "eHeadDirectionNW")):
+            self.assertIn(value, imm,
+                          "the compiled pose never materialises %s (%#x); "
+                          "found %s" % (what, value, sorted(imm)))
+
+    def test_the_compiled_pose_calls_the_three_argument_wait(self):
+        pose = self._block("VF2PlanSpaLoungerPose@@")
+        self.assertIn("call        " + self.THREE_ARG, pose,
+                      "the compiled pose does not call the 3-argument PlanToWait")
+        self.assertNotIn(self.FOUR_ARG, pose,
+                         "the compiled pose calls the 4-argument PlanToWait")
+        self.assertNotIn("PlanToLieDown", pose)
+        self.assertNotIn("PlanToPlayAnim", pose,
+                         "the compiled pose plays a strip: every awake relax "
+                         "roll on a spa lounger would sleep")
+
+    def test_the_compiled_rest_settles_through_the_pose_then_plays_a_strip(self):
+        rest = self._block("VF2PlanSpaLoungerRest@@")
+        self.assertIn("call        ?VF2PlanSpaLoungerPose@@", rest,
+                      "the compiled rest does not settle through the one "
+                      "body table")
+        self.assertNotIn(self.THREE_ARG, rest)
+        self.assertNotIn(self.FOUR_ARG, rest)
+        self.assertLess(rest.index("call        ?VF2PlanSpaLoungerPose@@"),
+                        rest.index("call        ?PlanToPlayAnim@"),
+                        "the strip is planned before the settle")
+        self.assertEqual(
+            len(set(re.findall(r"offset (\$SG\d+)", rest))), 2,
+            "the compiled rest does not select between two string "
+            "constants (SleepNE / SleepNW)")
+        for strip in (b"SleepNE\0", b"SleepNW\0"):
+            self.assertIn(strip, self.object_bytes,
+                          "%r is not in the compiled object" % strip)
+
+    def test_every_compiled_route_reaches_the_pose(self):
+        treatment = self._block("VF2PlanSpaTreatment@@")
+        self.assertIn("call        ?VF2PlanSpaLoungerRest@@", treatment)
+        for handler in ("VF2HandleMobileChaise@@", "VF2PlanLinkedChaiseAction@@"):
+            block = self._block(handler)
+            self.assertIn("call        ?VF2PlanSpaLoungerPose@@", block,
+                          "%s does not reach the pose (awake rolls)" % handler)
+            self.assertIn("call        ?VF2PlanSpaLoungerRest@@", block,
+                          "%s does not reach the rest (nap/sleep rolls)" % handler)
+        for handler in ("VF2HandleMobileInvisibleSpaLounger@@",
+                        "VF2HandleMobileSpaLoungerReceiving@@"):
+            self.assertIn("call        ?VF2PlanSpaTreatment@@", self._block(handler),
+                          "%s does not reach the treatment" % handler)
+
+
 if __name__ == "__main__":
     unittest.main()

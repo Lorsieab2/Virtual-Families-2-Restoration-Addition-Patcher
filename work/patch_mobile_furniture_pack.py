@@ -26359,15 +26359,20 @@ static bool VF2SpaLoungerFacesNorthWest(int orientation, int handle)
     //   orientation 0 (SE)  ->  EDirection 0 = NE, EHeadDirection 0 = NE
     //   orientation 1 (SW)  ->  EDirection 3 = NW, EHeadDirection 3 = NW
     //
-    // READ THIS BEFORE USING THE RETURN VALUE. What this predicate reports is
-    // the LOUNGER's facing. The spa RECEIVING pose does not use it directly --
-    // VF2PlanSpaTreatment takes the MIRROR, because the owner playtested B189
-    // with the unmirrored mapping and the villager was still lying across the
-    // lounger. Returning the lounger's facing here is correct; assuming the
-    // villager takes the same facing is what was wrong.
+    // WHAT USES THIS NOW: the ordinary-chaise branch at the two relax sites
+    // (where it answers false, so those loungers keep their shipped pose)
+    // and the walk-target nudge in VF2SpaTreatmentPoint. The spa POSE does
+    // not read it at all: VF2PlanSpaLoungerPose selects body and head from
+    // `orientation == 1` directly, the stock chaise's own table.
     //
-    // Orientation 0 was already correct in B188; orientation 1 is the one
-    // the owner reported wrong, and it wants the northwest strip.
+    // SUPERSEDED, kept per AGENTS.md 11: this comment previously said "the
+    // spa RECEIVING pose does not use it directly -- VF2PlanSpaTreatment
+    // takes the MIRROR, because the owner playtested B189 with the
+    // unmirrored mapping and the villager was still lying across the
+    // lounger", and that orientation 1 "wants the northwest strip". Both
+    // were wrong. The villager lay across the lounger because the body
+    // sprite was 0x17 on both orientations; the mirror, and every other
+    // facing permutation, could not fix that. Orientation 1 takes SleepNE.
     return orientation == 1;
 }
 
@@ -30117,14 +30122,33 @@ static void VF2PlanSpaTreatment(
     CVillagerPlans *plans, CVillager &villager, sFurnitureInfo2 const &info)
 {
     (void)villager;
-    // HISTORY, kept short on purpose (AGENTS.md 11). This function went
-    // through roughly twenty revisions -- selector flips, mirrored arms,
-    // coupled and then deliberately opposite settle/strip arms, a 3-argument
-    // detour, PlanToLieDown, and several strip inversions. All of them kept
-    // body 0x17 for BOTH orientations, which is the actual defect; see the
-    // note on VF2PlanSpaLoungerRest. The earlier commentary is in git history
-    // on PR #353 and is not repeated here, because the stack of contradictory
-    // superseded blocks was itself leading each round back into the bug.
+    // SUPERSEDED MAPPINGS, recorded here so nobody re-derives them
+    // (AGENTS.md 11). Every one of these posed with the 4-argument or
+    // 3-argument PlanToWait using body 0x17 (eBodyPositionChaise) on BOTH
+    // orientations, and that shared body is why each failed on at least one
+    // lounger whatever the other arguments said. `nw` below is
+    // VF2SpaLoungerFacesNorthWest(...), i.e. orientation == 1.
+    //
+    //   B189 (#348)        head nw?NW:NE, dir nw?Northwest:Northeast,
+    //                      strip nw?SleepNW:SleepNE.  Across the lounger.
+    //   B190 first (#350)  the horizontal MIRROR of B189: head nw?NE:NW,
+    //                      dir nw?Northeast:Northwest, strip nw?SleepNE:
+    //                      SleepNW.  Settle wrong, strip right.
+    //   #352               settle and strip on OPPOSITE arms: settle
+    //                      nw?NW:NE, strip nw?SleepNE:SleepNW.  Flipped
+    //                      when the eyes closed.
+    //   probes 9-20        3-argument PlanToWait with head nw?NE:NW and
+    //                      then nw?NW:NE; PlanToLieDown then the strip;
+    //                      PlanToLieDown alone; the strip inverted twice.
+    //                      Each left one orientation across the lounger.
+    //   round 21 (ships)   body nw?0x17:9, head nw?NE:NW, strip
+    //                      nw?SleepNE:SleepNW, 3-argument PlanToWait --
+    //                      the stock chaise table.  Confirmed in play.
+    //
+    // The long-form commentary those rounds accumulated here is in git
+    // history on PR #353; it is summarised rather than reproduced because
+    // the stack of contradictory blocks was itself steering each round back
+    // into the defect.
     //
     // info describes ONE placement: the drop route's linked chaise, or the
     // autonomous route's verified record. Nothing patches it in between.
