@@ -114,17 +114,21 @@ class TestSpaPoseSuppliesBodyDirection(unittest.TestCase):
             "or the villager's head and body point different ways."
             % (_pred(head), _pred(body)))
 
-    def test_head_and_sleep_strip_take_the_same_arm(self):
-        """The hammock pairs an NW head with SleepNW. The spa must match.
+    def test_the_sleep_strip_keeps_the_playtested_mapping(self):
+        """The strip is true -> SleepNE, false -> SleepNW. Do not "align" it.
 
-        Evaluates both predicate ARMS rather than comparing token order, so
-        flipping the animation selection alone is caught.
+        This is what B190 shipped and what the owner confirmed correct in
+        play: "once they close their eyes the position is correct." Only the
+        SETTLE was ever reported wrong.
+
+        An earlier revision inverted this to match the hammock's head/strip
+        pairing. That reasoning had no runtime evidence behind it, and review
+        caught that it would break the one phase already confirmed working.
+        The head and the strip evidently index their facing differently, so
+        they are NOT required to agree -- the owner separated the two phases
+        by photograph.
         """
         spa = _spa_body(_source())
-        head = re.search(
-            r"(!?\s*\w+)\s*\?\s*eHeadDirectionNW\s*:\s*eHeadDirectionNE", spa)
-        self.assertIsNotNone(head, "no head mapping found in the spa pose")
-
         anim = re.search(
             r"(!?\s*\w+)\s*\?\s*\"(Sleep\w+)\"\s*:\s*\"(Sleep\w+)\"", spa)
         if anim is None:
@@ -133,20 +137,18 @@ class TestSpaPoseSuppliesBodyDirection(unittest.TestCase):
                 r"\s*else\s*\{[^}]*\"(Sleep\w+)\"", spa, re.S)
         self.assertIsNotNone(
             anim, "no sleep-strip selection found in the spa pose")
-
         self.assertEqual(
-            _pred(head), _pred(anim),
-            "the head and the sleep strip are driven by different predicates "
-            "(%s vs %s)" % (_pred(head), _pred(anim)))
+            _pred(anim), "loungerFacesNorthWest",
+            "the strip is no longer driven by the plain lounger predicate")
         self.assertEqual(
-            anim.group(2), "SleepNW",
-            "the strip's TRUE arm is %s but the head's TRUE arm is NW. The "
-            "working hammock pairs an NW head with SleepNW; opposite arms "
-            "make the villager settle and sleep facing differently."
+            anim.group(2), "SleepNE",
+            "the strip's TRUE arm is %s, but the playtested B190 mapping is "
+            "SleepNE. The owner confirmed the eyes-closed phase CORRECT; "
+            "inverting it breaks the one phase that worked."
             % anim.group(2))
         self.assertEqual(
-            anim.group(3), "SleepNE",
-            "the strip's FALSE arm is %s, expected SleepNE" % anim.group(3))
+            anim.group(3), "SleepNW",
+            "the strip's FALSE arm is %s, expected SleepNW" % anim.group(3))
 
     def test_the_spa_behaviours_are_still_present(self):
         """A pose fix must not delete the spa feature."""

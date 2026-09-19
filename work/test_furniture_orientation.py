@@ -592,7 +592,7 @@ class OrientationComesFromTheOrientationField(unittest.TestCase):
         # The strip is now selected by a ternary into loungerAnim rather than
         # an if/else, and body/head/strip all take the SAME arm. The old
         # if/else form belonged to the superseded "opposite arms" rule.
-        self.assertIn('loungerFacesNorthWest ? "SleepNW" : "SleepNE"', SOURCE)
+        self.assertIn('loungerFacesNorthWest ? "SleepNE" : "SleepNW"', SOURCE)
         self.assertIn('"SleepNW"', SOURCE)
         self.assertIn('"SleepNE"', SOURCE)
 

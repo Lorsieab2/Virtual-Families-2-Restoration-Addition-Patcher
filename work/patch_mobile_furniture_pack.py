@@ -26379,13 +26379,12 @@ public:
     bool PlanToGo(CContentMap::EObject, ESpeed, EPriority, bool);
     void PlanToGo(ldwPoint, ESpeed, EPriority);
     void PlanToWait(int, EBodyPosition);
-    // The 3-argument form is REAL and is what the working hammock pose uses
-    // (see the second CVillagerPlans block, which also declares it). A
-    // FOUR-argument overload taking an extra EDirection was previously
-    // declared here and is a FABRICATION: no such symbol exists, the extra
-    // argument never reached the function, and the head value was silently
-    // discarded -- which is why both orientation arms rendered the identical
-    // wrong pose across nine playtest rounds. Do not reintroduce it.
+    // SUPERSEDED, RECORDED RATHER THAN DELETED (AGENTS.md 11). This block
+    // previously called the FOUR-argument overload "a FABRICATION: no such
+    // symbol exists". That was WRONG, and acting on it nearly shipped the
+    // reported defect a tenth time. The claim came from grepping THIS FILE
+    // for referenced symbols instead of reading the binary. The decoded
+    // disassembly below is the ground truth and it says the opposite.
     // BOTH overloads are REAL. Verified in work/VillagerPlans_patched_disasm.txt:
     //   3-arg  ?PlanToWait@CVillagerPlans@@QAEXHW4EBodyPosition@@W4EHeadDirection@@@Z
     //   4-arg  ?PlanToWait@CVillagerPlans@@QAEXHW4EBodyPosition@@W4EDirection@@W4EHeadDirection@@@Z
@@ -27396,14 +27395,11 @@ static bool VF2HandleMobilePatioUmbrella(CVillager &villager)
         ePriorityNormal,
         false);
     plans->PlanToWait(1, eBodyPositionUmbrella);
-    // Dropped to the real 3-argument form. This site previously passed a
-    // 4th EDirection, which the engine's PlanToWait does not take: the only
-    // exported symbol is PlanToWait(int, EBodyPosition) and the working
-    // hammock uses the 3-arg (duration, body, head) overload. The extra
-    // argument never reached the function, so removing it CANNOT change
-    // behaviour -- and eDirectionUmbrella and eHeadDirectionUmbrella are
-    // both 3 in any case. Kept minimal deliberately: this site is unrelated
-    // to the spa defect and its shipped behaviour must not change.
+    // FOUR arguments, and that is correct. An earlier revision dropped this
+    // to 3 on the false claim that the engine had no 4-argument overload;
+    // the decoded disassembly disproves it, and the 3-argument form writes
+    // -1 into the body-direction field. This site is unrelated to the spa
+    // defect and keeps the shape it has always shipped with.
     plans->PlanToWait(
         3,
         eBodyPositionStanding,
@@ -30136,7 +30132,18 @@ static void VF2PlanSpaTreatment(
     EDirection loungerBody =
         loungerFacesNorthWest ? eDirectionNorthwest : eDirectionNortheast;
     plans->PlanToWait(settle, eBodyPositionChaise, loungerBody, loungerHead);
-    char const *loungerAnim = loungerFacesNorthWest ? "SleepNW" : "SleepNE";
+    // THE PLAYTESTED STRIP MAPPING. true -> SleepNE, false -> SleepNW.
+    //
+    // This is what B190 shipped and what the owner confirmed correct in play:
+    // "once they close their eyes the position is correct". It was inverted
+    // during the 3-argument detour on the reasoning that it should match the
+    // hammock. That reasoning had no runtime evidence behind it and this
+    // phase was never reported broken, so the playtested arms are restored.
+    //
+    // DO NOT "align" this with the head without runtime evidence. The head
+    // and the strip index their facing differently; the owner separated the
+    // two phases by photograph, and only the settle was ever wrong.
+    char const *loungerAnim = loungerFacesNorthWest ? "SleepNE" : "SleepNW";
     plans->PlanToPlayAnim(total - settle, loungerAnim, false, 0.02f);
 
     // The sigh is deliberately NOT interleaved with the rest any more.

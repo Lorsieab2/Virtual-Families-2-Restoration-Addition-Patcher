@@ -586,7 +586,7 @@ class TestOnlyReceivingIsAutonomous(unittest.TestCase):
         body = src[start:src.index("\n}", start)]
         self.assertIn("int const settle = 10;", body)
         self.assertIn("PlanToPlayAnim(total - settle, loungerAnim", body)
-        self.assertIn('loungerFacesNorthWest ? "SleepNW" : "SleepNE"', body)
+        self.assertIn('loungerFacesNorthWest ? "SleepNE" : "SleepNW"', body)
 
     def test_added_furniture_candidates_require_their_own_furniture(self):
         """Each added item is offered only when ITS OWN furniture is placed.
@@ -1238,7 +1238,7 @@ class TheTreatmentPoseFollowsTheLounger(unittest.TestCase):
             "loungerFacesNorthWest ? eDirectionNorthwest : eDirectionNortheast",
             src, "the body direction is missing or no longer matches the head")
         self.assertIn(
-            'loungerFacesNorthWest ? "SleepNW" : "SleepNE"', src,
+            'loungerFacesNorthWest ? "SleepNE" : "SleepNW"', src,
             "the sleep strip no longer takes the same arm as the head")
 
     def test_edirection_is_not_confused_with_furniture_orientation(self):
