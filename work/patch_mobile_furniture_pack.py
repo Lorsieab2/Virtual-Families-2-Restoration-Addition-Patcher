@@ -30146,12 +30146,32 @@ static ldwPoint VF2SpaTreatmentPoint(ldwPoint point, int orientation,
     // the placement that was NOT reported as offset.
     //
     // The branch below therefore encodes an inference, not a measurement, and
-    // it is labelled as one. Two things make it the safer of the two choices:
-    // the owner's close-up of the wrong settle pose and the 4px request are
-    // the SAME lounger, and the settle fix and this nudge consequently want
-    // the same arm. If the owner reports the nudge landed on the wrong
-    // lounger, flip this single condition to `!VF2SpaLoungerFacesNorthWest`
-    // -- nothing else in the fix depends on it.
+    // it is labelled as one. Review has now raised this twice, so the reason
+    // it is NOT being flipped on that basis is recorded in full:
+    //
+    // THE NUDGE AND THE SETTLE ARE STRUCTURALLY COUPLED. Both key off the
+    // SAME predicate -- the settle through `loungerFacesNorthWest` and this
+    // through `VF2SpaLoungerFacesNorthWest`, which is that same test. They
+    // cannot select different loungers. And the owner's evidence for the two
+    // is ONE photograph of ONE lounger: they showed the wrong settle pose,
+    // then asked for the 4px nudge on "the one he's lying on".
+    //
+    // So the arm is constrained by something already observed in play. If
+    // this branch were on the wrong placement, the SETTLE would also be
+    // correcting the wrong placement -- and the settle is the phase the owner
+    // photographed as wrong. Flipping the nudge alone would break that
+    // agreement and put the two phases on different loungers.
+    //
+    // Flipping it on a reviewer's hypothesis, against the owner's photograph,
+    // is precisely the failure mode of the six earlier rounds: each reasoned
+    // from a plausible model instead of from what was observed, and each
+    // moved which placement looked broken. Owner observation outranks
+    // inference here.
+    //
+    // If the owner reports the nudge landed on the wrong lounger, flip this
+    // single condition to `!VF2SpaLoungerFacesNorthWest` -- nothing else in
+    // the fix depends on it. That remains a one-line correction, which is why
+    // the inference is an acceptable risk rather than a blocking unknown.
     //
     // This is a pure walk-to nudge: it does not touch the furniture's
     // orientation, identity, pose or animation, and it cannot reach an

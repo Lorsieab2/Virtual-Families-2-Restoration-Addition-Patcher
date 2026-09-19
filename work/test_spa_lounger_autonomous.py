@@ -716,6 +716,47 @@ class TestOnlyReceivingIsAutonomous(unittest.TestCase):
                     "candidate %s inherits its donor's object prerequisite "
                     "again" % target)
 
+    def test_the_nudge_and_the_settle_select_the_same_lounger(self):
+        """The 4px nudge and the settle pose must key off the SAME predicate.
+
+        The owner's evidence for both is ONE photograph of ONE lounger: they
+        showed the wrong settle pose, then asked for the nudge on "the one
+        he's lying on". So the two corrections target the same placement by
+        construction, not by coincidence.
+
+        Review twice suggested flipping the nudge arm on the grounds that the
+        screenshot does not establish the engine's orientation VALUE. That is
+        true and is labelled as an inference in the source. But flipping the
+        nudge ALONE would put the two phases on different loungers, and the
+        settle is the phase the owner actually photographed as wrong.
+
+        This pins the coupling so the two cannot silently diverge. If the arm
+        ever does need to change, BOTH must move together.
+        """
+        src = _source()
+
+        # The settle selects on loungerFacesNorthWest.
+        self.assertIn(
+            "loungerFacesNorthWest ? eHeadDirectionNW : eHeadDirectionNE", src,
+            "the settle head no longer selects on loungerFacesNorthWest")
+        self.assertIn(
+            "loungerFacesNorthWest ? eDirectionNorthwest : eDirectionNortheast",
+            src, "the settle body no longer selects on loungerFacesNorthWest")
+
+        # The nudge selects on the SAME predicate.
+        self.assertIn(
+            "if (VF2SpaLoungerFacesNorthWest(orientation, handle)) {", src,
+            "the nudge no longer selects on the spa-gated predicate, so it "
+            "can now disagree with the settle about which lounger to correct")
+
+        # And it must not have been negated on its own.
+        self.assertNotIn(
+            "if (!VF2SpaLoungerFacesNorthWest(orientation, handle)) {", src,
+            "the nudge arm was flipped WITHOUT flipping the settle. Those two "
+            "are driven by the owner's single photograph of a single lounger; "
+            "moving one alone puts the settle and the nudge on different "
+            "placements.")
+
     def test_every_receiving_label_is_reachable_from_both_routes(self):
         """The autonomous route must roll across ALL of the labels.
 
