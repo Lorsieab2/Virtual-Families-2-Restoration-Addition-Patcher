@@ -375,26 +375,27 @@ class TheCompiledArtifact(unittest.TestCase):
     Every class above reads work/patch_mobile_furniture_pack.py, so if the
     dispatch emitter stopped including this code they would keep passing
     against dead source while the shipped build lost the fix (AGENTS.md
-    L16-20; review on #353 round 6). This class emits the flag-on units the
-    way the build does, compiles the behaviours unit at /Od so the static
-    helpers stay out of line, disassembles the object with dumpbin, and
-    asserts on the instructions:
+    L16-20; review on #353 rounds 6 and 7). This class emits the flag-on
+    units the way the build does, compiles the behaviours unit at /Od so the
+    static helpers stay out of line, disassembles the object with dumpbin,
+    and then EXECUTES the compiled helpers with a small x86 interpreter --
+    once per orientation -- reading the arguments actually handed to each
+    call. Checking that the four constants merely appear somewhere in the
+    function is not enough: a build that swapped the arms would contain the
+    same four constants (review, round 7). The interpreter follows the
+    conditional control flow through the stores into the call.
 
-      * VF2PlanSpaLoungerPose compares the orientation to 1, materialises
-        BOTH body constants (17h and 9) and BOTH head constants (0 and 3),
-        and calls the 3-argument PlanToWait -- never the 4-argument one;
-      * VF2PlanSpaLoungerRest calls the pose, then PlanToPlayAnim, and the
-        object carries both strip names;
-      * every route reaches it: the treatment calls the rest; both relax
-        handlers call the pose and the rest; the drop and receiving handlers
-        call the treatment.
+    The listing produced alongside (/FAs) resolves the string labels the
+    disassembly references, so the strip handed to PlanToPlayAnim is read
+    as "SleepNE" / "SleepNW", not as an anonymous $SG symbol.
 
     Skips only for a genuinely absent prerequisite (no toolchain, no build
-    inputs), never on a failure of the generator or compiler.
+    inputs), never on a failure of the generator, compiler or interpreter.
     """
 
     THREE_ARG = "?PlanToWait@CVillagerPlans@@QAEXHW4EBodyPosition@@W4EHeadDirection@@@Z"
     FOUR_ARG = "?PlanToWait@CVillagerPlans@@QAEXHW4EBodyPosition@@W4EDirection@@W4EHeadDirection@@@Z"
+    PLAY_ANIM = "?PlanToPlayAnim@CVillagerPlans@@QAEXHPBD_NM@Z"
 
     @classmethod
     def setUpClass(cls):
@@ -432,11 +433,13 @@ class TheCompiledArtifact(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             work = pathlib.Path(tmp)
             (work / name).write_text(text, encoding="ascii")
-            obj = work / (pathlib.Path(name).stem + ".obj")
+            stem = pathlib.Path(name).stem
+            obj = work / (stem + ".obj")
+            asm = work / (stem + ".asm")
             listing = work / "disasm.txt"
-            cmd = ('"%s" >nul 2>&1 && cl /c /nologo /EHsc /Od "%s" && '
+            cmd = ('"%s" >nul 2>&1 && cl /c /nologo /EHsc /Od /FAs /Fa"%s" "%s" && '
                    'dumpbin /nologo /disasm "%s" > "%s"'
-                   % (vcvars, work / name, obj, listing))
+                   % (vcvars, asm, work / name, obj, listing))
             run = subprocess.run(cmd, cwd=work, shell=True,
                                  capture_output=True, text=True)
             if run.returncode != 0:
@@ -445,6 +448,11 @@ class TheCompiledArtifact(unittest.TestCase):
                     "disassemble:\n%s" % (name, (run.stdout or "")[-1500:]))
             cls.object_bytes = obj.read_bytes()
             disasm = listing.read_text(encoding="utf-8", errors="replace")
+            asm_text = asm.read_text(encoding="utf-8", errors="replace")
+        # $SG4447 DB 'SleepNE', 00H  ->  {"$SG4447": "SleepNE"}
+        cls.strings = {
+            m.group(1): m.group(2)
+            for m in re.finditer(r"^(\$SG\d+)\s+DB\s+'([^']*)', 00H", asm_text, re.M)}
         cls.blocks = {}
         current = None
         for line in disasm.splitlines():
@@ -466,28 +474,169 @@ class TheCompiledArtifact(unittest.TestCase):
             % (fragment, keys))
         return "\n".join(self.blocks[keys[0]])
 
-    @staticmethod
-    def _immediates(block):
-        """Every immediate a `mov ..., imm` or `push imm` materialises."""
-        found = set()
-        for m in re.finditer(r"\b(?:mov\s+dword ptr \[[^\]]+\]|push)\s*,?\s*([0-9A-Fa-f]+h?)\s*$",
-                             block, re.M):
-            tok = m.group(1)
-            found.add(int(tok[:-1], 16) if tok.endswith("h") else int(tok))
-        return found
+    # ---- a small interpreter for the /Od code the compiler emits ---------
 
-    def test_the_compiled_pose_selects_body_and_head_by_orientation(self):
-        pose = self._block("VF2PlanSpaLoungerPose@@")
-        self.assertRegex(pose, r"cmp\s+dword ptr \[ebp\+0Ch\],1\b",
-                         "the compiled pose does not compare the orientation "
-                         "argument to 1")
-        imm = self._immediates(pose)
-        for value, what in ((0x17, "eBodyPositionChaise"),
-                            (9, "eBodyPositionRestingHammock"),
-                            (0, "eHeadDirectionNE"), (3, "eHeadDirectionNW")):
-            self.assertIn(value, imm,
-                          "the compiled pose never materialises %s (%#x); "
-                          "found %s" % (what, value, sorted(imm)))
+    _INSN = re.compile(r"^\s*([0-9A-F]{8}): (?:[0-9A-F]{2} )+\s*(\S+)\s*(.*?)\s*$")
+
+    @staticmethod
+    def _split_operands(text):
+        out, depth, cur = [], 0, ""
+        for ch in text:
+            if ch == "[":
+                depth += 1
+            elif ch == "]":
+                depth -= 1
+            if ch == "," and depth == 0:
+                out.append(cur.strip())
+                cur = ""
+            else:
+                cur += ch
+        if cur.strip():
+            out.append(cur.strip())
+        return out
+
+    def _run(self, block, args):
+        """Execute one compiled helper; return the calls it made, in order.
+
+        `args` are the C arguments in order. Each call is recorded as
+        (callee, c_args, ecx): cdecl and thiscall both push right-to-left,
+        so the C argument order is the reverse of the push order; thiscall's
+        `this` travels in ecx.
+        """
+        code = {}
+        order = []
+        for line in block.splitlines():
+            m = self._INSN.match(line)
+            if m:
+                addr = int(m.group(1), 16)
+                code[addr] = (m.group(2), self._split_operands(m.group(3)))
+                order.append(addr)
+        self.assertTrue(order, "no instructions decoded")
+        regs = {"eax": 0, "ecx": 0, "edx": 0}
+        def disp(n):
+            """dumpbin spells displacements as 8, 0Ch, 10h: decimal below
+            ten, otherwise upper-case hex with a leading 0 when it would
+            start with a letter."""
+            if n < 10:
+                return str(n)
+            s = "%X" % n
+            return ("0" + s if s[0].isalpha() else s) + "h"
+
+        mem = {"ebp+" + disp(8 + 4 * i): a for i, a in enumerate(args)}
+        flags = (0, 0)
+        pushes = []
+        calls = []
+
+        def imm(tok):
+            return int(tok[:-1], 16) if tok.endswith("h") else int(tok)
+
+        def slot(tok):
+            m2 = re.search(r"\[(ebp[+-][0-9A-Fa-f]+h?)\]", tok)
+            self.assertIsNotNone(m2, "unsupported memory operand %r" % tok)
+            return m2.group(1)
+
+        def load(tok):
+            if tok in ("eax", "ecx", "edx"):
+                return regs[tok]
+            if tok == "al":
+                return regs["eax"] & 0xFF
+            if tok.startswith("offset "):
+                label = tok[len("offset "):]
+                return self.strings.get(label, label)
+            if "ptr [" in tok:
+                key = slot(tok)
+                self.assertIn(key, mem, "read of unset slot %s" % key)
+                return mem[key]
+            return imm(tok)
+
+        def store(tok, value):
+            if tok in ("eax", "ecx", "edx"):
+                regs[tok] = value
+            elif tok == "al":
+                regs["eax"] = (regs["eax"] & ~0xFF) | (value & 0xFF)
+            else:
+                mem[slot(tok)] = value
+
+        pc = order[0]
+        for _ in range(10000):
+            self.assertIn(pc, code, "jump to an address outside the function")
+            op, ops = code[pc]
+            nxt = order[order.index(pc) + 1] if order.index(pc) + 1 < len(order) else None
+            if op in ("nop",) or (op == "int" and ops == ["3"]):
+                pass
+            elif op == "push" and ops == ["ebp"]:
+                pass
+            elif op == "pop" and ops == ["ebp"]:
+                pass
+            elif op == "mov" and ops[0] in ("ebp", "esp"):
+                pass
+            elif op in ("sub", "add") and ops[0] == "esp":
+                pass
+            elif op == "movss":
+                pass
+            elif op == "push":
+                pushes.append(load(ops[0]))
+            elif op == "call":
+                calls.append((ops[0], list(reversed(pushes)), regs["ecx"]))
+                pushes = []
+            elif op == "ret":
+                return calls
+            elif op == "jmp":
+                pc = int(ops[0], 16)
+                continue
+            elif op in ("mov", "movzx"):
+                store(ops[0], load(ops[1]))
+            elif op == "cmp":
+                flags = (load(ops[0]), load(ops[1]))
+            elif op == "test":
+                flags = (load(ops[0]) & load(ops[1]), 0)
+            elif op in ("jne", "je", "jle", "jge", "jl", "jg"):
+                a, b = flags
+                taken = {"jne": a != b, "je": a == b, "jle": a <= b,
+                         "jge": a >= b, "jl": a < b, "jg": a > b}[op]
+                if taken:
+                    pc = int(ops[0], 16)
+                    continue
+            elif op == "cdq":
+                regs["edx"] = -1 if regs["eax"] < 0 else 0
+            elif op == "sub":
+                store(ops[0], load(ops[0]) - load(ops[1]))
+            elif op == "add":
+                store(ops[0], load(ops[0]) + load(ops[1]))
+            elif op == "sar":
+                store(ops[0], load(ops[0]) >> load(ops[1]))
+            else:
+                self.fail("the interpreter does not handle %s %s at %08X; "
+                          "extend it rather than skipping" % (op, ops, pc))
+            self.assertIsNotNone(nxt, "fell off the end of the function")
+            pc = nxt
+        self.fail("the compiled helper did not return within 10000 steps")
+
+    def _pose_args(self, orientation, duration=60):
+        calls = self._run(self._block("VF2PlanSpaLoungerPose@@"),
+                          ["plans", orientation, duration])
+        self.assertEqual([c[0] for c in calls], [self.THREE_ARG],
+                         "the compiled pose at orientation %d does not call "
+                         "exactly the 3-argument PlanToWait once: %s"
+                         % (orientation, [c[0] for c in calls]))
+        callee, c_args, this = calls[0]
+        self.assertEqual(this, "plans", "PlanToWait is not called on `plans`")
+        return c_args  # [duration, body, head]
+
+    def test_the_compiled_pose_takes_the_stock_table_arm_for_arm(self):
+        """orientation 1 -> (0x17, NE=0); orientation 0 -> (9, NW=3)."""
+        self.assertEqual(self._pose_args(1), [60, 0x17, 0],
+                         "orientation 1 must lie with body eBodyPositionChaise "
+                         "(0x17) and head eHeadDirectionNE (0)")
+        self.assertEqual(self._pose_args(0), [60, 9, 3],
+                         "orientation 0 must lie with body "
+                         "eBodyPositionRestingHammock (9) and head "
+                         "eHeadDirectionNW (3) -- 0x17 here is the ~20-round "
+                         "defect, lying ACROSS the lounger")
+        self.assertEqual(self._pose_args(2)[1:], [9, 3],
+                         "any orientation other than 1 takes the hammock body")
+        self.assertEqual(self._pose_args(1, 7)[0], 7,
+                         "the duration is not passed through")
 
     def test_the_compiled_pose_calls_the_three_argument_wait(self):
         pose = self._block("VF2PlanSpaLoungerPose@@")
@@ -500,23 +649,33 @@ class TheCompiledArtifact(unittest.TestCase):
                          "the compiled pose plays a strip: every awake relax "
                          "roll on a spa lounger would sleep")
 
-    def test_the_compiled_rest_settles_through_the_pose_then_plays_a_strip(self):
-        rest = self._block("VF2PlanSpaLoungerRest@@")
-        self.assertIn("call        ?VF2PlanSpaLoungerPose@@", rest,
-                      "the compiled rest does not settle through the one "
-                      "body table")
-        self.assertNotIn(self.THREE_ARG, rest)
-        self.assertNotIn(self.FOUR_ARG, rest)
-        self.assertLess(rest.index("call        ?VF2PlanSpaLoungerPose@@"),
-                        rest.index("call        ?PlanToPlayAnim@"),
-                        "the strip is planned before the settle")
+    def _rest_calls(self, orientation, duration):
+        calls = self._run(self._block("VF2PlanSpaLoungerRest@@"),
+                          ["plans", orientation, duration])
         self.assertEqual(
-            len(set(re.findall(r"offset (\$SG\d+)", rest))), 2,
-            "the compiled rest does not select between two string "
-            "constants (SleepNE / SleepNW)")
-        for strip in (b"SleepNE\0", b"SleepNW\0"):
-            self.assertIn(strip, self.object_bytes,
-                          "%r is not in the compiled object" % strip)
+            [c[0] for c in calls],
+            ["?VF2PlanSpaLoungerPose@@YAXPAVCVillagerPlans@@HH@Z", self.PLAY_ANIM],
+            "the compiled rest must settle through the pose and then play "
+            "the strip, nothing else: %s" % [c[0] for c in calls])
+        return calls
+
+    def test_the_compiled_rest_settles_then_sleeps_arm_for_arm(self):
+        """Settle through the one body table, then SleepNE / SleepNW."""
+        for orientation, strip in ((1, "SleepNE"), (0, "SleepNW")):
+            with self.subTest(orientation=orientation):
+                pose, anim = self._rest_calls(orientation, 60)
+                self.assertEqual(pose[1], ["plans", orientation, 10],
+                                 "the treatment (60 ticks) must settle for 10")
+                self.assertEqual(anim[2], "plans")
+                self.assertEqual(anim[1][0], 50, "the strip runs the remainder")
+                self.assertEqual(anim[1][1], strip,
+                                 "orientation %d must sleep with %s; the "
+                                 "inverted strip shipped in several builds"
+                                 % (orientation, strip))
+                self.assertEqual(anim[1][2], 0, "the strip must not loop")
+        pose, anim = self._rest_calls(0, 5)
+        self.assertEqual(pose[1][2], 2, "a five-tick nap settles for two")
+        self.assertEqual(anim[1][0], 3, "and sleeps for three")
 
     def test_every_compiled_route_reaches_the_pose(self):
         treatment = self._block("VF2PlanSpaTreatment@@")
