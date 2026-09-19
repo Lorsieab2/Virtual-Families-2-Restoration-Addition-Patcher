@@ -38,17 +38,39 @@ visual description.
 > The owner also confirmed a lounger only ever occupies **two** orientations,
 > so the "2 and 3 unobserved" caveat described states that do not exist.
 >
-> **Current expected mapping**, and the rule the owner stated — *the villager
-> faces the way the lounger faces, head and body*:
+> **SUPERSEDED AGAIN — this mapping was also wrong.** It is kept here because
+> it was the conclusion at the time, and because the way it failed is the
+> useful part. It read:
 >
-> | orientation | direction | head | strip |
-> |---|---|---|---|
-> | 0 (SE) | NE | NE | `SleepNE` |
-> | 1 (SW) | NW | NW | `SleepNW` |
+> > *Current expected mapping, and the rule the owner stated — the villager
+> > faces the way the lounger faces, head and body:*
+> >
+> > | orientation | direction | head | strip |
+> > |---|---|---|---|
+> > | 0 (SE) | NE | NE | `SleepNE` |
+> > | 1 (SW) | NW | NW | `SleepNW` |
 >
-> Fixed after this release; see issue #330. The corrected rule is gated on the
-> spa-lounger handle, because ordinary Lounge Chairs share the same reclined
-> branch and were confirmed working here.
+> B189 shipped that mapping and the owner playtested it: the villager was
+> **still lying across the lounger**. The owner's diagnosis was that the spa
+> **receiving** pose needs a **horizontal mirror**, not a different choice of
+> orientation.
+>
+> **Why every round up to here failed.** All of them, including this table,
+> argued about *which* orientation takes *which* strip. The receiving pose
+> needs the MIRROR of whatever that selector picks, so both placements were
+> wrong together and tuning the selector could only swap which one looked
+> wrong. The "one lounger correct, one wrong" symptom reported against B188
+> was two stacked defects — the selector wrong for one placement on top of the
+> mirror wrong for both.
+>
+> The current rule is in `VF2PlanSpaTreatment`: head, body and sleep strip all
+> take the **opposite** arm of the orientation test. See issue #330 and the
+> B190 notes.
+>
+> The handle gate that B189 added is still correct and still in place: the spa
+> rule must not reach ordinary Lounge Chairs, which share the same reclined
+> branch and were confirmed working. The gate was never the problem — it just
+> could not fix a defect that lived in the mirror rather than the selector.
 
 Stock is **not** the model here. Stock `CBehavior::RestingBody` dispatches
 four ways on orientation parity and plays `SleepNW` at orientation 0, which is

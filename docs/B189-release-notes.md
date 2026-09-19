@@ -37,10 +37,32 @@ was the one reported wrong.
 The rule, as the owner stated it — *the villager faces the way the lounger
 faces, head and body*:
 
-| orientation | direction | head | strip |
-|---|---|---|---|
-| 0 (SE) | NE | NE | `SleepNE` |
-| 1 (SW) | **NW** | **NW** | **`SleepNW`** |
+> **SUPERSEDED — B189 SHIPPED THIS MAPPING AND IT WAS WRONG.** The owner
+> playtested this release and the villager was **still lying across the
+> lounger**. Kept here because it is what B189 actually shipped, and because
+> the way it failed is the useful part. It read:
+>
+> > | orientation | direction | head | strip |
+> > |---|---|---|---|
+> > | 0 (SE) | NE | NE | `SleepNE` |
+> > | 1 (SW) | **NW** | **NW** | **`SleepNW`** |
+>
+> The owner's diagnosis: the spa **receiving** pose needs a **horizontal
+> mirror**, not a different choice of orientation.
+>
+> **Why this mapping could not have worked.** It — and the five rounds before
+> it — argued about *which* orientation takes *which* strip. The receiving
+> pose needs the MIRROR of whatever that selector picks, so both placements
+> were wrong together, and tuning the selector could only swap which one
+> looked wrong. The "one correct, one wrong" symptom on B188 was two stacked
+> defects: the selector wrong for one placement, on top of the mirror wrong
+> for both. Fixing the selector here made both consistently wrong instead.
+>
+> The current rule is in `VF2PlanSpaTreatment`: head, body and sleep strip all
+> take the **opposite** arm of the orientation test. See issue #330.
+>
+> The handle gate this release added is **still correct** and still in place.
+> It was never the problem.
 
 **The fix is gated, and the gating is the substance of it.** Review caught
 that the reclined-pose branch
