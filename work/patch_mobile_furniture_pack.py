@@ -16715,7 +16715,9 @@ static void VF2SpawnMaxYardWeeds()
     for (int i = 0; i < 15; ++i) {
         if (!VF2SpawnJunkOfType(eVF2JunkWeed, 0x7D + gVF2SpawnCheatWeedNext)) return;
         gVF2SpawnCheatWeedNext = (gVF2SpawnCheatWeedNext + 1) % 4;
-=======
+    }
+}
+
 // EVENT COLLECTABLES REPLACE THE OLDEST UNPICKED ONE WHEN BOTH SLOTS ARE BUSY.
 //
 // CCollectableItem keeps exactly two event slots, at +0x34C and +0x368 (0x1C
