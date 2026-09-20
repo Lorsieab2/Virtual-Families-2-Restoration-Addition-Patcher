@@ -444,6 +444,7 @@ APPEARANCE_LOAD_HELPER_SYMBOL = (
 )
 ACHIEVER_COMPLETION_HELPER_SYMBOL = "@VF2MaybeCompleteAchiever@8"
 ACHIEVER_LOAD_HELPER_SYMBOL = "@VF2AchievementLoadStateAndReconcile@12"
+CAREER_ROOM_GOALS_LOAD_HELPER_SYMBOL = "@VF2TechLoadStateAndReconcile@12"
 OLDER_MORTALITY_TABLE_FIRST_AGE = 55
 OLDER_MORTALITY_RANDOM_LIMIT = 1_000_000
 OLDER_MORTALITY_HAZARD_CAP_MILLIONTHS = 999_999
@@ -15552,6 +15553,27 @@ public:
     unsigned char healthPlanActive;
 };
 
+// CTech is the career-room upgrade tracker. Level(tech) is the game's own
+// recompute of the three career-room goals from HaveUpgrade -- decoded from
+// Tech.obj: 0 kitchen (items 0xF6..0xFF -> goal 0x36), 1 office
+// (0xEB..0xF5 -> 0x37), 2 workshop (0x100..0x109 -> 0x38). Each call resets
+// that goal's progress and re-increments it by min(count, 10), and both of
+// those are no-ops on a record that is already complete.
+enum ETech {
+    eTechKitchen = 0,
+    eTechOffice = 1,
+    eTechWorkshop = 2
+};
+
+class CTech {
+public:
+    struct SSaveState;
+    int Level(ETech tech) const;
+    bool const LoadState(SSaveState const &state);
+};
+
+extern CTech Tech;
+
 extern CFoodStore FoodStore;
 extern CMoney Money;
 extern CCollectableItem CollectableItem;
@@ -16568,6 +16590,36 @@ extern "C" bool __fastcall VF2PetManagerLoadStateAndReconcile(
     return loaded;
 }
 
+// CAREER ROOM GOALS ARE RECOMPUTED, NOT COUNTED. "Office of the future"
+// (0x37) and its kitchen/workshop siblings are rebuilt from HaveUpgrade by
+// CTech::Level, which the stock game only calls on an upgrade purchase or
+// while evaluating a villager in that career. A save whose achievement
+// records were wiped while the upgrades stayed owned -- the Reset
+// Achievements cheat below does exactly that -- therefore never sees these
+// goals come back on its own: "Office of the Future didn't autocomplete
+// when I have all career upgrades" (owner). Stock cannot reach that state;
+// the patcher can, so the patcher recomputes them at the two moments the
+// records can be fresh: after the save loads, and right after the reset.
+static void VF2ReconcileCareerRoomGoals() {
+    Tech.Level(eTechKitchen);
+    Tech.Level(eTechOffice);
+    Tech.Level(eTechWorkshop);
+}
+
+// Wraps CTech::LoadState inside theGameState::Load. That call sits after
+// CInventoryManager::LoadState (so HaveUpgrade answers for THIS save) and
+// after CAchievement::LoadState (so the records being recomputed are this
+// save's), which is why this hook and not an earlier one.
+extern "C" bool __fastcall VF2TechLoadStateAndReconcile(
+    CTech *tech,
+    void *,
+    CTech::SSaveState const &state
+) {
+    bool loaded = tech->LoadState(state);
+    if (loaded) VF2ReconcileCareerRoomGoals();
+    return loaded;
+}
+
 static void VF2CheckAppearanceAchievement(CFamilyTree::SPeepRecord *record) {
     unsigned char *data = (unsigned char *)record;
     if (data == 0 || data[0x1A] == 0) return;
@@ -17354,6 +17406,9 @@ extern "C" void __cdecl VF2ApplyVisibleSpecialUpgrade(int itemId) {
         VF2PersistentCheatAndPurchaseMask() = generation;
         VF2PersistentHealthPlanAndRenovationMask() = healthPlanAndRenovations;
         VF2PersistentAIBathroom2Mask() = aiBathroom2;
+        // The upgrades are still owned; give the career-room goals back now
+        // instead of leaving them for a purchase that can no longer happen.
+        VF2ReconcileCareerRoomGoals();
         }
         break;
     case 0x125:
@@ -23659,6 +23714,61 @@ def patch_longevity_achievement_load_reconciliation(manifest):
             "replacement": LONGEVITY_LOAD_HELPER_SYMBOL,
             "native_load_result_preserved": True,
         },
+    }
+
+
+def patch_career_room_goal_reconciliation(manifest):
+    """Recompute the three career-room goals from owned upgrades on load.
+
+    Relocation-only, exactly like the achiever and pet hooks: the call to
+    CTech::LoadState inside theGameState::Load (+0x205) is retargeted to a
+    __fastcall wrapper that runs the native load and then Tech.Level(0..2).
+    The site is verified against the stock bytes and the stock symbol first
+    so a drifted anchor fails loudly instead of retargeting something else.
+    """
+    obj_path = PATCHED / "theGameState.obj"
+    obj = CoffObject(obj_path)
+    load = obj.symbol("?Load@theGameState@@UAE_NH@Z")
+    sec = obj.section(load.section)
+    call_offset = load.value + 0x205
+    relocation_offset = load.value + 0x206
+    raw = sec.raw_ptr + call_offset
+    if bytes(obj.buf[raw : raw + 5]) != b"\xE8\0\0\0\0":
+        raise RuntimeError("Career-room goal load-reconciliation callsite drifted")
+    relocation = None
+    for index in range(sec.nreloc):
+        vaddr, symbol_index, rtype = struct.unpack_from(
+            "<IIH", obj.buf, sec.reloc_ptr + index * 10
+        )
+        if vaddr == relocation_offset:
+            relocation = (obj.symbol_by_index[symbol_index].name, rtype)
+            break
+    original = "?LoadState@CTech@@QAE?B_NABUSSaveState@1@@Z"
+    if relocation != (original, IMAGE_REL_I386_REL32):
+        raise RuntimeError(
+            f"Career-room goal load-reconciliation relocation drifted: {relocation}"
+        )
+    helper = obj.append_undefined_symbol(CAREER_ROOM_GOALS_LOAD_HELPER_SYMBOL)
+    obj.retarget_relocation(
+        sec.index,
+        relocation_offset,
+        helper,
+        IMAGE_REL_I386_REL32,
+    )
+    obj.write(obj_path)
+    manifest["CareerRoomGoalReconciliation"] = {
+        "status": "load reconciliation plus recompute after Reset Achievements",
+        "achievement_ids": ["0x36", "0x37", "0x38"],
+        "mechanism": "CTech::Level(tech) rebuilds each goal from HaveUpgrade over its item range and is the game's own routine; it is a no-op on a completed record",
+        "load_hook": {
+            "function": "?Load@theGameState@@UAE_NH@Z",
+            "call_offset": hex(0x205),
+            "original_target": original,
+            "replacement": CAREER_ROOM_GOALS_LOAD_HELPER_SYMBOL,
+            "why_this_site": "after CInventoryManager::LoadState (+0x1BA) and CAchievement::LoadState (+0x133), so ownership and records are this save's",
+        },
+        "reset_cheat_hook": "VF2ReconcileCareerRoomGoals() after Achievement.Reset() in the 0x124 handler",
+        "owner_report": "Office of the Future did not autocomplete with all career upgrades",
     }
 
 
@@ -39027,6 +39137,7 @@ def main():
     # executable; optional settings only filter order and completion routes.
     patch_custom_achievements(manifest)
     patch_achiever_load_reconciliation(manifest)
+    patch_career_room_goal_reconciliation(manifest)
     # Always link the dormant B152 hook. The offline patcher's exact-SHA
     # post-asset phase changes .vf2preg from 00 to 01 only when selected, so
     # this feature adds no executable-matrix dimension.
