@@ -445,6 +445,15 @@ APPEARANCE_LOAD_HELPER_SYMBOL = (
 ACHIEVER_COMPLETION_HELPER_SYMBOL = "@VF2MaybeCompleteAchiever@8"
 ACHIEVER_LOAD_HELPER_SYMBOL = "@VF2AchievementLoadStateAndReconcile@12"
 CAREER_ROOM_GOALS_LOAD_HELPER_SYMBOL = "@VF2TechLoadStateAndReconcile@12"
+# Every EVENT that spawns a collectable routes through this __thiscall-shaped
+# thunk instead of CCollectableItem::Add, so a busy pair of event slots no
+# longer swallows the spawn.
+EVENT_COLLECTABLE_ADD_THUNK_SYMBOL = "_VF2EventCollectableAdd"
+EVENT_COLLECTABLE_NATIVE_SITES = (
+    ("?ImpactGame@CEventTheBugWhisperer@@UAEXH@Z", 0x7D),
+    ("?ImpactGame@CEventTheBugWhisperer@@UAEXH@Z", 0xB8),
+    ("?ImpactGame@CEventTheNeighborCollectible@@UAEXXZ", 0x0E),
+)
 OLDER_MORTALITY_TABLE_FIRST_AGE = 55
 OLDER_MORTALITY_RANDOM_LIMIT = 1_000_000
 OLDER_MORTALITY_HAZARD_CAP_MILLIONTHS = 999_999
@@ -15488,6 +15497,11 @@ public:
     void SpawnTrashInHouse(int count);
     void SpawnWeedsInYard(int count);
     void RemoveAll(ECarrying carrying);
+    // The native event spawn and the native per-slot clear. Remove(slot)
+    // with slot < 2 clears an EVENT slot (+0x34C + slot * 0x1C); larger
+    // indices address the junk slots, which this file never touches.
+    void Add(ECarrying carrying, ldwPoint point, bool force);
+    void Remove(int slot);
 
     char pad0[0x8A8];
     unsigned char luckyRockActive;
@@ -16696,6 +16710,101 @@ static void VF2SpawnMaxYardWeeds()
     for (int i = 0; i < 15; ++i) {
         if (!VF2SpawnJunkOfType(eVF2JunkWeed, 0x7D + gVF2SpawnCheatWeedNext)) return;
         gVF2SpawnCheatWeedNext = (gVF2SpawnCheatWeedNext + 1) % 4;
+=======
+// EVENT COLLECTABLES REPLACE THE OLDEST UNPICKED ONE WHEN BOTH SLOTS ARE BUSY.
+//
+// CCollectableItem keeps exactly two event slots, at +0x34C and +0x368 (0x1C
+// apart: +0 active, +8 spawn stamp, +0x14 the villager walking to it or -1).
+// Decoded from CollectableItem.obj: Add(carrying, point, false) takes the first
+// free slot and RETURNS WITHOUT SPAWNING when both are busy; Add(.., true)
+// always writes slot 0, whatever it held. Natural spawns keep the pair busy
+// most of the time, which is why the mobile fossil email produced no mound in
+// play -- confirmed live: with a natural fossil and a shell in the two slots
+// the email spawned nothing; with the slots free it put a fossil in the yard.
+//
+// Owner decision: an EVENT spawn replaces the oldest unpicked collectable.
+// A free slot is always used first, so nothing is destroyed needlessly; a
+// slot somebody is already walking to is spared when the other is idle.
+static unsigned char *VF2EventCollectableSlot(int slot)
+{
+    return reinterpret_cast<unsigned char *>(&CollectableItem) + 0x34C + slot * 0x1C;
+}
+
+static bool VF2EventCollectableSlotBusy(int slot)
+{
+    return VF2EventCollectableSlot(slot)[0] != 0;
+}
+
+static bool VF2EventCollectableSlotPicked(int slot)
+{
+    return *reinterpret_cast<int *>(VF2EventCollectableSlot(slot) + 0x14) != -1;
+}
+
+static unsigned int VF2EventCollectableSlotStamp(int slot)
+{
+    return *reinterpret_cast<unsigned int *>(VF2EventCollectableSlot(slot) + 0x08);
+}
+
+// The slot an event spawn may take over when both are busy: the one nobody
+// is walking to, else the older of the two.
+static int VF2EventCollectableVictim()
+{
+    bool const picked0 = VF2EventCollectableSlotPicked(0);
+    bool const picked1 = VF2EventCollectableSlotPicked(1);
+    if (picked0 != picked1) return picked0 ? 1 : 0;
+    return VF2EventCollectableSlotStamp(1) < VF2EventCollectableSlotStamp(0) ? 1 : 0;
+}
+
+// The native force path only ever writes slot 0, so when slot 0 must survive
+// its record is moved to slot 1 first. Lookups go by carrying value and
+// position (CCollectableItem::Find), never by slot index, so a moved record
+// is still found.
+static void VF2MoveEventCollectableSlot(int from, int to)
+{
+    unsigned char *source = VF2EventCollectableSlot(from);
+    unsigned char *dest = VF2EventCollectableSlot(to);
+    for (int i = 0; i < 0x1C; ++i) dest[i] = source[i];
+    source[0] = 0;
+}
+
+extern "C" void __cdecl VF2EventCollectableAddImpl(
+    void *item, int carrying, int x, int y, int force)
+{
+    CCollectableItem *collectables = reinterpret_cast<CCollectableItem *>(item);
+    bool const busy0 = VF2EventCollectableSlotBusy(0);
+    bool const busy1 = VF2EventCollectableSlotBusy(1);
+    if (force) {
+        if (busy0 && !busy1) {
+            VF2MoveEventCollectableSlot(0, 1);
+        } else if (busy0 && busy1) {
+            if (VF2EventCollectableVictim() == 1) {
+                VF2MoveEventCollectableSlot(0, 1);
+            } else {
+                collectables->Remove(0);
+            }
+        }
+    } else if (busy0 && busy1) {
+        collectables->Remove(VF2EventCollectableVictim());
+    }
+    ldwPoint point = {x, y};
+    collectables->Add((ECarrying)carrying, point, force != 0);
+}
+
+// The __thiscall shape the three native event callsites already use:
+// ecx = &CollectableItem, then carrying, point.x, point.y, force on the
+// stack (ldwPoint by value is two words). Forwards all four words plus ecx to
+// the cdecl body and pops the caller's 16 bytes exactly as Add does.
+extern "C" __declspec(naked) void VF2EventCollectableAdd()
+{
+    __asm {
+        push dword ptr [esp+16]
+        push dword ptr [esp+16]
+        push dword ptr [esp+16]
+        push dword ptr [esp+16]
+        push ecx
+        call VF2EventCollectableAddImpl
+        add esp, 20
+        ret 16
     }
 }
 
@@ -18835,6 +18944,8 @@ public:
 extern CMoney Money;
 extern CCollectableItem CollectableItem;
 extern CToolTray ToolTray;
+// Defined in the special-upgrade helper unit, which every variant links.
+extern "C" void __cdecl VF2EventCollectableAddImpl(void *item, int carrying, int x, int y, int force);
 extern CFurnitureManager FurnitureManager;
 
 static CVillager *VF2PickMobileAdultEventVillager()
@@ -19071,7 +19182,11 @@ struct CMobileIslandEvent {{
                 ldwGameState::GetRandom(260) + 1212,
                 ldwGameState::GetRandom(126) + 1829
             }};
-            CollectableItem.Add(carrying, point, false);
+            // Not CollectableItem.Add directly: both event slots are usually
+            // busy with natural spawns and the native Add then returns without
+            // spawning, which is exactly what the owner saw. The helper frees
+            // the oldest unpicked slot first (owner decision).
+            VF2EventCollectableAddImpl(&CollectableItem, (int)carrying, point.x, point.y, 0);
         }} else if (outcome_kind_ == 20) {{
             Money.Adjust((float)award_, true);
             VillagerManager.CureAllVillagers();
@@ -23816,6 +23931,53 @@ def patch_longevity_achievement_load_reconciliation(manifest):
             "replacement": LONGEVITY_LOAD_HELPER_SYMBOL,
             "native_load_result_preserved": True,
         },
+    }
+
+
+def patch_event_collectable_slot_replacement(manifest):
+    """Route the native events that spawn collectables through the helper.
+
+    Relocation-only: the three REL32 calls to CCollectableItem::Add inside
+    IslandEvents.obj (Bug Whisperer twice, Neighbor Collectible once) are
+    retargeted to the __thiscall-shaped thunk. Each site is verified against
+    the stock symbol first so a drifted anchor fails loudly. Applies to every
+    variant: the native events exist whether or not the mobile ones do.
+    """
+    obj_path = PATCHED / "IslandEvents.obj"
+    obj = CoffObject(obj_path)
+    original = "?Add@CCollectableItem@@QAEXW4ECarrying@@UldwPoint@@_N@Z"
+    thunk = obj.append_undefined_symbol(EVENT_COLLECTABLE_ADD_THUNK_SYMBOL)
+    patched = []
+    for owner_name, call_offset in EVENT_COLLECTABLE_NATIVE_SITES:
+        owner = obj.symbol(owner_name)
+        sec = obj.section(owner.section)
+        raw = sec.raw_ptr + owner.value + call_offset - 1
+        if obj.buf[raw] != 0xE8:
+            raise RuntimeError(f"Event collectable callsite drifted: {owner_name}+{call_offset:#x}")
+        relocation_offset = owner.value + call_offset
+        relocation = None
+        for index in range(sec.nreloc):
+            vaddr, symbol_index, rtype = struct.unpack_from(
+                "<IIH", obj.buf, sec.reloc_ptr + index * 10
+            )
+            if vaddr == relocation_offset:
+                relocation = (obj.symbol_by_index[symbol_index].name, rtype)
+                break
+        if relocation != (original, IMAGE_REL_I386_REL32):
+            raise RuntimeError(
+                f"Event collectable relocation drifted at {owner_name}+{call_offset:#x}: {relocation}"
+            )
+        obj.retarget_relocation(sec.index, relocation_offset, thunk, IMAGE_REL_I386_REL32)
+        patched.append({"function": owner_name, "relocation": hex(relocation_offset)})
+    obj.write(obj_path)
+    manifest["EventCollectableSlotReplacement"] = {
+        "status": "event spawns replace the oldest unpicked collectable when both event slots are busy",
+        "mechanism": "CCollectableItem::Add keeps two event slots at +0x34C/+0x368 and returns without spawning when both are busy (force=false) or overwrites slot 0 (force=true)",
+        "policy": "free slot first; else the slot nobody is walking to; else the older spawn stamp; the native force path moves slot 0 aside so the survivor is kept",
+        "native_sites": patched,
+        "mobile_sites": ["InterestingArticleAboutFossils (outcome kind 13)"],
+        "untouched": "CCollectableItem::Update natural spawns keep waiting for a free slot",
+        "owner_decision": "fossil email (and any other event that spawns collectibles) = replace the oldest unpicked collectible",
     }
 
 
@@ -39243,6 +39405,7 @@ def main():
     patch_custom_achievements(manifest)
     patch_achiever_load_reconciliation(manifest)
     patch_career_room_goal_reconciliation(manifest)
+    patch_event_collectable_slot_replacement(manifest)
     # Always link the dormant B152 hook. The offline patcher's exact-SHA
     # post-asset phase changes .vf2preg from 00 to 01 only when selected, so
     # this feature adds no executable-matrix dimension.
