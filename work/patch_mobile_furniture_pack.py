@@ -10181,7 +10181,12 @@ extern "C" bool __cdecl VF2EitherHammockInWorld()
         "added_item": "0x30C",
         "behavior_id": "eBehavior_LieInHammockNoLeadIn (0x24)",
         "implementation": "_VF2LieInHammockDropped",
-        "base_hammock_modified": False,
+        # The base hammock's ITEM and HOTSPOT data are untouched (only the
+        # in-world gate is widened); its DROP BEHAVIOUR is retargeted along with
+        # the invisible copy whenever Behavior Patches is on, because 0x24 is
+        # one global handler. Two fields, so neither claim contradicts the other.
+        "base_hammock_item_and_hotspot_data_modified": False,
+        "base_hammock_drop_behavior_modified": bool(ENABLE_BEHAVIOR_PATCHES),
         "hotspot_modified": True,
         "drop_gate_helper": "_VF2EitherHammockInWorld",
         "relocation_safety": "only push 0x1E1 is NOPed; relocated mov ecx,FurnitureManager remains intact before the helper call",
@@ -38278,6 +38283,10 @@ def validate_invisible_hammock_behavior_contract(manifest):
         errors.append("Invisible Hammock must widen stock CHotSpot::Hammock drop gate")
     if drop.get("both_hammocks_take_the_same_route") is not True:
         errors.append("both hammocks must take the same drop route")
+    if drop.get("base_hammock_item_and_hotspot_data_modified") is not False:
+        errors.append("the base hammock's item and hotspot data must stay untouched")
+    if ENABLE_BEHAVIOR_PATCHES and drop.get("base_hammock_drop_behavior_modified") is not True:
+        errors.append("with Behavior Patches on, the base hammock's drop behaviour is retargeted and the record must say so")
 
     behavior_assets = manifest.get("behavior_assets", {})
     fmap_rows = {
