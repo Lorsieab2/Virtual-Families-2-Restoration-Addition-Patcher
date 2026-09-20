@@ -1384,7 +1384,20 @@
   `_VF2LieInHammockAnchoredRest`. The helper calls
   `CFurnitureManager::LinkPeepToFurniture` first, plans a walk to the linked
   hammock point, then chooses the sleep strip from the returned
-  `sFurnitureInfo2` orientation. Manual-drop behavior `0x24` remains native.
+  `sFurnitureInfo2` orientation. Manual-drop behavior `0x24` remained native
+  through B190.
+- B191 retargets the `0x24` macro entry (ctor+0x1B5, relocation at +0x1B6)
+  to `_VF2LieInHammockDropped` as well, so a drop on either hammock takes the
+  long rest. Decoded from `Behavior.obj`, the native drop's settle is
+  `cmp [ebp-18h],1` (`info.orientation == 1`) -> `PlanToLieDown`, otherwise
+  `PlanToWait(.., 0x17)` with no head direction; the native spontaneous
+  routine is `PlanToWait(10, 9)` + `SleepNW` unconditionally, a stock defect
+  the B124 helper had inherited as "body 9 at both orientations" with a head
+  split on `orientation == 3`. Both entries now share one rest built on the
+  drop's table (body 9 <-> `SleepNW`, `0x17` <-> `SleepNE`), the drop keeps
+  the native refusal branch, and only the spontaneous entry releases the
+  semaphore. SUPERSEDED: the sentence above this entry ("remains native")
+  described B124-B190.
 - B125 tightens the same spontaneous candidate's eligibility: it now requires
   `CFurnitureManager::IsInWorld(0x1E1)` for base `HammockStd` or
   `IsInWorld(0x30C)` for `InvisibleHammock`. When either item exists and

@@ -294,10 +294,18 @@ must remain visible as Needs source audit; it must not be silently omitted.
   adoption/new-person path, and remains stable across save-load. Confirm the
   button is not shown after the family tree has already been cleared.
 - In-game test B102 Invisible Hammock parity: buy/place the base Hammock and
-  Invisible Hammock separately, drop villagers on each, and verify both use the
-  same native hammock drop behavior without crashes. Confirm the widened
-  `CHotSpot::Hammock` in-world gate accepts item `0x30C` while the downstream
-  base behavior remains `eBehavior_LieInHammockNoLeadIn (0x24)`.
+  Invisible Hammock separately, drop villagers on each, and verify both take
+  the SAME drop route without crashes. Since B191 that route is
+  `_VF2LieInHammockDropped` behind behavior `0x24`: the villager settles with
+  the native drop's orientation (orientation 1 lies down, otherwise the chaise
+  body), closes their eyes, and stays for a long sleep like a villager who
+  chose the hammock autonomously; a full hammock still refuses. Confirm the
+  widened `CHotSpot::Hammock` in-world gate accepts item `0x30C`.
+  SUPERSEDED (B102-B190): this test previously required "the same native
+  hammock drop behavior" with "the downstream base behavior remains
+  `eBehavior_LieInHammockNoLeadIn (0x24)`". A build that still ran the short
+  native routine (lie down for 10-19 ticks, no sleep strip) would have passed
+  that wording and fails this one.
 - In-game test B103 Invisible Heart-Shaped Bed: buy/place item `0x327`, verify
   it appears as an invisible Bedroom item, and confirm villager drop/click
   behavior matches the base Heart-Shaped Bed donor `0x252`. Also verify
