@@ -6964,7 +6964,7 @@ class MobileIslandEventTextTests(unittest.TestCase):
                     source,
                 )
                 self.assertIn(
-                    "CollectableItem.Add(carrying, point, false);",
+                    "VF2EventCollectableAddImpl(&CollectableItem, (int)carrying, point.x, point.y, 0);",
                     source,
                 )
                 self.assertIn(
@@ -7076,7 +7076,7 @@ class MobileIslandEventTextTests(unittest.TestCase):
             ("EmailFromACME", 10, "exact mobile outcome", ("award_ = 70;",)),
             ("EmailFromAntonioGuildenstern", 11, "exact mobile outcome", ("(EBehavior)424, 7, 7, eGenderAny, 0, 0", "state->AdjustHappinessTrend(15);")),
             ("EmailFromSchool", 12, "exact mobile outcome", ("(EBehavior)88,", "+ 0x6B74")),
-            ("InterestingArticleAboutFossils", 13, "exact mobile outcome", ("ldwGameState::GetRandom(12) + 103", "CollectableItem.Add(carrying, point, false);")),
+            ("InterestingArticleAboutFossils", 13, "exact mobile outcome", ("ldwGameState::GetRandom(12) + 103", "VF2EventCollectableAddImpl(&CollectableItem, (int)carrying, point.x, point.y, 0);")),
             ("MeteoriteFallsInYard2", 14, "exact mobile outcome", ("award_ = choice == 0 ? 50 : 0;",)),
             ("ClownHoldingMetalRod", 15, "exact mobile outcome", ("FurnitureManager.AddToStorage((EInventoryItem)0x23B);", "likes->Add((ELike)0x24);")),
             ("MenInBlackAtDoor", 16, "exact mobile outcome", ("FurnitureManager.AddToStorage((EInventoryItem)0x218);", "(EBehavior)0x171,")),
