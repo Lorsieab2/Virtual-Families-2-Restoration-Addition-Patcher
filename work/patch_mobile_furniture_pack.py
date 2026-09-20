@@ -16745,10 +16745,30 @@ static unsigned int VF2EventCollectableSlotStamp(int slot)
     return *reinterpret_cast<unsigned int *>(VF2EventCollectableSlot(slot) + 0x08);
 }
 
-// The slot an event spawn may take over when both are busy: the one nobody
-// is walking to, else the older of the two.
+// The slot and spawn stamp of the item the previous event spawn produced.
+// The Bug Whisperer spawns TWICE back to back; without this, with a picked
+// item in one slot, the second spawn would pick the first spawn (the only
+// unpicked record) as its victim and the event would net one item, not two.
+// An item this burst just spawned is never sacrificed; stamps are per game
+// second, so only a spawn from the same second counts as the same burst.
+static int gVF2LastEventSpawnSlot = -1;
+static unsigned int gVF2LastEventSpawnStamp = 0;
+
+static bool VF2EventCollectableSlotFreshFromBurst(int slot)
+{
+    return gVF2LastEventSpawnSlot == slot &&
+        VF2EventCollectableSlotBusy(slot) &&
+        VF2EventCollectableSlotStamp(slot) == gVF2LastEventSpawnStamp;
+}
+
+// The slot an event spawn may take over when both are busy: never the item
+// this burst just spawned, else the one nobody is walking to, else the older
+// of the two.
 static int VF2EventCollectableVictim()
 {
+    bool const fresh0 = VF2EventCollectableSlotFreshFromBurst(0);
+    bool const fresh1 = VF2EventCollectableSlotFreshFromBurst(1);
+    if (fresh0 != fresh1) return fresh0 ? 1 : 0;
     bool const picked0 = VF2EventCollectableSlotPicked(0);
     bool const picked1 = VF2EventCollectableSlotPicked(1);
     if (picked0 != picked1) return picked0 ? 1 : 0;
@@ -16815,9 +16835,16 @@ extern "C" void __cdecl VF2EventCollectableAddImpl(
         VF2CopyEventCollectableSlot(freed, sacrificed);
         collectables->Remove(freed);
     }
+    // Where the native spawn lands: the force path always writes slot 0; the
+    // plain path takes the first free slot, which is the one just freed or,
+    // when nothing was sacrificed, the first slot that was free.
+    int const landed = force ? 0 : (freed >= 0 ? freed : (busy0 ? 1 : 0));
     ldwPoint point = {x, y};
     collectables->Add((ECarrying)carrying, point, force != 0);
-    if (freed >= 0 && !VF2EventCollectableSlotBusy(freed)) {
+    if (VF2EventCollectableSlotBusy(landed)) {
+        gVF2LastEventSpawnSlot = landed;
+        gVF2LastEventSpawnStamp = VF2EventCollectableSlotStamp(landed);
+    } else if (freed >= 0) {
         VF2RestoreEventCollectableSlot(freed, sacrificed);
     }
 }

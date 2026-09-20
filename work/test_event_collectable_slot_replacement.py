@@ -172,6 +172,24 @@ class TheSource(unittest.TestCase):
         self.assertIn("+ 0x14) != -1", _function(src, "static bool VF2EventCollectableSlotPicked(int slot)"))
         self.assertIn("+ 0x08)", _function(src, "static unsigned int VF2EventCollectableSlotStamp(int slot)"))
 
+    def test_an_item_this_burst_just_spawned_is_never_the_victim(self):
+        """The Bug Whisperer spawns twice back to back. With a picked item in
+        one slot, the second spawn's only unpicked record would be the first
+        spawn; protecting the burst's own item is what makes the event net
+        two, and it outranks the picked rule."""
+        src = _strip_comments(_source())
+        self.assertIn("static int gVF2LastEventSpawnSlot = -1;\nstatic unsigned int gVF2LastEventSpawnStamp = 0;", src)
+        fresh = _function(src, "static bool VF2EventCollectableSlotFreshFromBurst(int slot)")
+        self.assertIn("gVF2LastEventSpawnSlot == slot", fresh)
+        self.assertIn("VF2EventCollectableSlotBusy(slot)", fresh)
+        self.assertIn("VF2EventCollectableSlotStamp(slot) == gVF2LastEventSpawnStamp", fresh)
+        victim = _function(src, "static int VF2EventCollectableVictim()")
+        self.assertIn("if (fresh0 != fresh1) return fresh0 ? 1 : 0;", victim)
+        self.assertLess(victim.index("fresh0 != fresh1"), victim.index("picked0 != picked1"), "the burst rule outranks the picked rule")
+        helper = _function(src, 'extern "C" void __cdecl VF2EventCollectableAddImpl(')
+        self.assertIn("gVF2LastEventSpawnSlot = landed;\n        gVF2LastEventSpawnStamp = VF2EventCollectableSlotStamp(landed);", helper)
+        self.assertLess(helper.index("->Add("), helper.index("gVF2LastEventSpawnSlot = landed;"), "the bookkeeping reads the stamp the native spawn wrote")
+
     def test_the_helper_frees_only_when_both_slots_are_busy(self):
         src = _strip_comments(_source())
         f = _function(src, 'extern "C" void __cdecl VF2EventCollectableAddImpl(')
@@ -191,9 +209,13 @@ class TheSource(unittest.TestCase):
         src = _strip_comments(_source())
         f = _function(src, 'extern "C" void __cdecl VF2EventCollectableAddImpl(')
         self.assertIn("int freed = -1;\n    unsigned char sacrificed[0x1C];", f)
-        restore = "if (freed >= 0 && !VF2EventCollectableSlotBusy(freed)) {\n        VF2RestoreEventCollectableSlot(freed, sacrificed);\n    }"
+        restore = "} else if (freed >= 0) {\n        VF2RestoreEventCollectableSlot(freed, sacrificed);\n    }"
         self.assertIn(restore, f)
         self.assertLess(f.index("->Add("), f.index(restore), "the restore runs after the native spawn")
+        # The restore is the else-branch of "did the spawn land", so it can
+        # never run over a fresh spawn.
+        self.assertIn("if (VF2EventCollectableSlotBusy(landed)) {\n        gVF2LastEventSpawnSlot = landed;\n        gVF2LastEventSpawnStamp = VF2EventCollectableSlotStamp(landed);\n    " + restore, f)
+        self.assertIn("int const landed = force ? 0 : (freed >= 0 ? freed : (busy0 ? 1 : 0));", f)
         # Every sacrifice is snapshotted BEFORE the record is touched.
         for sacrifice in ("collectables->Remove(freed);", "if (victim == 1) {"):
             self.assertLess(f.index("VF2CopyEventCollectableSlot("), f.index(sacrifice))
