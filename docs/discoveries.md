@@ -1412,6 +1412,15 @@
   `PlanToWait(10, EBodyPosition 9, headDirection)`. `sFurnitureInfo2`
   orientation `1` uses head direction `7` before `SleepNW`; the other
   orientation uses head direction `1` before `SleepNE`.
+  SUPERSEDED (B126-B190): that mapping -- body 9 at both orientations with a
+  head-direction split -- was inherited from native `LieInHammock`, which is
+  `PlanToWait(10, 9)` + `SleepNW` unconditionally, a stock defect. (The head
+  constants `7`/`1` were later found to be UpNE1/Southeast and corrected to
+  `3`/`0`, which did not change the underlying body defect.) Since B191 both
+  hammock entries share one rest built on the native DROP's table:
+  orientation `1` -> `PlanToLieDown` (body 9) + `SleepNW`, otherwise
+  `PlanToWait(.., 0x17)` + `SleepNE`, no head direction. See the B191 entry
+  above and `work/test_hammock_drop_matches_autonomous.py`.
 - Added `work/dump_villager_action_plan_data.py` to generate a human-readable
   behavior/action-plan dump from `dump_behavior_disasm.txt` and
   `dump_villagerplans_disasm.txt`. The dump preserves raw x86 push context and

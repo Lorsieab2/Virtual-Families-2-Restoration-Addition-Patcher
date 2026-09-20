@@ -27226,10 +27226,21 @@ static bool VF2SpaLoungerHasHandle(int handle);
 // whose native path picks body 9. Spa loungers were forced into the explicit
 // 0x17 branch by `|| VF2SpaLoungerHasHandle(...)`.
 //
-// The hammock never had it either: it uses body 9 -- the same sprite -- with
-// the head selected from ONE predicate, via the 3-argument PlanToWait. That is
-// the shape copied here. The 4-argument PlanToWait is not used: it failed on
-// both arms in play, and neither working reference uses it.
+// The 3-argument PlanToWait, with the head selected from the same predicate
+// as the body, is the shape used here. The 4-argument PlanToWait is not used:
+// it failed on both arms in play, and neither working reference uses it.
+//
+// SUPERSEDED, recorded per AGENTS.md 11: this paragraph used to say "the
+// hammock never had it either: it uses body 9 -- the same sprite -- at both
+// orientations, with the head selected from ONE predicate, via the 3-argument
+// PlanToWait. That is the shape copied here." The call SHAPE was a sound
+// reference; the hammock's body TABLE was not. That description was of the
+// VF2 spontaneous route, which had inherited native LieInHammock's body 9 +
+// SleepNW at every orientation -- a stock defect. Once the manual hammock
+// drop shared it (B191, first probe) the owner reported a wrong facing and a
+// flip when the eyes closed. The hammock's real table, decoded from the native
+// drop, is orientation 1 -> PlanToLieDown (body 9) + SleepNW, otherwise
+// PlanToWait(.., 0x17) + SleepNE; see VF2PlanHammockRest.
 //
 // Pose holds the position for the whole duration and adds nothing else. The
 // chaise relax sites use it for their AWAKE rolls -- reading, studying,

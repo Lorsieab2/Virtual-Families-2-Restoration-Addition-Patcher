@@ -16,8 +16,18 @@ cannot fix a wrong body sprite, which is why "one lounger right, one wrong"
 survived every permutation of the other three arguments.
 
 Ordinary chaises never had the bug (orientation 0 uses PlanToLieDown, whose
-native path picks body 9). The hammock never had it (body 9 at both of its
-orientations, head + strip from one predicate, 3-argument PlanToWait).
+native path picks body 9).
+
+SUPERSEDED: this docstring used to add "The hammock never had it (body 9 at
+both of its orientations, head + strip from one predicate, 3-argument
+PlanToWait)". The hammock DID have a version of it: the VF2 spontaneous route
+had inherited native LieInHammock's body 9 + SleepNW at every orientation,
+and once the manual drop shared that mapping (B191) the owner reported a
+wrong facing plus a flip when the eyes closed. The hammock's real table is the
+native drop's -- orientation 1 -> PlanToLieDown (body 9) + SleepNW, otherwise
+PlanToWait(.., 0x17) + SleepNE -- pinned by
+work/test_hammock_drop_matches_autonomous.py. What the spa borrows from the
+hammock is only the 3-argument call SHAPE and the one-predicate pairing.
 
 These tests pin:
   * ONE body table, VF2PlanSpaLoungerPose, with the hammock's head pairing
