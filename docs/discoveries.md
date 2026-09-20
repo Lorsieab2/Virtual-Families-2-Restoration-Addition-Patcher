@@ -3256,8 +3256,16 @@
   native `ForgetPlans` clears it. The new goal reuses that route; near matches
   do not award it, and no additional gameplay detour is installed.
 - Row `0x93` is added to `achievementOrder` only in Behavior-enabled layouts.
-  Achiever Extraordinaire retains ID `0x92`, remains the final visible row,
-  and includes Pavlovian only when the goal is visible.
+  Achiever Extraordinaire retains ID `0x92`, is awarded only after every
+  other visible row, and includes Pavlovian only when the goal is visible.
+  SUPERSEDED, recorded rather than deleted: this said "remains the final
+  visible row". The Achiever Extraordinaire audit found that claim was the
+  cause of the goal being unawardable -- the 19 runtime-optional Holiday
+  Furniture goals sat ahead of it in an array the native draw loop walks
+  contiguously, so with those goals off the screen ended on an unearnable
+  holiday row and never drew Achiever at all. That block now follows the
+  meta-goal, which is the final visible row only when Holiday Furniture
+  goals are disabled.
 - All 16 B156 layouts link uniquely. Holiday validation passes 8/8 positive
   and 8/8 negative, all five runtime flags restore exactly, and all 226 tests
   pass with one intentional skip. The fully enabled executable is 1,767,936
