@@ -16622,11 +16622,12 @@ extern "C" bool __fastcall VF2PetManagerLoadStateAndReconcile(
 // of each type of weed)". The native spawners (SpawnStainInHouse,
 // SpawnSockInHouse, SpawnTrashInHouse, SpawnWeedsInYard; CollectableItem.obj)
 // each take the FIRST FREE of the 30 junk slots at +4 (0x1C apart), mark it
-// active, set carrier -1, pick a RANDOM sub-type, bump the counter at +0x8B4
-// and place the item at a random spawn position for their material. Only the
-// sub-type is random, so the cheat spawns ONE item through the native routine
-// and then writes the exact sub-type into the slot it just filled. Everything
-// else stays native.
+// active, set carrier -1, pick a RANDOM sub-type, bump their spawn counter
+// (the three house spawners increment +0x8B4, SpawnWeedsInYard increments
+// +0x8B0) and place the item at a random spawn position for their material.
+// Only the sub-type is random, so the cheat spawns ONE item through the
+// native routine and then writes the exact sub-type into the slot it just
+// filled. Everything else stays native.
 //
 // Sub-type ranges, from the IsDirtSmudge/IsSock/IsCandyWrapper/IsWeed
 // predicates: smudges 0x83..0x85, socks 0x73..0x78, wrappers 0x79..0x7C,

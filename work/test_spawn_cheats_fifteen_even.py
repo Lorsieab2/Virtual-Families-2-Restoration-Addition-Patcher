@@ -7,8 +7,9 @@ of each type of weed) respectively."
 MECHANISM, pinned below from CollectableItem.obj: the four native spawners
 (SpawnStainInHouse, SpawnSockInHouse, SpawnTrashInHouse, SpawnWeedsInYard)
 each take the FIRST FREE of the 30 junk slots at +4 (0x1C apart), mark it
-active, set carrier -1, pick a RANDOM sub-type from a fixed base, bump the
-counter at +0x8B4 and place the item for their material. The old cheats
+active, set carrier -1, pick a RANDOM sub-type from a fixed base, bump
+their spawn counter (+0x8B4 for the three house spawners, +0x8B0 for
+SpawnWeedsInYard) and place the item for their material. The old cheats
 called them with 10/10/10 and 30, so the split was random.
 
 FIX: spawn one item at a time through the native routine and then pin the
@@ -70,14 +71,19 @@ class GroundTruth(unittest.TestCase):
 
     def test_each_spawner_takes_the_first_free_slot_and_rolls_its_subtype(self):
         rows = (
-            ("?SpawnStainInHouse@CCollectableItem@@QAEXH@Z", 3, 0x83),
-            ("?SpawnSockInHouse@CCollectableItem@@QAEXH@Z", 6, 0x73),
-            ("?SpawnTrashInHouse@CCollectableItem@@QAEXH@Z", 4, 0x79),
-            ("?SpawnWeedsInYard@CCollectableItem@@QAEXH@Z", 4, 0x7D),
+            ("?SpawnStainInHouse@CCollectableItem@@QAEXH@Z", 3, 0x83, 0x8B4),
+            ("?SpawnSockInHouse@CCollectableItem@@QAEXH@Z", 6, 0x73, 0x8B4),
+            ("?SpawnTrashInHouse@CCollectableItem@@QAEXH@Z", 4, 0x79, 0x8B4),
+            ("?SpawnWeedsInYard@CCollectableItem@@QAEXH@Z", 4, 0x7D, 0x8B0),
         )
-        for symbol, subtypes, base in rows:
+        for symbol, subtypes, base, counter in rows:
             with self.subTest(symbol=symbol):
                 body = _body(symbol)
+                # inc dword ptr [eax+counter]: the house spawners share +0x8B4,
+                # the yard spawner keeps its own +0x8B0.
+                self.assertIn(b"\xFF\x80" + counter.to_bytes(4, "little"), body, "spawn counter offset")
+                other = 0x8B0 if counter == 0x8B4 else 0x8B4
+                self.assertNotIn(b"\xFF\x80" + other.to_bytes(4, "little"), body)
                 self.assertIn(b"\x8D\x71\x04", body[:0x14], "lea esi,[ecx+4] -- slot 0")
                 self.assertIn(b"\x80\x3E\x00\x75", body[:0x20], "cmp byte ptr [esi],0 / jne -- first FREE slot")
                 self.assertIn(b"\x6A" + bytes([subtypes]) + b"\xC6\x06\x01", body, "push n / mov byte ptr [esi],1")
