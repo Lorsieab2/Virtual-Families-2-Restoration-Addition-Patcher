@@ -10179,13 +10179,19 @@ extern "C" bool __cdecl VF2EitherHammockInWorld()
         "status": "stock hammock drop gate accepts base or invisible hammock",
         "base_item": "0x1E1",
         "added_item": "0x30C",
-        "native_behavior": "eBehavior_LieInHammockNoLeadIn (0x24)",
-        "base_hammock_modified": False,
+        "behavior_id": "eBehavior_LieInHammockNoLeadIn (0x24)",
+        "implementation": "_VF2LieInHammockDropped",
+        # The base hammock's ITEM and HOTSPOT data are untouched (only the
+        # in-world gate is widened); its DROP BEHAVIOUR is retargeted along with
+        # the invisible copy whenever Behavior Patches is on, because 0x24 is
+        # one global handler. Two fields, so neither claim contradicts the other.
+        "base_hammock_item_and_hotspot_data_modified": False,
+        "base_hammock_drop_behavior_modified": bool(ENABLE_BEHAVIOR_PATCHES),
         "hotspot_modified": True,
         "drop_gate_helper": "_VF2EitherHammockInWorld",
         "relocation_safety": "only push 0x1E1 is NOPed; relocated mov ecx,FurnitureManager remains intact before the helper call",
-        "matches_base_hammock_behavior": True,
-        "note": "Invisible Hammock keeps donor-cloned itemInfo, donor mouse-dispatch alias, and donor fmap, then widens the stock CHotSpot::Hammock in-world gate to accept item 0x30C before the native base hammock behavior runs.",
+        "both_hammocks_take_the_same_route": True,
+        "note": "Invisible Hammock keeps donor-cloned itemInfo, donor mouse-dispatch alias, and donor fmap, then widens the stock CHotSpot::Hammock in-world gate to accept item 0x30C, so a drop on either hammock dispatches behavior 0x24. With Behavior Patches on, that behavior's CBehavior constructor entry is retargeted to _VF2LieInHammockDropped, which links to the hammock, settles with the NATIVE DROP's own orientation table (orientation 1 -> PlanToLieDown, otherwise PlanToWait(.., body 0x17), no head direction) and then plays the matching sleep strip for GetRandom(180)+180, keeping the native refusal branch when the link fails. SUPERSEDED: this field previously ended '...before the native base hammock behavior runs', which was true until the owner asked for the drop to sleep for long periods like the autonomous route. The dispatch path is unchanged; only the implementation behind 0x24 is VF2's.",
     }
 
 
@@ -27220,10 +27226,21 @@ static bool VF2SpaLoungerHasHandle(int handle);
 // whose native path picks body 9. Spa loungers were forced into the explicit
 // 0x17 branch by `|| VF2SpaLoungerHasHandle(...)`.
 //
-// The hammock never had it either: it uses body 9 -- the same sprite -- with
-// the head selected from ONE predicate, via the 3-argument PlanToWait. That is
-// the shape copied here. The 4-argument PlanToWait is not used: it failed on
-// both arms in play, and neither working reference uses it.
+// The 3-argument PlanToWait, with the head selected from the same predicate
+// as the body, is the shape used here. The 4-argument PlanToWait is not used:
+// it failed on both arms in play, and neither working reference uses it.
+//
+// SUPERSEDED, recorded per AGENTS.md 11: this paragraph used to say "the
+// hammock never had it either: it uses body 9 -- the same sprite -- at both
+// orientations, with the head selected from ONE predicate, via the 3-argument
+// PlanToWait. That is the shape copied here." The call SHAPE was a sound
+// reference; the hammock's body TABLE was not. That description was of the
+// VF2 spontaneous route, which had inherited native LieInHammock's body 9 +
+// SleepNW at every orientation -- a stock defect. Once the manual hammock
+// drop shared it (B191, first probe) the owner reported a wrong facing and a
+// flip when the eyes closed. The hammock's real table, decoded from the native
+// drop, is orientation 1 -> PlanToLieDown (body 9) + SleepNW, otherwise
+// PlanToWait(.., 0x17) + SleepNE; see VF2PlanHammockRest.
 //
 // Pose holds the position for the whole duration and adds nothing else. The
 // chaise relax sites use it for their AWAKE rolls -- reading, studying,
@@ -27247,20 +27264,48 @@ static void VF2PlanSpaLoungerPose(
 // the mapping the owner confirmed correct in play on B190. It was inverted
 // twice in later rounds, and that inversion is what the last several builds
 // shipped.
+// THE STRIP LENGTH IS NOT IN THE SAME UNIT AS THE WAIT, which is why the
+// receiving treatment used to end early.
+//
+// The owner reported it directly: "do you mind increasing the length of spa
+// receiving treatments so they match the length of spa giving treatments?"
+// Both sides already computed the SAME number -- GetRandom(11) + 55 -- so the
+// two plans looked identical on paper. They are not:
+//
+//   giving     PlanToWork(55..65)                   -- 55..65 ticks of work
+//   receiving  PlanToWait(settle) + PlanToPlayAnim(55..65 - settle)
+//
+// PlanToWork and PlanToWait count ticks. PlanToPlayAnim counts ANIMATION
+// frames at the speed it is handed (0.02f here), so the same integer buys far
+// less wall-clock time. Subtracting the settle out of the tick budget and
+// handing the remainder to the strip made the receiver finish well before the
+// giver, and the giver was left working on nobody.
+//
+// The hammock is the working reference and it does not do this. It waits a
+// FIXED ten ticks and then plays its strip for GetRandom(180) + 180 -- a
+// number chosen for the strip's own unit, independent of the wait:
+//
+//     plans->PlanToWait(10, eBodyPositionRestingHammock, hammockHead);
+//     plans->PlanToPlayAnim(ldwGameState::GetRandom(180) + 180, ...);
+//
+// So `duration` here is the TICK budget for the settle, and the strip is
+// sized separately in its own unit by the caller. The relax rolls (a five-
+// tick nap) still settle proportionally; the spa treatment passes the strip
+// length it wants so the receiving villager stays put for as long as the
+// giver works.
 static void VF2PlanSpaLoungerRest(
-    CVillagerPlans *plans, int orientation, int duration)
+    CVillagerPlans *plans, int orientation, int duration, int stripFrames)
 {
     bool const liesNorthEast = orientation == 1;
     // Settle for up to ten ticks, but never more than half the stay: the
-    // treatment (55-65 ticks) still settles ten, while a five-tick nap from
-    // the relax roll settles two and sleeps three instead of settling five
-    // and sleeping one.
+    // treatment still settles ten, while a five-tick nap from the relax roll
+    // settles two and sleeps for the rest instead of settling five.
     int settle = duration / 2;
     if (settle > 10) settle = 10;
     if (settle < 1) settle = 1;
     VF2PlanSpaLoungerPose(plans, orientation, settle);
     plans->PlanToPlayAnim(
-        duration > settle ? duration - settle : 1,
+        stripFrames > 0 ? stripFrames : 1,
         liesNorthEast ? "SleepNE" : "SleepNW",
         false,
         0.02f);
@@ -27356,7 +27401,12 @@ static bool VF2HandleMobileChaise(CVillager &villager)
     // the orientation-1 body at every orientation.
     if (VF2SpaLoungerHasHandle(info.unknown0)) {
         if (sleeping) {
-            VF2PlanSpaLoungerRest(plans, info.orientation, duration);
+            // A nap or a full sleep on a spa lounger: the strip runs out the
+            // remainder of the roll's own duration, as it always has.
+            int const napSettle = duration / 2 > 10 ? 10 : (duration / 2 < 1 ? 1 : duration / 2);
+            VF2PlanSpaLoungerRest(
+                plans, info.orientation, duration,
+                duration > napSettle ? duration - napSettle : 1);
         } else {
             VF2PlanSpaLoungerPose(plans, info.orientation, duration);
         }
@@ -29820,7 +29870,12 @@ static void VF2PlanLinkedChaiseAction(
     // the orientation-1 body at every orientation.
     if (VF2SpaLoungerHasHandle(info.unknown0)) {
         if (sleeping) {
-            VF2PlanSpaLoungerRest(plans, info.orientation, duration);
+            // A nap or a full sleep on a spa lounger: the strip runs out the
+            // remainder of the roll's own duration, as it always has.
+            int const napSettle = duration / 2 > 10 ? 10 : (duration / 2 < 1 ? 1 : duration / 2);
+            VF2PlanSpaLoungerRest(
+                plans, info.orientation, duration,
+                duration > napSettle ? duration - napSettle : 1);
         } else {
             VF2PlanSpaLoungerPose(plans, info.orientation, duration);
         }
@@ -30164,8 +30219,24 @@ static void VF2PlanSpaTreatment(
     //
     // info describes ONE placement: the drop route's linked chaise, or the
     // autonomous route's verified record. Nothing patches it in between.
+    // MATCH THE GIVER. The giving villager plans PlanToWork(GetRandom(11) +
+    // 55) at the call site above, so the receiver settles against that same
+    // tick budget -- and then holds the sleep strip for the span the HAMMOCK
+    // uses, which is the one reclining-sleep length in this game that has
+    // been confirmed in play.
+    //
+    // The strip length is NOT the tick number (see VF2PlanSpaLoungerRest):
+    // PlanToPlayAnim counts animation frames at 0.02f, not ticks, so handing
+    // it the leftover ticks is what made the receiving treatment end early
+    // while the giver was still working. Rather than invent a conversion
+    // factor, this copies the hammock's own GetRandom(180) + 180 verbatim --
+    // same strips, same reclining sleep, same 0.02f speed, and a duration the
+    // owner has played. Its 180..360 is comfortably longer than the giver's
+    // 55..65 ticks, so the receiver no longer finishes first; the giver's
+    // work ending is what closes the pairing, as it already did.
     int const total = ldwGameState::GetRandom(11) + 55;
-    VF2PlanSpaLoungerRest(plans, info.orientation, total);
+    VF2PlanSpaLoungerRest(
+        plans, info.orientation, total, ldwGameState::GetRandom(180) + 180);
     plans->PlanToPlaySound(
         static_cast<ESound>(0x101), 1.0f, eSoundTypeEffects);
     plans->PlanToIncDirtiness(2);
@@ -33732,6 +33803,16 @@ def patch_spontaneous_behaviors(manifest):
         raise ValueError("Unexpected LieInHammock behavior macro entry")
     anchored_hammock = behavior_obj.append_undefined_symbol("_VF2LieInHammockAnchoredRest")
     behavior_obj.retarget_relocation(behavior_sec.index, ctor.value + 0x1A8, anchored_hammock)
+    # The MANUAL drop, 0x24 LieInHammockNoLeadIn, is the next macro entry,
+    # fourteen bytes on (push <fn>; push 0x24). Owner request: the drop must
+    # act like the spontaneous route -- the long sleep -- for both hammock
+    # items, which both dispatch through this one behaviour id.
+    drop_macro_raw = behavior_sec.raw_ptr + ctor.value + 0x1B5
+    drop_macro_expected = b"\x68\x00\x00\x00\x00\x6A\x24"
+    if behavior_obj.buf[drop_macro_raw:drop_macro_raw + len(drop_macro_expected)] != drop_macro_expected:
+        raise ValueError("Unexpected LieInHammockNoLeadIn behavior macro entry")
+    dropped_hammock = behavior_obj.append_undefined_symbol("_VF2LieInHammockDropped")
+    behavior_obj.retarget_relocation(behavior_sec.index, ctor.value + 0x1B6, dropped_hammock)
     behavior_obj.write(PATCHED / "Behavior.obj")
 
     # Normal praise clears the action label in ForgetPlans before the behavior
@@ -33987,7 +34068,13 @@ extern CContentMap ContentMap;
 enum ESpeed { eSpeedNormal = 0xC8 };
 enum EPriority { ePriorityNormal = 0 };
 enum EBodyPosition {
+    // Upright 0x00, the standing constant the other unit already declares.
+    // The native hammock drop's refusal shakes the head standing.
+    eBodyPositionStanding = 0,
     eBodyPositionRestingHammock = 9,
+    // The chaise body, 0x17: the native hammock DROP waits in it at every
+    // orientation other than 1 (decoded from LieInHammockNoLeadIn).
+    eBodyPositionChaise = 0x17,
     // The Exercise Bike's seated poses, declared HERE because this is
     // the unit the bike wrapper is emitted into. Declaring them in the
     // behaviours unit and using them from this one is what made an
@@ -34021,6 +34108,14 @@ struct sFurnitureInfo2 {
 
 class CVillager;
 
+// Declared before CVillagerPlans because PlanToSay takes it. 0xE9 is the
+// hammock label; 0xB7 is the "cannot reach furniture" line the native drop
+// refusal says, decoded from LieInHammockNoLeadIn in Behavior.obj.
+enum StringId {
+    eStringCannotReachFurniture = 0xB7,
+    eStringRelaxingInTheHammock = 0xE9
+};
+
 class CVillagerPlans {
 public:
     bool PlanToGo(CContentMap::EObject object, ESpeed speed, EPriority priority, bool unknown);
@@ -34028,6 +34123,14 @@ public:
     void PlanToWait(int duration, EBodyPosition bodyPosition);
     void PlanToWait(int duration, EBodyPosition bodyPosition, EHeadDirection headDirection);
     void PlanToPlayAnim(int duration, char const *anim, bool unknown, float speed);
+    // ?PlanToSay@CVillagerPlans@@QAEXW4StringId@@@Z and
+    // ?PlanToShakeHead@CVillagerPlans@@QAEXHW4EBodyPosition@@@Z, exactly as
+    // the native hammock drop refusal calls them.
+    void PlanToSay(StringId text);
+    void PlanToShakeHead(int duration, EBodyPosition bodyPosition);
+    // ?PlanToLieDown@CVillagerPlans@@QAEXH@Z: the native hammock drop's
+    // settle at orientation 1.
+    void PlanToLieDown(int duration);
     void PlanToIncDirtiness(int amount);
     void PlanToIncHappinessTrend(int amount);
     void PlanToIncEnergy(int amount);
@@ -34241,6 +34344,7 @@ extern "C" void __cdecl VF2RefreshHammockEligibility(void *villager)
 class CVillager;
 extern "C" void __cdecl VF2RandomBookshelfReading(CVillager &);
 extern "C" void __cdecl VF2LieInHammockAnchoredRest(CVillager &);
+extern "C" void __cdecl VF2LieInHammockDropped(CVillager &);
 extern "C" void __cdecl VF2RandomRadioBehavior(CVillager &);
 extern "C" void __cdecl VF2PrivateRomanticTimeLabel(CVillager &);
 extern "C" void __cdecl VF2RandomTVLabel(CVillager &);
@@ -34368,6 +34472,7 @@ private:
     friend void __cdecl VF2RandomBookshelfReading(CVillager &);
     friend void __cdecl VF2RandomRadioBehavior(CVillager &);
     friend void __cdecl VF2LieInHammockAnchoredRest(CVillager &);
+    friend void __cdecl VF2LieInHammockDropped(CVillager &);
     friend void __cdecl VF2PrivateRomanticTimeLabel(CVillager &);
     friend void __cdecl VF2RandomTVLabel(CVillager &);
     friend void __cdecl VF2RandomBoardGameLabel(CVillager &);
@@ -34437,8 +34542,6 @@ class ldwGameState {
 public:
     static int __cdecl GetRandom(int);
 };
-
-enum StringId { eStringRelaxingInTheHammock = 0xE9 };
 
 class theStringManager {
 public:
@@ -35149,6 +35252,57 @@ static bool VF2RunNativeBehaviorAndChangedLabel(CVillager &villager, void (__cde
     return VF2BehaviorLabelChangedSince(villager, before);
 }
 
+// THE ONE HAMMOCK REST, shared by the spontaneous route and the manual drop.
+//
+// THE SETTLE IS THE NATIVE DROP'S, VERBATIM. The owner asked for the manual
+// drop to keep the villager orientation it always had -- "they were correct
+// before the change" -- and to add the long lie-down-and-sleep of the
+// spontaneous route. The native drop, decoded in full from Behavior.obj
+// (LieInHammockNoLeadIn), settles like this:
+//
+//     cmp  dword ptr [ebp-18h],1        ; info.orientation == 1 ?
+//     jne  ...
+//       PlanToLieDown(GetRandom(10) + 10)     ; the native body-9 path
+//     else
+//       PlanToWait(GetRandom(10) + 10, 17h)   ; the CHAISE body, 2-argument
+//
+// So the hammock's table is the mirror of the spa lounger's: orientation 1
+// lies down in body 9, anything else waits in body 0x17. Copied here with
+// the same call shapes and no head-direction argument, because that is what
+// the owner confirmed correct.
+//
+// THE STRIP PAIRS WITH THE BODY the way the stock RestingBody dispatch pairs
+// them (decoded at .text+0x37444): body 9 <-> SleepNW, body 0x17 <-> SleepNE.
+// A strip that does not match the settle's body is what "changes between
+// lying down and sleeping".
+//
+// SUPERSEDED, recorded per AGENTS.md 11. The previous version of this helper
+// -- and the spontaneous VF2 route before it -- used body 9 at BOTH
+// orientations with the head and strip split on `orientation == 3`. That was
+// inherited from the native spontaneous routine, LieInHammock, which really
+// does PlanToWait(10, 9) and SleepNW unconditionally: a native defect, not a
+// reference. The drop's own compare against 1 is the hammock's predicate;
+// `== 3` is never it. Probe v17 shipped the inherited form and the owner
+// reported both symptoms at once: wrong orientation on one placement, and a
+// flip when the eyes closed.
+static void VF2PlanHammockRest(CVillagerPlans *plans, sFurnitureInfo2 const &info)
+{
+    bool const liesDown = info.orientation == 1;
+    if (liesDown) {
+        plans->PlanToLieDown(10);
+    } else {
+        plans->PlanToWait(10, eBodyPositionChaise);
+    }
+    plans->PlanToPlayAnim(
+        ldwGameState::GetRandom(180) + 180,
+        liesDown ? "SleepNW" : "SleepNE",
+        false,
+        0.02f);
+    plans->PlanToIncDirtiness(4);
+    plans->PlanToIncHappinessTrend(1);
+    plans->PlanToIncEnergy(2);
+}
+
 extern "C" void __cdecl VF2LieInHammockAnchoredRest(CVillager &villager)
 {
     CVillagerPlans *plans = (CVillagerPlans *)&villager;
@@ -35161,46 +35315,33 @@ extern "C" void __cdecl VF2LieInHammockAnchoredRest(CVillager &villager)
     } else {
         plans->PlanToGo(CContentMap::eObjectHammock, eSpeedNormal, ePriorityNormal, false);
     }
-
-    // LinkPeepToFurniture reports the placed hammock orientation; keep the
-    // getting-in pose and sleep strip parallel to the hammock itself.
-    //
-    // THE SETTLE POSE AND THE SLEEP STRIP MUST AGREE, AND THEY DID NOT.
-    //
-    // Reported in play: "when villagers lie down and prepare to relax on the
-    // hammocks they use the wrong orientation relative to the furniture. But
-    // when they actually close their eyes and sleep it's correct."
-    //
-    // That split is exactly diagnostic. The sleep leg passes an ANIMATION NAME
-    // and was right; the settle leg passed a HEAD-DIRECTION CONSTANT and both
-    // constants were wrong -- eHeadDirectionNE was 1 (really Southeast) and
-    // eHeadDirectionNW was 7 (really UpNE1, an upward gaze). Corrected above.
-    //
-    // The orientation test was wrong too. EFurnitureOrientation is SE=0, SW=1,
-    // NE=2, NW=3 (CodeView LF_ENUMERATE records, identical in
-    // FurnitureManager.obj at 0x52e0 and Behavior.obj at 0x9cfb), so `== 1` is
-    // SW alone and silently missed NW.
-    //
-    // THE SLEEP ANIMATION SELECTION IS NOT CHANGED HERE. The owner reports it
-    // is correct in play, and a villager follows the furniture: a hammock
-    // facing NE gets "SleepNE". The only defect is that the north half was
-    // being tested as `== 1`, which is SW -- so this now asks the same question
-    // the animation was always trying to ask, and the head direction is derived
-    // from that one answer so the settle pose can no longer disagree with the
-    // sleep strip that follows it.
-    // EFurnitureOrientation is SE=0, SW=1, NE=2, NW=3, so only NW takes the
-    // NW art. This route reaches the INVISIBLE Hammock too: it is the same
-    // item with different art and answers the same eObjectHammock lookup.
-    bool const hammockFacesNorthWest = info.orientation == 3 /* NW */;
-    EHeadDirection hammockHead =
-        hammockFacesNorthWest ? eHeadDirectionNW : eHeadDirectionNE;
-    plans->PlanToWait(10, eBodyPositionRestingHammock, hammockHead);
-    char const *sleepAnim = hammockFacesNorthWest ? "SleepNW" : "SleepNE";
-    plans->PlanToPlayAnim(ldwGameState::GetRandom(180) + 180, sleepAnim, false, 0.02f);
-    plans->PlanToIncDirtiness(4);
-    plans->PlanToIncHappinessTrend(1);
-    plans->PlanToIncEnergy(2);
+    VF2PlanHammockRest(plans, info);
     plans->PlanToReleaseSemaphore();
+    plans->StartNewBehavior(villager);
+}
+
+// THE MANUAL DROP, behaviour 0x24, for the base hammock (0x1E1) and the
+// Invisible Hammock (0x30C) alike: CHotSpot::Hammock's widened gate sends
+// both through this one behaviour id. Same label, same link, same rest as the
+// spontaneous route above. The native refusal is kept verbatim: a hammock
+// with no free peep slot makes the villager walk over, say they cannot, and
+// shake their head, rather than lie down on top of whoever is in it.
+extern "C" void __cdecl VF2LieInHammockDropped(CVillager &villager)
+{
+    CVillagerPlans *plans = (CVillagerPlans *)&villager;
+    char *behaviorLabel = ((char *)&villager) + 0x1BBA8;
+    strncpy(behaviorLabel, theStringManager::Get()->GetString(eStringRelaxingInTheHammock), 0x27);
+
+    sFurnitureInfo2 info = {};
+    if (!FurnitureManager.LinkPeepToFurniture(CContentMap::eObjectHammock, &villager, info, true, 0, 0)) {
+        plans->PlanToGo(CContentMap::eObjectHammock, eSpeedNormal, ePriorityNormal, false);
+        plans->PlanToSay(eStringCannotReachFurniture);
+        plans->PlanToShakeHead(4, eBodyPositionStanding);
+        plans->StartNewBehavior(villager);
+        return;
+    }
+    plans->PlanToGo(info.point, eSpeedNormal, ePriorityNormal);
+    VF2PlanHammockRest(plans, info);
     plans->StartNewBehavior(villager);
 }
 
@@ -37396,8 +37537,8 @@ extern "C" void __cdecl VF2EnableAutonomousCandidates(void *villager)
         ],
         "hammock_behavior": {
             "enabled_behavior": "0x23 LieInHammock retargeted to _VF2LieInHammockAnchoredRest",
-            "manual_drop_behavior": "0x24 LieInHammockNoLeadIn remains native",
-            "reason": "The spontaneous route keeps the long SleepNW/SleepNE rest animation sequence, writes the native eString 0xE9 behavior label, requires either base HammockStd item 0x1E1 or Invisible Hammock item 0x30C in-world, then calls FurnitureManager.LinkPeepToFurniture to use the placed hammock anchor and choose the matching hammock-rest head direction plus sleep strip for the linked orientation: NW hammock -> body position 9, head direction 7, and SleepNW; NE hammock -> body position 9, head direction 1, and SleepNE.",
+            "manual_drop_behavior": "0x24 LieInHammockNoLeadIn retargeted to _VF2LieInHammockDropped: the same label, link and long rest as the spontaneous route (shared VF2PlanHammockRest), keeping the native refusal branch when the link fails and not releasing the semaphore the drop route never holds. THE SETTLE IS THE NATIVE DROP'S OWN TABLE, decoded from Behavior.obj: orientation 1 -> PlanToLieDown (body 9) + SleepNW, otherwise PlanToWait(.., 0x17) + SleepNE, 2-argument, no head direction -- the orientation the owner confirmed correct. SUPERSEDED TWICE: this field first read 'remains native' (the native drop settled for GetRandom(10)+10 with no sleep strip, which the owner asked to replace); then probe v17 shared the spontaneous route's body 9 + `orientation == 3` split, which the owner reported as wrong orientation and a flip when the eyes close -- that split was inherited from native LieInHammock, which uses body 9 and SleepNW unconditionally and is a native defect, not a reference.",
+            "reason": "The spontaneous route keeps the long rest animation sequence, writes the native eString 0xE9 behavior label, requires either base HammockStd item 0x1E1 or Invisible Hammock item 0x30C in-world, then calls FurnitureManager.LinkPeepToFurniture to use the placed hammock anchor and settle with the native DROP's own table for the linked orientation: orientation 1 -> PlanToLieDown (body 9) + SleepNW; otherwise PlanToWait(.., body 0x17) + SleepNE. SUPERSEDED: this field previously described 'NW hammock -> body 9, head 7, SleepNW; NE hammock -> body 9, head 1, SleepNE' -- body 9 at both orientations with a head split, inherited from native LieInHammock (body 9 + SleepNW unconditionally, a native defect); the owner reported it as wrong orientation plus a flip between lying down and sleeping once the manual drop shared it.",
         },
         "note": "No Bored hook. Behavior Patches enables every registered variation route after stock InitAI and LoadAI, except Petting which is explicitly kept non-spontaneous. Native candidate fields continue to supply age, time, object, weather, and gender eligibility unless B150 documents an intentional override. The hammock candidate is refreshed at each native AI decision and is eligible only when base HammockStd item 0x1E1 or Invisible Hammock item 0x30C is in-world and Weather.currentType is 0 (Sunny) or 1 (Cloudy). Snow play is enabled only for Weather.currentType 5 (Snowing). Playhouse remains child-only and daytime-only. Raw age at CVillager+0x6A54 is displayed as years by dividing by 20.",
     }
@@ -38142,12 +38283,21 @@ def validate_invisible_hammock_behavior_contract(manifest):
     drop = manifest.get("invisible_hammock_drop_action", {})
     if drop.get("base_item") != "0x1E1" or drop.get("added_item") != "0x30C":
         errors.append("Invisible Hammock drop gate must accept base 0x1E1 and added 0x30C")
-    if drop.get("native_behavior") != "eBehavior_LieInHammockNoLeadIn (0x24)":
-        errors.append(f"Invisible Hammock native behavior drifted: {drop.get('native_behavior')}")
+    if drop.get("behavior_id") != "eBehavior_LieInHammockNoLeadIn (0x24)":
+        errors.append(f"Invisible Hammock drop behavior id drifted: {drop.get('behavior_id')}")
+    # The IMPLEMENTATION behind 0x24 is VF2's when Behavior Patches is on.
+    # Pinning "the native routine runs" here would now validate the opposite
+    # of what ships; pin the retarget instead.
+    if ENABLE_BEHAVIOR_PATCHES and drop.get("implementation") != "_VF2LieInHammockDropped":
+        errors.append(f"Invisible Hammock drop implementation drifted: {drop.get('implementation')}")
     if drop.get("hotspot_modified") is not True:
         errors.append("Invisible Hammock must widen stock CHotSpot::Hammock drop gate")
-    if drop.get("matches_base_hammock_behavior") is not True:
-        errors.append("Invisible Hammock must continue through the base hammock behavior route")
+    if drop.get("both_hammocks_take_the_same_route") is not True:
+        errors.append("both hammocks must take the same drop route")
+    if drop.get("base_hammock_item_and_hotspot_data_modified") is not False:
+        errors.append("the base hammock's item and hotspot data must stay untouched")
+    if ENABLE_BEHAVIOR_PATCHES and drop.get("base_hammock_drop_behavior_modified") is not True:
+        errors.append("with Behavior Patches on, the base hammock's drop behaviour is retargeted and the record must say so")
 
     behavior_assets = manifest.get("behavior_assets", {})
     fmap_rows = {
@@ -38174,7 +38324,7 @@ def validate_invisible_hammock_behavior_contract(manifest):
         "click_alias": alias,
         "hotspot": drop,
         "fmap": fmap,
-        "recognition_path": "InvisibleHammock inherits the donor itemInfo/click/fmap path and widens CHotSpot::Hammock's initial in-world gate so the stock base hammock drop behavior runs.",
+        "recognition_path": "InvisibleHammock inherits the donor itemInfo/click/fmap path and widens CHotSpot::Hammock's initial in-world gate, so a drop on it dispatches the same behavior 0x24 as the base hammock. With Behavior Patches on, 0x24 runs _VF2LieInHammockDropped. SUPERSEDED: this field previously ended 'so the stock base hammock drop behavior runs' -- true before the drop was retargeted; the recognition path itself is unchanged.",
     }
 
 

@@ -346,8 +346,15 @@ nearest and have them mime a treatment on it. The slot finder walks the placed
 furniture array and resolves an actual free Spa Lounger before anything is
 committed.
 
-A treatment runs for about one real minute, `GetRandom(11) + 55` plan seconds,
-shared by both halves, and pays dirtiness and energy on the way out. The receiving
+The giving villager works for `GetRandom(11) + 55` ticks, about one real
+minute. The receiving villager settles against that same tick budget and then
+holds the sleep strip for `GetRandom(180) + 180` animation frames — the
+hammock's own rest length — because `PlanToPlayAnim` counts frames, not ticks,
+and sizing the strip from the leftover ticks is what used to make the receiver
+get up while the giver was still working (fixed in B191). The receiver's rest
+starts when they lie down and is not re-planned when a giver is dropped on
+them later, so a giver added in the last moments of a rest can outlast it.
+Both halves pay dirtiness and energy on the way out. The receiving
 villager takes the nap's own posture, chosen from the placed lounger's
 orientation rather than assumed, so a lounger set the other way round does not
 have someone lying across its arm. `gulpahh_01.ogg` plays periodically through
@@ -538,7 +545,7 @@ found by that handle, which also keeps two tables of the same kind apart.
 
 These three do more than change eligibility or wording:
 
-- **Hammock rest** (`0x23`) is retargeted to a helper that builds its own plan sequence rather than reusing the native one. It links to the hammock, picks the getting-in pose and sleep animation strip to match the placed hammock's orientation, then rests for a randomised interval. Only Sunny and Cloudy weather allow it. The manual hammock drop (`0x24`) stays native.
+- **Hammock rest** (`0x23`) is retargeted to a helper that builds its own plan sequence rather than reusing the native one. It links to the hammock, picks the getting-in pose and sleep animation strip to match the placed hammock's orientation, then rests for a randomised interval. Only Sunny and Cloudy weather allow it. The manual hammock drop (`0x24`) is retargeted too, for the base and the invisible hammock alike: it settles with the native drop's own orientation table and then sleeps for the same long interval, so a dropped villager rests like one who chose the hammock themselves.
 - **Six-child private romantic time.** Stock `theMainScene::HandleDropOnVillager` refuses the drop when the family is full. That refusal is replaced with a jump to the same target every passing gate already uses, so an opposite-sex spouse pair at six children runs the ordinary romantic sequence — stock cooldown included — instead of being turned away. No cave and no reproduced instructions; the seven refusal bytes are simply unreachable, and the age and same-gender gates above are untouched.
 - **Manual computer drop.** When a drop on a computer would have produced ordinary web browsing, a coin flip switches it to playing a video game instead. The stock email, repair, career-work and sickness computer routes are reserved before that point and are not affected, and no autonomous candidate weight changes.
 

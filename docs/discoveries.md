@@ -1384,7 +1384,20 @@
   `_VF2LieInHammockAnchoredRest`. The helper calls
   `CFurnitureManager::LinkPeepToFurniture` first, plans a walk to the linked
   hammock point, then chooses the sleep strip from the returned
-  `sFurnitureInfo2` orientation. Manual-drop behavior `0x24` remains native.
+  `sFurnitureInfo2` orientation. Manual-drop behavior `0x24` remained native
+  through B190.
+- B191 retargets the `0x24` macro entry (ctor+0x1B5, relocation at +0x1B6)
+  to `_VF2LieInHammockDropped` as well, so a drop on either hammock takes the
+  long rest. Decoded from `Behavior.obj`, the native drop's settle is
+  `cmp [ebp-18h],1` (`info.orientation == 1`) -> `PlanToLieDown`, otherwise
+  `PlanToWait(.., 0x17)` with no head direction; the native spontaneous
+  routine is `PlanToWait(10, 9)` + `SleepNW` unconditionally, a stock defect
+  the B124 helper had inherited as "body 9 at both orientations" with a head
+  split on `orientation == 3`. Both entries now share one rest built on the
+  drop's table (body 9 <-> `SleepNW`, `0x17` <-> `SleepNE`), the drop keeps
+  the native refusal branch, and only the spontaneous entry releases the
+  semaphore. SUPERSEDED: the sentence above this entry ("remains native")
+  described B124-B190.
 - B125 tightens the same spontaneous candidate's eligibility: it now requires
   `CFurnitureManager::IsInWorld(0x1E1)` for base `HammockStd` or
   `IsInWorld(0x30C)` for `InvisibleHammock`. When either item exists and
@@ -1399,6 +1412,15 @@
   `PlanToWait(10, EBodyPosition 9, headDirection)`. `sFurnitureInfo2`
   orientation `1` uses head direction `7` before `SleepNW`; the other
   orientation uses head direction `1` before `SleepNE`.
+  SUPERSEDED (B126-B190): that mapping -- body 9 at both orientations with a
+  head-direction split -- was inherited from native `LieInHammock`, which is
+  `PlanToWait(10, 9)` + `SleepNW` unconditionally, a stock defect. (The head
+  constants `7`/`1` were later found to be UpNE1/Southeast and corrected to
+  `3`/`0`, which did not change the underlying body defect.) Since B191 both
+  hammock entries share one rest built on the native DROP's table:
+  orientation `1` -> `PlanToLieDown` (body 9) + `SleepNW`, otherwise
+  `PlanToWait(.., 0x17)` + `SleepNE`, no head direction. See the B191 entry
+  above and `work/test_hammock_drop_matches_autonomous.py`.
 - Added `work/dump_villager_action_plan_data.py` to generate a human-readable
   behavior/action-plan dump from `dump_behavior_disasm.txt` and
   `dump_villagerplans_disasm.txt`. The dump preserves raw x86 push context and
