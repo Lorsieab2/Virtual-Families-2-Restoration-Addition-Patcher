@@ -20,6 +20,7 @@ SHAPE, copied from the Invisible Spa Lounger beside the Spa Lounger:
     invisible table is a venue and a villager dropped on it counts as
     standing on "this item".
 """
+import json
 import pathlib
 import re
 import sys
@@ -70,12 +71,55 @@ class TheItem(unittest.TestCase):
         # id must be exactly one past the previous maximum (the Spa Lounger).
         self.assertEqual(max(patcher.item_id_for(i) for i in range(len(patcher.ITEMS))), 0x331)
         self.assertEqual(sorted(patcher.item_id_for(i) for i in range(len(patcher.ITEMS))).count(0x331), 1)
+        # The dict entry tracks its visible sibling on every field, INCLUDING
+        # the generation lock, so a change to the visible table carries over.
+        # What the BUILD ships is asserted separately below.
         for key in ("donor", "list", "price", "lock_generation", "item_type"):
             self.assertEqual(inv[key], vis[key], key)
         self.assertEqual(inv["donor"], 0x20C, "the Pool Table")
         self.assertEqual(inv["list"], "gFurniture5")
         self.assertEqual(inv["short_description"], "Invisible Ping-Pong Table")
         self.assertIn("invisible ping-pong table", inv["long_description"])
+
+    def test_the_emitted_record_is_unlocked_like_every_other_invisible_item(self):
+        """The EMITTED lock is 0, not the 4 in the dict entry.
+
+        Caught by review: asserting the dict literal proves nothing about the
+        build, because apply_generation_lock_distribution() rewrites
+        lock_generation to 0 for every item whose custom_pack starts with
+        "Invisible ", recording the reason "invisible furniture remains
+        placement/debug unlocked".
+
+        That override is deliberate and universal, and the owner has stated it
+        directly: all invisible furniture is to have a generation lock of 0.
+        The Invisible Spa Lounger already diverges from its visible sibling in
+        exactly this way -- it ships 0 while the Spa Lounger ships 12 -- so
+        exempting this one item would make it the only locked invisible piece.
+        Invisible items exist for roleplaying and placement, and are available
+        from the first generation.
+        """
+        manifest_path = patcher.OUT / "patch-manifest.json"
+        if not manifest_path.is_file():
+            self.skipTest("generator output not present; run the generator first")
+        records = json.loads(manifest_path.read_text(encoding="utf-8"))["items"]
+        emitted = {r["name"]: r["mobile_data"] for r in records}
+        invisible_locks = {
+            name: data.get("lock_generation")
+            for name, data in emitted.items()
+            if str(data.get("custom_pack", "")).startswith("Invisible ")
+        }
+        self.assertTrue(invisible_locks)
+        self.assertEqual(
+            sorted(set(invisible_locks.values())), [0],
+            "every invisible item must ship generation 0: "
+            + repr(invisible_locks))
+        self.assertIn("Invisible Ping-Pong Table", invisible_locks)
+        self.assertEqual(invisible_locks["Invisible Ping-Pong Table"], 0)
+        # The ORIGINAL lock still tracks the visible table, so the dict entry
+        # is not silently drifting away from its sibling.
+        self.assertEqual(
+            emitted["Invisible Ping-Pong Table"].get("original_lock_generation"),
+            emitted["Ping-Pong Table"].get("lock_generation"))
 
     def test_it_ships_the_visible_tables_sprite_and_borrows_the_pool_map(self):
         inv, vis = _item(NAME), _item(VISIBLE)
