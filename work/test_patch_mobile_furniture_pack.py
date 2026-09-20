@@ -10601,9 +10601,19 @@ class CustomAchievementAwardDispatchTests(unittest.TestCase):
                     manifest["AchieverExtraordinaire"]["achievement_id"],
                     "0x92",
                 )
+                # SUPERSEDED: this asserted must_be_last unconditionally.
+                # The holiday furniture goals now follow the meta-goal so the
+                # drawn window is contiguous when .vf2goal is zero, so the
+                # meta-goal is last in the ORDER only in that state. It is
+                # still the last row a player must COMPLETE in both.
+                contract = manifest["AchieverExtraordinaire"]
+                self.assertNotIn("must_be_last", contract)
                 self.assertTrue(
-                    manifest["AchieverExtraordinaire"]["must_be_last"]
-                )
+                    contract["must_be_last_when_holiday_furniture_disabled"])
+                self.assertTrue(
+                    contract["followed_by_holiday_furniture_goals_when_enabled"])
+                self.assertEqual(contract["holiday_furniture_goal_count"], 19)
+                self.assertIn("every other visible row", contract["status"])
         finally:
             patcher.PATCHED = old_patched
 

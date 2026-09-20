@@ -52,9 +52,31 @@ from coff_patch import CoffObject  # noqa: E402
 ACHIEVER = 0x92
 PROPS = 0xA5
 HOLIDAY = frozenset(range(0x6D, 0x80))
-# The two runtime states the single shipped executable must serve.
-COUNT_WITHOUT_HOLIDAY = 152
-COUNT_WITH_HOLIDAY = 171
+
+# THE COUNTS ARE DERIVED, NOT HARDCODED.
+#
+# Review caught that fixing these at 152/171 described only the all-gates-on
+# build. The matrix ships variants with Behavior Patches or Holiday Ornaments
+# disabled, and those emit shorter arrays (for example ornaments on with
+# behaviour goals off gives 123/142), so a hardcoded pair would fail this
+# audit against a perfectly valid variant. These mirror
+# VF2AchievementVisibleCountInternal, whose two compile gates are the two
+# module flags below; the third gate, Holiday Furniture, is the RUNTIME
+# .vf2goal byte and is what separates the two counts.
+_HOLIDAY_COUNT = len(HOLIDAY)
+
+
+def _count_without_holiday():
+    count = 0x5F + 6 + 3 + 2 + 5 + 6 + 2 + 1 + 1 + 1
+    if patcher.ENABLE_HOLIDAY_ORNAMENTS:
+        count += 1
+    if patcher.ENABLE_BEHAVIOR_PATCHES:
+        count += 29
+    return count
+
+
+COUNT_WITHOUT_HOLIDAY = _count_without_holiday()
+COUNT_WITH_HOLIDAY = COUNT_WITHOUT_HOLIDAY + _HOLIDAY_COUNT
 
 
 def _source():
@@ -104,7 +126,7 @@ class TheOrderArray(unittest.TestCase):
         self.assertEqual(len(order), COUNT_WITH_HOLIDAY)
         self.assertEqual(order.index(ACHIEVER), COUNT_WITHOUT_HOLIDAY - 1)
         holiday_positions = [i for i, x in enumerate(order) if x in HOLIDAY]
-        self.assertEqual(len(holiday_positions), 19)
+        self.assertEqual(len(holiday_positions), _HOLIDAY_COUNT)
         self.assertEqual(holiday_positions[0], COUNT_WITHOUT_HOLIDAY)
         self.assertEqual(holiday_positions[-1], COUNT_WITH_HOLIDAY - 1)
 
@@ -239,16 +261,89 @@ class TheCompleteAllCheat(unittest.TestCase):
                          if x not in completed and x not in (PROPS, ACHIEVER)]
             self.assertEqual(uncovered, [], f"visible rows={count}")
             # Props to you is then derivable: its prerequisites are all in.
-            self.assertTrue({0x30, 0xA1, 0xA2, 0xA3, 0xA4, 0xAB} <= completed)
+            # They are behaviour goals, so they exist only when that gate is on.
+            if patcher.ENABLE_BEHAVIOR_PATCHES:
+                self.assertTrue({0x30, 0xA1, 0xA2, 0xA3, 0xA4, 0xAB} <= completed)
 
     def test_the_newly_added_discipline_goal_is_covered(self):
         # The goal that prompted this audit. It is outside every range the
-        # cheat used to enumerate.
+        # cheat used to enumerate. It is a BEHAVIOUR goal, so it is only in
+        # the visible order when that compile gate is on -- the variants that
+        # build without Behavior Patches legitimately omit it.
         order = _order()
         if order is None:
             self.skipTest("generator output not present; run the generator first")
-        self.assertIn(0xAB, order[:COUNT_WITHOUT_HOLIDAY])
         self.assertEqual(patcher.CUSTOM_ACHIEVEMENT_BANGING_DISHES_ID, 0xAB)
+        if not patcher.ENABLE_BEHAVIOR_PATCHES:
+            self.assertNotIn(0xAB, order)
+            return
+        self.assertIn(0xAB, order[:COUNT_WITHOUT_HOLIDAY])
+
+
+class EveryGateCombination(unittest.TestCase):
+    """The audit must hold for every shipped matrix variant, not just this one.
+
+    Review caught that fixing the counts at 152/171 described only the
+    all-gates-on build. The matrix also ships variants with Behavior Patches
+    or Holiday Ornaments disabled, whose arrays are shorter, so this rebuilds
+    the order array under each combination and re-checks the two invariants
+    the audit exists to protect: the meta-goal is the last row a player must
+    complete, and no unearnable holiday row is drawn when the runtime byte is
+    zero.
+    """
+
+    COMBINATIONS = (
+        # ornaments, behavior, rows without holiday, rows with holiday
+        (False, False, 122, 141),
+        (True, False, 123, 142),
+        (False, True, 151, 170),
+        (True, True, 152, 171),
+    )
+
+    def test_the_derived_counts_match_every_declared_combination(self):
+        for ornaments, behavior, off, on in self.COMBINATIONS:
+            with self.subTest(ornaments=ornaments, behavior=behavior):
+                count = 0x5F + 6 + 3 + 2 + 5 + 6 + 2 + 1 + 1 + 1
+                if ornaments:
+                    count += 1
+                if behavior:
+                    count += 29
+                self.assertEqual(count, off)
+                self.assertEqual(count + _HOLIDAY_COUNT, on)
+
+    def test_the_meta_goal_is_last_before_the_holiday_block_in_every_variant(self):
+        import shutil
+        import tempfile
+        old_patched = patcher.PATCHED
+        old_ornaments = patcher.ENABLE_HOLIDAY_ORNAMENTS
+        old_behavior = patcher.ENABLE_BEHAVIOR_PATCHES
+        try:
+            for ornaments, behavior, off, on in self.COMBINATIONS:
+                with self.subTest(ornaments=ornaments, behavior=behavior):
+                    patcher.ENABLE_HOLIDAY_ORNAMENTS = ornaments
+                    patcher.ENABLE_BEHAVIOR_PATCHES = behavior
+                    with tempfile.TemporaryDirectory() as tmp:
+                        root = pathlib.Path(tmp)
+                        patcher.PATCHED = root
+                        for name in ("AchievementsScene.obj", "Achievement.obj"):
+                            shutil.copy2(patcher.SRC_OBJS / name, root / name)
+                        manifest = {}
+                        patcher.patch_custom_achievements(manifest)
+                        order = _order()
+                        self.assertEqual(len(order), on)
+                        # The meta-goal ends the drawn window when the
+                        # runtime holiday byte is zero ...
+                        self.assertEqual(order[off - 1], ACHIEVER)
+                        self.assertEqual(
+                            [x for x in order[:off] if x in HOLIDAY], [],
+                            "no unearnable holiday row may be drawn")
+                        # ... and the holiday rows follow it when it is set.
+                        self.assertEqual(
+                            sorted(order[off:]), sorted(HOLIDAY))
+        finally:
+            patcher.PATCHED = old_patched
+            patcher.ENABLE_HOLIDAY_ORNAMENTS = old_ornaments
+            patcher.ENABLE_BEHAVIOR_PATCHES = old_behavior
 
 
 class TheEmittedCpp(unittest.TestCase):

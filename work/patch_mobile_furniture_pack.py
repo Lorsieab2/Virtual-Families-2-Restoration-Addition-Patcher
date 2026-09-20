@@ -24198,9 +24198,31 @@ def patch_achiever_load_reconciliation(manifest):
     )
     obj.write(obj_path)
     manifest["AchieverExtraordinaire"] = {
-        "status": "final visible meta-goal with completion and load reconciliation",
+        # ORDERING IS CONDITIONAL, and saying otherwise misreports the build.
+        #
+        # SUPERSEDED, recorded rather than deleted: this claimed
+        # "final visible meta-goal" and must_be_last: True unconditionally.
+        # The 19 Holiday Furniture goals are now appended AFTER the meta-goal
+        # so the drawn window stays contiguous when the .vf2goal runtime byte
+        # is zero (see the append site). When that byte IS set, the final
+        # visible row is holiday goal 0x7F and the meta-goal is 20th from the
+        # end, so an unconditional claim here would have release diagnostics
+        # asserting an invariant the executable does not satisfy.
+        #
+        # What is true in BOTH states, and what actually matters, is that the
+        # meta-goal is the last row a player must COMPLETE: every other
+        # visible row, holiday rows included when they are visible, is
+        # required before it is awarded.
+        "status": (
+            "meta-goal awarded after every other visible row; last in the "
+            "visible order only when Holiday Furniture goals are disabled"
+        ),
         "achievement_id": hex(CUSTOM_ACHIEVEMENT_ACHIEVER_ID),
-        "must_be_last": True,
+        "must_be_last_when_holiday_furniture_disabled": True,
+        "followed_by_holiday_furniture_goals_when_enabled": True,
+        "holiday_furniture_goal_count": (
+            CUSTOM_ACHIEVEMENT_HOLIDAY_LAST - CUSTOM_ACHIEVEMENT_HOLIDAY_FIRST + 1
+        ),
         "completion_scope": "every other achievement visible in the selected executable/runtime-flag layout",
         "set_complete_hook": ACHIEVER_COMPLETION_HELPER_SYMBOL,
         "load_reconciliation_hook": ACHIEVER_LOAD_HELPER_SYMBOL,
