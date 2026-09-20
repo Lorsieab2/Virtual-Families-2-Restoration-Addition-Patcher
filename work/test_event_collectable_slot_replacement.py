@@ -180,9 +180,15 @@ class TheSource(unittest.TestCase):
         src = _strip_comments(_source())
         self.assertIn("static int gVF2LastEventSpawnSlot = -1;\nstatic unsigned int gVF2LastEventSpawnStamp = 0;", src)
         fresh = _function(src, "static bool VF2EventCollectableSlotFreshFromBurst(int slot)")
-        self.assertIn("gVF2LastEventSpawnSlot == slot", fresh)
-        self.assertIn("VF2EventCollectableSlotBusy(slot)", fresh)
-        self.assertIn("VF2EventCollectableSlotStamp(slot) == gVF2LastEventSpawnStamp", fresh)
+        self.assertIn("if (gVF2LastEventSpawnSlot != slot || !VF2EventCollectableSlotBusy(slot)) return false;", fresh)
+        # Bounded by the game clock: the record must carry the stamp of the
+        # CURRENT game second, so a record left over from an earlier event is
+        # not protected hours later against an unrelated event.
+        self.assertIn("return stamp == gVF2LastEventSpawnStamp && stamp == VF2EventCollectableStampNow();", fresh)
+        now = _function(src, "static unsigned int VF2EventCollectableStampNow()")
+        self.assertIn("reinterpret_cast<ldwGameState *>(theGameState::Get())", now)
+        self.assertIn("clock->GetSecondsFromGameStart() + 0x78", now, "the same seconds + 0x78 the native activation writes")
+        self.assertIn("    unsigned int GetSecondsFromGameStart();\n};", src)
         victim = _function(src, "static int VF2EventCollectableVictim()")
         self.assertIn("if (fresh0 != fresh1) return fresh0 ? 1 : 0;", victim)
         self.assertLess(victim.index("fresh0 != fresh1"), victim.index("picked0 != picked1"), "the burst rule outranks the picked rule")

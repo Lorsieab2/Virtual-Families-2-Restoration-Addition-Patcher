@@ -15537,6 +15537,11 @@ public:
 class ldwGameState {
 public:
     static int __cdecl GetRandom(int limit);
+    // ?GetSecondsFromGameStart@ldwGameState@@QAEIXZ: the game clock in
+    // seconds, the same one CCollectableItem::Add stamps into a spawned
+    // record (+0x08 = seconds + 0x78). theGameState derives from it at
+    // offset 0 (Add itself does theGameState::Get / mov ecx,eax / call).
+    unsigned int GetSecondsFromGameStart();
 };
 
 enum EGameScene {
@@ -16749,16 +16754,25 @@ static unsigned int VF2EventCollectableSlotStamp(int slot)
 // The Bug Whisperer spawns TWICE back to back; without this, with a picked
 // item in one slot, the second spawn would pick the first spawn (the only
 // unpicked record) as its victim and the event would net one item, not two.
-// An item this burst just spawned is never sacrificed; stamps are per game
-// second, so only a spawn from the same second counts as the same burst.
+// An item this burst just spawned is never sacrificed. "This burst" is
+// bounded by the game clock, not only by the cache: the record must still
+// carry the stamp of the CURRENT game second (Add writes seconds + 0x78 at
+// activation), so an unrelated event minutes or hours later, with the same
+// record still sitting there unpicked, gets no protection from it.
 static int gVF2LastEventSpawnSlot = -1;
 static unsigned int gVF2LastEventSpawnStamp = 0;
 
+static unsigned int VF2EventCollectableStampNow()
+{
+    ldwGameState *clock = reinterpret_cast<ldwGameState *>(theGameState::Get());
+    return clock ? clock->GetSecondsFromGameStart() + 0x78 : 0;
+}
+
 static bool VF2EventCollectableSlotFreshFromBurst(int slot)
 {
-    return gVF2LastEventSpawnSlot == slot &&
-        VF2EventCollectableSlotBusy(slot) &&
-        VF2EventCollectableSlotStamp(slot) == gVF2LastEventSpawnStamp;
+    if (gVF2LastEventSpawnSlot != slot || !VF2EventCollectableSlotBusy(slot)) return false;
+    unsigned int const stamp = VF2EventCollectableSlotStamp(slot);
+    return stamp == gVF2LastEventSpawnStamp && stamp == VF2EventCollectableStampNow();
 }
 
 // The slot an event spawn may take over when both are busy: never the item
