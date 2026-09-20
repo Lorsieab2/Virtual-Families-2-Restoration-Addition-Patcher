@@ -346,8 +346,15 @@ nearest and have them mime a treatment on it. The slot finder walks the placed
 furniture array and resolves an actual free Spa Lounger before anything is
 committed.
 
-A treatment runs for about one real minute, `GetRandom(11) + 55` plan seconds,
-shared by both halves, and pays dirtiness and energy on the way out. The receiving
+The giving villager works for `GetRandom(11) + 55` ticks, about one real
+minute. The receiving villager settles against that same tick budget and then
+holds the sleep strip for `GetRandom(180) + 180` animation frames — the
+hammock's own rest length — because `PlanToPlayAnim` counts frames, not ticks,
+and sizing the strip from the leftover ticks is what used to make the receiver
+get up while the giver was still working (fixed in B191). The receiver's rest
+starts when they lie down and is not re-planned when a giver is dropped on
+them later, so a giver added in the last moments of a rest can outlast it.
+Both halves pay dirtiness and energy on the way out. The receiving
 villager takes the nap's own posture, chosen from the placed lounger's
 orientation rather than assumed, so a lounger set the other way round does not
 have someone lying across its arm. `gulpahh_01.ogg` plays periodically through
