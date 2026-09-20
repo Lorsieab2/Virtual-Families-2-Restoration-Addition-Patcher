@@ -175,12 +175,33 @@ class TheSource(unittest.TestCase):
     def test_the_helper_frees_only_when_both_slots_are_busy(self):
         src = _strip_comments(_source())
         f = _function(src, 'extern "C" void __cdecl VF2EventCollectableAddImpl(')
-        self.assertIn("} else if (busy0 && busy1) {\n        collectables->Remove(VF2EventCollectableVictim());\n    }", f)
-        # force path: a busy slot 0 is moved aside rather than overwritten.
-        self.assertIn("if (busy0 && !busy1) {\n            VF2MoveEventCollectableSlot(0, 1);", f)
-        self.assertIn("if (VF2EventCollectableVictim() == 1) {\n                VF2MoveEventCollectableSlot(0, 1);\n            } else {\n                collectables->Remove(0);\n            }", f)
+        self.assertIn("} else if (busy0 && busy1) {\n        freed = VF2EventCollectableVictim();\n        VF2CopyEventCollectableSlot(freed, sacrificed);\n        collectables->Remove(freed);\n    }", f)
+        # force path: a busy slot 0 is moved aside rather than overwritten, and
+        # nothing is snapshotted when no item is sacrificed.
+        self.assertIn("if (busy0 && !busy1) {\n            VF2MoveEventCollectableSlot(0, 1);\n        } else if (busy0 && busy1) {", f)
+        self.assertIn("int const victim = VF2EventCollectableVictim();\n            VF2CopyEventCollectableSlot(victim, sacrificed);\n            freed = 0;\n            if (victim == 1) {\n                VF2MoveEventCollectableSlot(0, 1);\n            } else {\n                collectables->Remove(0);\n            }", f)
         self.assertIn("collectables->Add((ECarrying)carrying, point, force != 0);", f)
         self.assertLess(f.index("Remove("), f.index("->Add("), "the slot is freed before the native spawn")
+
+    def test_a_sacrificed_record_is_restored_when_the_native_spawn_does_not_activate(self):
+        """The forced random path can still give up after a thousand invalid
+        positions; then the sacrificed record goes back into the slot that
+        stayed empty, and only then (a restore over a fresh spawn would undo
+        the event)."""
+        src = _strip_comments(_source())
+        f = _function(src, 'extern "C" void __cdecl VF2EventCollectableAddImpl(')
+        self.assertIn("int freed = -1;\n    unsigned char sacrificed[0x1C];", f)
+        restore = "if (freed >= 0 && !VF2EventCollectableSlotBusy(freed)) {\n        VF2RestoreEventCollectableSlot(freed, sacrificed);\n    }"
+        self.assertIn(restore, f)
+        self.assertLess(f.index("->Add("), f.index(restore), "the restore runs after the native spawn")
+        # Every sacrifice is snapshotted BEFORE the record is touched.
+        for sacrifice in ("collectables->Remove(freed);", "if (victim == 1) {"):
+            self.assertLess(f.index("VF2CopyEventCollectableSlot("), f.index(sacrifice))
+        self.assertEqual(f.count("VF2CopyEventCollectableSlot("), 2, "one snapshot per sacrificing branch")
+        # The move-aside-into-a-free-slot branch sacrifices nothing and must not snapshot.
+        free_branch = f[f.index("if (busy0 && !busy1) {"):f.index("} else if (busy0 && busy1) {")]
+        self.assertNotIn("VF2CopyEventCollectableSlot(", free_branch)
+        self.assertNotIn("freed =", free_branch)
 
     def test_the_thunk_forwards_four_words_and_ecx_and_pops_sixteen(self):
         src = _strip_comments(_source())

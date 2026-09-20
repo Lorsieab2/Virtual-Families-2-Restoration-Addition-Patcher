@@ -16767,27 +16767,59 @@ static void VF2MoveEventCollectableSlot(int from, int to)
     source[0] = 0;
 }
 
+// A sacrificed record is kept aside until the native spawn has actually
+// activated. With an explicit carrying the native Add cannot be rejected
+// once a slot is free (its duplicate checks sit on the random path only,
+// pinned in the test file), but the forced RANDOM path (Neighbor
+// Collectible) still gives up after a thousand invalid spawn positions and
+// returns without activating. Losing a collectable for nothing is exactly
+// the failure this helper exists to end, so in that case the sacrificed
+// record goes back into the slot that stayed empty.
+static void VF2CopyEventCollectableSlot(int slot, unsigned char *dest)
+{
+    unsigned char *source = VF2EventCollectableSlot(slot);
+    for (int i = 0; i < 0x1C; ++i) dest[i] = source[i];
+}
+
+static void VF2RestoreEventCollectableSlot(int slot, unsigned char const *source)
+{
+    unsigned char *dest = VF2EventCollectableSlot(slot);
+    for (int i = 0; i < 0x1C; ++i) dest[i] = source[i];
+}
+
 extern "C" void __cdecl VF2EventCollectableAddImpl(
     void *item, int carrying, int x, int y, int force)
 {
     CCollectableItem *collectables = reinterpret_cast<CCollectableItem *>(item);
     bool const busy0 = VF2EventCollectableSlotBusy(0);
     bool const busy1 = VF2EventCollectableSlotBusy(1);
+    // The slot that must hold the new item afterwards, and the record that
+    // was sacrificed to make room (none when a slot was free).
+    int freed = -1;
+    unsigned char sacrificed[0x1C];
     if (force) {
         if (busy0 && !busy1) {
             VF2MoveEventCollectableSlot(0, 1);
         } else if (busy0 && busy1) {
-            if (VF2EventCollectableVictim() == 1) {
+            int const victim = VF2EventCollectableVictim();
+            VF2CopyEventCollectableSlot(victim, sacrificed);
+            freed = 0;
+            if (victim == 1) {
                 VF2MoveEventCollectableSlot(0, 1);
             } else {
                 collectables->Remove(0);
             }
         }
     } else if (busy0 && busy1) {
-        collectables->Remove(VF2EventCollectableVictim());
+        freed = VF2EventCollectableVictim();
+        VF2CopyEventCollectableSlot(freed, sacrificed);
+        collectables->Remove(freed);
     }
     ldwPoint point = {x, y};
     collectables->Add((ECarrying)carrying, point, force != 0);
+    if (freed >= 0 && !VF2EventCollectableSlotBusy(freed)) {
+        VF2RestoreEventCollectableSlot(freed, sacrificed);
+    }
 }
 
 // The __thiscall shape the three native event callsites already use:
