@@ -2207,7 +2207,7 @@ CHEAT_UPGRADE_ITEMS = [
     {
         "item_id": 0x130,
         "name": "Fill available yard slots with weeds",
-        "description": "Spawns 15 weeds, all four types evenly. Will not work if Gardener is active.",
+        "description": "Spawns 15 weeds, all 4 types (4/4/4/3, rotates). Will not work if Gardener is active.",
         "price": 0,
     },
     {
@@ -16667,24 +16667,34 @@ static bool VF2SpawnJunkOfType(int category, int carrying)
     return true;
 }
 
+// THE SUB-TYPE CYCLES CARRY OVER FROM ONE PRESS TO THE NEXT. Five socks per
+// press against six sock sub-types would otherwise never reach the sixth
+// (0x78), and fifteen weeds against four weed types would always give the
+// same type the short count; continuing each cycle where the previous press
+// left off reaches every sub-type and rotates which weed type gets three.
+// Session state, deliberately not saved: the cycle position is not game
+// state, only which sprite comes next.
+static int gVF2SpawnCheatTrashNext[3] = { 0, 0, 0 };
+static int gVF2SpawnCheatWeedNext = 0;
+
 static void VF2SpawnMaxHouseTrash()
 {
     static const int kCategories[3] = { eVF2JunkSmudge, eVF2JunkSock, eVF2JunkWrapper };
     static const int kFirst[3] = { 0x83, 0x73, 0x79 };
     static const int kCount[3] = { 3, 6, 4 };
-    int next[3] = { 0, 0, 0 };
     for (int i = 0; i < 15; ++i) {
         int const c = i % 3;
-        int const carrying = kFirst[c] + next[c];
-        next[c] = (next[c] + 1) % kCount[c];
+        int const carrying = kFirst[c] + gVF2SpawnCheatTrashNext[c];
         if (!VF2SpawnJunkOfType(kCategories[c], carrying)) return;
+        gVF2SpawnCheatTrashNext[c] = (gVF2SpawnCheatTrashNext[c] + 1) % kCount[c];
     }
 }
 
 static void VF2SpawnMaxYardWeeds()
 {
     for (int i = 0; i < 15; ++i) {
-        if (!VF2SpawnJunkOfType(eVF2JunkWeed, 0x7D + (i % 4))) return;
+        if (!VF2SpawnJunkOfType(eVF2JunkWeed, 0x7D + gVF2SpawnCheatWeedNext)) return;
+        gVF2SpawnCheatWeedNext = (gVF2SpawnCheatWeedNext + 1) % 4;
     }
 }
 
