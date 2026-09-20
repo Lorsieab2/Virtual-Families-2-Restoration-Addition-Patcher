@@ -554,12 +554,11 @@ class SpecialUpgradesReleaseParityTests(unittest.TestCase):
 
     def test_named_effects_and_marriage_refusal_are_fail_closed(self):
         fill_house = self._case_block(self.helper, 0x12F)
-        self.assertIn("CollectableItem.SpawnTrashInHouse(10);", fill_house)
-        self.assertIn("CollectableItem.SpawnStainInHouse(10);", fill_house)
-        self.assertIn("CollectableItem.SpawnSockInHouse(10);", fill_house)
+        # Fifteen each, evenly split (test_spawn_cheats_fifteen_even.py).
+        self.assertIn("VF2SpawnMaxHouseTrash();", fill_house)
 
         fill_garden = self._case_block(self.helper, 0x130)
-        self.assertIn("CollectableItem.SpawnWeedsInYard(30);", fill_garden)
+        self.assertIn("VF2SpawnMaxYardWeeds();", fill_garden)
 
         max_sock = self._case_block(self.helper, 0x133)
         self.assertNotIn(

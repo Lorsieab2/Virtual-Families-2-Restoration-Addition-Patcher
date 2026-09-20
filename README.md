@@ -241,9 +241,9 @@ Price modes affect every purchase routed through the store price calculator.
 | --- | --- |
 | Trigger all house malfunctions | Causes all possible malfunctions, including sink/toilet leaks and oven/dryer fires. Useful for the "Handyman" goal. Makes the Router offline. |
 | Fix all house malfunctions | Fixes every active malfunction and brings the Router back online; clears all 11 malfunction props without resetting ants. |
-| Fill available house slots with trash | Uses native trash, dirt smudge, and sock spawn. Will not work if the Maid is active. |
+| Fill available house slots with trash | Spawns 15 pieces of house mess: 5 dirt smudges, 5 socks and 5 wrappers, cycling every sub-type, through the native spawners; stops early when the 30 mess slots are full. Will not work if the Maid is active. |
 | Clean House | Removes the same four indoor mess categories as the stock Housekeeping Services event. Yard weeds and the laundry-room sock pile are preserved. |
-| Fill available yard slots with weeds | Uses the native weed spawn. Will not work if the Gardener is active. |
+| Fill available yard slots with weeds | Spawns 15 weeds cycling all four weed types through the native spawner; stops early when the 30 mess slots are full. Will not work if the Gardener is active. |
 | Clean Garden | Removes every weed from the yard without affecting other collectables. |
 | Max out sock pile | Sets only the laundry-room sock pile to the maximum signed integer value. |
 | No sock pile | Clears the laundry-room sock pile without awarding sock-laundering progress. |

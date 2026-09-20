@@ -9131,12 +9131,12 @@ class OutfitStoreMappingTests(unittest.TestCase):
         self.assertIn("int frame = -1;", source)
         self.assertIn("__VF2_VISIBLE_SPECIAL_UPGRADE_ICON_DRAW_CASES__", source)
         self.assertIn("case 0x12F:", source)
-        self.assertIn("CollectableItem.SpawnTrashInHouse(10);", source)
-        self.assertIn("CollectableItem.SpawnStainInHouse(10);", source)
-        self.assertIn("CollectableItem.SpawnSockInHouse(10);", source)
+        # Fifteen each, evenly split, one native spawn at a time with the
+        # sub-type pinned afterwards (test_spawn_cheats_fifteen_even.py).
+        self.assertIn("VF2SpawnMaxHouseTrash();", source)
         self.assertIn("case 0x130:", source)
         self.assertNotIn("VF2CountMessRecords", source)
-        self.assertIn("CollectableItem.SpawnWeedsInYard(30);", source)
+        self.assertIn("VF2SpawnMaxYardWeeds();", source)
         self.assertIn("case 0x131:", source)
         self.assertIn("CollectableItem.RemoveAll((ECarrying)0x7D);", source)
         self.assertIn("case 0x132:", source)
