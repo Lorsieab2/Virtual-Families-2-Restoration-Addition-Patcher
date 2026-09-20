@@ -687,9 +687,10 @@ must remain visible as Needs source audit; it must not be silently omitted.
   order/duplicate/save safe through hidden record `0x80`.
 - [x] Phase B2 behavior awards: exact pre-ForgetPlans praise/scold labels cover
   `0x66-0x6C`, Pavlovian `0x93`, social/child goals `0x94-0x97`, nine
-  additional praise goals `0x98-0xA0`, and four child-discipline goals
-  `0xA1-0xA4`. Props to you `0xA5` requires stock Tight Ship `0x30` plus all
-  four new discipline goals. Praise preserves the native restoration and
+  additional praise goals `0x98-0xA0`, and five child-discipline goals
+  `0xA1-0xA4` and `0xAB` (No banging dishes together!, added in B192). Props
+  to you `0xA5` requires stock Tight Ship `0x30` plus all five new discipline
+  goals. Praise preserves the native restoration and
   over-praise routes; every matching scold still reaches exactly one native
   ForgetPlans call with no label restoration.
 - [x] Validate B2 source, object, and linked contracts in core/off-off and

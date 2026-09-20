@@ -2388,14 +2388,18 @@ HOLIDAY_ORNAMENT_GOAL_COLLECTOR_ID = 0x54
 HOLIDAY_ORNAMENT_GOAL_COLLECTOR_TARGET = 13
 HOLIDAY_ORNAMENT_NOTIFICATION_QUEUE_COUNT = 0x5F
 CUSTOM_ACHIEVEMENT_FIRST_ID = 0x60
-CUSTOM_ACHIEVEMENT_LAST_ID = 0xAA
+CUSTOM_ACHIEVEMENT_LAST_ID = 0xAB
 # The two rare joke-label goals. Kirk Strayer sits at 0xAA rather than 0xA8:
 # that record is the purchase-mask scratch record and also the mobile
 # renovation persistent record, so a real achievement there would collide
 # with the Taters bits, pregnancy controls and renovation state.
 CUSTOM_ACHIEVEMENT_BURGER_ORDER_ID = 0xA9
 CUSTOM_ACHIEVEMENT_COFFEE_ORDER_ID = 0xAA
-CUSTOM_ACHIEVEMENT_DEFINED_LAST_ID = 0xAA
+# The fifth child-discipline goal. Not contiguous with 0xA1-0xA4 because the
+# ids between were already taken, so every site that used to walk that range
+# names it explicitly.
+CUSTOM_ACHIEVEMENT_BANGING_DISHES_ID = 0xAB
+CUSTOM_ACHIEVEMENT_DEFINED_LAST_ID = 0xAB
 CUSTOM_ACHIEVEMENT_RESERVED_FIRST_ID = CUSTOM_ACHIEVEMENT_DEFINED_LAST_ID + 1
 CUSTOM_ACHIEVEMENT_GENERAL_END = 0x65
 CUSTOM_ACHIEVEMENT_BEHAVIOR_FIRST = 0x66
@@ -2505,6 +2509,7 @@ CUSTOM_ACHIEVEMENT_ROW_SPECS = [
     (0xA7, "pet", "Slow and Steady", "Have a turtle in the house."),
     (0xAA, "behavior", "Kirk Strayer's Order", "You praised someone who was drinking a particularly complicated coffee order."),
     (0xA9, "behavior", "Bubble Bass's Order", "You praised someone who was eating a particularly complicated burger order."),
+    (0xAB, "behavior", "No banging dishes together!", "You scolded a child for banging dishes."),
 ]
 CUSTOM_ACHIEVEMENT_GENERAL_PURCHASE_GOALS = {
     0x2EA: 0x60,
@@ -2618,6 +2623,8 @@ CUSTOM_ACHIEVEMENT_SCOLD_LABEL_GOALS = {
     "Playing in the toilet": 0xA2,
     "Drawing on the wall": 0xA3,
     "Switching light on and off": 0xA4,
+    # The native label carries the exclamation mark: string key BangingDishes.
+    "Banging dishes!": 0xAB,
 }
 CUSTOM_ACHIEVEMENT_CHILD_SCOLD_LABELS = {
     "Procrastinating",
@@ -2625,6 +2632,7 @@ CUSTOM_ACHIEVEMENT_CHILD_SCOLD_LABELS = {
     "Playing in the toilet",
     "Drawing on the wall",
     "Switching light on and off",
+    "Banging dishes!",
 }
 
 
@@ -2680,6 +2688,7 @@ def custom_achievement_props_is_satisfied(completed_ids):
                 CUSTOM_ACHIEVEMENT_DISCIPLINE_LAST_ID + 1,
             )
         )
+        and CUSTOM_ACHIEVEMENT_BANGING_DISHES_ID in completed
     )
 
 
@@ -16357,8 +16366,9 @@ static int VF2AchievementVisibleCountInternal() {
     if (kVF2IncludeOrnamentologistGoal) ++count;
     // 26 original behaviour goals plus the two rare joke-label goals
     // (Bubble Bass's Order, Kirk Strayer's Order), which are behaviour
-    // goals too and are appended to the visible order alongside them.
-    if (kVF2IncludeBehaviorGoals) count += 28;
+    // goals too and are appended to the visible order alongside them, plus
+    // the fifth child-discipline goal (No banging dishes together!, 0xAB).
+    if (kVF2IncludeBehaviorGoals) count += 29;
     if (gVF2HolidayFurnitureGoalsEnabled != 0) count += 19;
     return count;
 }
@@ -16407,6 +16417,8 @@ extern "C" int __cdecl VF2AchievementsCompleteVisible(CAchievement *achievement)
         // read "all complete".
         if (achievement->IsComplete((EAchievement)0xA9)) ++completed;
         if (achievement->IsComplete((EAchievement)0xAA)) ++completed;
+        // The fifth discipline goal sits past the contiguous 0x93-0xA5 run.
+        if (achievement->IsComplete((EAchievement)0xAB)) ++completed;
     }
     completed += VF2CountCompletedAchievements(achievement, 0x80, 0x92);
     if (achievement->IsComplete((EAchievement)0xA6)) ++completed;
@@ -16442,6 +16454,9 @@ static void VF2MaybeCompleteDisciplineProps(CAchievement *achievement) {
     for (int id = 0xA1; id <= 0xA4; ++id) {
         if (!achievement->IsComplete((EAchievement)id)) return;
     }
+    // The fifth discipline goal (No banging dishes together!) is 0xAB, not
+    // part of the 0xA1-0xA4 run; Props to you needs it too.
+    if (!achievement->IsComplete((EAchievement)0xAB)) return;
     achievement->SetComplete((EAchievement)0xA5);
 }
 
@@ -21312,9 +21327,12 @@ def patch_custom_achievements(manifest):
         appended_order.extend(
             range(
                 CUSTOM_ACHIEVEMENT_PAVLOVIAN_ID,
-                CUSTOM_ACHIEVEMENT_PROPS_ID + 1,
+                CUSTOM_ACHIEVEMENT_DISCIPLINE_LAST_ID + 1,
             )
         )
+        # The fifth discipline goal sits with its siblings, ahead of Props.
+        appended_order.append(CUSTOM_ACHIEVEMENT_BANGING_DISHES_ID)
+        appended_order.append(CUSTOM_ACHIEVEMENT_PROPS_ID)
     appended_order.extend(
         range(CUSTOM_ACHIEVEMENT_BIRTHDAY_FIRST, CUSTOM_ACHIEVEMENT_BIRTHDAY_LAST + 1)
     )
@@ -21473,7 +21491,8 @@ def patch_custom_achievements(manifest):
     # behaviour goals too and are appended to the visible order alongside
     # them. Reporting 26 here made the manifest disagree with the executable
     # and truncated the visible order that release diagnostics read.
-    behavior_goal_visible_count = 28
+    # 29 since the fifth child-discipline goal (No banging dishes together!).
+    behavior_goal_visible_count = 29
     compile_visible_count = (
         stock_visible_count
         + (1 if ENABLE_HOLIDAY_ORNAMENTS else 0)
@@ -34286,6 +34305,9 @@ static void VF2MaybeCompleteDisciplineProps()
     for (int id = 0xA1; id <= 0xA4; ++id) {
         if (!Achievement.IsComplete((EAchievement)id)) return;
     }
+    // The fifth discipline goal (No banging dishes together!) is 0xAB, not
+    // part of the 0xA1-0xA4 run; Props to you needs it too.
+    if (!Achievement.IsComplete((EAchievement)0xAB)) return;
     Achievement.SetComplete((EAchievement)0xA5);
 }
 
