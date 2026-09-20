@@ -11368,8 +11368,8 @@ class CustomAchievementAwardDispatchTests(unittest.TestCase):
         ):
             self.assertIsNone(patcher.custom_achievement_scold_label_dispatch(negative))
 
-    def test_props_requires_tight_ship_and_all_four_new_discipline_goals(self):
-        complete = {0x30, 0xA1, 0xA2, 0xA3, 0xA4}
+    def test_props_requires_tight_ship_and_all_five_new_discipline_goals(self):
+        complete = {0x30, 0xA1, 0xA2, 0xA3, 0xA4, 0xAB}
         self.assertTrue(patcher.custom_achievement_props_is_satisfied(complete))
         for missing in complete:
             with self.subTest(missing=hex(missing)):
@@ -13762,10 +13762,11 @@ class HolidayOrnamentGateTests(unittest.TestCase):
             for ornaments, behavior, count_off, count_on, master_target, goal_target in (
                 (False, False, 122, 141, 5, 12),
                 (True, False, 123, 142, 6, 13),
-                # The behaviour rows gain two: the visible count now includes
-                # the two Order goals, matching the runtime helper's +28.
-                (False, True, 150, 169, 5, 12),
-                (True, True, 151, 170, 6, 13),
+                # The behaviour rows gain two for the Order goals and one more
+                # for the fifth child-discipline goal (No banging dishes
+                # together!), matching the runtime helper's +29.
+                (False, True, 151, 170, 5, 12),
+                (True, True, 152, 171, 6, 13),
             ):
                 with self.subTest(ornaments=ornaments, behavior=behavior):
                     with tempfile.TemporaryDirectory() as tmp:
@@ -14012,7 +14013,11 @@ class HolidayOrnamentGateTests(unittest.TestCase):
                         expected.extend(range(0x60, 0x66))
                         if behavior:
                             expected.extend(range(0x66, 0x6D))
-                            expected.extend(range(0x93, 0xA6))
+                            expected.extend(range(0x93, 0xA5))
+                            # The fifth child-discipline goal sits with its
+                            # siblings, ahead of Props to you.
+                            expected.append(patcher.CUSTOM_ACHIEVEMENT_BANGING_DISHES_ID)
+                            expected.append(patcher.CUSTOM_ACHIEVEMENT_PROPS_ID)
                         expected.extend(range(0x80, 0x92))
                         expected.append(0xA6)
                         expected.append(0xA7)
@@ -14746,7 +14751,7 @@ class HolidayOrnamentGateTests(unittest.TestCase):
                     # One row per defined achievement; derived so adding a
                     # goal moves it instead of failing this contract.
                     "physical_row_count": patcher.CUSTOM_ACHIEVEMENT_LAST_ID + 1,
-                    # Derived, because the visible count includes the 28
+                    # Derived, because the visible count includes the 29
                     # behaviour goals only when Behavior Patches are compiled
                     # in. These literals were written while that gate defaulted
                     # OFF, so the term was zero and invisible; the owner's
@@ -14754,9 +14759,9 @@ class HolidayOrnamentGateTests(unittest.TestCase):
                     # keeps the expectation exact either way, and flag_1 keeps
                     # its documented +19 relationship to flag_0.
                     "visible_count_flag_0": (
-                        123 + (28 if patcher.ENABLE_BEHAVIOR_PATCHES else 0)),
+                        123 + (29 if patcher.ENABLE_BEHAVIOR_PATCHES else 0)),
                     "visible_count_flag_1": (
-                        142 + (28 if patcher.ENABLE_BEHAVIOR_PATCHES else 0)),
+                        142 + (29 if patcher.ENABLE_BEHAVIOR_PATCHES else 0)),
                     "notify_queue_bound": 0x5F,
                 },
             )
