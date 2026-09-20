@@ -49,7 +49,7 @@ class TestPingPongTable(unittest.TestCase):
         carried = [
             list_name
             for name, donor, list_name, path in patcher.ITEMS
-            if "PingPongTable" in path
+            if path.endswith("/PingPongTableStd.png")
         ]
         self.assertEqual(
             carried, ["gFurniture5"],

@@ -46,6 +46,8 @@ BEHAVIOR_PATCH_ROUTED = {
     "ExerciseBikeStd",
     "HomeGymSystemStd",
     "PingPongTableStd",
+    # The invisible sibling shares the ping-pong route (B193).
+    "InvisiblePingPongTable",
 }
 
 ROUTED = {
@@ -65,6 +67,7 @@ ROUTED.update({
     "ExerciseBikeStd",
     "HomeGymSystemStd",
     "PingPongTableStd",
+    "InvisiblePingPongTable",
 })
 
 
@@ -476,8 +479,8 @@ class TestReadmeMatchesTheBuild(unittest.TestCase):
         text = README.read_text(encoding="utf-8")
         invisible = len(patcher.INVISIBLE_OUTDOOR_ITEMS)
         visible = len(patcher.NEW_FURNITURE_ITEMS)
-        self.assertIn(f"Eight outdoor pieces", text)
-        self.assertEqual(invisible, 8, "README says eight invisible pieces")
+        self.assertIn(f"Nine outdoor pieces", text)
+        self.assertEqual(invisible, 9, "README says nine invisible pieces")
         self.assertIn("Four new visible furniture items", text)
         self.assertEqual(visible, 4, "README says four new visible items")
 
