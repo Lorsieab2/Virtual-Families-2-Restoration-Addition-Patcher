@@ -16481,6 +16481,11 @@ extern "C" void __fastcall VF2MaybeCompleteAchiever(
     EAchievement achiever = (EAchievement)0x92;
     if (achievement->IsComplete(achiever)) return;
 
+    // Walk exactly the rows the Goals screen draws. The holiday furniture
+    // block now sits PAST the meta-goal and is included in this count only
+    // when gVF2HolidayFurnitureGoalsEnabled is set, so a player who did not
+    // select Holiday Furniture is never asked for a goal they cannot earn --
+    // which is precisely what used to make this meta-goal unawardable.
     int visibleCount = VF2AchievementVisibleCountInternal();
     for (int index = 0; index < visibleCount; ++index) {
         int achievementId = achievementOrder[index];
@@ -17403,28 +17408,32 @@ static void VF2CompleteAchievementForCheat(int achievement) {
 }
 
 static void VF2CompleteAllAchievements() {
-    for (int achievement = 0x00; achievement <= 0x5E; ++achievement) {
-        VF2CompleteAchievementForCheat(achievement);
+    // COMPLETE EXACTLY THE ROWS THE GOALS SCREEN DRAWS, by walking the same
+    // order array the screen walks.
+    //
+    // This used to enumerate hand-written id ranges: 0x00-0x5E, 0x5F, 0x60-
+    // 0x65, 0x66-0x6C, 0x80-0x91 and the holiday block. Every goal added
+    // since then fell outside those ranges, so "Complete all achievements"
+    // silently left 24 visible goals unfinished -- the whole praise/scold
+    // behaviour run 0x93-0xA4, the VF3 furniture and turtle goals 0xA6 and
+    // 0xA7, both joke-label Order goals 0xA9 and 0xAA, and the new
+    // discipline goal 0xAB (No banging dishes together!). Since Achiever
+    // Extraordinaire requires every visible row, the cheat could not award
+    // that either, and each newly added goal quietly made the gap wider.
+    //
+    // Deriving the list from achievementOrder means a goal added to the
+    // screen is completed here automatically and this cannot drift again.
+    // Props to you (0xA5) and Achiever (0x92) are awarded by their own
+    // reconciliation helpers below, after their prerequisites are all set,
+    // rather than being forced out of order here.
+    int visibleCount = VF2AchievementVisibleCountInternal();
+    for (int index = 0; index < visibleCount; ++index) {
+        int achievementId = achievementOrder[index];
+        if (achievementId == 0xA5 || achievementId == 0x92) continue;
+        VF2CompleteAchievementForCheat(achievementId);
     }
-    if (kVF2IncludeOrnamentologistGoal) {
-        VF2CompleteAchievementForCheat(0x5F);
-    }
-    for (int achievement = 0x60; achievement <= 0x65; ++achievement) {
-        VF2CompleteAchievementForCheat(achievement);
-    }
-    if (kVF2IncludeBehaviorGoals) {
-        for (int achievement = 0x66; achievement <= 0x6C; ++achievement) {
-            VF2CompleteAchievementForCheat(achievement);
-        }
-    }
-    for (int achievement = 0x80; achievement <= 0x91; ++achievement) {
-        VF2CompleteAchievementForCheat(achievement);
-    }
-    if (gVF2HolidayFurnitureGoalsEnabled != 0) {
-        for (int achievement = 0x6D; achievement <= 0x7F; ++achievement) {
-            VF2CompleteAchievementForCheat(achievement);
-        }
-    }
+    VF2MaybeCompleteDisciplineProps(&Achievement);
+    VF2MaybeCompleteAchiever(&Achievement, 0);
 }
 
 static const int kVF2MaximumSockPileCount = 0x7FFFFFFF;
@@ -21658,12 +21667,28 @@ def patch_custom_achievements(manifest):
         # were materialised but never shown on the Goals screen.
         appended_order.append(CUSTOM_ACHIEVEMENT_BURGER_ORDER_ID)
         appended_order.append(CUSTOM_ACHIEVEMENT_COFFEE_ORDER_ID)
+    # THE HOLIDAY FURNITURE GOALS GO LAST, AFTER THE META-GOAL.
+    #
+    # They used to sit here, ahead of Achiever Extraordinaire, which put a
+    # 19-entry block in the MIDDLE of an array whose presence is decided at
+    # RUNTIME by gVF2HolidayFurnitureGoalsEnabled. The visible count shrinks
+    # by 19 when that byte is zero, but the native draw loop walks the array
+    # CONTIGUOUSLY from index 0 up to that count, so it cannot skip a hole.
+    # With the holiday goals off -- which is every build where the player did
+    # not select Holiday Furniture -- the screen drew the first 152 rows,
+    # ending on holiday goal 0x6D, which that player can neither earn nor see
+    # explained, and stopped 19 rows short of Achiever Extraordinaire, whose
+    # row was never drawn at all. VF2MaybeCompleteAchiever scans the same
+    # window, so it also demanded that unearnable holiday goal and could
+    # never award the meta-goal.
+    #
+    # Putting the optional block at the END keeps the drawn window contiguous
+    # in BOTH runtime states: with the byte zero the array truncates cleanly
+    # after the meta-goal, and with it set the holiday rows extend past it.
+    appended_order.append(CUSTOM_ACHIEVEMENT_ACHIEVER_ID)
     appended_order.extend(
         range(CUSTOM_ACHIEVEMENT_HOLIDAY_FIRST, CUSTOM_ACHIEVEMENT_HOLIDAY_LAST + 1)
     )
-    # The meta-goal is always the final visible row and is awarded only after
-    # every other row currently exposed by the selected patch layout.
-    appended_order.append(CUSTOM_ACHIEVEMENT_ACHIEVER_ID)
     order_sym = scene_obj.symbol("?achievementOrder@@3QBHB")
     order_sec = scene_obj.section(order_sym.section)
     order_insert = (

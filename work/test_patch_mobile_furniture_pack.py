@@ -9116,14 +9116,29 @@ class OutfitStoreMappingTests(unittest.TestCase):
             source.index("Achievement.SetComplete(id);"),
         )
         self.assertIn("static void VF2CompleteAllAchievements()", source)
-        self.assertIn("for (int achievement = 0x00; achievement <= 0x5E; ++achievement)", source)
+        # THE CHEAT DERIVES ITS LIST FROM THE VISIBLE ORDER ARRAY.
+        #
+        # SUPERSEDED, recorded rather than deleted: this used to require the
+        # hand-written ranges 0x00-0x5E, 0x60-0x65, 0x66-0x6C, 0x80-0x91 plus
+        # the holiday block. Every goal added after those ranges were written
+        # fell outside them, so "Complete all achievements" silently left 24
+        # visible goals unfinished -- the praise/scold run 0x93-0xA4, the VF3
+        # furniture and turtle goals 0xA6/0xA7, both Order goals 0xA9/0xAA and
+        # the newest discipline goal 0xAB -- and therefore could not award
+        # Achiever Extraordinaire either, which requires every visible row.
+        # Walking achievementOrder means a goal added to the Goals screen is
+        # completed here automatically and this cannot drift again.
+        self.assertIn(
+            "int visibleCount = VF2AchievementVisibleCountInternal();", source)
+        self.assertIn("int achievementId = achievementOrder[index];", source)
+        self.assertIn("VF2CompleteAchievementForCheat(achievementId);", source)
         self.assertIn("if (kVF2IncludeOrnamentologistGoal)", source)
         self.assertIn("if (kVF2IncludeBehaviorGoals)", source)
-        self.assertIn(
-            "for (int achievement = 0x80; achievement <= 0x91; ++achievement)",
-            source,
-        )
         self.assertIn("if (gVF2HolidayFurnitureGoalsEnabled != 0)", source)
+        # Props to you and the meta-goal are reconciled after their
+        # prerequisites are set rather than forced out of order.
+        self.assertIn("VF2MaybeCompleteDisciplineProps(&Achievement);", source)
+        self.assertIn("VF2MaybeCompleteAchiever(&Achievement, 0);", source)
         self.assertIn("case 0x12E:", source)
         self.assertIn("VF2CompleteAllAchievements();", source)
         self.assertIn("static int VF2VisibleSpecialUpgradeIconSourceItem(int itemId)", source)
@@ -14027,10 +14042,28 @@ class HolidayOrnamentGateTests(unittest.TestCase):
                             # supplies those labels.
                             expected.append(patcher.CUSTOM_ACHIEVEMENT_BURGER_ORDER_ID)
                             expected.append(patcher.CUSTOM_ACHIEVEMENT_COFFEE_ORDER_ID)
-                        expected.extend(range(0x6D, 0x80))
+                        # THE META-GOAL COMES BEFORE THE HOLIDAY BLOCK.
+                        #
+                        # SUPERSEDED, recorded rather than deleted: this used
+                        # to expect range(0x6D, 0x80) and THEN 0x92, matching
+                        # a generator that appended the holiday furniture
+                        # goals ahead of Achiever Extraordinaire. That put a
+                        # 19-entry block whose visibility is decided at
+                        # RUNTIME (gVF2HolidayFurnitureGoalsEnabled) in the
+                        # MIDDLE of an array the native draw loop walks
+                        # contiguously up to the visible count. With the
+                        # holiday goals off the screen drew rows 0..151,
+                        # ending on holiday goal 0x6D -- unearnable for that
+                        # player -- and never reached Achiever's row at all,
+                        # so the meta-goal could not be awarded. The optional
+                        # block now sits PAST the meta-goal, which keeps the
+                        # drawn window contiguous in both runtime states.
                         expected.append(0x92)
+                        expected.extend(range(0x6D, 0x80))
                         self.assertEqual(order, expected)
                         orders = 2 if behavior else 0
+                        # The array now ENDS with the 19 holiday rows, so
+                        # every offset below counts back from past them.
                         self.assertEqual(order[-40 - orders:-22 - orders], list(range(0x80, 0x92)))
                         self.assertEqual(order[-22 - orders], 0xA6)
                         self.assertEqual(order[-21 - orders], 0xA7)
@@ -14040,8 +14073,8 @@ class HolidayOrnamentGateTests(unittest.TestCase):
                                 [patcher.CUSTOM_ACHIEVEMENT_BURGER_ORDER_ID,
                                  patcher.CUSTOM_ACHIEVEMENT_COFFEE_ORDER_ID],
                             )
-                        self.assertEqual(order[-20:-1], list(range(0x6D, 0x80)))
-                        self.assertEqual(order[-1], 0x92)
+                        self.assertEqual(order[-19:], list(range(0x6D, 0x80)))
+                        self.assertEqual(order[-20], 0x92)
                         order_contract = manifest["CustomAchievements"][
                             "ornamentologist_order"
                         ]
