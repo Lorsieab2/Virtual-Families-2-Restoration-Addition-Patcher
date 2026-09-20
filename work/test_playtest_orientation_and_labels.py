@@ -239,14 +239,31 @@ class TheOrientationTestsCoverNorthwest(unittest.TestCase):
 
         The sleep leg passed an animation name and was correct; the settle leg
         passed a head-direction constant and was not. Deriving both from one
-        condition is what stops them disagreeing again. The animation SELECTION
-        is deliberately unchanged -- the owner confirmed it correct in play.
+        condition is what stops them disagreeing again.
+
+        SUPERSEDED DETAIL, kept so it is not re-derived: this test used to pin
+        `hammockFacesNorthWest` (orientation == 3) selecting the strip, with the
+        note that the owner had confirmed that selection in play. What the
+        owner had actually confirmed was the native manual DROP, whose settle
+        is engine-driven. Once the drop shared the VF2 mapping (B191, first
+        probe) the owner reported a wrong facing and a flip when the eyes
+        closed. The hammock's predicate is the native drop's `orientation ==
+        1` (decoded from Behavior.obj), and body and strip are paired the way
+        the stock RestingBody dispatch pairs them. The property this test
+        guards -- ONE condition drives both legs -- is unchanged; the
+        condition it names is not.
         """
         text = source_text()
-        self.assertIn("hammockFacesNorthWest", text)
-        self.assertIn(
-            'char const *sleepAnim = hammockFacesNorthWest ? "SleepNW" : "SleepNE";',
-            text)
+        self.assertNotIn("hammockFacesNorthWest", text,
+                         "the orientation == 3 predicate is back; it is never "
+                         "the hammock's")
+        rest = text[text.index("static void VF2PlanHammockRest("):]
+        rest = rest[:rest.index("\n}\n")]
+        self.assertIn("bool const liesDown = info.orientation == 1;", rest)
+        self.assertIn("if (liesDown) {", rest, "the settle is not driven by liesDown")
+        self.assertIn('liesDown ? "SleepNW" : "SleepNE"', rest,
+                      "the strip is not driven by the same condition as the "
+                      "settle, so the two can disagree again")
 
 
 class TheTreadmillDoesNotUseAPositionBlindQuery(unittest.TestCase):
