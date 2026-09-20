@@ -2195,7 +2195,7 @@ CHEAT_UPGRADE_ITEMS = [
     {
         "item_id": 0x12F,
         "name": "Fill available house slots with trash",
-        "description": "Uses native trash, dirt smudges, and sock spawn. Will not work if Maid is active.",
+        "description": "Spawns 15: 5 dirt smudges, 5 socks, 5 wrappers. Will not work if Maid is active.",
         "price": 0,
     },
     {
@@ -2207,7 +2207,7 @@ CHEAT_UPGRADE_ITEMS = [
     {
         "item_id": 0x130,
         "name": "Fill available yard slots with weeds",
-        "description": "Uses the native weed spawn. Will not work if Gardener is active.",
+        "description": "Spawns 15 weeds, all 4 types (4/4/4/3, rotates). Will not work if Gardener is active.",
         "price": 0,
     },
     {
@@ -16615,6 +16615,90 @@ extern "C" bool __fastcall VF2PetManagerLoadStateAndReconcile(
 // when I have all career upgrades" (owner). Stock cannot reach that state;
 // the patcher can, so the patcher recomputes them at the two moments the
 // records can be fresh: after the save loads, and right after the reset.
+// THE TWO SPAWN CHEATS SPAWN FIFTEEN EACH, EVENLY SPLIT.
+//
+// Owner: "they should each spawn 15 of each category of trash (comprised of
+// equal amounts of dirt smudges, socks and wrappers) and weeds (equal numbers
+// of each type of weed)". The native spawners (SpawnStainInHouse,
+// SpawnSockInHouse, SpawnTrashInHouse, SpawnWeedsInYard; CollectableItem.obj)
+// each take the FIRST FREE of the 30 junk slots at +4 (0x1C apart), mark it
+// active, set carrier -1, pick a RANDOM sub-type, bump their spawn counter
+// (the three house spawners increment +0x8B4, SpawnWeedsInYard increments
+// +0x8B0) and place the item at a random spawn position for their material.
+// Only the sub-type is random, so the cheat spawns ONE item through the
+// native routine and then writes the exact sub-type into the slot it just
+// filled. Everything else stays native.
+//
+// Sub-type ranges, from the IsDirtSmudge/IsSock/IsCandyWrapper/IsWeed
+// predicates: smudges 0x83..0x85, socks 0x73..0x78, wrappers 0x79..0x7C,
+// weeds 0x7D..0x80.
+static int VF2FirstFreeJunkSlot()
+{
+    unsigned char *base = reinterpret_cast<unsigned char *>(&CollectableItem);
+    for (int slot = 0; slot < 30; ++slot) {
+        if (base[4 + slot * 0x1C] == 0) return slot;
+    }
+    return -1;
+}
+
+enum EVF2JunkCategory {
+    eVF2JunkSmudge = 0,
+    eVF2JunkSock = 1,
+    eVF2JunkWrapper = 2,
+    eVF2JunkWeed = 3
+};
+
+// Spawn exactly one item of the given category through the native routine,
+// then pin its sub-type. Returns false when no slot was free or the native
+// routine declined (it leaves the slot inactive), so callers stop early
+// rather than overwrite someone else's slot.
+static bool VF2SpawnJunkOfType(int category, int carrying)
+{
+    int const slot = VF2FirstFreeJunkSlot();
+    if (slot < 0) return false;
+    switch (category) {
+    case eVF2JunkSmudge: CollectableItem.SpawnStainInHouse(1); break;
+    case eVF2JunkSock: CollectableItem.SpawnSockInHouse(1); break;
+    case eVF2JunkWrapper: CollectableItem.SpawnTrashInHouse(1); break;
+    default: CollectableItem.SpawnWeedsInYard(1); break;
+    }
+    unsigned char *record = reinterpret_cast<unsigned char *>(&CollectableItem) + 4 + slot * 0x1C;
+    if (record[0] == 0) return false;
+    *reinterpret_cast<int *>(record + 4) = carrying;
+    return true;
+}
+
+// THE SUB-TYPE CYCLES CARRY OVER FROM ONE PRESS TO THE NEXT. Five socks per
+// press against six sock sub-types would otherwise never reach the sixth
+// (0x78), and fifteen weeds against four weed types would always give the
+// same type the short count; continuing each cycle where the previous press
+// left off reaches every sub-type and rotates which weed type gets three.
+// Session state, deliberately not saved: the cycle position is not game
+// state, only which sprite comes next.
+static int gVF2SpawnCheatTrashNext[3] = { 0, 0, 0 };
+static int gVF2SpawnCheatWeedNext = 0;
+
+static void VF2SpawnMaxHouseTrash()
+{
+    static const int kCategories[3] = { eVF2JunkSmudge, eVF2JunkSock, eVF2JunkWrapper };
+    static const int kFirst[3] = { 0x83, 0x73, 0x79 };
+    static const int kCount[3] = { 3, 6, 4 };
+    for (int i = 0; i < 15; ++i) {
+        int const c = i % 3;
+        int const carrying = kFirst[c] + gVF2SpawnCheatTrashNext[c];
+        if (!VF2SpawnJunkOfType(kCategories[c], carrying)) return;
+        gVF2SpawnCheatTrashNext[c] = (gVF2SpawnCheatTrashNext[c] + 1) % kCount[c];
+    }
+}
+
+static void VF2SpawnMaxYardWeeds()
+{
+    for (int i = 0; i < 15; ++i) {
+        if (!VF2SpawnJunkOfType(eVF2JunkWeed, 0x7D + gVF2SpawnCheatWeedNext)) return;
+        gVF2SpawnCheatWeedNext = (gVF2SpawnCheatWeedNext + 1) % 4;
+    }
+}
+
 static void VF2ReconcileCareerRoomGoals() {
     Tech.Level(eTechKitchen);
     Tech.Level(eTechOffice);
@@ -17453,15 +17537,14 @@ extern "C" void __cdecl VF2ApplyVisibleSpecialUpgrade(int itemId) {
         VF2CompleteAllAchievements();
         break;
     case 0x12F:
-        // Delegate to the stock house-mess spawners. Each native routine
-        // performs its own bounded slot selection and house spawn routing.
-        CollectableItem.SpawnTrashInHouse(10);
-        CollectableItem.SpawnStainInHouse(10);
-        CollectableItem.SpawnSockInHouse(10);
+        // Fifteen pieces, five per category, every sub-type cycled; the
+        // native spawners still own slot choice, placement and the counter.
+        VF2SpawnMaxHouseTrash();
         break;
     case 0x130:
-        // The native routine owns the yard spawn area and slot selection.
-        CollectableItem.SpawnWeedsInYard(30);
+        // Fifteen weeds cycling the four weed types through the native
+        // yard spawner.
+        VF2SpawnMaxYardWeeds();
         break;
     case 0x131:
         CollectableItem.RemoveAll((ECarrying)0x7D);
