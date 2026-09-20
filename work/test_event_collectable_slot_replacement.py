@@ -108,6 +108,33 @@ class GroundTruth(unittest.TestCase):
         self.assertIn(b"\xC7\x86\x60\x03\x00\x00\xFF\xFF\xFF\xFF", body, "carrier = -1 at +0x14")
         self.assertIn(b"\x89\x86\x54\x03\x00\x00", body, "stamp stored at +0x08")
 
+    def test_an_explicit_carrying_activates_unconditionally_once_a_slot_is_free(self):
+        """The duplicate checks (WasItemSpawned / IsItemBeingCarried /
+        WasTabletCollected) sit on the RANDOM path only. With an explicit
+        carrying, Add stores the record and jumps straight to the activation
+        block, so once the helper has freed a slot the native spawn cannot be
+        rejected. Review question answered from the bytes, not from intent."""
+        body, obj, s, sec = _body("CollectableItem.obj", NATIVE_ADD)
+        explicit = body.index(b"\x89\x86\x5C\x03\x00\x00\xE9")  # mov [esi+35Ch],eax ; jmp rel32
+        rel = struct.unpack_from("<i", body, explicit + 7)[0]
+        target = explicit + 7 + 4 + rel
+        self.assertEqual(body[target:target + 7], b"\xC6\x86\x4C\x03\x00\x00\x01",
+                         "the explicit path's jump lands on mov byte ptr [esi+34Ch],1 -- activation")
+        checks = []
+        for index in range(sec.nreloc):
+            v, si, rt = struct.unpack_from("<IIH", obj.buf, sec.reloc_ptr + index * 10)
+            name = obj.symbol_by_index[si].name
+            if s.value <= v < s.value + len(body) and any(k in name for k in ("WasItemSpawned", "IsItemBeingCarried", "WasTabletCollected")):
+                checks.append(v - s.value)
+        self.assertEqual(len(checks), 3, checks)
+        for offset in sorted(checks):
+            self.assertGreater(offset, explicit, "a duplicate check sits before the explicit path's jump")
+            self.assertLess(offset, target, "a duplicate check sits after the activation block")
+        # The random path reaches those checks only when force is false:
+        # test cl,cl / jne activation right before the first of them.
+        first = min(checks)
+        self.assertIn(b"\x84\xC9\x75", body[first - 0x14:first])
+
     def test_remove_clears_an_event_slot_for_indices_below_two(self):
         body, *_ = _body("CollectableItem.obj", "?Remove@CCollectableItem@@QAEXH@Z")
         self.assertIn(b"\x83\xFA\x02\x7D", body[:0x20], "cmp edx,2 / jge -- slots 0 and 1 are the event slots")
