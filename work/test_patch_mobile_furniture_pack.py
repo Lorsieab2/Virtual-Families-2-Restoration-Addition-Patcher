@@ -6541,10 +6541,11 @@ def valid_invisible_hammock_manifest():
             "status": "stock hammock drop gate accepts base or invisible hammock",
             "base_item": "0x1E1",
             "added_item": "0x30C",
-            "native_behavior": "eBehavior_LieInHammockNoLeadIn (0x24)",
+            "behavior_id": "eBehavior_LieInHammockNoLeadIn (0x24)",
+            "implementation": "_VF2LieInHammockDropped",
             "base_hammock_modified": False,
             "hotspot_modified": True,
-            "matches_base_hammock_behavior": True,
+            "both_hammocks_take_the_same_route": True,
         },
         "clickable_added_furniture": {
             "items": [
@@ -7637,7 +7638,7 @@ class InvisibleHammockBehaviorContractTests(unittest.TestCase):
                 self.assertEqual(manifest["invisible_hammock_drop_action"]["base_item"], "0x1E1")
                 self.assertEqual(manifest["invisible_hammock_drop_action"]["added_item"], "0x30C")
                 self.assertTrue(manifest["invisible_hammock_drop_action"]["hotspot_modified"])
-                self.assertTrue(manifest["invisible_hammock_drop_action"]["matches_base_hammock_behavior"])
+                self.assertTrue(manifest["invisible_hammock_drop_action"]["both_hammocks_take_the_same_route"])
             finally:
                 patcher.PATCHED = old_patched
 

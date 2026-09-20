@@ -10179,13 +10179,14 @@ extern "C" bool __cdecl VF2EitherHammockInWorld()
         "status": "stock hammock drop gate accepts base or invisible hammock",
         "base_item": "0x1E1",
         "added_item": "0x30C",
-        "native_behavior": "eBehavior_LieInHammockNoLeadIn (0x24)",
+        "behavior_id": "eBehavior_LieInHammockNoLeadIn (0x24)",
+        "implementation": "_VF2LieInHammockDropped",
         "base_hammock_modified": False,
         "hotspot_modified": True,
         "drop_gate_helper": "_VF2EitherHammockInWorld",
         "relocation_safety": "only push 0x1E1 is NOPed; relocated mov ecx,FurnitureManager remains intact before the helper call",
-        "matches_base_hammock_behavior": True,
-        "note": "Invisible Hammock keeps donor-cloned itemInfo, donor mouse-dispatch alias, and donor fmap, then widens the stock CHotSpot::Hammock in-world gate to accept item 0x30C before the native base hammock behavior runs.",
+        "both_hammocks_take_the_same_route": True,
+        "note": "Invisible Hammock keeps donor-cloned itemInfo, donor mouse-dispatch alias, and donor fmap, then widens the stock CHotSpot::Hammock in-world gate to accept item 0x30C, so a drop on either hammock dispatches behavior 0x24. With Behavior Patches on, that behavior's CBehavior constructor entry is retargeted to _VF2LieInHammockDropped, which links to the hammock, settles with the NATIVE DROP's own orientation table (orientation 1 -> PlanToLieDown, otherwise PlanToWait(.., body 0x17), no head direction) and then plays the matching sleep strip for GetRandom(180)+180, keeping the native refusal branch when the link fails. SUPERSEDED: this field previously ended '...before the native base hammock behavior runs', which was true until the owner asked for the drop to sleep for long periods like the autonomous route. The dispatch path is unchanged; only the implementation behind 0x24 is VF2's.",
     }
 
 
@@ -38266,12 +38267,17 @@ def validate_invisible_hammock_behavior_contract(manifest):
     drop = manifest.get("invisible_hammock_drop_action", {})
     if drop.get("base_item") != "0x1E1" or drop.get("added_item") != "0x30C":
         errors.append("Invisible Hammock drop gate must accept base 0x1E1 and added 0x30C")
-    if drop.get("native_behavior") != "eBehavior_LieInHammockNoLeadIn (0x24)":
-        errors.append(f"Invisible Hammock native behavior drifted: {drop.get('native_behavior')}")
+    if drop.get("behavior_id") != "eBehavior_LieInHammockNoLeadIn (0x24)":
+        errors.append(f"Invisible Hammock drop behavior id drifted: {drop.get('behavior_id')}")
+    # The IMPLEMENTATION behind 0x24 is VF2's when Behavior Patches is on.
+    # Pinning "the native routine runs" here would now validate the opposite
+    # of what ships; pin the retarget instead.
+    if ENABLE_BEHAVIOR_PATCHES and drop.get("implementation") != "_VF2LieInHammockDropped":
+        errors.append(f"Invisible Hammock drop implementation drifted: {drop.get('implementation')}")
     if drop.get("hotspot_modified") is not True:
         errors.append("Invisible Hammock must widen stock CHotSpot::Hammock drop gate")
-    if drop.get("matches_base_hammock_behavior") is not True:
-        errors.append("Invisible Hammock must continue through the base hammock behavior route")
+    if drop.get("both_hammocks_take_the_same_route") is not True:
+        errors.append("both hammocks must take the same drop route")
 
     behavior_assets = manifest.get("behavior_assets", {})
     fmap_rows = {
@@ -38298,7 +38304,7 @@ def validate_invisible_hammock_behavior_contract(manifest):
         "click_alias": alias,
         "hotspot": drop,
         "fmap": fmap,
-        "recognition_path": "InvisibleHammock inherits the donor itemInfo/click/fmap path and widens CHotSpot::Hammock's initial in-world gate so the stock base hammock drop behavior runs.",
+        "recognition_path": "InvisibleHammock inherits the donor itemInfo/click/fmap path and widens CHotSpot::Hammock's initial in-world gate, so a drop on it dispatches the same behavior 0x24 as the base hammock. With Behavior Patches on, 0x24 runs _VF2LieInHammockDropped. SUPERSEDED: this field previously ended 'so the stock base hammock drop behavior runs' -- true before the drop was retargeted; the recognition path itself is unchanged.",
     }
 
 
