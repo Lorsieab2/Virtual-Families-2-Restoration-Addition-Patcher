@@ -521,8 +521,16 @@ class TheExerciseBikeHasItsOwnObject(unittest.TestCase):
         # Pool Table's 0x36 for the exclusion -- the same split as the bike.
         # The gym/yoga dispatcher below is now the only item where the two
         # values coincide.
+        #
+        # The Invisible Ping-Pong Table later became the route's alternate
+        # item id, so it sits between the item and its object exactly as the
+        # yoga pair's does. What this test guards is the SPLIT -- own object
+        # for the venue, the Pool Table's for the exclusion -- so the
+        # alternate is allowed but the two objects must still be the two
+        # different constants, in that order.
         self.assertIn(
-            "__VF2_PING_PONG_TABLE_ITEM_ID__, __VF2_PING_PONG_OBJECT__,",
+            "__VF2_PING_PONG_TABLE_ITEM_ID__, __VF2_INVISIBLE_PING_PONG_TABLE_ITEM_ID__,"
+            + NL + "        __VF2_PING_PONG_OBJECT__, __VF2_PING_PONG_DONOR_OBJECT__,",
             SOURCE)
         self.assertIn("__VF2_PING_PONG_DONOR_OBJECT__,", SOURCE)
         self.assertIn(

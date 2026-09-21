@@ -127,11 +127,15 @@ class TestAddedFurnitureContract(unittest.TestCase):
         # behaviour can serve two ids: the Yoga Equipment needs it, because the
         # stock item (0x220) and the invisible copy are the same thing with
         # different art and a drop on either must reach the same venue. Callers
-        # with no second id pass -1. The pairing this test guards -- which
-        # OBJECT each added item is bound to -- is otherwise unchanged.
+        # with no second id pass -1. The Ping-Pong Table's second id is the
+        # Invisible Ping-Pong Table, written as its own placeholder (the
+        # visible id is written the same way) so a renumbering follows. The
+        # pairing this test guards -- which OBJECT each added item is bound
+        # to -- is otherwise unchanged; the alternate may span a line break.
         for item, obj in expected.items():
             self.assertRegex(
-                src, rf"{re.escape(item)}, (?:(?:-1|0x[0-9a-fA-F]+), )?{obj}",
+                src,
+                rf"{re.escape(item)}, (?:(?:-1|0x[0-9a-fA-F]+|__VF2_[A-Z_]+_ITEM_ID__),\s+)?{obj}",
                 f"{item} is no longer bound to donor object {obj}")
         self.assertIn("CBehavior::WorkoutTreadmill", src)
         self.assertIn("CBehavior::RunningOnTreadmill", src)

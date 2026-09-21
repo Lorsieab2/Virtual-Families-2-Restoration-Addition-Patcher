@@ -475,9 +475,11 @@ class ThePingPongTableHasItsOwnObject(unittest.TestCase):
         though the table itself has moved.
         """
         src = _source()
+        # Both tables' ids, then the own object, then the donor object the
+        # exclusion asks about (the invisible sibling rides as altItemId).
         self.assertIn(
-            "__VF2_PING_PONG_TABLE_ITEM_ID__, __VF2_PING_PONG_OBJECT__,", src)
-        self.assertIn("__VF2_PING_PONG_DONOR_OBJECT__,", src)
+            "__VF2_PING_PONG_TABLE_ITEM_ID__, __VF2_INVISIBLE_PING_PONG_TABLE_ITEM_ID__,\n"
+            "        __VF2_PING_PONG_OBJECT__, __VF2_PING_PONG_DONOR_OBJECT__,", src)
         self.assertNotIn(
             "__VF2_PING_PONG_TABLE_ITEM_ID__, 0x36, 0x36,", src,
             "the table is back on the Pool Table's object for both questions")

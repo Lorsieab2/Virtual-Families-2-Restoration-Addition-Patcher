@@ -4452,6 +4452,25 @@ INVISIBLE_OUTDOOR_ITEMS = [
         "donor_fmap": "Chaise_brown.png.fmap",
     },
     {
+        # The invisible sibling of the Ping-Pong Table: same donor (the Pool
+        # Table), same borrowed map, same store list, price and lock, same
+        # drop route and action. Ships the SAME sprite as the visible table --
+        # "invisible" names which item the transparency setting may blank, not
+        # an absence of artwork (the Spa Lounger pair set that rule).
+        "name": "InvisiblePingPongTable",
+        "item_id": 0x331,
+        "donor": 0x20C,
+        "list": "gFurniture5",
+        "price": 12000,
+        "lock_generation": 4,
+        "item_type": 5,
+        "short_description": "Invisible Ping-Pong Table",
+        "long_description": "This invisible ping-pong table lets villagers rally back and forth! (For roleplaying purposes)",
+        "source_png": "PingPongTableStd.png",
+        "base_png": "PingPongTableStd.png",
+        "donor_fmap": "PoolTableStd.png.fmap",
+    },
+    {
         "name": "InvisibleHammock",
         "item_id": 0x30C,
         "donor": 0x1E1,
@@ -4851,6 +4870,13 @@ NEW_FURNITURE_FMAP_DONORS = {
     f"{item['name']}.png.fmap": item["donor_fmap"]
     for item in NEW_FURNITURE_ITEMS
 }
+# The Invisible Ping-Pong Table's id, derived the same way as the visible
+# table's so a renumbering cannot leave the routes pointing at nothing.
+INVISIBLE_PING_PONG_TABLE_ITEM_ID = next(
+    item["item_id"]
+    for item in INVISIBLE_OUTDOOR_ITEMS
+    if item["name"] == "InvisiblePingPongTable"
+)
 INVISIBLE_OUTDOOR_FMAP_DONORS = {
     f"{item['name']}.png.fmap": item["donor_fmap"]
     for item in INVISIBLE_OUTDOOR_ITEMS
@@ -25360,6 +25386,14 @@ def sync_behavior_assets(manifest):
                 MOBILE_PING_PONG_OBJECT,
                 "the Pool Table's",
             ),
+            # The invisible sibling borrows the same Pool Table map and must
+            # declare the same ping-pong object, or a drop on it would find a
+            # pool table and villagers would rally at the wrong furniture.
+            "InvisiblePingPongTable.png.fmap": (
+                MOBILE_PING_PONG_DONOR_OBJECT,
+                MOBILE_PING_PONG_OBJECT,
+                "the Pool Table's",
+            ),
         }
         if target in retarget_pairs:
             donor_object, own_object, whose = retarget_pairs[target]
@@ -31233,7 +31267,10 @@ __VF2_COMPUTER_DROP_DISPATCH__
         VF2YogaEquipmentWorkout(villager);
         return true;
     }
-    if (candidate == __VF2_PING_PONG_TABLE_ITEM_ID__) {
+    // BOTH ping-pong tables, visible and invisible, the way the yoga pair is
+    // matched above.
+    if (candidate == __VF2_PING_PONG_TABLE_ITEM_ID__ ||
+        candidate == __VF2_INVISIBLE_PING_PONG_TABLE_ITEM_ID__) {
         VF2PingPongPlay(villager);
         return true;
     }
@@ -31255,6 +31292,7 @@ __VF2_COMPUTER_DROP_DISPATCH__
         ("__VF2_HOME_GYM_ITEM_ID__", "HomeGymSystemStd"),
         ("__VF2_YOGA_EQUIPMENT_ITEM_ID__", "InvisibleYogaEquipment"),
         ("__VF2_PING_PONG_TABLE_ITEM_ID__", "PingPongTableStd"),
+        ("__VF2_INVISIBLE_PING_PONG_TABLE_ITEM_ID__", "InvisiblePingPongTable"),
     ):
         helper_source = helper_source.replace(
             _placeholder, f"{furniture_item_id_by_name(_item_name):#x}"
@@ -32344,8 +32382,9 @@ def validate_mobile_furniture_runtime_bindings(manifest):
     # the same reason: a drop on the visible item routes to
     # VF2YogaEquipmentWorkout beside the invisible copy, so it is an
     # added-furniture binding rather than a ported-mobile one.
+    # 0x331 is the Invisible Ping-Pong Table, routed beside the visible one.
     actual_manual_ids = (set(literal_ids) | range_ids) - {
-        0x220, 0x32A, 0x32C, 0x32D, 0x32E}
+        0x220, 0x32A, 0x32C, 0x32D, 0x32E, INVISIBLE_PING_PONG_TABLE_ITEM_ID}
     chaise_spec = next(
         spec
         for spec in MOBILE_FURNITURE_MANUAL_BINDING_SPECS
@@ -36991,16 +37030,19 @@ extern "C" void __cdecl VF2YogaEquipmentWorkout(CVillager &villager)
 
 extern "C" void __cdecl VF2PingPongPlay(CVillager &villager)
 {
-    VF2RunOwnFurnitureAction(
+    VF2RunOwnFurnitureActionEx(
         villager, CBehavior::PlayingPooltable,
         // Ping-Pong's OWN object selects its venue; the Pool Table's 0x36 is
         // what the exclusion must ask about, because the donor here is the
         // stock PlayingPooltable behaviour and 0x36 is the only object it can
-        // be diverted through. Same split as the Exercise Bike.
-        __VF2_PING_PONG_TABLE_ITEM_ID__, __VF2_PING_PONG_OBJECT__,
-        __VF2_PING_PONG_DONOR_OBJECT__,
+        // be diverted through. Same split as the Exercise Bike. The invisible
+        // table is the altItemId, the way the yoga pair carries both ids, so
+        // a placed invisible table is a venue and a villager dropped on it is
+        // standing on "this item", not on other furniture.
+        __VF2_PING_PONG_TABLE_ITEM_ID__, __VF2_INVISIBLE_PING_PONG_TABLE_ITEM_ID__,
+        __VF2_PING_PONG_OBJECT__, __VF2_PING_PONG_DONOR_OBJECT__,
         kVF2BehaviorLabels_ping_pong,
-        VF2_LABEL_COUNT(kVF2BehaviorLabels_ping_pong));
+        VF2_LABEL_COUNT(kVF2BehaviorLabels_ping_pong), false);
 }
 
 // The Ping-Pong Table borrows the Pool Table's behaviour wholesale, so without
@@ -37910,6 +37952,10 @@ extern "C" void __cdecl VF2EnableAutonomousCandidates(void *villager)
 '''.strip() + "\n"
     helper_cpp = helper_cpp.replace(
         "__VF2_PING_PONG_TABLE_ITEM_ID__", f"{PING_PONG_TABLE_ITEM_ID:#x}"
+    )
+    helper_cpp = helper_cpp.replace(
+        "__VF2_INVISIBLE_PING_PONG_TABLE_ITEM_ID__",
+        f"{INVISIBLE_PING_PONG_TABLE_ITEM_ID:#x}",
     )
     helper_cpp = helper_cpp.replace(
         "__VF2_EXERCISE_BIKE_ITEM_ID__",
