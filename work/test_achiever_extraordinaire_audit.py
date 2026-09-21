@@ -434,9 +434,17 @@ class TheEmittedCpp(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             work = pathlib.Path(tmp)
             shutil.copy2(emitted, work / emitted.name)
+            # Compile with /O2, the flag work/compile_helpers_b22.rsp uses for
+            # the shipped matrix build. Review caught that an unoptimised
+            # object does not validate the artifact: /O2 could inline the
+            # static cheat function or drop a reference and change the symbol
+            # table, so a passing /O0 object would prove nothing about what
+            # ships. Under /O2 both functions and both references are verified
+            # empirically to survive (the static cheat is kept because the
+            # 0x12E cheat dispatch calls it).
             result = subprocess.run(
                 f'"{vcvars}" >nul 2>&1 && cd /d "{work}" && '
-                f'cl /c /EHsc /nologo "{emitted.name}"',
+                f'cl /c /O2 /EHsc /nologo "{emitted.name}"',
                 shell=True, capture_output=True, text=True)
             obj = work / (emitted.stem + ".obj")
             self.assertEqual(
