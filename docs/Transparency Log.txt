@@ -942,6 +942,12 @@ B156 Pavlovian Association
   detour is installed. Near matches do not award the goal.
 - The row is visible only with Behavior Patches. Achiever Extraordinaire keeps
   ID 0x92 and remains the final visible row.
+  [SUPERSEDED by the Achiever Extraordinaire audit: 0x92 is the last goal a
+  player must COMPLETE, but it is the final visible ROW only when Holiday
+  Furniture goals are disabled. Those 19 runtime-optional goals now follow
+  the meta-goal so the drawn window stays contiguous when the .vf2goal byte
+  is zero; before the audit they sat ahead of it and made the goal
+  unawardable.]
 - All 16 layouts, Holiday checks, five runtime-toggle restoration cycles, and
   all 226 tests pass. Live gameplay QA remains.
 B156 age-60 Next Generation gate

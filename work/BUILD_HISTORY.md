@@ -1361,6 +1361,14 @@ descriptor with a dedicated semantic sock-pile icon.
 
 - Defines persisted custom goal `0x92` as Achiever Extraordinaire and appends
   it as the final visible row in every compile/runtime layout.
+  <!-- SUPERSEDED by the Achiever Extraordinaire audit: appending it as the
+  final visible row in every layout was the defect. The 19 runtime-optional
+  Holiday Furniture goals sat ahead of it, and with those goals off the
+  native draw loop ended on an unearnable holiday row and never drew
+  Achiever, so the meta-goal could not be awarded. The block now follows the
+  meta-goal, which is the final visible row only when Holiday Furniture goals
+  are disabled; in every layout it remains the last goal a player must
+  COMPLETE. -->
 - The completion observer checks the exact selected visible order, excluding
   only itself. Ornamentologist, Behavior goals, and Holiday Furniture goals
   are prerequisites only while their matching compile/runtime gates expose
