@@ -46,16 +46,24 @@ RESULT: all checks passed
 
 The VF2 feasibility-study session independently re-derived and reproduced this spike: rebuilt `stage1_spike.c` (VS x86) and ran it (all checks pass, exit 0); re-derived the prologue from the stock `VillagerState.obj` with capstone; and confirmed `ChanceOfPregnancy.bin` is byte-identical to the real 0xF7-byte (247-byte) stock function, so the spike is tied to the actual binary. Verdict: **GO for Stage 1.5**; the §5 open risk is retired for the CAVE+DETOUR family.
 
-### Stage 1.5 install shape — an OPEN design decision (two VV views)
+### Stage 1.5 install shape — an OPEN design decision (three candidates)
 
-An earlier draft proposed a **proxy DLL hijacking `SDL2_image.dll`**. This is an **open decision for the owner / whoever runs Stage 1.5** — but *not* a vote between two sessions' preferences. It turns on two **mechanism claims** (from the VV production author, who ships the model) about what a proxy forces, each of which is either true of VF2 or not:
+An earlier draft proposed a **proxy DLL hijacking `SDL2_image.dll`**. This is an **open decision for the owner / whoever runs Stage 1.5** — but *not* a vote between sessions' preferences, and *not* proxy-vs-nothing. There are **three** injection vectors to compare against fail-open / AV profile / robustness, all sharing the same load properties below:
+
+| Vector | Load | Fail-open? | AV profile | Cost |
+|---|---|---|---|---|
+| **Proxy / hijack** (forward a real dependency) | simplest | **No** — load-bearing for the game (bad forward or quarantine → game won't start) | highest | one renamed real DLL + forwarders |
+| **Separate launcher / injector** (start the game, then install) | second process | **Yes** — game binary untouched | its own (a second process that writes another's memory) | a launcher process |
+| **Static import stub in the base exe** (added import that loads the companion) | most robust | **Yes** | lowest of the three | reintroduces **one** build step on the base image (not 32) |
+
+Fail-open beats cheap-proxy as a default: the loader should not be load-bearing unless there is a concrete VF2 reason it must be. The proxy option additionally turns on two **mechanism claims** (from the VV production author, who ships the model) about what a proxy forces, each either true of VF2 or not:
 
 1. **A proxy forces `DllMain` / the loader lock.** A forwarding proxy is entered by the loader while it resolves the game's imports, i.e. under the loader lock, where deadlocks live — whereas a companion called from a normal code site installs outside it.
 2. **A proxy makes the DLL load-bearing for the *game*, not just the feature.** If the proxy is wrong about a forwarded export or gets quarantined, the game won't start at all; a called companion degrades to the feature silently not existing (which matters for a patcher shipped to players who can't debug it).
 
 **The decision procedure:** check whether each failure mode actually applies to VF2's exe and loader, and whether the proxy approach has a concrete reason it avoids them. If it does, that reason beats the mechanism objection; if it doesn't, the called-companion shape wins on those grounds. Do not decide it by which session said what.
 
-**The proxy data (feasibility-study session), for whoever evaluates it:** the vanilla exe directly imports `fmod.dll`, `SDL2.dll`, `SDL2_image.dll`, `WININET.dll`. `SDL2_image.dll` has the smallest export surface (41 exports, vs SDL2's 536, fmod's 230), so it is the cheapest forwarding proxy; use **linker export-forwarders** (`#pragma comment(linker,"/export:IMG_Load=._real_SDL2_image.IMG_Load")`) to a renamed real copy rather than hand-writing 41 thunks. (fmod is a *direct* import in vanilla — the `LoadLibrary` fmod thunks are only in the modded helper build, so don't rely on them.) Neither this report nor either peer has yet checked this data *against* the two mechanism claims above — that check is the open work.
+**Within the proxy option only, IF it is chosen — a tie-breaker, not a reason to choose it (feasibility-study session):** the vanilla exe directly imports `fmod.dll`, `SDL2.dll`, `SDL2_image.dll`, `WININET.dll`. `SDL2_image.dll` has the smallest export surface (41 exports, vs SDL2's 536, fmod's 230), so it is the cheapest of the three to forward; use **linker export-forwarders** (`#pragma comment(linker,"/export:IMG_Load=._real_SDL2_image.IMG_Load")`) to a renamed real copy rather than hand-writing 41 thunks. (fmod is a *direct* import in vanilla — the `LoadLibrary` fmod thunks are only in the modded helper build, so don't rely on them.) This picks the cheapest hijack target; it does not argue for hijacking over the launcher or static-stub vectors, and no one has yet tested it against the two mechanism claims. That check is the open work.
 
 **What both agree on (the load properties — these are the actual point):**
 - Load the companion **by full path** (`GetModuleFileNameA`), never a bare name (a bare `LoadLibraryA` is the search-order-hijack shape AV scores on).
