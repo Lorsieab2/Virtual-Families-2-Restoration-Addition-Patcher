@@ -40,7 +40,20 @@ RESULT: all checks passed
 
 - **The body is stubbed, on purpose.** The stock `ChanceOfPregnancy` body is **not self-contained**: it has 6 external relocations (`ldwGameState::GetRandom`, `CTutorialTip::Queue`/`WasDisplayed`, the `TutorialTip` global). Executing the raw body standalone faults on the first unrelocated `call` — which the first spike run did (`0xC0000005`), and which is a property of the *body needing the whole linked game*, not of the hook. Running the real body is what the linked build's own tests already cover. So the spike proves the **hook mechanism** against the **real prologue**, with a stub for the fall-through body.
 - **Proven here:** real-prologue steal is clean and needs no relocation; a runtime `E9`+cave trampoline installs and dispatches flag-gated to a helper or to the replayed prologue; re-hook is refused.
-- **Not proven here (next):** the same install performed by an actual **proxy DLL loaded into the running VF2.exe** (DLL search-order hijack of an already-present dependency, e.g. `SDL2_image.dll`), against the function at its **loaded address**, with the helper reading real game globals — verified by in-game behaviour matching the static build. That needs a running game and is the natural Stage-1.5.
+- **Not proven here (next):** the same install performed **in the running VF2.exe**, against the function at its **loaded address**, with the helper reading real game globals — verified by in-game behaviour matching the static build. That needs a running game and is the natural Stage 1.5.
+
+### Stage 1.5 install shape — corrected after VV-author review
+
+An earlier draft of this report proposed a **proxy DLL hijacking an already-loaded dependency** (e.g. `SDL2_image.dll`). The VV patcher author (who ships this model in production) advises **against** it, and the reason is the AV profile:
+
+- **Do NOT proxy / search-order-hijack.** A bare `LoadLibraryA("SDL2_image.dll")` is precisely the search-order-hijack shape AV heuristics score on, and it makes the DLL load-bearing for the *game* (a wrong forwarded export or a quarantine means the game won't start at all).
+- **Do what VV does instead:** one tiny hook in the exe (the only executable-space cost) resolves and calls **one** companion, loaded **by full path** built from `GetModuleFileNameA` (never a bare name), **from a per-frame tick, never `DllMain`** (DllMain runs under the loader lock — deadlock risk). That companion loads and calls the others DLL-to-DLL. The load **fails open**: missing file/export → stock game, resolved once and remembered. A feature's on/off switch becomes literally whether the patcher shipped that DLL (VV's Sort By patches zero exe bytes — empty patch list + a dependency + a DLL).
+- **AV constraints proven in VV:** keep the trampoline cave **R-X, never RWX** — a W+X page reads as self-modifying code and Malwarebytes quarantines it. `VirtualProtect` narrowly around any write and restore it. What has *not* drawn AV attention in VV: runtime `E9` detours installed from a legitimately-loaded companion, full-path `LoadLibrary`, `GetProcAddress`, SDL event watches — essentially this spike's shape. Also: whatever writes the exe must recompute the **PE checksum at 0x160** (a stale checksum is itself a strong AV signal), and the exe must be produced through the patcher from a **vanilla source**, never byte-poked in place.
+
+### Two per-site cautions before Stage 2 (VV-author)
+
+- **Re-entry:** steal-and-replay is only safe if nothing re-enters the function at an address **inside** the stolen bytes. Enumerate every branch whose target lands at or past the hook site before Stage 2 — sites that look like choke points often are not, and this matters more with an 8-byte steal.
+- **The prologue is not distinctive.** `mov eax,66666667h` is the signed-divide-by-5 magic constant, so the compiler inlined a `/5` there; this exact prologue is likely **shape-shared** with other `/O2` functions in the image. Hook a **fixed address**, never pattern-match this prologue.
 
 ## Bearing on the study's verdict
 
