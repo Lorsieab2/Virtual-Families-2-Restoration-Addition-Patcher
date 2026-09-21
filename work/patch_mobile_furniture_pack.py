@@ -16440,8 +16440,63 @@ extern "C" int __cdecl VF2AchievementDrawHeight() {
     return VF2AchievementVisibleCountInternal() * 0x42;
 }
 
+// THE GOALS SCREEN DRAWS THIS, THE SCAN DOES NOT.
+//
+// Achiever Extraordinaire (0x92) must be the LAST row a player sees, in every
+// runtime state -- including with Holiday Furniture on, where the 19 holiday
+// goals (0x6D-0x7F) sit AFTER the meta-goal in achievementOrder so the drawn
+// window stays contiguous when the runtime byte is zero (see the append site
+// in patch_custom_achievements). That physical order is right for the SCAN and
+// wrong for the EYE: it puts 0x92 twenty rows from the bottom when holiday is
+// on.
+//
+// So the DRAW walks this display copy instead: the same visible window, in the
+// same order, with 0x92 pulled to the end. It is rebuilt once per draw (from
+// the base-pointer detour, before the draw loop reads it) so it always matches
+// the current runtime holiday state. Its length equals the visible count, so
+// the scroll offset, content height and order-end bound are unchanged.
+//
+// VF2MaybeCompleteAchiever / VF2CompleteAllAchievements keep reading the real
+// achievementOrder by ID and are position-independent, so autocomplete is
+// untouched -- only the row the eye sees last changes.
+static const int kVF2AchievementDisplayCapacity = 200;
+static int achievementDisplayOrder[kVF2AchievementDisplayCapacity];
+
+extern "C" void __cdecl VF2AchievementBuildDisplayOrder() {
+    int visibleCount = VF2AchievementVisibleCountInternal();
+    if (visibleCount < 1 || visibleCount > kVF2AchievementDisplayCapacity) {
+        // A count outside the array can never index it. Leaving the display
+        // array as it was is safer than writing past its end.
+        return;
+    }
+    int out = 0;
+    // Everything except the meta-goal, in its existing order ...
+    for (int index = 0; index < visibleCount; ++index) {
+        int achievementId = achievementOrder[index];
+        if (achievementId == 0x92) continue;
+        if (out >= kVF2AchievementDisplayCapacity) return;
+        achievementDisplayOrder[out++] = achievementId;
+    }
+    // ... then the meta-goal last, so the eye always ends on it. The window
+    // includes 0x92 exactly once, so this restores the visible count.
+    if (out < kVF2AchievementDisplayCapacity) {
+        achievementDisplayOrder[out++] = 0x92;
+    }
+}
+
+// Rebuild the display order and hand back &achievementDisplayOrder[index]. The
+// draw loop's base-pointer detour calls this once, before the loop reads any
+// row, so the array is current when the walk begins.
+extern "C" const int *__cdecl VF2AchievementDisplayBase(int index) {
+    VF2AchievementBuildDisplayOrder();
+    return achievementDisplayOrder + index;
+}
+
 extern "C" const int *__cdecl VF2AchievementOrderEnd() {
-    return achievementOrder + VF2AchievementVisibleCountInternal();
+    // The draw loop walks achievementDisplayOrder now, so its end bound must
+    // point into the SAME array. The length is identical to the visible
+    // window, so the bound is the visible count as before.
+    return achievementDisplayOrder + VF2AchievementVisibleCountInternal();
 }
 
 extern "C" int __cdecl VF2AchievementsCompleteVisible(CAchievement *achievement) {
@@ -21807,6 +21862,116 @@ def patch_custom_achievements(manifest):
         IMAGE_REL_I386_REL32,
     ) not in draw_relocs:
         raise RuntimeError("AchievementsScene order-end helper relocation is missing")
+
+    # ACHIEVER EXTRAORDINAIRE ALWAYS DRAWS LAST -- base-pointer detour.
+    #
+    # The draw loop sets its base once at DrawScene+0xC6:
+    #   8D 34 85 <DIR32 achievementOrder>   lea esi,[eax*4 + achievementOrder]
+    # with eax the scroll start index, then walks esi by 4 until
+    # VF2AchievementOrderEnd(). Repointing that base at achievementDisplayOrder
+    # (0x92 pulled to the end) makes the meta-goal the last drawn row in every
+    # runtime state, WITHOUT touching the loop body, the count, or the scan --
+    # the display copy has the same length and index semantics as the window.
+    #
+    # The display array must be rebuilt before the loop reads its first row, so
+    # the detour calls VF2AchievementDisplayBase(index), which rebuilds the
+    # array for the current runtime holiday state and returns
+    # &achievementDisplayOrder[index]. The stock DIR32 reloc that bound the lea
+    # to achievementOrder is MOVED onto the detour's call, becoming the REL32 to
+    # VF2AchievementDisplayBase, so no relocation is left dangling in the middle
+    # of the jump. The end bound already points into achievementDisplayOrder
+    # (see VF2AchievementOrderEnd above), so base and bound name one array.
+    display_base_helper = scene_obj.append_undefined_symbol(
+        "_VF2AchievementDisplayBase"
+    )
+    draw_sym = scene_obj.symbol("?DrawScene@CAchievementsScene@@MAEXXZ")
+    draw_sec = scene_obj.section(draw_sym.section)
+    draw_raw = draw_sec.raw_ptr + draw_sym.value
+    expected_base_lea = b"\x8D\x34\x85\x00\x00\x00\x00"
+    if scene_obj.buf[draw_raw + 0xC6 : draw_raw + 0xCD] != expected_base_lea:
+        raise RuntimeError("Unexpected AchievementsScene draw base-pointer lea")
+    base_cave = draw_sec.raw_size
+    base_return = draw_sym.value + 0xCD
+    # push ecx; push edx        -- preserve the two caller-saved regs the loop
+    #                              still needs (ecx is pushed at +0xD0)
+    # push eax                  -- __cdecl arg: the scroll start index
+    # call VF2AchievementDisplayBase
+    # add esp,4                 -- __cdecl caller cleanup
+    # mov esi,eax               -- esi = &achievementDisplayOrder[index]
+    # pop edx; pop ecx
+    # jmp back to +0xCD
+    base_cave_payload = (
+        b"\x51\x52"
+        b"\x50"
+        b"\xE8\x00\x00\x00\x00"
+        b"\x83\xC4\x04"
+        b"\x8B\xF0"
+        b"\x5A\x59"
+        b"\xE9" + section_rel32(base_cave + 15, 5, base_return)
+    )
+    scene_obj.insert_section_bytes(draw_sym.section, base_cave, base_cave_payload)
+    # The stock DIR32 to achievementOrder at +0xC9 sits inside the bytes the
+    # near jump overwrites; move it onto the detour's call operand as the REL32
+    # to VF2AchievementDisplayBase. The call opcode is at cave+3, so its rel32
+    # operand is at cave+4.
+    move_relocation(
+        scene_obj,
+        draw_sym.section,
+        draw_sym.value + 0xC9,
+        base_cave + 4,
+        display_base_helper,
+        IMAGE_REL_I386_REL32,
+    )
+    patch_section_near_jump(
+        scene_obj,
+        draw_sym.section,
+        draw_sym.value + 0xC6,
+        base_cave,
+        7,
+        expected_base_lea,
+    )
+    draw_sec = scene_obj.section(draw_sym.section)
+    draw_raw = draw_sec.raw_ptr + draw_sym.value
+    base_jump = draw_sym.value + 0xC6
+    if scene_obj.buf[draw_raw + 0xC6] != 0xE9:
+        raise RuntimeError("AchievementsScene draw base source is not a near jump")
+    base_target = base_jump + 5 + struct.unpack_from(
+        "<i", scene_obj.buf, draw_raw + 0xC7
+    )[0]
+    if base_target != base_cave:
+        raise RuntimeError("AchievementsScene draw base jump misses its code cave")
+    expected_base_cave_prefix = (
+        b"\x51\x52\x50\xE8\x00\x00\x00\x00\x83\xC4\x04\x8B\xF0\x5A\x59\xE9"
+    )
+    base_cave_raw = draw_sec.raw_ptr + base_cave
+    if (
+        scene_obj.buf[base_cave_raw : base_cave_raw + len(expected_base_cave_prefix)]
+        != expected_base_cave_prefix
+    ):
+        raise RuntimeError("AchievementsScene draw base cave is malformed")
+    base_cave_return = base_cave + 20 + struct.unpack_from(
+        "<i", scene_obj.buf, base_cave_raw + 16
+    )[0]
+    if base_cave_return != base_return:
+        raise RuntimeError("AchievementsScene draw base cave returns to the wrong byte")
+    draw_relocs = [
+        struct.unpack_from("<IIH", scene_obj.buf, draw_sec.reloc_ptr + index * 10)
+        for index in range(draw_sec.nreloc)
+    ]
+    if (
+        base_cave + 4,
+        display_base_helper,
+        IMAGE_REL_I386_REL32,
+    ) not in draw_relocs:
+        raise RuntimeError("AchievementsScene draw base helper relocation is missing")
+    # The old DIR32 to achievementOrder must be gone from the loop body -- it
+    # was moved into the cave, so nothing may still bind the overwritten lea.
+    order_sym_index = scene_obj.symbol("?achievementOrder@@3QBHB").index
+    for vaddr, symidx, rtype in draw_relocs:
+        if symidx == order_sym_index and vaddr < base_cave:
+            raise RuntimeError(
+                "a stale achievementOrder relocation survives in the draw body")
+
     scene_obj.write(PATCHED / "AchievementsScene.obj")
 
     stock_visible_count = 0x5F
