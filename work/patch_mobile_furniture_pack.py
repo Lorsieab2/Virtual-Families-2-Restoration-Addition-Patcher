@@ -25516,6 +25516,91 @@ Wrong store section:
     }
 
 
+# The items VF2HandleDropOnMobileFurniture routes by id whose sprites the
+# Transparent Graphics setting can blank. Those are the only drops that reach
+# the alpha-sampling stock resolver AND can lose every pixel it samples, so
+# they are the only ones VF2TransparentFurnitureItemAtPoint needs a footprint
+# for (#369). Kept as names and resolved through the generator's own item
+# table, so a renumbering cannot leave the fallback pointing at a stale id;
+# test_transparent_furniture_drop.py asserts this set equals the invisible ids
+# the emitted dispatcher actually compares against.
+TRANSPARENT_DROP_FOOTPRINT_ITEMS = (
+    "InvisiblePicnicTable",
+    "InvisiblePatioTable",
+    "InvisibleYogaEquipment",
+    "InvisibleLounger",
+    "InvisibleSpaLounger",
+    "InvisiblePingPongTable",
+)
+
+
+def transparent_footprint_table_cpp(assets):
+    """The C++ definition of kVF2TransparentFootprints, baked from `assets`.
+
+    Reads each routed item's fmap AS WRITTEN under its own name -- so the spa
+    lounger's widened drop target is included -- decodes its object cells with
+    the encoding retarget_fmap_object uses, and emits a row-major mask plus the
+    bbox centre the runtime tiebreak needs. The struct itself is declared once,
+    in the dispatcher unit this text is appended to.
+
+    Fails loudly on a missing, unreadable or empty map rather than baking a
+    footprint with no cells, which would read in play as "transparent drops
+    just don't work" -- the exact symptom this exists to fix.
+    """
+    masks = []
+    entries = []
+    for name in TRANSPARENT_DROP_FOOTPRINT_ITEMS:
+        item_id = furniture_item_id_by_name(name)
+        fmap_name = f"{name}.png.fmap"
+        path = assets / fmap_name
+        if not path.is_file():
+            donor = (
+                INVISIBLE_OUTDOOR_FMAP_DONORS.get(fmap_name)
+                or INVISIBLE_TRANSPARENT_FMAP_DONORS.get(fmap_name)
+            )
+            if donor and (assets / donor).is_file():
+                path = assets / donor
+            else:
+                raise RuntimeError(
+                    f"{fmap_name} is not in the build's Assets and has no donor "
+                    "there; the transparent drop fallback cannot be baked without it"
+                )
+        data = path.read_bytes()
+        cells = _fmap_cells(data)
+        if not cells:
+            raise RuntimeError(f"{path.name} is not a readable QAMF grid")
+        cols, rows = struct.unpack_from("<II", data, 24)
+        solid = [
+            ((((cell >> 11) & 0x40000) | (cell & 0x3F800)) >> 11) != 0
+            for cell in cells
+        ]
+        if not any(solid):
+            raise RuntimeError(f"{path.name} has no object cells; nothing to drop onto")
+        xs = [index % cols for index, on in enumerate(solid) if on]
+        ys = [index // cols for index, on in enumerate(solid) if on]
+        centre_x = (min(xs) + max(xs)) // 2
+        centre_y = (min(ys) + max(ys)) // 2
+        symbol = f"kVF2TransparentMask_{item_id:03X}"
+        body = ",".join("1" if on else "0" for on in solid)
+        masks.append(
+            f"static const unsigned char {symbol}[{rows * cols}] = {{{body}}};"
+        )
+        entries.append(
+            f"    {{ {item_id:#x}, {cols}, {rows}, {centre_x}, {centre_y}, {symbol} }},"
+        )
+    return "\n".join([
+        "",
+        "// kVF2TransparentFootprints -- baked by transparent_footprint_table_cpp",
+        "// from the fmaps as shipped. See VF2TransparentFurnitureItemAtPoint.",
+        *masks,
+        "const VF2TransparentFootprint kVF2TransparentFootprints[] = {",
+        *entries,
+        "};",
+        f"const int kVF2TransparentFootprintCount = {len(entries)};",
+        "",
+    ])
+
+
 def sync_behavior_assets(manifest):
     assets = OUT / "Assets"
     assets.mkdir(parents=True, exist_ok=True)
@@ -25821,6 +25906,36 @@ def sync_behavior_assets(manifest):
             target, NEW_FURNITURE_FMAP_DONORS.get(target)
             or INVISIBLE_TRANSPARENT_FMAP_DONORS.get(target)
             or INVISIBLE_OUTDOOR_FMAP_DONORS.get(target), spa_widened)
+    # THE TRANSPARENT DROP FALLBACK'S FOOTPRINTS ARE BAKED HERE, not where the
+    # dispatcher is emitted, because this is the first moment the routed items'
+    # maps exist AS SHIPPED -- copied under their own names and, for the spa
+    # loungers, widened just above. The dispatcher unit carries only an extern
+    # for the table; this appends the definition. main() calls the dispatcher
+    # emitter and the runtime-bindings validator BEFORE this function, both
+    # unconditionally, and the validator only reads the unit, so nothing
+    # rewrites it after this append and no variant can be left with the extern
+    # but not the definition.
+    dispatch_unit = PATCHED / "vf2_mobile_furniture_behaviors.cpp"
+    if not dispatch_unit.is_file():
+        raise RuntimeError(
+            "vf2_mobile_furniture_behaviors.cpp is not present; the transparent "
+            "drop fallback table has nowhere to go"
+        )
+    footprint_cpp = transparent_footprint_table_cpp(assets)
+    dispatch_unit.write_text(
+        dispatch_unit.read_text(encoding="ascii") + footprint_cpp,
+        encoding="ascii",
+    )
+    manifest["TransparentDropFootprints"] = {
+        "items": list(TRANSPARENT_DROP_FOOTPRINT_ITEMS),
+        "cell_px": 16,
+        "appended_to": dispatch_unit.name,
+        "reason": (
+            "the stock drop resolver samples sprite alpha, so a fully "
+            "transparent invisible item resolved to nothing; the dispatcher "
+            "now falls back to the item's fmap object cells (#369)"
+        ),
+    }
     for item in manifest["items"]:
         reason = safety_fmap_reason(item)
         if not reason:
@@ -31358,11 +31473,110 @@ static bool VF2HandleMobileSpaLoungerReceiving(CVillager &villager)
 }
 
 
+// TRANSPARENT FURNITURE: A DROP MUST STILL RESOLVE WHEN THE SPRITE HAS NO PIXELS.
+//
+// The candidate below comes from VF2FurnitureItemAtPoint, which wraps the stock
+// CFurnitureManager::PtOnFurniture. That routine does a bounding-box pass and
+// then ldwImageImpl::PixelIsVisible -- SDL_GetRGBA on the sprite's own pixels,
+// a hit only where alpha != 0. Swap an item's sprite for a fully transparent
+// one (the Transparent Graphics setting) and every pixel is alpha 0, so the
+// stock resolver returns -1 and every `candidate == <id>` route is skipped:
+// the villager is dropped and nothing happens. Issue #369.
+//
+// Native items never see this: they resolve through the content map's fmap
+// cells -- pure geometry -- which is why a transparent pool still works. Only
+// the items THIS dispatcher routes by id go through the alpha resolver, and
+// those are exactly the ones that broke.
+//
+// So when the stock resolver finds nothing, fall back to the same geometry the
+// content map uses: each routed item's fmap object cells, baked at build time
+// from the map actually shipped (so the spa lounger's widened target is
+// included), placed at the record's own +0x14/+0x18 origin at kVF2FmapCellPx
+// per cell. The sprite is never consulted, so it can stay fully transparent.
+//
+// This runs ONLY when the stock resolver returned -1, so every visible item and
+// every native item keeps exactly the behaviour it has today. It considers only
+// the routed transparent-capable items, so a drop in a visible item's empty
+// margin still resolves to nothing, as it does now.
+//
+// Orientation is deliberately not decoded: the footprint is tested as authored
+// AND horizontally mirrored, so a flipped placement (orientation 1) is caught
+// whichever way the engine mirrors it. Among several hits the nearest footprint
+// centre wins, which keeps the mirror's phantom side from stealing a drop
+// meant for a neighbour.
+struct VF2TransparentFootprint {
+    int itemId;
+    int cols;
+    int rows;
+    int centreX;   // bbox centre of the object cells, in cells
+    int centreY;
+    const unsigned char *mask;   // rows*cols, row-major, 1 = object cell
+};
+// Defined at the END of this unit by sync_behavior_assets, which appends the
+// baked table once the routed items' maps exist as shipped.
+extern const VF2TransparentFootprint kVF2TransparentFootprints[];
+extern const int kVF2TransparentFootprintCount;
+// One number: world pixels per fmap cell. Read from the QAMF header (+8),
+// constant 16 across every shipped map. If a playtest shows the fallback zone
+// scaled wrong, this is the value to change.
+static const int kVF2FmapCellPx = 16;
+
+static int VF2TransparentFurnitureItemAtPoint(ldwPoint point)
+{
+    unsigned char *manager = reinterpret_cast<unsigned char *>(&FurnitureManager);
+    int count = *reinterpret_cast<int *>(manager + 0x1004);
+    if (count < 0 || count > 0x200) return -1;
+    int bestItem = -1;
+    int bestDist = 0;
+    for (int slot = 0; slot < count; ++slot) {
+        unsigned char *record = manager + 0x1008 + slot * 0x40;
+        if ((*reinterpret_cast<unsigned int *>(record + 0x0C) & 1) == 0) continue;
+        int itemId = *reinterpret_cast<int *>(record);
+        const VF2TransparentFootprint *fp = 0;
+        for (int i = 0; i < kVF2TransparentFootprintCount; ++i) {
+            if (kVF2TransparentFootprints[i].itemId == itemId) {
+                fp = &kVF2TransparentFootprints[i];
+                break;
+            }
+        }
+        if (!fp) continue;
+        // Cell (0,0) sits at the record's own world position. A point left of
+        // or above the origin is outside the grid: C division truncates toward
+        // zero, so -5 / 16 would read as cell 0, which is why the sign is
+        // tested before dividing.
+        int dx = point.x - *reinterpret_cast<int *>(record + 0x14);
+        int dy = point.y - *reinterpret_cast<int *>(record + 0x18);
+        if (dx < 0 || dy < 0) continue;
+        int cx = dx / kVF2FmapCellPx;
+        int cy = dy / kVF2FmapCellPx;
+        if (cx >= fp->cols || cy >= fp->rows) continue;
+        int mx = fp->cols - 1 - cx;
+        bool hit = fp->mask[cy * fp->cols + cx] != 0;
+        bool mirrorHit = fp->mask[cy * fp->cols + mx] != 0;
+        if (!hit && !mirrorHit) continue;
+        // Distance to the nearer of the authored and mirrored footprint centres.
+        int ax = cx - fp->centreX;
+        int ay = cy - fp->centreY;
+        int bx = cx - (fp->cols - 1 - fp->centreX);
+        int dA = ax * ax + ay * ay;
+        int dB = bx * bx + ay * ay;
+        int dist = dA < dB ? dA : dB;
+        if (bestItem < 0 || dist < bestDist) {
+            bestItem = itemId;
+            bestDist = dist;
+        }
+    }
+    return bestItem;
+}
+
 bool const theMainScene::VF2HandleDropOnMobileFurniture(CVillager &villager)
 {
 ldwPoint sample = villager.FeetPos();
     sample.y -= 10;
     int candidate = VF2FurnitureItemAtPoint(sample);
+    // The stock resolver samples sprite alpha, so a fully transparent invisible
+    // item comes back as -1. Resolve it by its fmap footprint instead (#369).
+    if (candidate < 0) candidate = VF2TransparentFurnitureItemAtPoint(sample);
 __VF2_ADDED_FURNITURE_DROP_DISPATCH__
 __VF2_COMPUTER_DROP_DISPATCH__
     // The Invisible Spa Lounger is a custom item, not ported mobile furniture,
