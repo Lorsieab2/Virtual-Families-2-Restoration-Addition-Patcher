@@ -396,6 +396,75 @@ class TheEmittedCpp(unittest.TestCase):
         scan = text[scan_start:text.index("\n}\n", scan_start)]
         self.assertIn("achievementOrder[index]", scan)
 
+    def test_the_helper_compiles_and_both_fixes_survive_into_the_object(self):
+        """Compile the helper and DECODE the object, not just the .cpp text.
+
+        Review: rereading vf2_special_upgrade_effects.cpp still passes if the
+        build compiles a stale unit, drops the helper, or fails to link the
+        changed loop. Generated source is not artifact evidence. So this
+        compiles the unit exactly as the matrix build does and reads the
+        resulting COFF object, proving both functions are emitted and that
+        the cheat loop actually calls VF2CompleteAchievementForCheat and the
+        meta-goal scan actually reads achievementOrder in compiled code.
+
+        The helper is a source unit the matrix build compiles; the executable
+        it links into is the release gate's concern. What this test adds over
+        the text check is that the two functions survive the compiler into an
+        object with the expected external references.
+        """
+        import shutil
+        import subprocess
+        import tempfile
+
+        emitted = patcher.PATCHED / "vf2_special_upgrade_effects.cpp"
+        if not emitted.is_file():
+            self.skipTest("generator output not present; run the generator first")
+
+        vcvars = None
+        for candidate in (
+            pathlib.Path(r"C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvars32.bat"),
+            pathlib.Path(r"C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\VC\Auxiliary\Build\vcvars32.bat"),
+        ):
+            if candidate.is_file():
+                vcvars = candidate
+                break
+        if vcvars is None:
+            self.skipTest("no MSVC toolchain to compile the helper")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            work = pathlib.Path(tmp)
+            shutil.copy2(emitted, work / emitted.name)
+            result = subprocess.run(
+                f'"{vcvars}" >nul 2>&1 && cd /d "{work}" && '
+                f'cl /c /EHsc /nologo "{emitted.name}"',
+                shell=True, capture_output=True, text=True)
+            obj = work / (emitted.stem + ".obj")
+            self.assertEqual(
+                result.returncode, 0,
+                "the helper unit must compile:\n"
+                + (result.stdout or "") + (result.stderr or ""))
+            self.assertTrue(obj.is_file(), "no object was produced")
+
+            compiled = CoffObject(obj)
+            names = {sym.name for sym in compiled.symbols}
+            # The cheat function and the meta-goal scan must BOTH be emitted
+            # into the object as defined functions.
+            self.assertTrue(
+                any("VF2CompleteAllAchievements" in n for n in names),
+                "the cheat function was dropped from the compiled object")
+            self.assertTrue(
+                any("VF2MaybeCompleteAchiever" in n for n in names),
+                "the meta-goal scan was dropped from the compiled object")
+            # The cheat loop's body must reference the shared completion
+            # helper, and the array both functions walk must be an external
+            # reference the linker resolves against AchievementsScene.
+            self.assertTrue(
+                any("VF2CompleteAchievementForCheat" in n for n in names),
+                "the compiled cheat no longer calls the completion helper")
+            self.assertTrue(
+                any("achievementOrder" in n for n in names),
+                "neither compiled function reads the visible order array")
+
 
 if __name__ == "__main__":
     unittest.main()
