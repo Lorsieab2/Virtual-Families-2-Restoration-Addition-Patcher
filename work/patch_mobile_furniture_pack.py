@@ -30958,6 +30958,16 @@ static bool VF2HandleMobileInvisibleSpaLounger(CVillager &villager)
     // walk holds are invisible to LinkPeepToFurniture -- exactly as the spa
     // path does below; then this villager's own earlier hold on some spa
     // lounger is released, because they are not going to one.
+    //
+    // This degrade is issue #365 -- "the spa lounger sometimes uses the
+    // behavior from the normal chaise loungers" -- and it is DELIBERATE. The
+    // tempting fix, re-resolving the dropped-on lounger read-only (a
+    // FindFurniture on the slot record) and running the treatment there, was
+    // rejected in review rounds 8, 9 and 21: it leaves the engine's
+    // reservation on the wrongly-linked chaise while the villager walks to a
+    // different one. test_spa_lounger_pose.py's
+    // test_the_drop_route_uses_the_linked_record_whole forbids that
+    // re-anchor; do not reintroduce it here.
     bool const droppedOnKnown = loungerSlot >= 0;
     int const droppedOn = VF2FurnitureHandleAtSlot(loungerSlot);
     bool const linkedTheDroppedOnLounger =
