@@ -38,6 +38,7 @@ These tests read the EMITTED object, not only the generator, because the
 order array is built by patching bytes into AchievementsScene.obj.
 """
 import pathlib
+import re
 import struct
 import sys
 import unittest
@@ -250,18 +251,52 @@ class TheCompleteAllCheat(unittest.TestCase):
                 "a hand-written range cannot follow newly added goals; that "
                 "is what left 24 of them uncompleted")
 
+    @staticmethod
+    def _cheat_excluded_ids():
+        """The ids the EMITTED cheat loop skips, parsed from its source.
+
+        Review caught that building `completed` from the window and then
+        checking the window against it is empty by construction: it cannot
+        catch a missing exclusion. Adding `if (achievementId == 0xA7)
+        continue;` to the production loop would leave a visible goal
+        unfinished while a window-derived check still passed.
+
+        So the set of skipped ids is read from the emitted helper instead,
+        and coverage is the window MINUS those ids. A stray `continue` for
+        any other id then shows up as an uncovered visible row.
+        """
+        emitted = patcher.PATCHED / "vf2_special_upgrade_effects.cpp"
+        text = emitted.read_text(encoding="utf-8", errors="replace")
+        start = text.index("static void VF2CompleteAllAchievements()")
+        body = text[start:text.index("\n}\n", start)]
+        loop = body[body.index("for (int index"):]
+        excluded = set()
+        for match in re.finditer(
+                r"achievementId == (0x[0-9a-fA-F]+)", loop):
+            excluded.add(int(match.group(1), 16))
+        return body, excluded
+
     def test_the_cheat_covers_every_visible_goal_in_both_states(self):
         order = _order()
         if order is None:
             self.skipTest("generator output not present; run the generator first")
+        body, excluded = self._cheat_excluded_ids()
+        # The loop must complete every row it does not explicitly skip, and
+        # the only rows it may skip are the two DERIVED goals (Props and the
+        # meta-goal), which are reconciled afterwards. Any other exclusion is
+        # a coverage hole.
+        self.assertTrue(
+            "VF2CompleteAchievementForCheat(achievementId);" in body)
+        self.assertEqual(
+            excluded, {PROPS, ACHIEVER},
+            "the cheat loop skips an id other than the two derived goals: "
+            + repr(sorted(hex(x) for x in excluded)))
         for count in (COUNT_WITHOUT_HOLIDAY, COUNT_WITH_HOLIDAY):
             window = order[:count]
-            completed = {x for x in window if x not in (PROPS, ACHIEVER)}
+            completed = {x for x in window if x not in excluded}
             uncovered = [hex(x) for x in window
                          if x not in completed and x not in (PROPS, ACHIEVER)]
             self.assertEqual(uncovered, [], f"visible rows={count}")
-            # Props to you is then derivable: its prerequisites are all in.
-            # They are behaviour goals, so they exist only when that gate is on.
             if patcher.ENABLE_BEHAVIOR_PATCHES:
                 self.assertTrue({0x30, 0xA1, 0xA2, 0xA3, 0xA4, 0xAB} <= completed)
 
