@@ -19,20 +19,28 @@ items the patcher's dispatcher routes by id; the owner confirmed the partition
 in play.
 
 THE FIX. When the stock resolver returns -1, VF2TransparentFurnitureItemAtPoint
-tests the drop point against those items' fmap OBJECT cells -- the same geometry
-the content map uses -- baked at build time from the maps as shipped. The sprite
-is never consulted, so it stays fully transparent. The dispatcher unit declares
-the table `extern`; sync_behavior_assets appends the definition once the maps
-exist as written (so the spa lounger's widened target is included).
+walks the placed furniture records and, for each routed item, asks the ENGINE'S
+OWN content block: LookupFurnitureInfo(item).contentBlocks[orientation], the
+block CFurnitureManager::LoadFmap built for the orientation the record holds
+(authored, mirrored, second block, its mirror), anchored on the content map
+exactly as CFurnitureManager::ApplyFmapContent anchors it -- at content cell
+(pos - block.origin) / 8 in C integer division -- and reads the cell under the
+drop point. No
+table is baked, no mirror is guessed and no cell size is assumed: the fallback
+agrees with the content map by construction.
 
-WHAT IS NOT TESTED HERE, ON PURPOSE. There is no Python re-implementation of the
-cell arithmetic asserting the C++ "would" resolve a point. A model written from
-the same assumption as the code agrees with itself and proves nothing about the
-binary (the round-trip trap). The semantics that matter are pinned as literal
-source properties below -- the negative-offset guard, the mirror test, the
-nearest-centre tiebreak -- and the runtime behaviour is the owner's playtest.
+SUPERSEDED, RECORDED AS WRONG. The first draft baked each item's object cells
+into a table and re-derived the placement at 16 pixels per cell (the QAMF +8
+field, which is the OFFSET of the first block and only happens to be 16), with
+no origin subtracted and orientation unioned with a mirror guess. Review caught
+all three. The tests below pin the constants against the stock DISASSEMBLY, a
+source the template cannot agree with by construction.
+
+WHAT IS NOT TESTED HERE, ON PURPOSE. There is no Python model of the fallback
+asserting it "would" resolve a point: a model written from the same reading as
+the code agrees with itself and proves nothing about the binary (the round-trip
+trap). The runtime behaviour is the owner's playtest.
 """
-import os
 import pathlib
 import re
 import sys
@@ -40,6 +48,7 @@ import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 GEN = ROOT / "work" / "patch_mobile_furniture_pack.py"
+STOCK_DISASM = ROOT / "work" / "FurnitureManager_current_disasm.txt"
 sys.path.insert(0, str(ROOT / "work"))
 
 import patch_mobile_furniture_pack as patcher  # noqa: E402
@@ -47,9 +56,18 @@ import patch_mobile_furniture_pack as patcher  # noqa: E402
 ROUTED_INVISIBLE = {0x328, 0x329, 0x32A, 0x32B, 0x32F, 0x331}
 VISIBLE_SPA_LOUNGER = 0x330
 
+FALLBACK = "static int VF2TransparentFurnitureItemAtPoint(ldwPoint point)"
+HOOK = "if (candidate < 0) candidate = VF2TransparentFurnitureItemAtPoint(sample);"
+CELL_IDIOM = "static int VF2ContentCell(int px) { return (px + ((px >> 31) & 7)) >> 3; }"
+
 
 def _source():
     return GEN.read_text(encoding="utf-8")
+
+
+def _fallback_body(text):
+    start = text.index(FALLBACK)
+    return text[start:text.index("\n}\n", start)]
 
 
 def _emitted_unit():
@@ -72,36 +90,18 @@ def _emitted_unit():
     return path.read_text(encoding="ascii"), None
 
 
-def _build_assets():
-    """An Assets dir holding the routed items' fmaps under their OWN names.
+def _stock_function(name):
+    """The dumpbin listing of one CFurnitureManager routine from the stock object.
 
-    That is what sync_behavior_assets writes and what the bake reads at its
-    real call site; the release payload renames some of them on export, so it
-    is deliberately not used here.
+    The header line, not a `call` to the symbol from another routine: dumpbin
+    prints a function as its decorated name at column 0 followed by the
+    undecorated form in parentheses.
     """
-    candidates = []
-    env = os.environ.get("VF2_PATCH_OUT")
-    if env:
-        candidates.append(pathlib.Path(env) / "Assets")
-    candidates.append(patcher.OUT / "Assets")
-    matrix = sorted(
-        (ROOT / "outputs").glob("VF2-B*-matrix-final_all_enabled/Assets"),
-        key=lambda p: p.stat().st_mtime, reverse=True)
-    candidates.extend(matrix)
-    needed = [f"{n}.png.fmap" for n in patcher.TRANSPARENT_DROP_FOOTPRINT_ITEMS]
-    for assets in candidates:
-        if all((assets / n).is_file() for n in needed):
-            return assets, None
-    return None, ("no build Assets dir holds all of %s under their own names; "
-                  "run the generator first" % ", ".join(needed))
-
-
-def _parse_table(cpp):
-    masks = {int(m.group(1), 16): m.group(2).split(",")
-             for m in re.finditer(r"kVF2TransparentMask_([0-9A-F]+)\[\d+\] = \{([01,]+)\};", cpp)}
-    entries = {int(e[0], 16): tuple(int(x) for x in e[1:])
-               for e in re.findall(r"\{ (0x[0-9a-f]+), (\d+), (\d+), (\d+), (\d+), kVF2TransparentMask_", cpp)}
-    return masks, entries
+    text = STOCK_DISASM.read_text(encoding="utf-8", errors="replace")
+    header = re.search("^" + re.escape(name) + r" \(", text, re.M)
+    if header is None:
+        raise AssertionError(f"{name} has no function header in {STOCK_DISASM.name}")
+    return text[header.start():text.index("\nRELOCATIONS", header.start())]
 
 
 class TheDispatcherTemplate(unittest.TestCase):
@@ -109,112 +109,169 @@ class TheDispatcherTemplate(unittest.TestCase):
 
     def setUp(self):
         self.src = _source()
+        self.body = _fallback_body(self.src)
 
     def test_the_fallback_is_defined_and_hooked_after_the_stock_resolver(self):
-        self.assertIn("static int VF2TransparentFurnitureItemAtPoint(ldwPoint point)", self.src)
-        hook = "if (candidate < 0) candidate = VF2TransparentFurnitureItemAtPoint(sample);"
-        self.assertIn(hook, self.src)
+        self.assertIn(FALLBACK, self.src)
+        self.assertIn(HOOK, self.src)
         # The fallback runs only after the stock resolver returned nothing, and
         # before any route inspects the candidate.
         resolve = self.src.index("int candidate = VF2FurnitureItemAtPoint(sample);")
-        self.assertLess(resolve, self.src.index(hook))
-        self.assertLess(self.src.index(hook), self.src.index("__VF2_ADDED_FURNITURE_DROP_DISPATCH__"))
+        self.assertLess(resolve, self.src.index(HOOK))
+        self.assertLess(self.src.index(HOOK), self.src.index("__VF2_ADDED_FURNITURE_DROP_DISPATCH__"))
 
-    def test_the_table_is_declared_extern_in_the_dispatcher(self):
-        # Declared here, DEFINED later by sync_behavior_assets: the two halves
-        # of the emission-order inversion.
-        self.assertIn("extern const VF2TransparentFootprint kVF2TransparentFootprints[];", self.src)
-        self.assertIn("extern const int kVF2TransparentFootprintCount;", self.src)
+    def test_it_asks_the_engine_for_the_block_it_actually_placed(self):
+        # Declared so the compiler mangles the call to the symbol the stock
+        # FurnitureManager.obj already imports.
+        self.assertIn("sFurnitureInfo &__cdecl LookupFurnitureInfo(EInventoryItem);", self.src)
+        self.assertIn("sFurnitureInfo &info = LookupFurnitureInfo((EInventoryItem)itemId);", self.body)
+        self.assertIn("const sContentBlock *block = info.contentBlocks[orientation];", self.body)
+        # No block yet (LoadFmap has not run) or an orientation with no block:
+        # the engine applied nothing, so nothing resolves.
+        self.assertIn("if (!info.fmapHeader) continue;", self.body)
+        self.assertIn("if (!block || block->cols <= 0 || block->rows <= 0) continue;", self.body)
 
-    def test_the_cell_size_is_one_named_constant(self):
-        # Single-sourced from the QAMF header (+8 == 16 on every shipped map);
-        # if a playtest shows the zone scaled wrong this is the number to change.
-        self.assertIn("static const int kVF2FmapCellPx = 16;", self.src)
+    def test_the_placed_orientation_selects_the_block(self):
+        # Read from the record, clamped exactly as ApplyFmapContent clamps it.
+        self.assertIn("int orientation = *reinterpret_cast<int *>(record + 0x10);", self.body)
+        self.assertIn("if (orientation < 0 || orientation >= 4) orientation = 0;", self.body)
+        # The superseded union-with-mirror guess is gone.
+        self.assertNotIn("mirrorHit", self.src)
+        self.assertNotIn("kVF2TransparentFootprints", self.src)
 
-    def test_a_point_left_of_or_above_the_origin_is_outside(self):
-        # C division truncates toward zero, so -5 / 16 reads as cell 0; the
-        # sign must be tested before dividing or the fallback claims a strip
-        # outside every item.
-        self.assertIn("if (dx < 0 || dy < 0) continue;", self.src)
+    def test_the_block_is_anchored_as_the_engine_anchors_it(self):
+        self.assertIn(CELL_IDIOM, self.src)
+        self.assertIn("int anchorX = VF2ContentCell(*reinterpret_cast<int *>(record + 0x14) - block->originX);", self.body)
+        self.assertIn("int anchorY = VF2ContentCell(*reinterpret_cast<int *>(record + 0x18) - block->originY);", self.body)
+        self.assertIn("int cx = pointCellX - anchorX;", self.body)
+        self.assertIn("if (cx < 0 || cy < 0 || cx >= block->cols || cy >= block->rows) continue;", self.body)
+        # No second cell size anywhere in the template.
+        self.assertNotIn("kVF2FmapCellPx", self.src)
 
-    def test_the_footprint_is_tested_mirrored_too(self):
-        # Orientation is not decoded; a flipped placement is caught whichever
-        # way the engine mirrors it.
-        self.assertIn("int mx = fp->cols - 1 - cx;", self.src)
-        self.assertIn("bool mirrorHit = fp->mask[cy * fp->cols + mx] != 0;", self.src)
+    def test_the_object_is_decoded_as_get_object_decodes_it(self):
+        self.assertIn("unsigned int object = (((cell >> 11) & 0x40000u) | (cell & 0x3F800u)) >> 11;", self.body)
+        self.assertIn("if (object == 0) continue;", self.body)
 
-    def test_the_nearest_footprint_centre_wins(self):
-        # Keeps the mirror's phantom side from stealing a drop meant for a
-        # neighbouring transparent item.
-        self.assertIn("if (bestItem < 0 || dist < bestDist) {", self.src)
+    def test_the_cell_idiom_is_c_division_by_eight_truncating_toward_zero(self):
+        # The idiom is the compiler's rendering of a signed `/ 8` (cdq / and
+        # edx,7 / add / sar 3), which truncates toward zero: -5 is cell 0, as
+        # the engine has it. Python's `//` floors, so the independent reference
+        # is truncation written out; the two differ on every negative
+        # non-multiple of 8, which is exactly where a floor would disagree with
+        # the content map.
+        def trunc8(v):
+            return -((-v) // 8) if v < 0 else v // 8
+        for px in list(range(-64, 65)) + [-2147483648, 2147483647, -9, -8, -7, -1]:
+            self.assertEqual((px + ((px >> 31) & 7)) >> 3, trunc8(px), px)
+        self.assertEqual((-5 + ((-5 >> 31) & 7)) >> 3, 0)
+
+    def test_the_struct_shims_carry_the_engine_offsets(self):
+        block = self.src[self.src.index("struct sContentBlock {"):]
+        block = block[:block.index("};")]
+        self.assertEqual(
+            re.findall(r"^\s+(?:int|unsigned int) (\w+)", block, re.M),
+            ["originX", "originY", "cols", "rows", "cells"])
+        info = self.src[self.src.index("struct sFurnitureInfo {\n    char pad0[0x58];"):]
+        info = info[:info.index("};")]
+        self.assertIn("void *fmapHeader;", info)
+        self.assertIn("sContentBlock *contentBlocks[4];", info)
 
 
-class TheBakedTable(unittest.TestCase):
-    """T2: the masks baked from the maps as written are the right shapes."""
+class TheStockDisassemblyAgrees(unittest.TestCase):
+    """T2: every offset the fallback uses is the one the stock code uses.
+
+    The template and the dumpbin listing of CFurnitureManager::ApplyFmapContent
+    are independent sources; agreement between them is evidence, agreement
+    between the template and a model of the template is not.
+    """
 
     def setUp(self):
-        self.assets, reason = _build_assets()
+        if not STOCK_DISASM.is_file():
+            self.skipTest("work/FurnitureManager_current_disasm.txt is absent")
+        self.apply = _stock_function(
+            "?ApplyFmapContent@CFurnitureManager@@QAEXH@Z")
+        self.load = _stock_function(
+            "?LoadFmap@CFurnitureManager@@AAEXW4EInventoryItem@@_N@Z")
+
+    def test_orientation_is_read_from_record_plus_0x10_and_clamped_to_four(self):
+        # Records start at manager+0x1008, so +0x10 in the record is +0x1018.
+        self.assertIn("mov         ecx,dword ptr [esi+1018h]", self.apply)
+        self.assertIn("cmp         ecx,4", self.apply)
+        self.assertIn("xor         ecx,ecx", self.apply)
+
+    def test_the_block_table_sits_at_info_plus_0x5c_indexed_by_orientation(self):
+        self.assertIn("mov         edx,dword ptr [eax+ecx*4+5Ch]", self.apply)
+        # LoadFmap fills that table: header+[header+8] into +0x5C, its mirror
+        # into +0x60, the second block into +0x64 and its mirror into +0x68.
+        self.assertIn("mov         dword ptr [ebx+5Ch],ecx", self.load)
+        self.assertIn("mov         dword ptr [ebx+60h],eax", self.load)
+        self.assertIn("mov         dword ptr [ebx+64h],eax", self.load)
+        self.assertIn("mov         dword ptr [ebx+68h],eax", self.load)
+        # And the header pointer the fallback tests for null lives at +0x58.
+        self.assertIn("mov         dword ptr [ebx+58h],eax", self.load)
+
+    def test_the_origin_is_subtracted_from_the_placement_position(self):
+        # y at record+0x18 (+0x1020) minus block+4; x at record+0x14 (+0x101C)
+        # minus block+0 -- the anchoring the fallback repeats.
+        self.assertIn("mov         eax,dword ptr [esi+1020h]", self.apply)
+        self.assertIn("mov         ecx,dword ptr [esi+101Ch]", self.apply)
+        self.assertIn("sub         eax,dword ptr [edx+4]", self.apply)
+        self.assertIn("sub         ecx,dword ptr [edx]", self.apply)
+
+    def test_only_a_flagged_record_is_applied(self):
+        # Bit 0 of record+0x0C (+0x1014), the same placed flag the fallback tests.
+        self.assertIn("test        byte ptr [eax+ecx+1014h],1", self.apply)
+
+
+class TheEmittedUnit(unittest.TestCase):
+    """T3: the unit a full generator run wrote carries the fallback, substituted."""
+
+    def setUp(self):
+        self.unit, reason = _emitted_unit()
         if reason:
             self.skipTest(reason)
-        self.cpp = patcher.transparent_footprint_table_cpp(self.assets)
-        self.masks, self.entries = _parse_table(self.cpp)
 
-    def test_every_routed_invisible_item_has_a_footprint(self):
-        self.assertEqual(set(self.entries), ROUTED_INVISIBLE)
-        self.assertIn("kVF2TransparentFootprintCount = 6;", self.cpp)
+    def test_the_item_list_is_substituted_from_the_item_table(self):
+        self.assertNotIn("__VF2_TRANSPARENT_DROP_ITEMS__", self.unit)
+        match = re.search(r"kVF2TransparentDropItems\[\] = \{ ([0-9a-fx, ]+) \};", self.unit)
+        self.assertIsNotNone(match)
+        emitted = {int(x, 16) for x in match.group(1).split(", ")}
+        expected = {patcher.furniture_item_id_by_name(n) for n in patcher.TRANSPARENT_DROP_FOOTPRINT_ITEMS}
+        self.assertEqual(emitted, expected)
+        self.assertEqual(emitted, ROUTED_INVISIBLE)
 
-    def test_the_spa_lounger_is_baked_from_the_written_map_widening_included(self):
-        # The plain lounger and the spa lounger borrow the SAME donor; the spa
-        # lounger's map is then widened by one cell. More solid cells here is
-        # the proof the bake read the WRITTEN map, not the donor source -- bake
-        # from the source and this collapses to equality.
-        solid = {i: m.count("1") for i, m in self.masks.items()}
-        self.assertGreater(solid[0x32F], solid[0x32B])
+    def test_the_fallback_and_hook_reach_the_unit(self):
+        self.assertIn(FALLBACK, self.unit)
+        self.assertIn(HOOK, self.unit)
+        self.assertIn(CELL_IDIOM, self.unit)
+        self.assertIn("sFurnitureInfo &__cdecl LookupFurnitureInfo(EInventoryItem);", self.unit)
 
-    def test_a_known_object_cell_is_solid_and_a_corner_is_not(self):
-        # Chaise_brown's object cells are an eleven-cell ragged diagonal that
-        # includes (7,8) (measured in widen_spa_lounger_hotspot); (0,0) is empty.
-        cols = self.entries[0x32B][0]
-        self.assertEqual(cols, 19)
-        lounger = self.masks[0x32B]
-        self.assertEqual(lounger[8 * cols + 7], "1")
-        self.assertEqual(lounger[0], "0")
-        self.assertEqual(self.masks[0x32F][8 * cols + 7], "1")
-
-    def test_each_mask_covers_its_whole_grid(self):
-        for item, (cols, rows, cx, cy) in self.entries.items():
-            with self.subTest(item=hex(item)):
-                self.assertEqual(len(self.masks[item]), cols * rows)
-                self.assertTrue(0 <= cx < cols and 0 <= cy < rows)
-
-    def test_a_missing_map_fails_loudly_rather_than_baking_nothing(self):
-        import tempfile
-        with tempfile.TemporaryDirectory() as empty:
-            with self.assertRaises(RuntimeError):
-                patcher.transparent_footprint_table_cpp(pathlib.Path(empty))
+    def test_the_superseded_appended_table_is_gone(self):
+        # The earlier mechanism appended a baked table after emission; a unit
+        # still carrying it was written by a stale generator.
+        self.assertNotIn("kVF2TransparentFootprints", self.unit)
+        self.assertNotIn("kVF2TransparentMask_", self.unit)
 
 
 class TheDriftGuard(unittest.TestCase):
-    """T3: the baked set equals the invisible ids the emitted dispatcher routes.
+    """T4: the fallback's item set equals the invisible ids the dispatcher routes.
 
-    This is the test that matters for the future. A new invisible item routed
-    through the dispatcher by id but left out of TRANSPARENT_DROP_FOOTPRINT_ITEMS
-    would silently return to "transparent drops do nothing"; a footprint baked
-    for an item the dispatcher never routes is dead weight. Both sets are
-    derived independently -- one from the emitted C++, one from the generator's
-    own item table -- so they cannot agree by construction.
+    A new invisible item routed through the dispatcher by id but left out of
+    TRANSPARENT_DROP_FOOTPRINT_ITEMS would silently return to "transparent drops
+    do nothing"; an item in the list the dispatcher never routes would resolve
+    to a candidate no route accepts. Both sets are derived independently -- one
+    from the emitted C++, one from the generator's own item table -- so they
+    cannot agree by construction.
     """
 
-    def test_baked_footprints_match_the_routed_invisible_ids(self):
+    def test_the_item_list_matches_the_routed_invisible_ids(self):
         unit, reason = _emitted_unit()
         if reason:
             self.skipTest(reason)
         # Every id the dispatcher routes: the literal `candidate == <id>`
         # compares, PLUS the ids VF2IsMobileChaise accepts, because the
         # Invisible Lounger is folded into that predicate rather than compared
-        # by literal (see the "chaise" binding spec). Both are read from the
-        # emitted C++, never from the generator's tables, so this set cannot
-        # agree with the baked one by construction.
+        # by literal (see the "chaise" binding spec).
         routed = {int(x, 16) for x in re.findall(r"candidate == (0x[0-9A-Fa-f]+)", unit)}
         chaise_start = unit.index("static bool VF2IsMobileChaise(int item)")
         chaise = unit[chaise_start:unit.index("\n}\n", chaise_start)]
@@ -225,43 +282,18 @@ class TheDriftGuard(unittest.TestCase):
         invisible_names = {it["item_id"]: it["name"]
                            for it in (patcher.INVISIBLE_OUTDOOR_ITEMS + patcher.INVISIBLE_TRANSPARENT_BASE_ITEMS)}
         routed_invisible = {i for i in routed if invisible_names.get(i, "").startswith("Invisible")}
-        baked = {patcher.furniture_item_id_by_name(n) for n in patcher.TRANSPARENT_DROP_FOOTPRINT_ITEMS}
-        self.assertEqual(routed_invisible, baked)
+        listed = {patcher.furniture_item_id_by_name(n) for n in patcher.TRANSPARENT_DROP_FOOTPRINT_ITEMS}
+        self.assertEqual(routed_invisible, listed)
 
-    def test_the_visible_spa_lounger_is_routed_but_deliberately_not_baked(self):
+    def test_the_visible_spa_lounger_is_routed_but_deliberately_not_listed(self):
         # 0x330 goes through the same alpha resolver, but its sprite is never
         # swapped for a transparent one, so it can never need the fallback.
         unit, reason = _emitted_unit()
         if reason:
             self.skipTest(reason)
         self.assertIn("candidate == 0x330", unit)
-        baked = {patcher.furniture_item_id_by_name(n) for n in patcher.TRANSPARENT_DROP_FOOTPRINT_ITEMS}
-        self.assertNotIn(VISIBLE_SPA_LOUNGER, baked)
-
-
-class TheDefinitionReachesTheArtifact(unittest.TestCase):
-    """T4: the appended DEFINITION is in the emitted unit, not just the extern.
-
-    An unresolved extern compiles to a perfectly good object and only fails at
-    link -- a fix that is silently absent while every compile test stays green.
-    Only a full generator run (which invokes sync_behavior_assets after the
-    dispatcher is emitted) can put the definition there, so this reads what
-    that run actually wrote.
-    """
-
-    def test_the_table_definition_and_count_are_in_the_emitted_unit(self):
-        unit, reason = _emitted_unit()
-        if reason:
-            self.skipTest(reason)
-        self.assertIn("const VF2TransparentFootprint kVF2TransparentFootprints[] = {", unit)
-        self.assertIn("kVF2TransparentFootprintCount = 6;", unit)
-        masks, entries = _parse_table(unit)
-        self.assertEqual(set(entries), ROUTED_INVISIBLE)
-        self.assertEqual(len(masks), 6)
-        # The extern precedes the definition: declared in the dispatcher,
-        # appended afterwards -- the emission-order inversion, in the file.
-        self.assertLess(unit.index("extern const VF2TransparentFootprint kVF2TransparentFootprints[];"),
-                        unit.index("const VF2TransparentFootprint kVF2TransparentFootprints[] = {"))
+        listed = {patcher.furniture_item_id_by_name(n) for n in patcher.TRANSPARENT_DROP_FOOTPRINT_ITEMS}
+        self.assertNotIn(VISIBLE_SPA_LOUNGER, listed)
 
 
 if __name__ == "__main__":
