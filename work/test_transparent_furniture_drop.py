@@ -49,6 +49,7 @@ import unittest
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 GEN = ROOT / "work" / "patch_mobile_furniture_pack.py"
 STOCK_DISASM = ROOT / "work" / "FurnitureManager_current_disasm.txt"
+CONTENT_MAP_DISASM = ROOT / "work" / "ContentMap_current_disasm.txt"
 sys.path.insert(0, str(ROOT / "work"))
 
 import patch_mobile_furniture_pack as patcher  # noqa: E402
@@ -90,18 +91,38 @@ def _emitted_unit():
     return path.read_text(encoding="ascii"), None
 
 
-def _stock_function(name):
-    """The dumpbin listing of one CFurnitureManager routine from the stock object.
+def _function_in(text, name):
+    """One routine's listing from a dumpbin /disasm text.
 
     The header line, not a `call` to the symbol from another routine: dumpbin
     prints a function as its decorated name at column 0 followed by the
     undecorated form in parentheses.
     """
-    text = STOCK_DISASM.read_text(encoding="utf-8", errors="replace")
     header = re.search("^" + re.escape(name) + r" \(", text, re.M)
     if header is None:
-        raise AssertionError(f"{name} has no function header in {STOCK_DISASM.name}")
-    return text[header.start():text.index("\nRELOCATIONS", header.start())]
+        raise AssertionError(f"{name} has no function header in the listing")
+    end = text.find("\nRELOCATIONS", header.start())
+    return text[header.start():end if end >= 0 else len(text)]
+
+
+def _stock_function(name):
+    """The dumpbin listing of one CFurnitureManager routine from the stock object."""
+    return _function_in(STOCK_DISASM.read_text(encoding="utf-8", errors="replace"), name)
+
+
+def _build_assets():
+    """An Assets dir holding the routed items' fmaps under their OWN names."""
+    import os
+    candidates = []
+    env = os.environ.get("VF2_PATCH_OUT")
+    if env:
+        candidates.append(pathlib.Path(env) / "Assets")
+    candidates.append(patcher.OUT / "Assets")
+    needed = [f"{n}.png.fmap" for n in patcher.TRANSPARENT_DROP_FOOTPRINT_ITEMS]
+    for assets in candidates:
+        if all((assets / n).is_file() for n in needed):
+            return assets, None
+    return None, "no build Assets dir holds the routed items' maps under their own names; run the generator first"
 
 
 class TheDispatcherTemplate(unittest.TestCase):
@@ -148,9 +169,21 @@ class TheDispatcherTemplate(unittest.TestCase):
         # No second cell size anywhere in the template.
         self.assertNotIn("kVF2FmapCellPx", self.src)
 
-    def test_the_object_is_decoded_as_get_object_decodes_it(self):
-        self.assertIn("unsigned int object = (((cell >> 11) & 0x40000u) | (cell & 0x3F800u)) >> 11;", self.body)
-        self.assertIn("if (object == 0) continue;", self.body)
+    def test_occupancy_is_the_hit_not_the_object_bits(self):
+        # ApplyContentBlock writes every nonzero cell and skips the zeros; the
+        # object bits mark a few hotspot cells per map (see TheShippedMaps) and
+        # a gate on them leaves most of a transparent item dead to a drop --
+        # the second draft's defect, caught in review.
+        self.assertIn("if (block->cells[cy * block->cols + cx] == 0) continue;", self.body)
+        self.assertNotIn("object == 0", self.body)
+        self.assertNotIn("0x3F800", self.body)
+
+    def test_a_later_placement_owns_an_overlapped_cell(self):
+        # ApplyFmapContent applies slots in order and a later block overwrites
+        # an earlier one; the fallback keeps the last hit for the same reason.
+        self.assertIn("int hit = -1;", self.body)
+        self.assertIn("hit = itemId;", self.body)
+        self.assertNotIn("return itemId;", self.body)
 
     def test_the_cell_idiom_is_c_division_by_eight_truncating_toward_zero(self):
         # The idiom is the compiler's rendering of a signed `/ 8` (cdq / and
@@ -221,6 +254,83 @@ class TheStockDisassemblyAgrees(unittest.TestCase):
     def test_only_a_flagged_record_is_applied(self):
         # Bit 0 of record+0x0C (+0x1014), the same placed flag the fallback tests.
         self.assertIn("test        byte ptr [eax+ecx+1014h],1", self.apply)
+
+
+class TheContentMapDisassemblyAgrees(unittest.TestCase):
+    """T2b: the cell arithmetic and the occupancy rule are the content map's.
+
+    work/ContentMap_current_disasm.txt is the dumpbin listing of the stock
+    ContentMap.obj, checked in for this cross-check.
+    """
+
+    def setUp(self):
+        if not CONTENT_MAP_DISASM.is_file():
+            self.skipTest("work/ContentMap_current_disasm.txt is absent")
+        text = CONTENT_MAP_DISASM.read_text(encoding="utf-8", errors="replace")
+        self.apply = _function_in(text, "?ApplyContentBlock@CContentMap@@QAEPAUsContentBlock@@PAU2@UldwPoint@@_N@Z")
+        self.get_object = _function_in(text, "?GetObject@CContentMap@@QAE?AW4EObject@1@PAUsContentBlock@@UldwPoint@@@Z")
+
+    def test_a_world_pixel_becomes_a_cell_by_signed_division_by_eight(self):
+        # cdq / and edx,7 / lea (add) / sar 3 in both routines: the idiom
+        # VF2ContentCell spells out.
+        for listing in (self.apply, self.get_object):
+            self.assertIn("cdq", listing)
+            self.assertIn("and         edx,7", listing)
+            self.assertRegex(listing, r"sar         e[a-d]x,3")
+        self.assertNotIn("sar         ebx,4", self.apply)
+
+    def test_apply_content_block_writes_nonzero_cells_and_skips_zeros(self):
+        # The occupancy rule: a zero cell is not applied to the map, every
+        # other value is -- object bits or not.
+        self.assertRegex(self.apply, r"cmp         dword ptr \[edi\],0\s*\n\s*[0-9A-F]+: [0-9A-F ]+\s+je ")
+
+
+class TheShippedMaps(unittest.TestCase):
+    """T2c: the maps carry occupied cells with NO object bits, in the majority.
+
+    This is the evidence that an object gate is the wrong test. Read from the
+    build's own Assets under the items' own names (the release payload renames
+    some on export).
+    """
+
+    def setUp(self):
+        self.assets, reason = _build_assets()
+        if reason:
+            self.skipTest(reason)
+
+    @staticmethod
+    def _grid(path):
+        import struct
+        data = path.read_bytes()
+        cols, rows = struct.unpack_from("<ii", data, 24)
+        cells = struct.unpack_from("<%dI" % (cols * rows), data, 32)
+        return cols, rows, cells
+
+    @staticmethod
+    def _object(cell):
+        # CContentMap::GetObject's decode, bits 11..17 and 29.
+        return (((cell >> 11) & 0x40000) | (cell & 0x3F800)) >> 11
+
+    def test_most_occupied_cells_carry_no_object(self):
+        for name in patcher.TRANSPARENT_DROP_FOOTPRINT_ITEMS:
+            with self.subTest(item=name):
+                cols, rows, cells = self._grid(self.assets / f"{name}.png.fmap")
+                occupied = [c for c in cells if c]
+                with_object = [c for c in occupied if self._object(c)]
+                self.assertGreater(len(occupied), 4 * len(with_object),
+                                   f"{name}: {len(with_object)} object cells of {len(occupied)} occupied")
+
+    def test_a_named_occupied_objectless_cell_on_each_map(self):
+        # The known-bad case for an object gate, pinned by coordinate: an
+        # occupied cell with no object bits, well inside the item.
+        for name, (x, y) in {"InvisiblePicnicTable": (5, 0), "InvisiblePatioTable": (7, 1),
+                             "InvisibleLounger": (2, 1), "InvisibleSpaLounger": (2, 1),
+                             "InvisibleYogaEquipment": (3, 0), "InvisiblePingPongTable": (12, 0)}.items():
+            with self.subTest(item=name, cell=(x, y)):
+                cols, rows, cells = self._grid(self.assets / f"{name}.png.fmap")
+                cell = cells[y * cols + x]
+                self.assertNotEqual(cell, 0)
+                self.assertEqual(self._object(cell), 0)
 
 
 class TheEmittedUnit(unittest.TestCase):

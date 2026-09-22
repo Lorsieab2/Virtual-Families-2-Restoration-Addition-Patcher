@@ -31431,13 +31431,15 @@ static bool VF2HandleMobileSpaLoungerReceiving(CVillager &villager)
 // fact the OFFSET of the first content block and only happens to be 16; the
 // content map divides by 8), with no origin subtracted, and with orientation
 // unioned with a horizontal-mirror guess instead of read from the record.
-// Review caught all three; the engine's own block has none of them.
+// Review caught all three; the engine's own block has none of them. The
+// second draft then gated the hit on the cell's OBJECT bits, which mark only
+// a few hotspot cells per map; review caught that too. Occupancy is the test.
 struct sContentBlock {
     int originX;              // subtracted from the placement position when anchoring
     int originY;
     int cols;
     int rows;
-    unsigned int cells[1];    // rows*cols, row-major; object id in bits 11..17 and 29
+    unsigned int cells[1];    // rows*cols, row-major; nonzero = the item occupies the cell
 };
 struct sFurnitureInfo {
     char pad0[0x58];
@@ -31463,6 +31465,7 @@ static int VF2TransparentFurnitureItemAtPoint(ldwPoint point)
     int count = *reinterpret_cast<int *>(manager + 0x1004);
     int pointCellX = VF2ContentCell(point.x);
     int pointCellY = VF2ContentCell(point.y);
+    int hit = -1;
     for (int slot = 0; slot < count; ++slot) {
         unsigned char *record = manager + 0x1008 + slot * 0x40;
         if ((*reinterpret_cast<unsigned int *>(record + 0x0C) & 1) == 0) continue;
@@ -31489,14 +31492,19 @@ static int VF2TransparentFurnitureItemAtPoint(ldwPoint point)
         int cx = pointCellX - anchorX;
         int cy = pointCellY - anchorY;
         if (cx < 0 || cy < 0 || cx >= block->cols || cy >= block->rows) continue;
-        // The object id, decoded as CContentMap::GetObject decodes it. A cell
-        // with no object is the block's empty margin, not the item.
-        unsigned int cell = block->cells[cy * block->cols + cx];
-        unsigned int object = (((cell >> 11) & 0x40000u) | (cell & 0x3F800u)) >> 11;
-        if (object == 0) continue;
-        return itemId;
+        // Occupancy, by ApplyContentBlock's own rule: it writes every NONZERO
+        // cell of the block into the map and skips the zeros (cmp [edi],0 /
+        // je), so a nonzero cell is exactly where the engine says the item is.
+        // The OBJECT bits are NOT the test: they mark a few hotspot cells (8 of
+        // the picnic table's 237 occupied cells, 12 of the chaise's 154) and a
+        // gate on them leaves most of a transparent item dead to a drop.
+        if (block->cells[cy * block->cols + cx] == 0) continue;
+        // ApplyFmapContent applies the slots in order and a later block
+        // overwrites an earlier one, so where two footprints overlap the later
+        // placement owns the cell here too.
+        hit = itemId;
     }
-    return -1;
+    return hit;
 }
 
 bool const theMainScene::VF2HandleDropOnMobileFurniture(CVillager &villager)
