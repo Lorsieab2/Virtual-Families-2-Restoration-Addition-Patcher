@@ -267,6 +267,23 @@ class TheDispatcherTemplate(unittest.TestCase):
         # No second cell size anywhere in the template.
         self.assertNotIn("kVF2FmapCellPx", self.src)
 
+    def test_a_visible_sprite_keeps_its_stock_behaviour(self):
+        """The fallback fires only where the sprite really is blank.
+
+        Both graphics packs are player-installed assets, so the executable
+        cannot read the setting -- it has to ask the sprite. Without this the
+        fallback would fire in the transparent gutters of the Base (visible)
+        sprites, which are only 45-64% opaque, and change behaviour for
+        players who never enabled Transparent Graphics. Caught in review.
+        """
+        self.assertIn("static bool VF2SpriteIsBlankAround(sFurnitureInfo *info, int localX, int localY)", self.src)
+        self.assertIn("if (grid->PixelIsVisible(localX + dx, localY + dy)) return false;", self.src)
+        # Applied in the fallback, and the drop is rejected when it fails.
+        self.assertIn("if (!VF2SpriteIsBlankAround(info,", self.body)
+        # The declaration must match the stock export's signature or the
+        # mangled name will not resolve at link.
+        self.assertIn("bool PixelIsVisible(int x, int y);", self.src)
+
     def test_occupancy_is_the_hit_not_the_object_bits(self):
         # ApplyContentBlock writes every nonzero cell and skips the zeros; the
         # object bits mark a few hotspot cells per map (see TheShippedMaps) and
@@ -308,13 +325,15 @@ class TheDispatcherTemplate(unittest.TestCase):
         # struct name finds whichever comes first in the generator.
         info = self.src[self.src.index("struct sFurnitureInfo {\n    int item;                         // +0x00"):]
         info = info[:info.index("};")]
-        # item at +0x00 then 0x54 of padding puts fmapHeader at +0x58 and the
-        # block table at +0x5C, the offsets the stock code uses; the whole
-        # record is 0x6C, the stride itemInfo[] is indexed by.
-        self.assertIn("char pad0[0x54];", info)
+        # item +0x00, image +0x04 (the EImage PtOnFurniture reads to get the
+        # sprite grid), then padding to put fmapHeader at +0x58 and the block
+        # table at +0x5C -- the offsets the stock code uses. The whole record
+        # is 0x6C, the stride itemInfo[] is indexed by.
+        self.assertIn("int image;", info)
+        self.assertIn("char pad0[0x50];", info)
         self.assertIn("void *fmapHeader;", info)
         self.assertIn("sContentBlock *contentBlocks[4];", info)
-        self.assertEqual(4 + 0x54 + 4 + 4 * 4, 0x6C)
+        self.assertEqual(4 + 4 + 0x50 + 4 + 4 * 4, 0x6C)
 
 
 class TheStockDisassemblyAgrees(unittest.TestCase):

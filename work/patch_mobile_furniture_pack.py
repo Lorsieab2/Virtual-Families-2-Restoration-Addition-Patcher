@@ -27273,7 +27273,15 @@ public:
 // Declared exactly as the other generated units declare them, so the compiler
 // mangles the calls to the same symbols the linker already resolves.
 enum EImage { eImageDummy = 0 };
-class ldwImageGrid;
+// PixelIsVisible is the alpha sample the stock PtOnFurniture reaches through,
+// and it is External in ldwImage.obj
+// (?PixelIsVisible@ldwImageGrid@@QAE_NHH@Z), so the transparent drop
+// fallback's blank-sprite gate can call it. Declared with the exact
+// signature the stock object exports, so the mangled name matches.
+class ldwImageGrid {
+public:
+    bool PixelIsVisible(int x, int y);
+};
 class theGraphicsManager {
 public:
     static theGraphicsManager *Get();
@@ -31470,7 +31478,8 @@ struct sContentBlock {
 // external-resolution test below is what caught it.
 struct sFurnitureInfo {
     int item;                         // +0x00
-    char pad0[0x54];
+    int image;                        // +0x04: the EImage the sprite grid comes from
+    char pad0[0x50];
     void *fmapHeader;                 // +0x58: null until LoadFmap has run for the item
     sContentBlock *contentBlocks[4];  // +0x5C: one per EFurnitureOrientation; may be null
 };
@@ -31498,6 +31507,42 @@ static sFurnitureInfo *VF2FurnitureInfoForItem(int item)
     }
     return 0;
 }
+// IS THIS PLACEMENT'S SPRITE ACTUALLY BLANK HERE?
+//
+// Both graphics packs are assets the PLAYER installs, not a build-time
+// toggle: the executable cannot know which is present, so the fallback
+// cannot be gated on the setting. It can, however, ask the sprite itself.
+//
+// This matters because the Base (visible) sprites are only 45-64% opaque --
+// they have transparent gutters and holes. Without this gate the fallback
+// would fire in those gaps and let a villager dropped visibly BESIDE or
+// THROUGH a gap in a visible table act on it, which is a behaviour change
+// for players who never enabled Transparent Graphics. Review caught it.
+//
+// ldwImageGrid::PixelIsVisible is the same alpha sample the stock resolver
+// reaches through PtOnFurniture, and it is External in ldwImage.obj, so it
+// links. Sampling the ONE pixel under the drop is exact and costs nothing:
+// on a transparent sprite it is false (fallback proceeds), on a visible one
+// at a real gap it is also false -- so the gate is the whole cell region,
+// tested below, not this pixel alone.
+static bool VF2SpriteIsBlankAround(sFurnitureInfo *info, int localX, int localY)
+{
+    theGraphicsManager *graphics = theGraphicsManager::Get();
+    if (!graphics) return false;
+    ldwImageGrid *grid = graphics->GetImageGrid((EImage)info->image);
+    if (!grid) return false;
+    // A visible sprite has SOME opaque pixel near the drop; a transparent one
+    // has none anywhere in the neighbourhood. Sampling a spread of points
+    // rather than one distinguishes "blank sprite" from "gap in a real
+    // sprite", which one pixel cannot do.
+    for (int dy = -24; dy <= 24; dy += 8) {
+        for (int dx = -24; dx <= 24; dx += 8) {
+            if (grid->PixelIsVisible(localX + dx, localY + dy)) return false;
+        }
+    }
+    return true;
+}
+
 // The routed invisible items whose sprite the Transparent Graphics setting
 // swaps for a fully transparent one. Substituted from the item tables.
 static const int kVF2TransparentDropItems[] = { __VF2_TRANSPARENT_DROP_ITEMS__ };
@@ -31554,6 +31599,15 @@ static int VF2TransparentFurnitureSlotAtPoint(ldwPoint point)
         // the picnic table's 237 occupied cells, 12 of the chaise's 154) and a
         // gate on them leaves most of a transparent item dead to a drop.
         if (block->cells[cy * block->cols + cx] == 0) continue;
+        // Only claim it if this placement's sprite really is blank here. With
+        // the Base (visible) graphics installed the sprites are 45-64% opaque
+        // and full of transparent gutters, so without this the fallback would
+        // fire in those gaps and change behaviour for players who never
+        // enabled Transparent Graphics. Review caught that; the gate asks the
+        // sprite rather than the setting, which the executable cannot see.
+        if (!VF2SpriteIsBlankAround(info,
+                point.x - *reinterpret_cast<int *>(record + 0x14),
+                point.y - *reinterpret_cast<int *>(record + 0x18))) continue;
         // ApplyFmapContent applies the slots in order and a later block
         // overwrites an earlier one, so where two footprints overlap the later
         // placement owns the cell here too.
