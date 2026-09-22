@@ -198,9 +198,15 @@ class TheRoute(unittest.TestCase):
         # item id instead, an invisible-only yard would offer ping-pong and
         # then silently start nothing.
         src = _strip_comments(_source())
-        self.assertIn(
-            "CloneAutonomousCandidateWithWeight(data, 0x099, 0x0B8, 450, __VF2_PING_PONG_OBJECT__);",
-            src)
+        # The WEIGHT is matched as \d+ on purpose. This test pins the OBJECT
+        # the candidate is gated on; the weight is a separate product decision
+        # (the owner raised it to match the Pool Table's) and hardcoding it
+        # here made this test fail for a change it does not govern.
+        # work/test_pingpong_weight.py pins the number itself.
+        self.assertRegex(
+            src,
+            r"CloneAutonomousCandidateWithWeight\(data, 0x099, 0x0B8, \d+, "
+            r"__VF2_PING_PONG_OBJECT__\);")
         self.assertEqual(patcher.MOBILE_PING_PONG_OBJECT, 0x9A)
         self.assertEqual(
             patcher.INVISIBLE_OUTDOOR_FMAP_DONORS[NAME + ".png.fmap"],
