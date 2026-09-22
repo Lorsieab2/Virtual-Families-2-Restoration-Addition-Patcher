@@ -119,8 +119,31 @@ class BothTableVariantsAreCovered(unittest.TestCase):
         import patch_mobile_furniture_pack as patcher
         self.assets = patcher.OUT / "Assets"
         needed = ["PingPongTableStd.png.fmap", "InvisiblePingPongTable.png.fmap"]
-        if not all((self.assets / n).is_file() for n in needed):
-            self.skipTest("the built Assets do not hold both ping-pong maps; run the generator")
+        missing = [n for n in needed if not (self.assets / n).is_file()]
+        if not missing:
+            return
+        # A SKIP HERE WOULD BE THE DEFECT. Review: "both variant-coverage
+        # tests are skipped and the suite remains green ... the claimed guard
+        # cannot distinguish a valid two-variant payload from one with no maps
+        # at all." Correct -- so generate the maps rather than skipping, and
+        # fail if they still do not appear.
+        if any(pathlib.Path(patcher.PATCHED).glob("*.cpp")):
+            # The generator has run in this checkout, so the maps should exist.
+            # Their absence is a real payload defect, not a missing setup.
+            raise AssertionError(
+                "the generator has run but %s %s absent from the build Assets; "
+                "a ping-pong table variant would never make the autonomous "
+                "candidate eligible" % (", ".join(missing),
+                                        "is" if len(missing) == 1 else "are"))
+        import subprocess
+        result = subprocess.run(
+            [sys.executable, str(GEN)], cwd=str(ROOT),
+            capture_output=True, text=True)
+        still = [n for n in needed if not (self.assets / n).is_file()]
+        if still:
+            raise AssertionError(
+                "ran the generator (exit %d) and %s still absent from %s"
+                % (result.returncode, ", ".join(still), self.assets))
 
     @staticmethod
     def _objects(path):
@@ -152,6 +175,87 @@ class BothTableVariantsAreCovered(unittest.TestCase):
         for name in ("PingPongTableStd", "InvisiblePingPongTable"):
             with self.subTest(table=name):
                 self.assertNotIn(0x36, self._objects(self.assets / f"{name}.png.fmap"))
+
+
+class TheCompiledObject(unittest.TestCase):
+    """The weight must be an immediate in the COMPILED code, not just source.
+
+    AGENTS.md section 1: verify the shipped artifact, never the source.
+    Review: "this test only parses the generated .cpp, so it still passes if
+    compilation/linking uses a stale object or the helper never reaches the
+    executable." Correct. This compiles the unit that carries the clone call
+    and decodes the argument out of the instruction stream.
+
+    The weight is the fourth argument of a __cdecl call, so it is pushed
+    fourth-from-last before the call -- i.e. `push <weight>` appears in the
+    argument sequence alongside `push 9Ah` (the object), `push 0B8h` (the
+    target behaviour) and `push 99h` (the donor).
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        import subprocess
+        import tempfile
+        import patch_mobile_furniture_pack as patcher
+        from test_generated_cpp_compiles import _vcvars
+        cls.reason = None
+        vcvars = _vcvars()
+        if vcvars is None:
+            cls.reason = "no Visual Studio toolchain on this machine"
+            return
+        unit = None
+        pattern = re.compile(r"CloneAutonomousCandidateWithWeight\(data, 0x099, 0x0[bB]8,", re.I)
+        for path in sorted(pathlib.Path(patcher.PATCHED).glob("*.cpp")):
+            if pattern.search(path.read_text(encoding="ascii", errors="replace")):
+                unit = path
+                break
+        if unit is None:
+            cls.reason = "the ping-pong clone call is in no generated unit; run the generator"
+            return
+        cls.work = tempfile.TemporaryDirectory()
+        work = pathlib.Path(cls.work.name)
+        (work / unit.name).write_bytes(unit.read_bytes())
+        result = subprocess.run(
+            f'"{vcvars}" >nul 2>&1 && cd /d "{work}" && '
+            f'cl /c /EHsc /nologo "{unit.name}" && '
+            f'dumpbin /nologo /disasm "{unit.stem}.obj" > d.txt',
+            shell=True, capture_output=True, text=True)
+        if result.returncode != 0:
+            raise AssertionError("the unit carrying the clone call did not compile/decode:\n"
+                                 + (result.stdout or "") + (result.stderr or ""))
+        cls.disasm = (work / "d.txt").read_text(encoding="utf-8", errors="replace")
+
+    @classmethod
+    def tearDownClass(cls):
+        if getattr(cls, "work", None):
+            cls.work.cleanup()
+
+    def setUp(self):
+        if self.reason:
+            self.skipTest(self.reason)
+
+    def test_the_compiled_call_pushes_the_pool_table_weight(self):
+        pool = _pool_default_weight(_source())
+        # Find the call site by its distinctive argument pair: the target
+        # behaviour 0B8h and the object 9Ah, then require the pool weight
+        # among the pushes immediately around them.
+        window = None
+        lines = self.disasm.splitlines()
+        for i, line in enumerate(lines):
+            if re.search(r"push\s+0B8h", line):
+                window = lines[max(0, i - 4):i + 6]
+                if any(re.search(r"push\s+9Ah", w) for w in window):
+                    break
+                window = None
+        self.assertIsNotNone(
+            window,
+            "no compiled call site pushes both the ping-pong behaviour 0B8h and object 9Ah")
+        text = "\n".join(window)
+        self.assertRegex(
+            text, r"push\s+0?%Xh" % pool,
+            f"the compiled clone call does not push the pool table weight {pool}; window was:\n{text}")
+        # And the superseded value is not what ships.
+        self.assertNotRegex(text, r"push\s+1C2h")  # 450
 
 
 class TheEmittedUnit(unittest.TestCase):
