@@ -606,6 +606,43 @@ class TheCompiledObject(unittest.TestCase):
         self.assertEqual(unresolved, [], f"these externals no stock object defines: {unresolved}")
 
 
+class TheRealLink(unittest.TestCase):
+    """T3c: the whole program LINKS with the fallback in it.
+
+    The strongest available check short of playing the game, and the one that
+    would have caught the defect this class was added for: calling a Static
+    stock symbol compiles cleanly and only fails here. Symbol-level checks
+    approximate this; link/@rsp IS it.
+
+    Slow (about a minute, ~370 objects), so it is opt-in via VF2_LINK_TEST=1
+    and run before a release. The release build links all 32 variants anyway,
+    which is the real gate; this makes the failure reproducible in one step.
+    """
+
+    def test_the_patched_objects_link_into_an_executable(self):
+        import os
+        import subprocess
+        import tempfile
+        if os.environ.get("VF2_LINK_TEST") != "1":
+            self.skipTest("set VF2_LINK_TEST=1 to run the full link (about a minute)")
+        builder = ROOT / "work" / "build_b119.bat"
+        if not builder.is_file():
+            self.skipTest("work/build_b119.bat is absent")
+        unit, reason = _emitted_unit()
+        if reason:
+            self.skipTest(reason)
+        with tempfile.TemporaryDirectory() as out:
+            env = dict(os.environ, VF2_BUILD_OUT=out, VF2_OUTPUT_EXE="VF2-linktest.exe")
+            result = subprocess.run(f'"{builder}"', shell=True, cwd=str(ROOT),
+                                    capture_output=True, text=True, env=env)
+            exe = pathlib.Path(out) / "VF2-linktest.exe"
+            if result.returncode != 0 or not exe.is_file():
+                tail = ((result.stdout or "") + (result.stderr or "")).splitlines()
+                errors = [l for l in tail if "error" in l.lower() or "unresolved" in l.lower()]
+                self.fail("the patched objects do not link:\n  " + "\n  ".join(errors[:10] or tail[-10:]))
+            self.assertGreater(exe.stat().st_size, 1_000_000)
+
+
 class TheDriftGuard(unittest.TestCase):
     """T4: the fallback's item set equals the invisible ids the dispatcher routes.
 
