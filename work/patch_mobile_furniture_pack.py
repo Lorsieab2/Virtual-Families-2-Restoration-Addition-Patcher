@@ -31458,12 +31458,46 @@ struct sContentBlock {
     int rows;
     unsigned int cells[1];    // rows*cols, row-major; nonzero = the item occupies the cell
 };
+// The furniture record, 0x6C bytes, as itemInfo[] holds it. Field 0 is the
+// item id: LookupFurnitureInfo finds a record by walking the array and
+// comparing it, which is what VF2FurnitureInfoForItem does below.
+//
+// THE NAME IS PART OF THE CONTRACT. itemInfo mangles to
+// ?itemInfo@@3PAUsFurnitureInfo@@A, which encodes the element type, so this
+// struct must be called sFurnitureInfo or the reference names a symbol no
+// stock object defines. Naming it sFurnitureInfoRecord compiled cleanly and
+// produced an unresolvable ?itemInfo@@3PAUsFurnitureInfoRecord@@A; the
+// external-resolution test below is what caught it.
 struct sFurnitureInfo {
-    char pad0[0x58];
+    int item;                         // +0x00
+    char pad0[0x54];
     void *fmapHeader;                 // +0x58: null until LoadFmap has run for the item
     sContentBlock *contentBlocks[4];  // +0x5C: one per EFurnitureOrientation; may be null
 };
-sFurnitureInfo &__cdecl LookupFurnitureInfo(EInventoryItem);
+// itemInfo IS reachable from a generated object: patch_furniture_manager
+// promotes its COFF storage class from Static to External for exactly this
+// reason, and vf2_special_upgrade_effects.cpp already links against it.
+//
+// LookupFurnitureInfo itself is NOT reachable -- it is Static in
+// FurnitureManager.obj (work/FurnitureManager_current_symbols.txt line 438),
+// so declaring and calling it compiles cleanly and then fails at LINK with an
+// unresolved external. An earlier draft of this fallback did precisely that;
+// review caught it before a build ever ran, because the object-level test
+// stopped at `cl /c` and never linked.
+extern sFurnitureInfo itemInfo[];
+static const int kVF2FurnitureRecordSearchCount = __VF2_FURNITURE_SEARCH_COUNT__;
+
+// The record for an item, or null. Deliberately NOT the stock lookup: same
+// linear search by item id, minus the itemInfoLookup memo cache, which is
+// also Static. The fallback runs once per drop on a handful of placements,
+// so the search costs nothing worth exporting a symbol for.
+static sFurnitureInfo *VF2FurnitureInfoForItem(int item)
+{
+    for (int i = 0; i < kVF2FurnitureRecordSearchCount; ++i) {
+        if (itemInfo[i].item == item) return &itemInfo[i];
+    }
+    return 0;
+}
 // The routed invisible items whose sprite the Transparent Graphics setting
 // swaps for a fully transparent one. Substituted from the item tables.
 static const int kVF2TransparentDropItems[] = { __VF2_TRANSPARENT_DROP_ITEMS__ };
@@ -31496,15 +31530,15 @@ static int VF2TransparentFurnitureSlotAtPoint(ldwPoint point)
             if (kVF2TransparentDropItems[i] == itemId) { routed = true; break; }
         }
         if (!routed) continue;
-        sFurnitureInfo &info = LookupFurnitureInfo((EInventoryItem)itemId);
-        if (!info.fmapHeader) continue;
+        sFurnitureInfo *info = VF2FurnitureInfoForItem(itemId);
+        if (!info || !info->fmapHeader) continue;
         // The placed orientation selects the block, exactly as ApplyFmapContent
         // selects it: SE=0 authored, SW=1 mirrored, NE=2 / NW=3 the second block
         // and its mirror. An orientation the record should never hold reads as
         // 0 there, so it reads as 0 here.
         int orientation = *reinterpret_cast<int *>(record + 0x10);
         if (orientation < 0 || orientation >= 4) orientation = 0;
-        const sContentBlock *block = info.contentBlocks[orientation];
+        const sContentBlock *block = info->contentBlocks[orientation];
         if (!block || block->cols <= 0 || block->rows <= 0) continue;
         // ApplyContentBlock anchored this block at content cell
         // ((pos - origin) / 8), so its cell (cx, cy) sits at anchor + (cx, cy).
@@ -31674,6 +31708,14 @@ __VF2_COMPUTER_DROP_DISPATCH__
 """
     helper_source = helper_source.replace(
         "__VF2_ADDED_FURNITURE_DROP_DISPATCH__", added_furniture_drop_dispatch
+    )
+    # How many itemInfo[] records VF2FurnitureInfoForItem searches: the stock
+    # count plus the records this pack appends, which is exactly the array
+    # patch_furniture_manager leaves behind. Substituted from the same tables
+    # that decide the array's length, so the two cannot drift.
+    helper_source = helper_source.replace(
+        "__VF2_FURNITURE_SEARCH_COUNT__",
+        str(ORIG_FURNITURE_COUNT + len(ITEMS)),
     )
     # The routed invisible items the transparent drop fallback (#369) may
     # resolve. From the item tables, like every other id in this unit.

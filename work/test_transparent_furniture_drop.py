@@ -126,6 +126,59 @@ def _stock_function(name):
     return _function_in(STOCK_DISASM.read_text(encoding="utf-8", errors="replace"), name)
 
 
+def _stock_external_definitions():
+    """Every symbol the PATCHED stock objects define as External.
+
+    Read from the patcher's own output directory, because that is what the
+    build links: patch_furniture_manager promotes itemInfo from Static to
+    External there, and the unpatched object would wrongly report it as
+    unreachable. Static definitions are deliberately excluded -- a Static
+    definition is exactly what cannot satisfy another object's reference.
+    """
+    import subprocess
+    from test_generated_cpp_compiles import _vcvars
+    objs = sorted(pathlib.Path(patcher.PATCHED).glob("*.obj"))
+    if not objs or _vcvars() is None:
+        return None
+    defined = set()
+    for chunk in [objs[i:i + 24] for i in range(0, len(objs), 24)]:
+        names = " ".join(f'"{o.name}"' for o in chunk)
+        result = subprocess.run(
+            f'"{_vcvars()}" >nul 2>&1 && cd /d "{pathlib.Path(patcher.PATCHED)}" && '
+            f'dumpbin /nologo /symbols {names}',
+            shell=True, capture_output=True, text=True)
+        for line in result.stdout.splitlines():
+            if "External" in line and "UNDEF" not in line and "|" in line:
+                defined.add(line.split("|", 1)[1].strip().split(" ", 1)[0])
+    # The real link also takes the OTHER generated units, which define the
+    # cross-unit helpers this one calls (VF2PingPongPlay, VF2HomeGymWorkout
+    # and friends). They are .cpp here rather than .obj, so compile them the
+    # way the build does and read their exports too -- otherwise every
+    # legitimate cross-unit call reads as unresolvable.
+    import tempfile
+    sources = [p for p in sorted(pathlib.Path(patcher.PATCHED).glob("*.cpp"))]
+    if sources:
+        with tempfile.TemporaryDirectory() as work:
+            work = pathlib.Path(work)
+            for src in sources:
+                (work / src.name).write_bytes(src.read_bytes())
+            names = " ".join(f'"{s.name}"' for s in sources)
+            subprocess.run(
+                f'"{_vcvars()}" >nul 2>&1 && cd /d "{work}" && cl /c /EHsc /nologo {names}',
+                shell=True, capture_output=True, text=True)
+            built = sorted(work.glob("*.obj"))
+            for chunk in [built[i:i + 24] for i in range(0, len(built), 24)]:
+                objnames = " ".join(f'"{o.name}"' for o in chunk)
+                result = subprocess.run(
+                    f'"{_vcvars()}" >nul 2>&1 && cd /d "{work}" && '
+                    f'dumpbin /nologo /symbols {objnames}',
+                    shell=True, capture_output=True, text=True)
+                for line in result.stdout.splitlines():
+                    if "External" in line and "UNDEF" not in line and "|" in line:
+                        defined.add(line.split("|", 1)[1].strip().split(" ", 1)[0])
+    return defined
+
+
 def _build_assets():
     """An Assets dir holding the routed items' fmaps under their OWN names."""
     import os
@@ -180,14 +233,21 @@ class TheDispatcherTemplate(unittest.TestCase):
         self.assertNotIn("hit = itemId;", self.body)
 
     def test_it_asks_the_engine_for_the_block_it_actually_placed(self):
-        # Declared so the compiler mangles the call to the symbol the stock
-        # FurnitureManager.obj already imports.
-        self.assertIn("sFurnitureInfo &__cdecl LookupFurnitureInfo(EInventoryItem);", self.src)
-        self.assertIn("sFurnitureInfo &info = LookupFurnitureInfo((EInventoryItem)itemId);", self.body)
-        self.assertIn("const sContentBlock *block = info.contentBlocks[orientation];", self.body)
-        # No block yet (LoadFmap has not run) or an orientation with no block:
-        # the engine applied nothing, so nothing resolves.
-        self.assertIn("if (!info.fmapHeader) continue;", self.body)
+        # itemInfo, not the Static LookupFurnitureInfo: the array's storage
+        # class is promoted to External by patch_furniture_manager, so a
+        # generated object can link against it. The declaration's element
+        # type must be named sFurnitureInfo or the mangled name does not match.
+        self.assertIn("extern sFurnitureInfo itemInfo[];", self.src)
+        # Not called from the fallback: it is Static in the stock object.
+        # Scoped to the fallback body -- the generator mentions the name
+        # elsewhere (in disassembly notes and other units' comments), and a
+        # whole-file search would fail on those.
+        self.assertNotIn("LookupFurnitureInfo", self.body)
+        self.assertIn("sFurnitureInfo *info = VF2FurnitureInfoForItem(itemId);", self.body)
+        self.assertIn("const sContentBlock *block = info->contentBlocks[orientation];", self.body)
+        # No record, no block yet (LoadFmap has not run), or an orientation
+        # with no block: the engine applied nothing, so nothing resolves.
+        self.assertIn("if (!info || !info->fmapHeader) continue;", self.body)
         self.assertIn("if (!block || block->cols <= 0 || block->rows <= 0) continue;", self.body)
 
     def test_the_placed_orientation_selects_the_block(self):
@@ -241,10 +301,20 @@ class TheDispatcherTemplate(unittest.TestCase):
         self.assertEqual(
             re.findall(r"^\s+(?:int|unsigned int) (\w+)", block, re.M),
             ["originX", "originY", "cols", "rows", "cells"])
-        info = self.src[self.src.index("struct sFurnitureInfo {\n    char pad0[0x58];"):]
+        # THIS unit's definition, anchored on its first member: the generator
+        # emits a different sFurnitureInfo for vf2_special_upgrade_effects
+        # (item/image/price/generationLock + pad to 0x6C). Separate
+        # translation units, so both are legal, but a bare search for the
+        # struct name finds whichever comes first in the generator.
+        info = self.src[self.src.index("struct sFurnitureInfo {\n    int item;                         // +0x00"):]
         info = info[:info.index("};")]
+        # item at +0x00 then 0x54 of padding puts fmapHeader at +0x58 and the
+        # block table at +0x5C, the offsets the stock code uses; the whole
+        # record is 0x6C, the stride itemInfo[] is indexed by.
+        self.assertIn("char pad0[0x54];", info)
         self.assertIn("void *fmapHeader;", info)
         self.assertIn("sContentBlock *contentBlocks[4];", info)
+        self.assertEqual(4 + 0x54 + 4 + 4 * 4, 0x6C)
 
 
 class TheStockDisassemblyAgrees(unittest.TestCase):
@@ -391,7 +461,10 @@ class TheEmittedUnit(unittest.TestCase):
         self.assertIn(FALLBACK, self.unit)
         self.assertIn(HOOK, self.unit)
         self.assertIn(CELL_IDIOM, self.unit)
-        self.assertIn("sFurnitureInfo &__cdecl LookupFurnitureInfo(EInventoryItem);", self.unit)
+        self.assertIn("extern sFurnitureInfo itemInfo[];", self.unit)
+        # The search bound is substituted, not left as a placeholder.
+        self.assertNotIn("__VF2_FURNITURE_SEARCH_COUNT__", self.unit)
+        self.assertRegex(self.unit, r"kVF2FurnitureRecordSearchCount = \d+;")
 
     def test_the_superseded_appended_table_is_gone(self):
         # The earlier mechanism appended a baked table after emission; a unit
@@ -492,15 +565,45 @@ class TheCompiledObject(unittest.TestCase):
                 self.assertRegex(listing, r"call\s+\S*VF2FurnitureSlotAtPointOrTransparent",
                                  f"{caller} does not reach the transparent-aware resolver")
 
-    def test_the_fallback_binds_the_stock_lookup_by_its_mangled_name(self):
-        fallback = self._listing("VF2TransparentFurnitureSlotAtPoint")
-        self.assertIn("call        " + self.STOCK_LOOKUP, fallback)
-        self.assertIn("?FurnitureManager@@3VCFurnitureManager@@A", fallback)
-        # Undefined in this object: the linker resolves it from the stock
-        # objects, which relocate against the same name (see the RELOCATIONS
-        # of ApplyFmapContent in work/FurnitureManager_current_disasm.txt).
-        self.assertRegex(self.symbols, r"UNDEF\s+notype \(\)\s+External\s+\| " + re.escape(self.STOCK_LOOKUP))
-        self.assertIn(self.STOCK_LOOKUP, STOCK_DISASM.read_text(encoding="utf-8", errors="replace"))
+    def test_the_fallback_reads_the_furniture_array_not_the_static_lookup(self):
+        """Every external the fallback needs must be one the linker can supply.
+
+        LookupFurnitureInfo is Static in FurnitureManager.obj, so a generated
+        object cannot call it: that compiles cleanly and fails at LINK. An
+        earlier draft did exactly that, and this suite did not catch it
+        because it stopped at `cl /c`. itemInfo is the reachable one --
+        patch_furniture_manager promotes its storage class to External.
+        """
+        fallback = self._listing("VF2FurnitureInfoForItem")
+        self.assertIn("?itemInfo@@3PAUsFurnitureInfo@@A", fallback)
+        # The static accessor is not referenced anywhere in this object.
+        self.assertNotIn(self.STOCK_LOOKUP, self.disasm)
+        self.assertNotIn(self.STOCK_LOOKUP, self.symbols)
+
+    def test_every_undefined_external_is_one_the_stock_objects_export(self):
+        """The link check, in symbol form: no UNDEF this build cannot satisfy.
+
+        Each UNDEF External in the generated object must be defined -- and
+        defined as External, not Static -- by some stock object, or the real
+        link fails. A Static definition is the exact trap the previous draft
+        fell into, and a name matched case-insensitively or by substring
+        would hide it, so both sides are exact.
+        """
+        undefs = set(re.findall(r"UNDEF\s+\S+\s+\S*\s*External\s+\|\s+(\S+)", self.symbols))
+        self.assertTrue(undefs, "the object declares no externals at all; the parse is wrong")
+        exported = _stock_external_definitions()
+        if exported is None:
+            self.skipTest("no stock object directory to resolve externals against")
+        # Compiler/CRT helpers are supplied by the toolchain, not the game.
+        # @__security_check_cookie@4 is emitted by /GS and resolved from the
+        # CRT at link; it is not a game symbol and never will be.
+        unresolved = sorted(
+            n for n in undefs
+            if n not in exported
+            and not n.startswith(("__", "@__", "_CIcos", "_CIsin", "_CIsqrt", "_ftol", "_alloca"))
+            and not n.lstrip("_").startswith(("memset", "memcpy", "strncpy", "strncmp", "sprintf", "rand", "atoi"))
+        )
+        self.assertEqual(unresolved, [], f"these externals no stock object defines: {unresolved}")
 
 
 class TheDriftGuard(unittest.TestCase):
