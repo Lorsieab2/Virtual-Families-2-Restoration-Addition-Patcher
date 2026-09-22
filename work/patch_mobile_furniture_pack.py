@@ -25516,6 +25516,24 @@ Wrong store section:
     }
 
 
+# The items VF2HandleDropOnMobileFurniture routes by id whose sprites the
+# Transparent Graphics setting can blank. Those are the only drops that reach
+# the alpha-sampling stock resolver AND can lose every pixel it samples, so
+# they are the only ones VF2TransparentFurnitureSlotAtPoint may resolve (#369).
+# Kept as names and resolved through the generator's own item table, so a
+# renumbering cannot leave the fallback pointing at a stale id;
+# test_transparent_furniture_drop.py asserts this set equals the invisible ids
+# the emitted dispatcher actually compares against.
+TRANSPARENT_DROP_FOOTPRINT_ITEMS = (
+    "InvisiblePicnicTable",
+    "InvisiblePatioTable",
+    "InvisibleYogaEquipment",
+    "InvisibleLounger",
+    "InvisibleSpaLounger",
+    "InvisiblePingPongTable",
+)
+
+
 def sync_behavior_assets(manifest):
     assets = OUT / "Assets"
     assets.mkdir(parents=True, exist_ok=True)
@@ -25821,6 +25839,21 @@ def sync_behavior_assets(manifest):
             target, NEW_FURNITURE_FMAP_DONORS.get(target)
             or INVISIBLE_TRANSPARENT_FMAP_DONORS.get(target)
             or INVISIBLE_OUTDOOR_FMAP_DONORS.get(target), spa_widened)
+    # The transparent drop fallback (#369) needs nothing from these maps at
+    # build time: the dispatcher reads the content block the ENGINE loaded from
+    # them, for the orientation actually placed, so whatever is shipped here --
+    # the spa widening included -- is what a drop resolves against. Recorded in
+    # the manifest so a payload can be checked for the mechanism it carries.
+    manifest["TransparentDropFallback"] = {
+        "items": list(TRANSPARENT_DROP_FOOTPRINT_ITEMS),
+        "mechanism": (
+            "the stock drop resolver samples sprite alpha, so a fully "
+            "transparent invisible item resolved to nothing; the dispatcher "
+            "now falls back to the engine's own per-orientation fmap content "
+            "block for each placed routed item, anchored as ApplyFmapContent "
+            "anchors it, at the content map's 8 pixels per cell (#369)"
+        ),
+    }
     for item in manifest["items"]:
         reason = safety_fmap_reason(item)
         if not reason:
@@ -27240,7 +27273,15 @@ public:
 // Declared exactly as the other generated units declare them, so the compiler
 // mangles the calls to the same symbols the linker already resolves.
 enum EImage { eImageDummy = 0 };
-class ldwImageGrid;
+// PixelIsVisible is the alpha sample the stock PtOnFurniture reaches through,
+// and it is External in ldwImage.obj
+// (?PixelIsVisible@ldwImageGrid@@QAE_NHH@Z), so the transparent drop
+// fallback's blank-sprite gate can call it. Declared with the exact
+// signature the stock object exports, so the mangled name matches.
+class ldwImageGrid {
+public:
+    bool PixelIsVisible(int x, int y);
+};
 class theGraphicsManager {
 public:
     static theGraphicsManager *Get();
@@ -27851,13 +27892,30 @@ static int VF2FurnitureItemAtPoint(ldwPoint point)
     return VF2FurnitureItemAtSlot(VF2FurnitureSlotAtPoint(point));
 }
 
+// Declared here, defined further down with the routed-item table it needs:
+// the geometry fallback for a sprite with no pixels to sample (#369).
+static int VF2TransparentFurnitureSlotAtPoint(ldwPoint point);
+
+// The placed slot under a point, recovering a fully transparent item. Every
+// caller that needs to know WHICH placement is under a point goes through
+// here, so the drop dispatcher and the spa's own occupancy probes recover
+// together; resolving only the dropped-on item would leave a treatment on a
+// transparent lounger still broken, because the spa asks for the slot twice
+// more (see VF2SpaOccupantIndex).
+static int VF2FurnitureSlotAtPointOrTransparent(ldwPoint point)
+{
+    int slot = VF2FurnitureSlotAtPoint(point);
+    if (slot < 0) slot = VF2TransparentFurnitureSlotAtPoint(point);
+    return slot;
+}
+
 // The furniture slot a villager is standing on, sampled the same way the drop
 // path samples the villager being dropped.
 static int VF2FurnitureSlotUnderVillager(CVillager &villager)
 {
     ldwPoint sample = villager.FeetPos();
     sample.y -= 10;
-    return VF2FurnitureSlotAtPoint(sample);
+    return VF2FurnitureSlotAtPointOrTransparent(sample);
 }
 
 static bool VF2IsMobileChaise(int item)
@@ -31358,11 +31416,216 @@ static bool VF2HandleMobileSpaLoungerReceiving(CVillager &villager)
 }
 
 
+// TRANSPARENT FURNITURE: A DROP MUST STILL RESOLVE WHEN THE SPRITE HAS NO PIXELS.
+//
+// The candidate below comes from VF2FurnitureItemAtPoint, which wraps the stock
+// CFurnitureManager::PtOnFurniture. That routine does a bounding-box pass and
+// then ldwImageImpl::PixelIsVisible -- SDL_GetRGBA on the sprite's own pixels,
+// a hit only where alpha != 0. Swap an item's sprite for a fully transparent
+// one (the Transparent Graphics setting) and every pixel is alpha 0, so the
+// stock resolver returns -1 and every `candidate == <id>` route is skipped:
+// the villager is dropped and nothing happens. Issue #369.
+//
+// Native items never see this: they resolve through the content map's fmap
+// cells -- pure geometry -- which is why a transparent pool still works. Only
+// the items THIS dispatcher routes by id go through the alpha resolver, and
+// those are exactly the ones that broke.
+//
+// So when the stock resolver finds nothing, fall back to the geometry the
+// engine itself placed for that item. CFurnitureManager::ApplyFmapContent(int)
+// reads the placement's orientation (record +0x10; anything outside 0..3 is
+// treated as 0), takes the sContentBlock that LoadFmap built for that
+// orientation (sFurnitureInfo +0x5C + orientation*4: 0 = the map as authored,
+// 1 = its mirror from CreateContentBlockMirror, 2 and 3 = the file's second
+// block and its mirror, present only for four-cell sprites), and anchors it on
+// the content map at cell ((record.x - block.originX) / 8,
+// (record.y - block.originY) / 8) in C integer division. The fallback below performs that same
+// anchoring against that same block and reads the cell under the drop point,
+// so it agrees with the content map by construction -- no baked table, no
+// guessed mirror, no second cell size. The sprite is never consulted, so it can
+// stay fully transparent.
+//
+// This runs ONLY when the stock resolver returned -1, so every visible item and
+// every native item keeps exactly the behaviour it has today. It considers only
+// the routed transparent-capable items, so a drop in a visible item's empty
+// margin still resolves to nothing, as it does now.
+//
+// SUPERSEDED, RECORDED AS WRONG: the first draft of this fallback baked each
+// item's object cells into a table at build time and re-derived the placement
+// itself -- at 16 pixels per cell (the QAMF header's +8 field, which is in
+// fact the OFFSET of the first content block and only happens to be 16; the
+// content map divides by 8), with no origin subtracted, and with orientation
+// unioned with a horizontal-mirror guess instead of read from the record.
+// Review caught all three; the engine's own block has none of them. The
+// second draft then gated the hit on the cell's OBJECT bits, which mark only
+// a few hotspot cells per map; review caught that too. Occupancy is the test.
+struct sContentBlock {
+    int originX;              // subtracted from the placement position when anchoring
+    int originY;
+    int cols;
+    int rows;
+    unsigned int cells[1];    // rows*cols, row-major; nonzero = the item occupies the cell
+};
+// The furniture record, 0x6C bytes, as itemInfo[] holds it. Field 0 is the
+// item id: LookupFurnitureInfo finds a record by walking the array and
+// comparing it, which is what VF2FurnitureInfoForItem does below.
+//
+// THE NAME IS PART OF THE CONTRACT. itemInfo mangles to
+// ?itemInfo@@3PAUsFurnitureInfo@@A, which encodes the element type, so this
+// struct must be called sFurnitureInfo or the reference names a symbol no
+// stock object defines. Naming it sFurnitureInfoRecord compiled cleanly and
+// produced an unresolvable ?itemInfo@@3PAUsFurnitureInfoRecord@@A; the
+// external-resolution test below is what caught it.
+struct sFurnitureInfo {
+    int item;                         // +0x00
+    int image;                        // +0x04: the EImage the sprite grid comes from
+    char pad0[0x50];
+    void *fmapHeader;                 // +0x58: null until LoadFmap has run for the item
+    sContentBlock *contentBlocks[4];  // +0x5C: one per EFurnitureOrientation; may be null
+};
+// itemInfo IS reachable from a generated object: patch_furniture_manager
+// promotes its COFF storage class from Static to External for exactly this
+// reason, and vf2_special_upgrade_effects.cpp already links against it.
+//
+// LookupFurnitureInfo itself is NOT reachable -- it is Static in
+// FurnitureManager.obj (work/FurnitureManager_current_symbols.txt line 438),
+// so declaring and calling it compiles cleanly and then fails at LINK with an
+// unresolved external. An earlier draft of this fallback did precisely that;
+// review caught it before a build ever ran, because the object-level test
+// stopped at `cl /c` and never linked.
+extern sFurnitureInfo itemInfo[];
+static const int kVF2FurnitureRecordSearchCount = __VF2_FURNITURE_SEARCH_COUNT__;
+
+// The record for an item, or null. Deliberately NOT the stock lookup: same
+// linear search by item id, minus the itemInfoLookup memo cache, which is
+// also Static. The fallback runs once per drop on a handful of placements,
+// so the search costs nothing worth exporting a symbol for.
+static sFurnitureInfo *VF2FurnitureInfoForItem(int item)
+{
+    for (int i = 0; i < kVF2FurnitureRecordSearchCount; ++i) {
+        if (itemInfo[i].item == item) return &itemInfo[i];
+    }
+    return 0;
+}
+// IS THIS PLACEMENT'S SPRITE ACTUALLY BLANK HERE?
+//
+// Both graphics packs are assets the PLAYER installs, not a build-time
+// toggle: the executable cannot know which is present, so the fallback
+// cannot be gated on the setting. It can, however, ask the sprite itself.
+//
+// This matters because the Base (visible) sprites are only 45-64% opaque --
+// they have transparent gutters and holes. Without this gate the fallback
+// would fire in those gaps and let a villager dropped visibly BESIDE or
+// THROUGH a gap in a visible table act on it, which is a behaviour change
+// for players who never enabled Transparent Graphics. Review caught it.
+//
+// ldwImageGrid::PixelIsVisible is the same alpha sample the stock resolver
+// reaches through PtOnFurniture, and it is External in ldwImage.obj, so it
+// links. Sampling the ONE pixel under the drop is exact and costs nothing:
+// on a transparent sprite it is false (fallback proceeds), on a visible one
+// at a real gap it is also false -- so the gate is the whole cell region,
+// tested below, not this pixel alone.
+static bool VF2SpriteIsBlankAround(sFurnitureInfo *info, int localX, int localY)
+{
+    theGraphicsManager *graphics = theGraphicsManager::Get();
+    if (!graphics) return false;
+    ldwImageGrid *grid = graphics->GetImageGrid((EImage)info->image);
+    if (!grid) return false;
+    // A visible sprite has SOME opaque pixel near the drop; a transparent one
+    // has none anywhere in the neighbourhood. Sampling a spread of points
+    // rather than one distinguishes "blank sprite" from "gap in a real
+    // sprite", which one pixel cannot do.
+    for (int dy = -24; dy <= 24; dy += 8) {
+        for (int dx = -24; dx <= 24; dx += 8) {
+            if (grid->PixelIsVisible(localX + dx, localY + dy)) return false;
+        }
+    }
+    return true;
+}
+
+// The routed invisible items whose sprite the Transparent Graphics setting
+// swaps for a fully transparent one. Substituted from the item tables.
+static const int kVF2TransparentDropItems[] = { __VF2_TRANSPARENT_DROP_ITEMS__ };
+static const int kVF2TransparentDropItemCount =
+    sizeof(kVF2TransparentDropItems) / sizeof(kVF2TransparentDropItems[0]);
+// CContentMap's world-pixel to cell conversion exactly as compiled in
+// ApplyContentBlock and GetObject (cdq / and edx,7 / add / sar 3): signed
+// division by 8 truncating toward zero, C's `/ 8`, so -5 is cell 0 there and
+// cell 0 here. Spelled out rather than written `/ 8` so the equivalence is
+// visible in the source, not left to the compiler.
+static int VF2ContentCell(int px) { return (px + ((px >> 31) & 7)) >> 3; }
+
+static int VF2TransparentFurnitureSlotAtPoint(ldwPoint point)
+{
+    unsigned char *manager = reinterpret_cast<unsigned char *>(&FurnitureManager);
+    int count = *reinterpret_cast<int *>(manager + 0x1004);
+    int pointCellX = VF2ContentCell(point.x);
+    int pointCellY = VF2ContentCell(point.y);
+    // The SLOT, not the item: everything downstream of the drop -- which
+    // lounger this is, who else is on it -- is per-placement, and an item id
+    // cannot tell two copies apart. Returning the slot lets the item lookup
+    // and the spa's own slot probes all recover from the same fallback.
+    int hit = -1;
+    for (int slot = 0; slot < count; ++slot) {
+        unsigned char *record = manager + 0x1008 + slot * 0x40;
+        if ((*reinterpret_cast<unsigned int *>(record + 0x0C) & 1) == 0) continue;
+        int itemId = *reinterpret_cast<int *>(record);
+        bool routed = false;
+        for (int i = 0; i < kVF2TransparentDropItemCount; ++i) {
+            if (kVF2TransparentDropItems[i] == itemId) { routed = true; break; }
+        }
+        if (!routed) continue;
+        sFurnitureInfo *info = VF2FurnitureInfoForItem(itemId);
+        if (!info || !info->fmapHeader) continue;
+        // The placed orientation selects the block, exactly as ApplyFmapContent
+        // selects it: SE=0 authored, SW=1 mirrored, NE=2 / NW=3 the second block
+        // and its mirror. An orientation the record should never hold reads as
+        // 0 there, so it reads as 0 here.
+        int orientation = *reinterpret_cast<int *>(record + 0x10);
+        if (orientation < 0 || orientation >= 4) orientation = 0;
+        const sContentBlock *block = info->contentBlocks[orientation];
+        if (!block || block->cols <= 0 || block->rows <= 0) continue;
+        // ApplyContentBlock anchored this block at content cell
+        // ((pos - origin) / 8), so its cell (cx, cy) sits at anchor + (cx, cy).
+        int anchorX = VF2ContentCell(*reinterpret_cast<int *>(record + 0x14) - block->originX);
+        int anchorY = VF2ContentCell(*reinterpret_cast<int *>(record + 0x18) - block->originY);
+        int cx = pointCellX - anchorX;
+        int cy = pointCellY - anchorY;
+        if (cx < 0 || cy < 0 || cx >= block->cols || cy >= block->rows) continue;
+        // Occupancy, by ApplyContentBlock's own rule: it writes every NONZERO
+        // cell of the block into the map and skips the zeros (cmp [edi],0 /
+        // je), so a nonzero cell is exactly where the engine says the item is.
+        // The OBJECT bits are NOT the test: they mark a few hotspot cells (8 of
+        // the picnic table's 237 occupied cells, 12 of the chaise's 154) and a
+        // gate on them leaves most of a transparent item dead to a drop.
+        if (block->cells[cy * block->cols + cx] == 0) continue;
+        // Only claim it if this placement's sprite really is blank here. With
+        // the Base (visible) graphics installed the sprites are 45-64% opaque
+        // and full of transparent gutters, so without this the fallback would
+        // fire in those gaps and change behaviour for players who never
+        // enabled Transparent Graphics. Review caught that; the gate asks the
+        // sprite rather than the setting, which the executable cannot see.
+        if (!VF2SpriteIsBlankAround(info,
+                point.x - *reinterpret_cast<int *>(record + 0x14),
+                point.y - *reinterpret_cast<int *>(record + 0x18))) continue;
+        // ApplyFmapContent applies the slots in order and a later block
+        // overwrites an earlier one, so where two footprints overlap the later
+        // placement owns the cell here too.
+        hit = slot;
+    }
+    return hit;
+}
+
 bool const theMainScene::VF2HandleDropOnMobileFurniture(CVillager &villager)
 {
 ldwPoint sample = villager.FeetPos();
     sample.y -= 10;
-    int candidate = VF2FurnitureItemAtPoint(sample);
+    // The stock resolver samples sprite alpha, so a fully transparent invisible
+    // item comes back as -1; VF2FurnitureSlotAtPointOrTransparent recovers the
+    // placed SLOT by the item's own fmap geometry instead (#369). Resolving the
+    // slot rather than the item matters: the handlers below ask which placement
+    // this is, not merely which kind of thing it is.
+    int candidate = VF2FurnitureItemAtSlot(VF2FurnitureSlotAtPointOrTransparent(sample));
 __VF2_ADDED_FURNITURE_DROP_DISPATCH__
 __VF2_COMPUTER_DROP_DISPATCH__
     // The Invisible Spa Lounger is a custom item, not ported mobile furniture,
@@ -31499,6 +31762,23 @@ __VF2_COMPUTER_DROP_DISPATCH__
 """
     helper_source = helper_source.replace(
         "__VF2_ADDED_FURNITURE_DROP_DISPATCH__", added_furniture_drop_dispatch
+    )
+    # How many itemInfo[] records VF2FurnitureInfoForItem searches: the stock
+    # count plus the records this pack appends, which is exactly the array
+    # patch_furniture_manager leaves behind. Substituted from the same tables
+    # that decide the array's length, so the two cannot drift.
+    helper_source = helper_source.replace(
+        "__VF2_FURNITURE_SEARCH_COUNT__",
+        str(ORIG_FURNITURE_COUNT + len(ITEMS)),
+    )
+    # The routed invisible items the transparent drop fallback (#369) may
+    # resolve. From the item tables, like every other id in this unit.
+    helper_source = helper_source.replace(
+        "__VF2_TRANSPARENT_DROP_ITEMS__",
+        ", ".join(
+            f"{furniture_item_id_by_name(name):#x}"
+            for name in TRANSPARENT_DROP_FOOTPRINT_ITEMS
+        ),
     )
     # Added furniture routes to its donor's drop handler. The ids come from
     # the item tables so a renumbering cannot leave a route pointing at the
