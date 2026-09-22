@@ -633,10 +633,17 @@ class TestOnlyReceivingIsAutonomous(unittest.TestCase):
             ("0x099", "0x0B8", "__VF2_PING_PONG_OBJECT__", "Ping-Pong Table"),
         ):
             with self.subTest(item=name):
-                call = ("CloneAutonomousCandidateWithWeight(data, %s, %s, 450, %s)"
-                        % (donor, target, prereq))
-                self.assertIn(
-                    call, src,
+                # The WEIGHT is deliberately not pinned here. This test exists
+                # for the object prerequisite -- the fifth argument -- and
+                # hardcoding the fourth made it fail when the owner asked for
+                # the Ping-Pong Table's weight to match the Pool Table's.
+                # work/test_pingpong_weight.py pins that number against the
+                # pool table's own default, which is where it belongs.
+                pattern = re.compile(
+                    r"CloneAutonomousCandidateWithWeight\(data, %s, %s, \d+, %s\)"
+                    % (re.escape(donor), re.escape(target), re.escape(prereq)))
+                self.assertRegex(
+                    src, pattern,
                     "%s is not gated on its own object; passing 0 inherits the "
                     "donor's prerequisite, so the action can be offered with "
                     "none of that furniture placed" % name)
