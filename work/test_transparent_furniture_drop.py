@@ -82,7 +82,15 @@ def _emitted_unit():
     """
     path = patcher.PATCHED / "vf2_mobile_furniture_behaviors.cpp"
     if not path.is_file():
-        return None, "work/patched_mobile_furniture_pack_objs/vf2_mobile_furniture_behaviors.cpp is absent; run the generator first"
+        if pathlib.Path(patcher.PATCHED).is_dir() and any(pathlib.Path(patcher.PATCHED).glob("*.cpp")):
+            # The generator RAN -- other units are here -- and did not emit the
+            # dispatcher. That is the fix being absent from the build, not a
+            # missing prerequisite, and it fails.
+            raise AssertionError(
+                "the generator emitted other units but not "
+                "vf2_mobile_furniture_behaviors.cpp; the transparent drop "
+                "fallback is absent from this build")
+        return None, "work/patched_mobile_furniture_pack_objs has no generated units; run the generator first"
     if path.stat().st_mtime < GEN.stat().st_mtime:
         raise AssertionError(
             "the emitted dispatcher unit is OLDER than the generator, so it does "
@@ -361,6 +369,85 @@ class TheEmittedUnit(unittest.TestCase):
         # still carrying it was written by a stale generator.
         self.assertNotIn("kVF2TransparentFootprints", self.unit)
         self.assertNotIn("kVF2TransparentMask_", self.unit)
+
+
+class TheCompiledObject(unittest.TestCase):
+    """T3b: the fallback and its call site are in the compiled OBJECT.
+
+    AGENTS.md section 1: verify the shipped artifact, never the source. The
+    emitted unit is compiled exactly as test_generated_cpp_compiles.py and the
+    real build compile it, and the object is decoded with dumpbin: the drop
+    handler must call the stock resolver and then the fallback, and the
+    fallback must import LookupFurnitureInfo by the mangled name the stock
+    FurnitureManager.obj already relocates against. A source that reads right
+    but compiles to something else -- an inlined-away call, a mangling that
+    names a symbol the linker will never see -- fails here and nowhere else.
+    """
+
+    STOCK_LOOKUP = "?LookupFurnitureInfo@@YAAAUsFurnitureInfo@@W4EInventoryItem@@@Z"
+
+    @classmethod
+    def setUpClass(cls):
+        import subprocess
+        import tempfile
+        from test_generated_cpp_compiles import _vcvars
+        cls.reason = None
+        vcvars = _vcvars()
+        if vcvars is None:
+            cls.reason = "no Visual Studio toolchain on this machine"
+            return
+        unit, reason = _emitted_unit()
+        if reason:
+            cls.reason = reason
+            return
+        cls.work = tempfile.TemporaryDirectory()
+        work = pathlib.Path(cls.work.name)
+        (work / "vf2_mobile_furniture_behaviors.cpp").write_text(unit, encoding="ascii")
+        result = subprocess.run(
+            f'"{vcvars}" >nul 2>&1 && cd /d "{work}" && '
+            'cl /c /EHsc /nologo vf2_mobile_furniture_behaviors.cpp && '
+            'dumpbin /nologo /disasm vf2_mobile_furniture_behaviors.obj > disasm.txt && '
+            'dumpbin /nologo /symbols vf2_mobile_furniture_behaviors.obj > symbols.txt',
+            shell=True, capture_output=True, text=True)
+        if result.returncode != 0:
+            raise AssertionError("the emitted dispatcher did not compile or decode:\n"
+                                 + (result.stdout or "") + (result.stderr or ""))
+        cls.disasm = (work / "disasm.txt").read_text(encoding="utf-8", errors="replace")
+        cls.symbols = (work / "symbols.txt").read_text(encoding="utf-8", errors="replace")
+
+    @classmethod
+    def tearDownClass(cls):
+        if getattr(cls, "work", None):
+            cls.work.cleanup()
+
+    def setUp(self):
+        if self.reason:
+            self.skipTest(self.reason)
+
+    def _listing(self, fragment):
+        header = re.search(r"^\?[^\n]*" + re.escape(fragment) + r"[^\n]*\):\s*$", self.disasm, re.M)
+        self.assertIsNotNone(header, f"no compiled routine named like {fragment}")
+        end = self.disasm.find("\n\n", header.end())
+        return self.disasm[header.start():end if end >= 0 else len(self.disasm)]
+
+    def test_the_drop_handler_calls_the_stock_resolver_then_the_fallback(self):
+        handler = self._listing("VF2HandleDropOnMobileFurniture@theMainScene")
+        calls = [m.group(1) for m in re.finditer(r"call\s+(\S+)", handler)]
+        stock = [i for i, c in enumerate(calls) if "VF2FurnitureItemAtPoint" in c and "Transparent" not in c]
+        fallback = [i for i, c in enumerate(calls) if "VF2TransparentFurnitureItemAtPoint" in c]
+        self.assertTrue(stock, "the drop handler does not call the stock resolver")
+        self.assertTrue(fallback, "the drop handler does not call the fallback -- the fix is not in the object")
+        self.assertLess(stock[0], fallback[0], "the fallback is called before the stock resolver")
+
+    def test_the_fallback_binds_the_stock_lookup_by_its_mangled_name(self):
+        fallback = self._listing("VF2TransparentFurnitureItemAtPoint")
+        self.assertIn("call        " + self.STOCK_LOOKUP, fallback)
+        self.assertIn("?FurnitureManager@@3VCFurnitureManager@@A", fallback)
+        # Undefined in this object: the linker resolves it from the stock
+        # objects, which relocate against the same name (see the RELOCATIONS
+        # of ApplyFmapContent in work/FurnitureManager_current_disasm.txt).
+        self.assertRegex(self.symbols, r"UNDEF\s+notype \(\)\s+External\s+\| " + re.escape(self.STOCK_LOOKUP))
+        self.assertIn(self.STOCK_LOOKUP, STOCK_DISASM.read_text(encoding="utf-8", errors="replace"))
 
 
 class TheDriftGuard(unittest.TestCase):
