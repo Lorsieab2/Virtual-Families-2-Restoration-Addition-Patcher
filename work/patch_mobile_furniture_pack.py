@@ -2077,23 +2077,6 @@ MOBILE_FURNITURE_EXTERNAL_AUTONOMOUS_SPECS = (
         "object_enum": "eObjectChaise",
         "handler": "VF2HandleMobileSpaLoungerReceiving",
     },
-    {
-        # PING-PONG, AUTONOMOUS. Owner: "i want them to play it autonomously
-        # and only when a pingpong table exists in the house."
-        #
-        # Another of this patcher's own items, so no mobile_id -- the mobile
-        # game has no ping-pong row to port. Bound to the table's OWN object
-        # 0x9A, which nothing else answers to, so the selector's generic
-        # ObjectExists gate is the whole "table is in the house" requirement.
-        #
-        # Weight 3000 matches the picnic-preparation entry: a behaviour that
-        # turns up now and then rather than constantly.
-        "mobile_id": None,
-        "object": MOBILE_PING_PONG_OBJECT,
-        "weight": 3000,
-        "object_enum": "eObjectPingPongTable",
-        "handler": "VF2PingPongPlay",
-    },
 )
 MOBILE_SPECIAL_UPGRADE_ITEM_IDS = [0x117, 0x118, 0x119, 0x11A]
 
@@ -26906,13 +26889,6 @@ class CContentMap { public: enum EObject {
     eObjectPatioUmbrella = 0x96,
     eObjectPicnicTable = 0x97,
     eObjectPatioTable = 0x98,
-    // The Ping-Pong Table's OWN object, separated from the stock Pool Table's
-    // 0x36 so the two are distinguishable. Because nothing else answers to it,
-    // ObjectExists(0x9A) is a complete "is there a ping-pong table in the
-    // house" test on its own -- unlike eObjectChaise, which every lounger
-    // shares and which therefore needs the extra item check spaLoungerInWorld
-    // performs.
-    eObjectPingPongTable = 0x9A,
     eObjectBirthdayCake = 0x94,
     eObjectBirthdayPresents = 0x93
 };
@@ -29982,24 +29958,6 @@ static int VF2VillagerValue(CVillager &villager, int offset)
         reinterpret_cast<unsigned char *>(&villager) + offset);
 }
 
-// The autonomous candidate table takes bool (*)(CVillager &) -- a handler
-// returns false when it declines, so the selector can fall through to another
-// choice. VF2PingPongPlay is the DROP route's function and returns void: by
-// the time a villager has been dropped on the table there is nothing left to
-// decline. Rather than change that shared signature (the drop dispatcher and
-// the behaviour-id registration both bind it), this adapts it.
-//
-// Returning true unconditionally is correct here, not a shortcut. The only
-// precondition is that a ping-pong table exists, and the selector has already
-// established that through ObjectExists(eObjectPingPongTable) before it calls
-// any handler -- unlike the spa lounger, which must still find a FREE lounger
-// and so has something real to refuse.
-static bool VF2StartAutonomousPingPong(CVillager &villager)
-{
-    VF2PingPongPlay(villager);
-    return true;
-}
-
 static bool VF2VillagerIsSick(CVillager &villager)
 {
     CVillagerState *state = reinterpret_cast<CVillagerState *>(
@@ -30023,11 +29981,7 @@ static bool VF2VillagerDislikes(CVillager &villager, int like)
 
 struct VF2MobileExternalWeights {
     void *villager;
-    // One per entry in MOBILE_FURNITURE_EXTERNAL_AUTONOMOUS_SPECS. Adding a
-    // candidate WITHOUT growing this reads past the end of the array, which
-    // is silent at compile time and yields a garbage weight at runtime;
-    // test_mobile_autonomous_weights_are_in_bounds asserts the two agree.
-    unsigned int weights[15];
+    unsigned int weights[14];
 };
 
 // One slot per villager the selector has weighted.  Sized well above the
@@ -30070,25 +30024,15 @@ static void VF2InitializeMobileExternalWeights(void *villager)
 {
     VF2MobileExternalWeights *record = VF2FindMobileExternalWeights(villager);
     record->villager = villager;
-    unsigned int bases[15] = {
+    unsigned int bases[14] = {
         2000, 2000, 2000, 2000, 2000,
         3000, 12000, 3000, 12000, 2000, 3000, 2000, 2000,
         // Spa lounger, receiving half only. Same base weight as the other
         // relax-on-a-chaise candidates -- it is one adult choosing to go and
         // be pampered, not a rare event.
-        2000,
-        // Ping-pong. 3000, matching picnic preparation: a behaviour that turns
-        // up now and then rather than constantly. Only ever offered when a
-        // ping-pong table is actually placed, which the selector's
-        // ObjectExists(eObjectPingPongTable) gate decides.
-        3000
+        2000
     };
-    // sizeof rather than a literal: the bound and the table cannot disagree,
-    // which is how weights[14] would otherwise have been left uninitialised
-    // while the selector happily read it.
-    for (unsigned int index = 0;
-         index < sizeof(bases) / sizeof(bases[0]);
-         ++index) {
+    for (int index = 0; index < 14; ++index) {
         record->weights[index] =
             VF2RandomizeMobileCandidateWeight(bases[index]);
     }
@@ -30282,34 +30226,6 @@ extern "C" bool __cdecl VF2TryStartMobileFurnitureAutonomous(
             mobileWeights->weights[13],
             VF2HandleMobileSpaLoungerReceiving,
             spaLoungerInWorld
-        },
-        {
-            // PING-PONG, AUTONOMOUS. Owner: "i want them to play it
-            // autonomously and only when a pingpong table exists in the
-            // house."
-            //
-            // The "only when it exists" half needs no extra flag. The generic
-            // ContentMap.ObjectExists(candidate.object) test below is exactly
-            // that check, because 0x9A belongs to the Ping-Pong Table alone --
-            // it was split off the stock Pool Table's 0x36 precisely so the
-            // two stopped being indistinguishable. With no table placed the
-            // object does not exist, the candidate is never eligible, and it
-            // contributes nothing to externalWeight.
-            //
-            // All ages: the drop route has never age-gated ping-pong, and
-            // there is no reason a child cannot play.
-            //
-            // Solo by construction, which is what the owner asked for -- the
-            // selector runs per villager and VF2PingPongPlay is the same
-            // single-villager action the drop route uses. The owner was asked
-            // about several villagers queueing at one table and said they do
-            // not mind, so no occupancy gate is added here.
-            CContentMap::eObjectPingPongTable,
-            0,
-            0x7FFFFFFF,
-            mobileWeights->weights[14],
-            VF2StartAutonomousPingPong,
-            true
         },
     };
 
@@ -32883,17 +32799,6 @@ def patch_mobile_furniture_external_autonomous_selection(manifest):
                 "object": hex(MOBILE_CHAISE_OBJECT),
                 "weight": 2000,
                 "raw_age_min": "0x118",
-            },
-            {
-                # Also this patcher's own item, so no mobile_id. Bound to the
-                # Ping-Pong Table's OWN object rather than the Pool Table's
-                # 0x36, so the candidate exists only while a ping-pong table
-                # is placed. No age bounds: the drop route has never age-gated
-                # it either.
-                "behavior": "PingPongPlay",
-                "mobile_id": None,
-                "object": hex(MOBILE_PING_PONG_OBJECT),
-                "weight": 3000,
             },
         ],
     }
