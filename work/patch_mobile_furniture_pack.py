@@ -38436,7 +38436,18 @@ extern "C" void __cdecl VF2EnableAutonomousCandidates(void *villager)
     // the owner's requirement.
     CloneAutonomousCandidateWithWeight(data, 0x04A, 0x0B3, 450, 0); // Home Gym System
     CloneAutonomousCandidateWithWeight(data, 0x08B, 0x0B4, 450, 0); // Yoga Equipment
-    CloneAutonomousCandidateWithWeight(data, 0x099, 0x0B8, 450, __VF2_PING_PONG_OBJECT__); // Ping-Pong Table
+    // 3000, the SAME weight the Pool Table itself carries: its candidate is
+    // enabled by EnableAllAgesAutonomousCandidate(data, 0x099) just above,
+    // which defaults to 3000. Owner: "Raise pingpong weight to same as pool
+    // table." At the previous 450 a ping-pong table was offered about a
+    // seventh as often as the pool table it was cloned from, which read in
+    // play as villagers ignoring it.
+    //
+    // The object prerequisite is unchanged and still does the real work: 0x9A
+    // belongs to the Ping-Pong Table alone, so the candidate is offered only
+    // while one is placed. Raising the weight changes HOW OFTEN it is chosen
+    // when a table exists, never WHETHER it is offered without one.
+    CloneAutonomousCandidateWithWeight(data, 0x099, 0x0B8, 3000, __VF2_PING_PONG_OBJECT__); // Ping-Pong Table
     EnableAdultOnlyAutonomousCandidateWithWeight(data, 0x047, 450); // WorkKitchenDispatch
     CloneAutonomousCandidateWithWeight(data, 0x047, 0x048, 450, 0); // WorkKitchen0, with kitchen career gates
     EnableAdultOnlyAutonomousCandidateWithWeight(data, 0x048, 450);

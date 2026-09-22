@@ -428,9 +428,15 @@ class ThePingPongTableHasItsOwnObject(unittest.TestCase):
         Asserted at the CALL SITE, because the generic `target + 0xC4` write
         and the bike call sites are all satisfied without this one.
         """
-        self.assertIn(
-            "CloneAutonomousCandidateWithWeight(data, 0x099, 0x0B8, 450, "
-            "__VF2_PING_PONG_OBJECT__)", _source(),
+        # The weight is matched as \d+: this assertion is about the fifth
+        # argument, the object prerequisite. Pinning the fourth made it fail
+        # when the owner raised ping-pong's weight to match the Pool Table's,
+        # a change this test does not govern. work/test_pingpong_weight.py
+        # pins the weight against the pool table's own default.
+        self.assertRegex(
+            _source(),
+            r"CloneAutonomousCandidateWithWeight\(data, 0x099, 0x0B8, \d+, "
+            r"__VF2_PING_PONG_OBJECT__\)",
             "the ping-pong autonomous candidate inherits the Pool Table's "
             "object prerequisite, so it is only offered when a pool table is "
             "placed")
