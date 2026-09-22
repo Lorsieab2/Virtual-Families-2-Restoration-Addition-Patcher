@@ -25519,7 +25519,7 @@ Wrong store section:
 # The items VF2HandleDropOnMobileFurniture routes by id whose sprites the
 # Transparent Graphics setting can blank. Those are the only drops that reach
 # the alpha-sampling stock resolver AND can lose every pixel it samples, so
-# they are the only ones VF2TransparentFurnitureItemAtPoint may resolve (#369).
+# they are the only ones VF2TransparentFurnitureSlotAtPoint may resolve (#369).
 # Kept as names and resolved through the generator's own item table, so a
 # renumbering cannot leave the fallback pointing at a stale id;
 # test_transparent_furniture_drop.py asserts this set equals the invisible ids
@@ -27884,13 +27884,30 @@ static int VF2FurnitureItemAtPoint(ldwPoint point)
     return VF2FurnitureItemAtSlot(VF2FurnitureSlotAtPoint(point));
 }
 
+// Declared here, defined further down with the routed-item table it needs:
+// the geometry fallback for a sprite with no pixels to sample (#369).
+static int VF2TransparentFurnitureSlotAtPoint(ldwPoint point);
+
+// The placed slot under a point, recovering a fully transparent item. Every
+// caller that needs to know WHICH placement is under a point goes through
+// here, so the drop dispatcher and the spa's own occupancy probes recover
+// together; resolving only the dropped-on item would leave a treatment on a
+// transparent lounger still broken, because the spa asks for the slot twice
+// more (see VF2SpaOccupantIndex).
+static int VF2FurnitureSlotAtPointOrTransparent(ldwPoint point)
+{
+    int slot = VF2FurnitureSlotAtPoint(point);
+    if (slot < 0) slot = VF2TransparentFurnitureSlotAtPoint(point);
+    return slot;
+}
+
 // The furniture slot a villager is standing on, sampled the same way the drop
 // path samples the villager being dropped.
 static int VF2FurnitureSlotUnderVillager(CVillager &villager)
 {
     ldwPoint sample = villager.FeetPos();
     sample.y -= 10;
-    return VF2FurnitureSlotAtPoint(sample);
+    return VF2FurnitureSlotAtPointOrTransparent(sample);
 }
 
 static bool VF2IsMobileChaise(int item)
@@ -31459,12 +31476,16 @@ static const int kVF2TransparentDropItemCount =
 // visible in the source, not left to the compiler.
 static int VF2ContentCell(int px) { return (px + ((px >> 31) & 7)) >> 3; }
 
-static int VF2TransparentFurnitureItemAtPoint(ldwPoint point)
+static int VF2TransparentFurnitureSlotAtPoint(ldwPoint point)
 {
     unsigned char *manager = reinterpret_cast<unsigned char *>(&FurnitureManager);
     int count = *reinterpret_cast<int *>(manager + 0x1004);
     int pointCellX = VF2ContentCell(point.x);
     int pointCellY = VF2ContentCell(point.y);
+    // The SLOT, not the item: everything downstream of the drop -- which
+    // lounger this is, who else is on it -- is per-placement, and an item id
+    // cannot tell two copies apart. Returning the slot lets the item lookup
+    // and the spa's own slot probes all recover from the same fallback.
     int hit = -1;
     for (int slot = 0; slot < count; ++slot) {
         unsigned char *record = manager + 0x1008 + slot * 0x40;
@@ -31502,7 +31523,7 @@ static int VF2TransparentFurnitureItemAtPoint(ldwPoint point)
         // ApplyFmapContent applies the slots in order and a later block
         // overwrites an earlier one, so where two footprints overlap the later
         // placement owns the cell here too.
-        hit = itemId;
+        hit = slot;
     }
     return hit;
 }
@@ -31511,10 +31532,12 @@ bool const theMainScene::VF2HandleDropOnMobileFurniture(CVillager &villager)
 {
 ldwPoint sample = villager.FeetPos();
     sample.y -= 10;
-    int candidate = VF2FurnitureItemAtPoint(sample);
     // The stock resolver samples sprite alpha, so a fully transparent invisible
-    // item comes back as -1. Resolve it by its fmap footprint instead (#369).
-    if (candidate < 0) candidate = VF2TransparentFurnitureItemAtPoint(sample);
+    // item comes back as -1; VF2FurnitureSlotAtPointOrTransparent recovers the
+    // placed SLOT by the item's own fmap geometry instead (#369). Resolving the
+    // slot rather than the item matters: the handlers below ask which placement
+    // this is, not merely which kind of thing it is.
+    int candidate = VF2FurnitureItemAtSlot(VF2FurnitureSlotAtPointOrTransparent(sample));
 __VF2_ADDED_FURNITURE_DROP_DISPATCH__
 __VF2_COMPUTER_DROP_DISPATCH__
     // The Invisible Spa Lounger is a custom item, not ported mobile furniture,

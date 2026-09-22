@@ -57,8 +57,10 @@ import patch_mobile_furniture_pack as patcher  # noqa: E402
 ROUTED_INVISIBLE = {0x328, 0x329, 0x32A, 0x32B, 0x32F, 0x331}
 VISIBLE_SPA_LOUNGER = 0x330
 
-FALLBACK = "static int VF2TransparentFurnitureItemAtPoint(ldwPoint point)"
-HOOK = "if (candidate < 0) candidate = VF2TransparentFurnitureItemAtPoint(sample);"
+FALLBACK = "static int VF2TransparentFurnitureSlotAtPoint(ldwPoint point)"
+HOOK = "if (slot < 0) slot = VF2TransparentFurnitureSlotAtPoint(point);"
+DROP_RESOLVE = "int candidate = VF2FurnitureItemAtSlot(VF2FurnitureSlotAtPointOrTransparent(sample));"
+SLOT_UNDER = "    return VF2FurnitureSlotAtPointOrTransparent(sample);"
 CELL_IDIOM = "static int VF2ContentCell(int px) { return (px + ((px >> 31) & 7)) >> 3; }"
 
 
@@ -67,7 +69,13 @@ def _source():
 
 
 def _fallback_body(text):
-    start = text.index(FALLBACK)
+    """The fallback's DEFINITION, not its forward declaration.
+
+    The declaration ends in `;` and is what `index` finds first; slicing from
+    it returns everything up to the next closing brace, which silently passes
+    or fails tests against the wrong text.
+    """
+    start = text.index(FALLBACK + "\n{")
     return text[start:text.index("\n}\n", start)]
 
 
@@ -142,12 +150,34 @@ class TheDispatcherTemplate(unittest.TestCase):
 
     def test_the_fallback_is_defined_and_hooked_after_the_stock_resolver(self):
         self.assertIn(FALLBACK, self.src)
-        self.assertIn(HOOK, self.src)
-        # The fallback runs only after the stock resolver returned nothing, and
-        # before any route inspects the candidate.
-        resolve = self.src.index("int candidate = VF2FurnitureItemAtPoint(sample);")
-        self.assertLess(resolve, self.src.index(HOOK))
-        self.assertLess(self.src.index(HOOK), self.src.index("__VF2_ADDED_FURNITURE_DROP_DISPATCH__"))
+        # One choke point: the stock slot resolver first, the geometry
+        # fallback only when it found nothing.
+        chokepoint = self.src[self.src.index("static int VF2FurnitureSlotAtPointOrTransparent(ldwPoint point)"):]
+        chokepoint = chokepoint[:chokepoint.index("\n}\n")]
+        self.assertIn("int slot = VF2FurnitureSlotAtPoint(point);", chokepoint)
+        self.assertIn(HOOK, chokepoint)
+
+    def test_every_consumer_of_a_point_goes_through_the_choke_point(self):
+        # The DROP resolves its item through the recovered slot, and the spa's
+        # own probe (VF2FurnitureSlotUnderVillager, which VF2SpaOccupantIndex
+        # calls for the dropped villager AND each candidate occupant) shares
+        # it. Resolving only the dropped item would leave a treatment on a
+        # transparent lounger broken: loungerSlot would still be -1 and the
+        # occupant scan would reject every match. Caught in review.
+        self.assertIn(DROP_RESOLVE, self.src)
+        self.assertIn(SLOT_UNDER, self.src)
+        # The superseded item-level entry point is gone entirely.
+        self.assertNotIn("VF2TransparentFurnitureItemAtPoint", self.src)
+        # Nothing reaches the alpha-only slot resolver for a drop any more.
+        self.assertNotIn("int candidate = VF2FurnitureItemAtPoint(sample);", self.src)
+        self.assertLess(self.src.index(DROP_RESOLVE),
+                        self.src.index("__VF2_ADDED_FURNITURE_DROP_DISPATCH__"))
+
+    def test_the_fallback_returns_a_slot_not_an_item(self):
+        # An item id cannot tell two copies of the same lounger apart, which
+        # is exactly what the spa handler needs.
+        self.assertIn("hit = slot;", self.body)
+        self.assertNotIn("hit = itemId;", self.body)
 
     def test_it_asks_the_engine_for_the_block_it_actually_placed(self):
         # Declared so the compiler mangles the call to the symbol the stock
@@ -190,8 +220,7 @@ class TheDispatcherTemplate(unittest.TestCase):
         # ApplyFmapContent applies slots in order and a later block overwrites
         # an earlier one; the fallback keeps the last hit for the same reason.
         self.assertIn("int hit = -1;", self.body)
-        self.assertIn("hit = itemId;", self.body)
-        self.assertNotIn("return itemId;", self.body)
+        self.assertIn("hit = slot;", self.body)
 
     def test_the_cell_idiom_is_c_division_by_eight_truncating_toward_zero(self):
         # The idiom is the compiler's rendering of a signed `/ 8` (cdq / and
@@ -425,22 +454,46 @@ class TheCompiledObject(unittest.TestCase):
             self.skipTest(self.reason)
 
     def _listing(self, fragment):
-        header = re.search(r"^\?[^\n]*" + re.escape(fragment) + r"[^\n]*\):\s*$", self.disasm, re.M)
-        self.assertIsNotNone(header, f"no compiled routine named like {fragment}")
-        end = self.disasm.find("\n\n", header.end())
-        return self.disasm[header.start():end if end >= 0 else len(self.disasm)]
+        """One compiled routine, bounded by the NEXT routine's header.
 
-    def test_the_drop_handler_calls_the_stock_resolver_then_the_fallback(self):
-        handler = self._listing("VF2HandleDropOnMobileFurniture@theMainScene")
-        calls = [m.group(1) for m in re.finditer(r"call\s+(\S+)", handler)]
-        stock = [i for i, c in enumerate(calls) if "VF2FurnitureItemAtPoint" in c and "Transparent" not in c]
-        fallback = [i for i, c in enumerate(calls) if "VF2TransparentFurnitureItemAtPoint" in c]
-        self.assertTrue(stock, "the drop handler does not call the stock resolver")
-        self.assertTrue(fallback, "the drop handler does not call the fallback -- the fix is not in the object")
+        dumpbin does not separate functions with a blank line, so slicing to
+        the next "\\n\\n" returns the rest of the object -- 472 KB of other
+        functions, in which any call can be found. That made an earlier
+        version of this check vacuous: a mutation that removed the call from
+        the routine under test still passed, because the call existed
+        somewhere downstream. Bound on the next header instead.
+        """
+        headers = [(m.start(), m.group(0)) for m in
+                   re.finditer(r"^\?\S+ \([^\n]*\):\s*$", self.disasm, re.M)]
+        self.assertTrue(headers, "the disassembly has no function headers")
+        for i, (start, line) in enumerate(headers):
+            if fragment in line:
+                end = headers[i + 1][0] if i + 1 < len(headers) else len(self.disasm)
+                return self.disasm[start:end]
+        self.fail(f"no compiled routine named like {fragment}")
+
+    def test_the_choke_point_calls_the_stock_resolver_then_the_fallback(self):
+        choke = self._listing("VF2FurnitureSlotAtPointOrTransparent")
+        calls = [m.group(1) for m in re.finditer(r"call\s+(\S+)", choke)]
+        stock = [i for i, c in enumerate(calls) if "VF2FurnitureSlotAtPoint" in c and "Transparent" not in c]
+        fallback = [i for i, c in enumerate(calls) if "VF2TransparentFurnitureSlotAtPoint" in c]
+        self.assertTrue(stock, "the choke point does not call the stock slot resolver")
+        self.assertTrue(fallback, "the choke point does not call the fallback -- the fix is not in the object")
         self.assertLess(stock[0], fallback[0], "the fallback is called before the stock resolver")
 
+    def test_both_the_drop_and_the_spa_probe_reach_the_choke_point(self):
+        # The two consumers that must recover on a transparent item: the drop
+        # dispatcher, and the slot probe VF2SpaOccupantIndex uses for the
+        # dropped villager and each candidate occupant.
+        for caller in ("VF2HandleDropOnMobileFurniture@theMainScene",
+                       "VF2FurnitureSlotUnderVillager"):
+            with self.subTest(caller=caller):
+                listing = self._listing(caller)
+                self.assertRegex(listing, r"call\s+\S*VF2FurnitureSlotAtPointOrTransparent",
+                                 f"{caller} does not reach the transparent-aware resolver")
+
     def test_the_fallback_binds_the_stock_lookup_by_its_mangled_name(self):
-        fallback = self._listing("VF2TransparentFurnitureItemAtPoint")
+        fallback = self._listing("VF2TransparentFurnitureSlotAtPoint")
         self.assertIn("call        " + self.STOCK_LOOKUP, fallback)
         self.assertIn("?FurnitureManager@@3VCFurnitureManager@@A", fallback)
         # Undefined in this object: the linker resolves it from the stock
