@@ -59,7 +59,8 @@ VISIBLE_SPA_LOUNGER = 0x330
 
 FALLBACK = "static int VF2TransparentFurnitureSlotAtPoint(ldwPoint point)"
 HOOK = "if (slot < 0) slot = VF2TransparentFurnitureSlotAtPoint(point);"
-DROP_RESOLVE = "int candidate = VF2FurnitureItemAtSlot(VF2FurnitureSlotAtPointOrTransparent(sample));"
+DROP_RESOLVE = "gVF2DropCandidateCache = VF2FurnitureItemAtSlot("
+DROP_RESOLVE2 = "VF2FurnitureSlotAtPointOrTransparent(gVF2DropCandidateSample));"
 SLOT_UNDER = "    return VF2FurnitureSlotAtPointOrTransparent(sample);"
 CELL_IDIOM = "static int VF2ContentCell(int px) { return (px + ((px >> 31) & 7)) >> 3; }"
 
@@ -574,15 +575,31 @@ class TheCompiledObject(unittest.TestCase):
         self.assertLess(stock[0], fallback[0], "the fallback is called before the stock resolver")
 
     def test_both_the_drop_and_the_spa_probe_reach_the_choke_point(self):
-        # The two consumers that must recover on a transparent item: the drop
-        # dispatcher, and the slot probe VF2SpaOccupantIndex uses for the
-        # dropped villager and each candidate occupant.
-        for caller in ("VF2HandleDropOnMobileFurniture@theMainScene",
-                       "VF2FurnitureSlotUnderVillager"):
-            with self.subTest(caller=caller):
-                listing = self._listing(caller)
-                self.assertRegex(listing, r"call\s+\S*VF2FurnitureSlotAtPointOrTransparent",
-                                 f"{caller} does not reach the transparent-aware resolver")
+        """Both consumers still reach the transparent-aware resolver.
+
+        The drop dispatcher no longer calls it DIRECTLY. Since issue #378 the
+        dispatcher defers resolution to VF2DropCandidate(), so the call moved
+        one frame down -- that indirection is the fix, not a regression, and
+        the reachability it guards is asserted through the resolver instead.
+
+        VF2FurnitureSlotUnderVillager, which VF2SpaOccupantIndex uses for the
+        dropped villager and each candidate occupant, still calls it directly.
+        """
+        with self.subTest(caller="VF2DropCandidate"):
+            listing = self._listing("VF2DropCandidate")
+            self.assertRegex(
+                listing, r"call\s+\S*VF2FurnitureSlotAtPointOrTransparent",
+                "the lazy drop resolver does not reach the transparent-aware resolver")
+        with self.subTest(caller="VF2HandleDropOnMobileFurniture@theMainScene"):
+            listing = self._listing("VF2HandleDropOnMobileFurniture@theMainScene")
+            self.assertRegex(
+                listing, r"call\s+\S*VF2DropCandidate",
+                "the drop dispatcher does not reach the lazy resolver")
+        with self.subTest(caller="VF2FurnitureSlotUnderVillager"):
+            listing = self._listing("VF2FurnitureSlotUnderVillager")
+            self.assertRegex(
+                listing, r"call\s+\S*VF2FurnitureSlotAtPointOrTransparent",
+                "the spa probe does not reach the transparent-aware resolver")
 
     def test_the_fallback_reads_the_furniture_array_not_the_static_lookup(self):
         """Every external the fallback needs must be one the linker can supply.
@@ -681,7 +698,7 @@ class TheDriftGuard(unittest.TestCase):
         # compares, PLUS the ids VF2IsMobileChaise accepts, because the
         # Invisible Lounger is folded into that predicate rather than compared
         # by literal (see the "chaise" binding spec).
-        routed = {int(x, 16) for x in re.findall(r"candidate == (0x[0-9A-Fa-f]+)", unit)}
+        routed = {int(x, 16) for x in re.findall(r"VF2DropCandidate\(\) == (0x[0-9A-Fa-f]+)", unit)}
         chaise_start = unit.index("static bool VF2IsMobileChaise(int item)")
         chaise = unit[chaise_start:unit.index("\n}\n", chaise_start)]
         routed |= {int(x, 16) for x in re.findall(r"item == (0x[0-9A-Fa-f]+)", chaise)}
@@ -700,7 +717,7 @@ class TheDriftGuard(unittest.TestCase):
         unit, reason = _emitted_unit()
         if reason:
             self.skipTest(reason)
-        self.assertIn("candidate == 0x330", unit)
+        self.assertIn("VF2DropCandidate() == 0x330", unit)
         listed = {patcher.furniture_item_id_by_name(n) for n in patcher.TRANSPARENT_DROP_FOOTPRINT_ITEMS}
         self.assertNotIn(VISIBLE_SPA_LOUNGER, listed)
 

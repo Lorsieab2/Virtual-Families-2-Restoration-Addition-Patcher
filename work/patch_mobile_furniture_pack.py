@@ -1801,7 +1801,7 @@ MOBILE_FURNITURE_MANUAL_BINDING_SPECS = (
         # inherits every chaise behaviour rather than needing its own route.
         "item_ids": tuple(MOBILE_CHAISE_ITEM_IDS) + (INVISIBLE_LOUNGER_ITEM_ID,),
         "handler": "VF2HandleMobileChaise",
-        "condition_marker": "VF2IsMobileChaise(candidate)",
+        "condition_marker": "VF2IsMobileChaise(VF2DropCandidate())",
         "literal_ids": (),
     },
     {
@@ -31423,7 +31423,7 @@ static bool VF2HandleMobileSpaLoungerReceiving(CVillager &villager)
 // then ldwImageImpl::PixelIsVisible -- SDL_GetRGBA on the sprite's own pixels,
 // a hit only where alpha != 0. Swap an item's sprite for a fully transparent
 // one (the Transparent Graphics setting) and every pixel is alpha 0, so the
-// stock resolver returns -1 and every `candidate == <id>` route is skipped:
+// stock resolver returns -1 and every `VF2DropCandidate() == <id>` route is skipped:
 // the villager is dropped and nothing happens. Issue #369.
 //
 // Native items never see this: they resolve through the content map's fmap
@@ -31616,6 +31616,23 @@ static int VF2TransparentFurnitureSlotAtPoint(ldwPoint point)
     return hit;
 }
 
+// Lazy, memoised resolution of the dropped-on item (issue #378).
+//
+// -2 means "not yet resolved"; a real resolution can legitimately yield -1
+// (nothing under the point), so -1 cannot be the sentinel or every route
+// would re-resolve and re-run the sprite probe.
+static int gVF2DropCandidateCache = -2;
+static ldwPoint gVF2DropCandidateSample = { 0, 0 };
+
+static int VF2DropCandidate()
+{
+    if (gVF2DropCandidateCache == -2) {
+        gVF2DropCandidateCache = VF2FurnitureItemAtSlot(
+            VF2FurnitureSlotAtPointOrTransparent(gVF2DropCandidateSample));
+    }
+    return gVF2DropCandidateCache;
+}
+
 bool const theMainScene::VF2HandleDropOnMobileFurniture(CVillager &villager)
 {
 ldwPoint sample = villager.FeetPos();
@@ -31625,7 +31642,25 @@ ldwPoint sample = villager.FeetPos();
     // placed SLOT by the item's own fmap geometry instead (#369). Resolving the
     // slot rather than the item matters: the handlers below ask which placement
     // this is, not merely which kind of thing it is.
-    int candidate = VF2FurnitureItemAtSlot(VF2FurnitureSlotAtPointOrTransparent(sample));
+    //
+    // RESOLVED LAZILY, AND NOT BEFORE HandleDropOnHotSpot. Issue #378.
+    //
+    // B195 resolved the candidate eagerly here, on the first line of the
+    // dispatcher. That made the transparent fallback -- including
+    // VF2SpriteIsBlankAround, which calls theGraphicsManager::GetImageGrid --
+    // run on EVERY drop in the game, before any stock code, whether or not the
+    // drop had anything to do with an invisible item. A resource-resolving
+    // call on the universal drop path is not something this fallback needs and
+    // not something the stock path ever did: B194 contained 20 GetImageGrid
+    // call sites and B195 contained 21, the new one being this.
+    //
+    // The candidate is only ever read by the __VF2_ADDED_FURNITURE_DROP_DISPATCH__
+    // routes below, all of which run after HandleDropOnHotSpot has had its
+    // say, so computing it up front bought nothing. VF2DropCandidate() defers
+    // the work to the first route that actually asks, which restores the stock
+    // ordering for every drop the added furniture does not claim.
+    gVF2DropCandidateSample = sample;
+    gVF2DropCandidateCache = -2;
 __VF2_ADDED_FURNITURE_DROP_DISPATCH__
 __VF2_COMPUTER_DROP_DISPATCH__
     // The Invisible Spa Lounger is a custom item, not ported mobile furniture,
@@ -31640,7 +31675,7 @@ __VF2_COMPUTER_DROP_DISPATCH__
     // because their store descriptions promise the treatments
     // unconditionally, and ahead of the chaise family because they share the
     // chaise object and the ordinary lounger route would swallow them.
-    if (candidate == 0x32F || candidate == __VF2_SPA_LOUNGER_ITEM_ID__) {
+    if (VF2DropCandidate() == 0x32F || VF2DropCandidate() == __VF2_SPA_LOUNGER_ITEM_ID__) {
         return VF2HandleMobileInvisibleSpaLounger(villager);
     }
 
@@ -31652,40 +31687,40 @@ __VF2_COMPUTER_DROP_DISPATCH__
     // which is why they appear in the conditions below rather than in routes
     // of their own.
     if (gVF2MobileFurnitureBehaviors == 0) return false;
-    if (VF2IsMobileChaise(candidate)) return VF2HandleMobileChaise(villager);
-    if (candidate == 0x2E7) return VF2HandleMobilePatioUmbrella(villager);
+    if (VF2IsMobileChaise(VF2DropCandidate())) return VF2HandleMobileChaise(villager);
+    if (VF2DropCandidate() == 0x2E7) return VF2HandleMobilePatioUmbrella(villager);
     // The invisible tables are the same items without art -- same donor,
     // same behaviour map, same handler -- so they join the stock route
     // rather than getting one of their own.
-    if (candidate == 0x2E6 || candidate == __VF2_INVISIBLE_PATIO_TABLE__) {
+    if (VF2DropCandidate() == 0x2E6 || VF2DropCandidate() == __VF2_INVISIBLE_PATIO_TABLE__) {
         return VF2HandleMobilePatioTable(villager);
     }
-    if (candidate == 0x2E8 || candidate == __VF2_INVISIBLE_PICNIC_TABLE__) {
+    if (VF2DropCandidate() == 0x2E8 || VF2DropCandidate() == __VF2_INVISIBLE_PICNIC_TABLE__) {
         return VF2HandleMobilePicnicTable(villager);
     }
-    if (candidate == 0x2DC) return VF2HandleMobileBirthdayCake(villager);
-    if (candidate == 0x2DD) return VF2HandleMobileBirthdayPresents(villager);
-    if (candidate == 0x2DA) return VF2HandleMobileBirthdayBalloons(villager);
-    if (candidate == 0x2DB) return VF2HandleMobileBirthdayBanner(villager);
-    if (candidate == 0x2AA) return VF2HandleMobileHolidayCandles(villager);
-    if (candidate == 0x2B0) return VF2HandleMobileEggnog(villager);
-    if (candidate == 0x2BE) return VF2HandleMobileSantaCookiePlate(villager);
-    if ((candidate >= 0x2B1 && candidate <= 0x2B5) ||
-        candidate == 0x2BD || candidate == 0x2C0 ||
-        candidate == 0x2C2 || candidate == 0x2C3 ||
-        candidate == 0x2C5) {
+    if (VF2DropCandidate() == 0x2DC) return VF2HandleMobileBirthdayCake(villager);
+    if (VF2DropCandidate() == 0x2DD) return VF2HandleMobileBirthdayPresents(villager);
+    if (VF2DropCandidate() == 0x2DA) return VF2HandleMobileBirthdayBalloons(villager);
+    if (VF2DropCandidate() == 0x2DB) return VF2HandleMobileBirthdayBanner(villager);
+    if (VF2DropCandidate() == 0x2AA) return VF2HandleMobileHolidayCandles(villager);
+    if (VF2DropCandidate() == 0x2B0) return VF2HandleMobileEggnog(villager);
+    if (VF2DropCandidate() == 0x2BE) return VF2HandleMobileSantaCookiePlate(villager);
+    if ((VF2DropCandidate() >= 0x2B1 && VF2DropCandidate() <= 0x2B5) ||
+        VF2DropCandidate() == 0x2BD || VF2DropCandidate() == 0x2C0 ||
+        VF2DropCandidate() == 0x2C2 || VF2DropCandidate() == 0x2C3 ||
+        VF2DropCandidate() == 0x2C5) {
         return VF2HandleMobileXmasKnickknack(villager);
     }
-    if (candidate == 0x2C1 || candidate == 0x2C4 ||
-        candidate == 0x2C8 || candidate == 0x2C9) {
+    if (VF2DropCandidate() == 0x2C1 || VF2DropCandidate() == 0x2C4 ||
+        VF2DropCandidate() == 0x2C8 || VF2DropCandidate() == 0x2C9) {
         return VF2HandleMobileHouseXmasDecor(villager);
     }
-    if (candidate == 0x2AD || candidate == 0x2AE) {
+    if (VF2DropCandidate() == 0x2AD || VF2DropCandidate() == 0x2AE) {
         return VF2HandleMobileXmasTreeGroup(villager);
     }
-    if (candidate == 0x2AF) return VF2HandleMobileDreidelGroup(villager);
-    if (candidate == 0x2B8) return VF2HandleMobileMenorahGroup(villager);
-    if (candidate == 0x2C6 || candidate == 0x2C7) {
+    if (VF2DropCandidate() == 0x2AF) return VF2HandleMobileDreidelGroup(villager);
+    if (VF2DropCandidate() == 0x2B8) return VF2HandleMobileMenorahGroup(villager);
+    if (VF2DropCandidate() == 0x2C6 || VF2DropCandidate() == 0x2C7) {
         return VF2HandleMobileXmasStockings(villager);
     }
     return false;
@@ -31704,7 +31739,7 @@ __VF2_COMPUTER_DROP_DISPATCH__
     added_furniture_drop_dispatch = "" if not ENABLE_BEHAVIOR_PATCHES else """
     // Added-item identity must win before the stock hotspot: these items use
     // donor maps, so the stock hotspot would otherwise consume the drop first.
-    if (candidate == __VF2_EXERCISE_BIKE_ITEM_ID__) {
+    if (VF2DropCandidate() == __VF2_EXERCISE_BIKE_ITEM_ID__) {
         // BOTH bike variants must be reachable from a DROP.
         //
         // Reported in play: dropping a villager on the Exercise Bike only ever
@@ -31725,7 +31760,7 @@ __VF2_COMPUTER_DROP_DISPATCH__
         }
         return true;
     }
-    if (candidate == __VF2_HOME_GYM_ITEM_ID__) {
+    if (VF2DropCandidate() == __VF2_HOME_GYM_ITEM_ID__) {
         VF2HomeGymWorkout(villager);
         return true;
     }
@@ -31748,14 +31783,14 @@ __VF2_COMPUTER_DROP_DISPATCH__
     //
     // Pairing the stock id with the invisible one is the shape this dispatcher
     // already uses for exactly this situation; see the patio and picnic tables.
-    if (candidate == 0x220 || candidate == __VF2_YOGA_EQUIPMENT_ITEM_ID__) {
+    if (VF2DropCandidate() == 0x220 || VF2DropCandidate() == __VF2_YOGA_EQUIPMENT_ITEM_ID__) {
         VF2YogaEquipmentWorkout(villager);
         return true;
     }
     // BOTH ping-pong tables, visible and invisible, the way the yoga pair is
     // matched above.
-    if (candidate == __VF2_PING_PONG_TABLE_ITEM_ID__ ||
-        candidate == __VF2_INVISIBLE_PING_PONG_TABLE_ITEM_ID__) {
+    if (VF2DropCandidate() == __VF2_PING_PONG_TABLE_ITEM_ID__ ||
+        VF2DropCandidate() == __VF2_INVISIBLE_PING_PONG_TABLE_ITEM_ID__) {
         VF2PingPongPlay(villager);
         return true;
     }
@@ -32865,11 +32900,11 @@ def validate_mobile_furniture_runtime_bindings(manifest):
 
     literal_ids = {
         int(value, 16)
-        for value in re.findall(r"candidate\s*==\s*0x([0-9A-Fa-f]+)", dispatcher)
+        for value in re.findall(r"VF2DropCandidate\(\)\s*==\s*0x([0-9A-Fa-f]+)", dispatcher)
     }
     range_ids = set()
     for low, high in re.findall(
-        r"candidate\s*>=\s*0x([0-9A-Fa-f]+)\s*&&\s*candidate\s*<=\s*0x([0-9A-Fa-f]+)",
+        r"VF2DropCandidate\(\)\s*>=\s*0x([0-9A-Fa-f]+)\s*&&\s*VF2DropCandidate\(\)\s*<=\s*0x([0-9A-Fa-f]+)",
         dispatcher,
     ):
         range_ids.update(range(int(low, 16), int(high, 16) + 1))
@@ -32918,7 +32953,7 @@ def validate_mobile_furniture_runtime_bindings(manifest):
         if handler_position < 0:
             raise RuntimeError(f"Missing manual handler: {spec['name']}")
         for item_id in spec.get("literal_ids", ()):
-            marker = f"candidate == 0x{item_id:X}"
+            marker = f"VF2DropCandidate() == 0x{item_id:X}"
             marker_position = dispatcher.find(marker)
             if marker_position < 0 or not (
                 marker_position < handler_position < marker_position + 320
@@ -32928,7 +32963,7 @@ def validate_mobile_furniture_runtime_bindings(manifest):
                 )
         if "range" in spec:
             low, high = spec["range"]
-            marker = f"candidate >= 0x{low:X} && candidate <= 0x{high:X}"
+            marker = f"VF2DropCandidate() >= 0x{low:X} && VF2DropCandidate() <= 0x{high:X}"
             marker_position = dispatcher.find(marker)
             if marker_position < 0 or not (
                 marker_position < handler_position < marker_position + 320
