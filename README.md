@@ -113,22 +113,37 @@ the release you downloaded. B196's bundle offers 35 settings, grouped the way
 the GUI groups them, unchanged since B180.
 
 That number is not simply the count of settings the patcher defines, which is
-36. A bundle drops any optional setting whose source assets were not available
-when it was exported -- in B196, as in B180, that is the two named just below -- and the
-export adds one setting of its own, `core_assets`, which copies the support
-files and generated assets that are not tied to a single feature. So 36 defined,
-less 2 unavailable, plus 1 generated, is the 35 the GUI shows.
+36. The settings list drops any optional setting that has no packaged source
+assets -- in B196, as in B180, the two named just below -- and the export adds
+one setting of its own, `core_assets`, which copies the support files and
+generated assets that are not tied to a single feature. So 36 defined, less 2
+without packaged assets, plus 1 generated, is the 35 the GUI shows.
 
-Two of the entries below are described for completeness but are **not** offered
-by the bundle:
+**A missing checkbox does not mean a missing feature.** That filter asks only
+whether a setting has files to copy, so a feature built as *code* rather than
+as assets has nothing to package and drops off the list while still being
+installed with the executable patch. **Allow Same-Sex Marriage is exactly that
+case, and it works in B196.** Only one of the two below is genuinely not
+applied.
 
-- **Allow Same-Sex Marriage**, reachable in game through its Cheat Upgrade row
-  instead, since its toggle moved to a persisted save byte. Absent since at
-  least B174.1.
-- **Transparent Store Bar**, a defined setting whose replacement image lives in
-  the `OptionalVisualMods` tree rather than in this repository, so the export
-  has no source art to package and drops the setting. Also absent since at
-  least B174.1.
+Two of the entries below do not appear as their own checkbox in the GUI. They
+are **not** the same case, and an earlier revision of this README wrongly
+described both as simply absent:
+
+- **Allow Same-Sex Marriage** **works, and always has.** It is not a packaged
+  asset but compiled code, carried in the `.vf2same` section of the patched
+  executable and installed with the rest of the executable patch. You turn it
+  on in game with the **Enable Same-Sex Marriage** Special Upgrade (see
+  [Cheat Upgrades in detail](#cheat-upgrades-in-detail)), which is why it needs
+  no checkbox of its own. **Corrected 2026-09-24:** this README previously
+  listed it as "not offered by the bundle", which told players a working
+  feature does not ship. It does ship. The bundle's settings list simply drops
+  entries that have no packaged source assets, and a code-only feature has
+  none -- that is a quirk of how the list is built, not a missing feature.
+- **Transparent Store Bar** genuinely is not applied. Unlike the above it is a
+  pure image swap, and its replacement image (`main_no-comm.png`) lives in the
+  `OptionalVisualMods` tree rather than in this repository, so the export has
+  no art to package and nothing to apply. Absent since at least B174.1.
 
 Do not confuse **Transparent Store Bar** with **Store Scroll Bar**,
 **Transparent Menu Bar** or **Transparent Decor Tab**. Those are three separate
