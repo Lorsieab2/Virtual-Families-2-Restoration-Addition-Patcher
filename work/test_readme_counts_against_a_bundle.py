@@ -309,6 +309,38 @@ class DisclosureOfShippedDefectsTests(unittest.TestCase):
             "differently, or it overstates the defect in the other direction",
         )
 
+    def test_the_label_group_count_matches_the_generator(self):
+        """47 was a call-site count masquerading as a group count.
+
+        The README and the request ledger both said the stuck-label defect
+        affected "all 47 label groups". That figure came from counting
+        VF2CurrentLabelInGroup call sites, not distinct groups, and it was
+        carried between documents for several builds without anyone counting
+        the groups themselves. BEHAVIOR_LABEL_GROUPS is the authority.
+
+        Only a group with more than one label can show the defect at all, so
+        the affected population is the multi-label groups, not every group.
+        """
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location(
+            "_vf2_patcher_for_label_counts",
+            Path(__file__).resolve().parent / "patch_mobile_furniture_pack.py",
+        )
+        patcher = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(patcher)
+
+        groups = patcher.BEHAVIOR_LABEL_GROUPS
+        multi = [name for name, entries in groups if len(entries) > 1]
+
+        readme = README
+        self.assertNotIn(
+            "47 label groups", readme,
+            "the stale call-site count is back in the README",
+        )
+        with self.subTest("the README states the real multi-label count"):
+            self.assertIn("%d of the %d groups" % (len(multi), len(groups)), readme)
+
     def test_the_source_now_carries_the_corrected_count(self):
         # The disclosure claims it is fixed at source. Check that, so the log
         # cannot describe a repair that was never made.

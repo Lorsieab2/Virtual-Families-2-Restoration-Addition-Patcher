@@ -462,7 +462,7 @@ relabelled at the last moment.
     behaviour label persists in memory after a behaviour ENDS, and the code
     that decides "is this villager already doing X" read that leftover text --
     so every later session matched it and re-used the old label instead of
-    rolling again. The same defect applied to all 47 label groups, not only the
+    rolling again. The same defect applied to every multi-label group -- 41 of the 59 groups carry more than one label -- not only the
     gym; it was simply most visible there because the gym has ten.
   - Fixed by asking the label cache, which is keyed to the specific behaviour
     instance, whether the label still belongs to the activity actually running.
