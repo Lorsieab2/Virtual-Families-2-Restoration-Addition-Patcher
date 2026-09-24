@@ -31,12 +31,14 @@ the invisible table playing pool in older builds.
 
 Verified against the compiled code rather than the source: the emitted call is
 decoded out of the instruction stream and must push 3000, and reverting it to
-450 fails that check. The full link of the patched objects succeeds. Not
-verified in play.
+450 fails that check. The full link of the patched objects succeeds.
 
-**Playtest:** with a ping-pong table placed -- try each of the visible and
-invisible ones -- leave villagers to their own devices and see whether they
-choose to play. In a house with no ping-pong table, they should never do so.
+**Confirmed in play 2026-09-24:** the owner reports villagers choosing the
+ping-pong table on their own at the raised frequency.
+
+**Playtest (done).** With a ping-pong table placed, villagers left to their own
+devices choose to play. In a house with no ping-pong table they never do, since
+the candidate carries the table's own content-map object.
 
 Still open from earlier builds, for the owner's eyes: Achiever Extraordinaire
 is the bottom Goals row with Holiday Furniture on; the Invisible Ping-Pong
