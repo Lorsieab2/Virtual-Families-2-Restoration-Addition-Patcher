@@ -136,6 +136,29 @@ class ReadmeCountsTests(unittest.TestCase):
                 found.add(path)
         return found
 
+    def test_the_on_marker_legend_is_not_self_contradictory(self):
+        """Two sentences described the (on) marks in opposite ways.
+
+        One said "Each is marked below"; the other said the marks are
+        deliberately non-exhaustive. A player cannot interpret the marker
+        under both, and the contradiction survived a review round. The
+        manifest settles it: almost every setting ships enabled, so the
+        non-exhaustive reading is the one the README keeps.
+        """
+        on = [row for row in self.manifest["settings"] if row.get("default")]
+
+        with self.subTest("the exhaustive claim is gone"):
+            self.assertNotIn("Each is marked below", README)
+        with self.subTest("the README states the real default-on count"):
+            self.assertIn("%d arrive enabled" % len(on), README)
+        with self.subTest("the README states the real default-off count"):
+            off = len(self.manifest["settings"]) - len(on)
+            self.assertEqual(
+                1, off,
+                "the legend names exactly one default-off setting; update it "
+                "if the bundle ever ships a different number",
+            )
+
     def test_the_offered_settings_count_matches_the_manifest(self):
         self.assertIn(
             f"bundle offers {len(self.manifest['settings'])} settings",
@@ -308,6 +331,67 @@ class DisclosureOfShippedDefectsTests(unittest.TestCase):
             "the entry must state that nothing a player receives behaves "
             "differently, or it overstates the defect in the other direction",
         )
+
+    def test_the_label_group_count_matches_the_generator(self):
+        """47 was a call-site count masquerading as a group count.
+
+        The README and the request ledger both said the stuck-label defect
+        affected "all 47 label groups". That figure came from counting
+        VF2CurrentLabelInGroup call sites, not distinct groups, and it was
+        carried between documents for several builds without anyone counting
+        the groups themselves. BEHAVIOR_LABEL_GROUPS is the authority.
+
+        Only a group with more than one label can show the defect at all, so
+        the affected population is the multi-label groups, not every group.
+        """
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location(
+            "_vf2_patcher_for_label_counts",
+            Path(__file__).resolve().parent / "patch_mobile_furniture_pack.py",
+        )
+        patcher = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(patcher)
+
+        groups = patcher.BEHAVIOR_LABEL_GROUPS
+        multi = [name for name, entries in groups if len(entries) > 1]
+
+        remaining = len(multi) - 1  # every multi-label group but the Home Gym
+
+        ledger = (ROOT / "docs" / "REQUEST_LEDGER.md").read_text(encoding="utf-8")
+
+        # The first version of this test read only the README, and the stale
+        # count was sitting in the ledger at the same moment it passed. A
+        # count that lives in two documents has to be checked in both.
+        for name, text in (("README.md", README), ("REQUEST_LEDGER.md", ledger)):
+            with self.subTest(name + " states the real multi-label count"):
+                self.assertIn("%d of the %d groups" % (len(multi), len(groups)), text)
+            with self.subTest(name + " has dropped the call-site count"):
+                # The ledger quotes the withdrawn figure inside its correction
+                # note on purpose, so only the bare claim is forbidden there.
+                self.assertNotIn("all 47 label groups", text.lower())
+            with self.subTest(name + " does not carry a count derived from 47"):
+                self.assertNotIn("other 46 label groups", text.lower())
+                self.assertNotIn("remaining 46 groups", text.lower())
+
+        # Pin the count IN ITS OWN ROW. Asserting it "somewhere in the file"
+        # is satisfied by the summary paragraph, so the row this guard exists
+        # to protect could carry any number and still pass.
+        row = next(
+            (line for line in ledger.splitlines()
+             if line.startswith("| Label groups showed only one of their labels |")),
+            None,
+        )
+        self.assertIsNotNone(row, "the label-groups ledger row is gone")
+        status = row.split("|")[2]
+        with self.subTest("the ledger ROW STATUS states the real remaining count"):
+            self.assertIn("remaining %d multi-label groups" % remaining, status)
+        with self.subTest("the ledger row status carries no other group count"):
+            others = [
+                n for n in re.findall(r"remaining (\d+) multi-label groups", status)
+                if int(n) != remaining
+            ]
+            self.assertEqual([], others, "stale remaining-count in the row status")
 
     def test_the_source_now_carries_the_corrected_count(self):
         # The disclosure claims it is fixed at source. Check that, so the log
