@@ -167,12 +167,14 @@ Upgrades**. Each is marked below. Uncheck anything you do not want and click
 - **2nd Bathroom Mobile-Style Renovations (AI-Generated Art Warning)** (on) - AI-generated Bathroom 2 art, hand-edited, based on the Bathroom 1 mobile renovations. Labeled with an art warning in the GUI.
 - **Cheat Upgrades** (on) - the cheat-only executable overlay, adding 43 Special Upgrade rows. See [Cheat Upgrades in detail](#cheat-upgrades-in-detail).
 
-**Experimental rule changes** (each is a separate default-off one-byte runtime flag)
+**Experimental rule changes** (each gated by its own one-byte runtime flag, which stays
+zero until you enable the setting -- note the SETTINGS themselves ship enabled in the
+release bundle, like almost everything else)
 
 - **Allow Older Pregnancies** (`.vf2preg`) - normal fertility below 50, then a chance that tapers from 10% at 50 to a 0.1% floor at 69+; Next Generation also unlocks at 60 with a surviving child.
 - **Allow Same-Sex Marriage** (`.vf2same`) - flips only the spawned candidate's gender field when the in-game Special Upgrade is on; same-sex spouses keep native private romantic time and never become pregnant.
 - **Older Villager Mortality Curve** (`.vf2mort`) - replaces only the annual old-age death roll with a calibrated curve that accelerates past effective age 110. Active food groups still subtract 0-4 effective years. No hard maximum age.
-- **Store Scroll Bar** (`.vf2scrl`) - adds a scroll bar to the store.
+- **Store Scroll Bar** (`.vf2scrl`) (on) - adds a scroll bar to the store.
 
 **Asset and UI mods**
 
@@ -182,7 +184,7 @@ Upgrades**. Each is marked below. Uncheck anything you do not want and click
 - **Four new visible furniture items** - Exercise Bike, Home Gym System, Ping-Pong Table, and Spa Lounger. These are ordinary store items with their own art, each built on the same donor arrangement as the invisible pieces above. Until B180 none of them did anything when a villager was dropped on one: this patcher's drop dispatcher matches on item id, and only the Invisible Spa Lounger was ever listed, so every other added piece had no route at all. Their records and placement maps were correct and simply never consulted. B180 gives the **Spa Lounger** a route of its own. The **Exercise Bike**, **Home Gym System**, **Ping-Pong Table** and the Yoga Equipment now each have villager actions of their own as well, described under "Actions for the added furniture" below. That replaces an earlier arrangement in which three of them borrowed a base-game action and relabelled it, and the Home Gym System had no action at all -- it was reported in play as doing nothing, which was accurate, because the Yoga Equipment it was modelled on consults no furniture in the base game. Those are actions a villager chooses on their own. **All of these drop routes are now confirmed in play by the owner** -- see the end of this entry. Which of them has a drop route of its own depends on **Behavior Patches** -- the behavior-only executable overlay, not **Add mobile furniture behaviors**, which is a separate setting with its own `.vf2beh` runtime flag. With Behavior Patches off, only the Spa Lounger does, and the others rely on the game's native hotspot path, which dispatches on a hotspot rather than on an item id and so cannot tell one added item from another. With it on -- it is on by default -- the Exercise Bike, Home Gym System, Yoga Equipment and Ping-Pong Table are each matched by exact item id before the stock hotspot is consulted, so a drop on one reaches that item's own action. That routing is present in the emitted source. The owner has confirmed in play that dropping a villager on the Spa Lounger, Patio Table, Picnic Table, Exercise Bike, Home Gym System, Ping-Pong Table, Lounger and Yoga Equipment -- visible and invisible alike -- reaches those items' own actions (B195 fixed the case where transparent art stopped the drop resolving at all). **No added-furniture drop route is outstanding.**
 - **Invisible Workspace Upgrades** - invisible variants of the workspace upgrade props.
 - **Lorsieab2's Custom Map Images** - replacement map art.
-- **Transparent Menu Bar** and **Transparent Decor Tab** - UI chrome transparency. A third transparency setting, **Transparent Store Bar**, is defined but is not in the bundle; see [What's included](#whats-included). (**Store Scroll Bar** is a separate thing entirely -- it *adds* a scroll bar to the store rather than making anything transparent, and is listed under the experimental rule changes above.)
+- **Transparent Menu Bar** (on) and **Transparent Decor Tab** (on) - UI chrome transparency. A third transparency setting, **Transparent Store Bar**, is defined but is not in the bundle; see [What's included](#whats-included). (**Store Scroll Bar** is a separate thing entirely -- it *adds* a scroll bar to the store rather than making anything transparent, and is listed under the experimental rule changes above.)
 - **White Birds** - recoloured birds.
 - **Glowing Collectibles** - makes collectibles easier to spot.
 - **Misc Graphics Fixes** - assorted art corrections.
@@ -190,8 +192,13 @@ Upgrades**. Each is marked below. Uncheck anything you do not want and click
 - **Add optional song mods** - optional music replacements.
 - **No AI Icons** - requires Cheat Upgrades; swaps the late Special Upgrade icons for non-AI artwork.
 
-Entries marked **(on)** are enabled by the release profile the bundle ships
-with; everything else is off until you tick it. Every optional feature is absent
+**Almost everything in the release bundle is on by default.** Of B196's 35
+settings, **34 arrive enabled** when you pick **Defaults** in the GUI, and
+exactly one arrives off: **Swap Invisible Furniture Graphics with Transparent
+Graphics**. The `(on)` marks below are therefore not an exhaustive index --
+they were added to entries where the default has surprised people, and an
+entry without one is not thereby off. The shipped `manifest.json` is the
+authority, and the GUI shows each setting's real initial state. Every optional feature is absent
 when its setting is off, and base-game autonomous behavior choices and
 likelihoods are left alone except where a patch documents otherwise. As of the audit date above the owner has confirmed
 in play: every added-furniture drop route, the Home Gym's caption variation,
