@@ -136,6 +136,29 @@ class ReadmeCountsTests(unittest.TestCase):
                 found.add(path)
         return found
 
+    def test_the_on_marker_legend_is_not_self_contradictory(self):
+        """Two sentences described the (on) marks in opposite ways.
+
+        One said "Each is marked below"; the other said the marks are
+        deliberately non-exhaustive. A player cannot interpret the marker
+        under both, and the contradiction survived a review round. The
+        manifest settles it: almost every setting ships enabled, so the
+        non-exhaustive reading is the one the README keeps.
+        """
+        on = [row for row in self.manifest["settings"] if row.get("default")]
+
+        with self.subTest("the exhaustive claim is gone"):
+            self.assertNotIn("Each is marked below", README)
+        with self.subTest("the README states the real default-on count"):
+            self.assertIn("%d arrive enabled" % len(on), README)
+        with self.subTest("the README states the real default-off count"):
+            off = len(self.manifest["settings"]) - len(on)
+            self.assertEqual(
+                1, off,
+                "the legend names exactly one default-off setting; update it "
+                "if the bundle ever ships a different number",
+            )
+
     def test_the_offered_settings_count_matches_the_manifest(self):
         self.assertIn(
             f"bundle offers {len(self.manifest['settings'])} settings",
@@ -351,8 +374,24 @@ class DisclosureOfShippedDefectsTests(unittest.TestCase):
                 self.assertNotIn("other 46 label groups", text.lower())
                 self.assertNotIn("remaining 46 groups", text.lower())
 
-        with self.subTest("the ledger states the real remaining count"):
-            self.assertIn("%d multi-label groups" % remaining, ledger)
+        # Pin the count IN ITS OWN ROW. Asserting it "somewhere in the file"
+        # is satisfied by the summary paragraph, so the row this guard exists
+        # to protect could carry any number and still pass.
+        row = next(
+            (line for line in ledger.splitlines()
+             if line.startswith("| Label groups showed only one of their labels |")),
+            None,
+        )
+        self.assertIsNotNone(row, "the label-groups ledger row is gone")
+        status = row.split("|")[2]
+        with self.subTest("the ledger ROW STATUS states the real remaining count"):
+            self.assertIn("remaining %d multi-label groups" % remaining, status)
+        with self.subTest("the ledger row status carries no other group count"):
+            others = [
+                n for n in re.findall(r"remaining (\d+) multi-label groups", status)
+                if int(n) != remaining
+            ]
+            self.assertEqual([], others, "stale remaining-count in the row status")
 
     def test_the_source_now_carries_the_corrected_count(self):
         # The disclosure claims it is fixed at source. Check that, so the log

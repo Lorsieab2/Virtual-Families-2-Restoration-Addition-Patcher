@@ -150,10 +150,14 @@ verified against the shipped `manifest.json`.
 
 ### Optional patches
 
-Release bundles are exported with the all-enabled release profile, so several of
-these arrive **on** when you pick **Defaults** in the GUI — including **Cheat
-Upgrades**. Each is marked below. Uncheck anything you do not want and click
-**Enable/Disable Patches** to rebuild the modded folder without it.
+Release bundles are exported with the all-enabled release profile, so **nearly
+all of these arrive on** when you pick **Defaults** in the GUI — including
+**Cheat Upgrades**. Of B196's 35 settings, 34 arrive enabled and one arrives
+off (**Swap Invisible Furniture Graphics with Transparent Graphics**). The
+`(on)` marks below are a reading aid on entries whose default has surprised
+people, **not** an exhaustive index -- an unmarked entry is not thereby off.
+Uncheck anything you do not want and click **Enable/Disable Patches** to
+rebuild the modded folder without it.
 
 **Gameplay and content**
 
