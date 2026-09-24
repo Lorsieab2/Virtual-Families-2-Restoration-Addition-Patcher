@@ -333,13 +333,26 @@ class DisclosureOfShippedDefectsTests(unittest.TestCase):
         groups = patcher.BEHAVIOR_LABEL_GROUPS
         multi = [name for name, entries in groups if len(entries) > 1]
 
-        readme = README
-        self.assertNotIn(
-            "47 label groups", readme,
-            "the stale call-site count is back in the README",
-        )
-        with self.subTest("the README states the real multi-label count"):
-            self.assertIn("%d of the %d groups" % (len(multi), len(groups)), readme)
+        remaining = len(multi) - 1  # every multi-label group but the Home Gym
+
+        ledger = (ROOT / "docs" / "REQUEST_LEDGER.md").read_text(encoding="utf-8")
+
+        # The first version of this test read only the README, and the stale
+        # count was sitting in the ledger at the same moment it passed. A
+        # count that lives in two documents has to be checked in both.
+        for name, text in (("README.md", README), ("REQUEST_LEDGER.md", ledger)):
+            with self.subTest(name + " states the real multi-label count"):
+                self.assertIn("%d of the %d groups" % (len(multi), len(groups)), text)
+            with self.subTest(name + " has dropped the call-site count"):
+                # The ledger quotes the withdrawn figure inside its correction
+                # note on purpose, so only the bare claim is forbidden there.
+                self.assertNotIn("all 47 label groups", text.lower())
+            with self.subTest(name + " does not carry a count derived from 47"):
+                self.assertNotIn("other 46 label groups", text.lower())
+                self.assertNotIn("remaining 46 groups", text.lower())
+
+        with self.subTest("the ledger states the real remaining count"):
+            self.assertIn("%d multi-label groups" % remaining, ledger)
 
     def test_the_source_now_carries_the_corrected_count(self):
         # The disclosure claims it is fixed at source. Check that, so the log

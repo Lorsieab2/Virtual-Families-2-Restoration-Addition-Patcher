@@ -51,9 +51,11 @@ they do NOT close:
   villagers choose the table ON THEIR OWN is a separate observation, and
   `docs/B196-release-notes.md` still records it as not verified in play with an
   open playtest request.
-- The **other 46 label groups**. The Home Gym's ten captions were observed;
-  nap_dream, meal_prep, sit_down_general, career, coffee and the rest share the
-  fix but nobody has watched them.
+- The **other 40 multi-label groups**. The Home Gym's ten captions were
+  observed; nap_dream, meal_prep, sit_down_general, career, coffee and the rest
+  share the fix but nobody has watched them. (41 of the 59 groups in
+  `BEHAVIOR_LABEL_GROUPS` carry more than one label and can show this defect;
+  the other 18 cannot.)
 - The rows above still marked pending, which the 2026-09-06 blanket statement
   covers but which remain individually unverified.
 
