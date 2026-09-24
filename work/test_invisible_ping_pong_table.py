@@ -176,7 +176,7 @@ class TheSprite(unittest.TestCase):
 class TheRoute(unittest.TestCase):
     def test_the_drop_dispatch_names_both_tables(self):
         src = _strip_comments(_source())
-        self.assertIn("if (VF2DropCandidate() == __VF2_PING_PONG_TABLE_ITEM_ID__ ||\n        VF2DropCandidate() == __VF2_INVISIBLE_PING_PONG_TABLE_ITEM_ID__) {\n        VF2PingPongPlay(villager);", src)
+        self.assertIn("if (VF2DropCandidateNoSprite() == __VF2_PING_PONG_TABLE_ITEM_ID__ ||\n        VF2DropCandidateNoSprite() == __VF2_INVISIBLE_PING_PONG_TABLE_ITEM_ID__) {\n        VF2PingPongPlay(villager);", src)
         self.assertIn('("__VF2_INVISIBLE_PING_PONG_TABLE_ITEM_ID__", "InvisiblePingPongTable"),', src)
         self.assertIn('"__VF2_INVISIBLE_PING_PONG_TABLE_ITEM_ID__",\n        f"{INVISIBLE_PING_PONG_TABLE_ITEM_ID:#x}",', src)
         self.assertIn("0x220, 0x32A, 0x32C, 0x32D, 0x32E, INVISIBLE_PING_PONG_TABLE_ITEM_ID}", src)
@@ -218,7 +218,7 @@ class TheRoute(unittest.TestCase):
         if not emitted.is_file():
             self.skipTest("generator output not present; run the generator first")
         text = emitted.read_text(encoding="utf-8", errors="replace")
-        self.assertIn("if (VF2DropCandidate() == 0x32e ||\n        VF2DropCandidate() == 0x331) {\n        VF2PingPongPlay(villager);", text)
+        self.assertIn("if (VF2DropCandidateNoSprite() == 0x32e ||\n        VF2DropCandidateNoSprite() == 0x331) {\n        VF2PingPongPlay(villager);", text)
         special = (patcher.PATCHED / "vf2_spontaneous_behaviors.cpp").read_text(encoding="utf-8", errors="replace")
         self.assertIn("        0x32e, 0x331,\n        0x9a, 0x36,", special)
         self.assertNotIn("__VF2_INVISIBLE_PING_PONG_TABLE_ITEM_ID__", text + special, "an unsubstituted placeholder would not compile")

@@ -31555,7 +31555,22 @@ static const int kVF2TransparentDropItemCount =
 // visible in the source, not left to the compiler.
 static int VF2ContentCell(int px) { return (px + ((px >> 31) & 7)) >> 3; }
 
+static int VF2TransparentFurnitureSlotAtPointEx(ldwPoint point, bool checkSprite);
+
+// Sprite-free variant for the pre-hotspot routes (#378): identical geometry,
+// no GetImageGrid. See VF2DropCandidateNoSprite for why the blank-sprite gate
+// is not needed before the stock handler has run.
+static int VF2TransparentFurnitureSlotAtPointNoSprite(ldwPoint point)
+{
+    return VF2TransparentFurnitureSlotAtPointEx(point, false);
+}
+
 static int VF2TransparentFurnitureSlotAtPoint(ldwPoint point)
+{
+    return VF2TransparentFurnitureSlotAtPointEx(point, true);
+}
+
+static int VF2TransparentFurnitureSlotAtPointEx(ldwPoint point, bool checkSprite)
 {
     unsigned char *manager = reinterpret_cast<unsigned char *>(&FurnitureManager);
     int count = *reinterpret_cast<int *>(manager + 0x1004);
@@ -31605,7 +31620,8 @@ static int VF2TransparentFurnitureSlotAtPoint(ldwPoint point)
         // fire in those gaps and change behaviour for players who never
         // enabled Transparent Graphics. Review caught that; the gate asks the
         // sprite rather than the setting, which the executable cannot see.
-        if (!VF2SpriteIsBlankAround(info,
+        if (checkSprite &&
+            !VF2SpriteIsBlankAround(info,
                 point.x - *reinterpret_cast<int *>(record + 0x14),
                 point.y - *reinterpret_cast<int *>(record + 0x18))) continue;
         // ApplyFmapContent applies the slots in order and a later block
@@ -31631,6 +31647,36 @@ static int VF2DropCandidate()
             VF2FurnitureSlotAtPointOrTransparent(gVF2DropCandidateSample));
     }
     return gVF2DropCandidateCache;
+}
+
+// THE PRE-HOTSPOT LOOKUP. NO SPRITE, EVER. Issue #378.
+//
+// The added-furniture routes are substituted AHEAD of HandleDropOnHotSpot, so
+// anything they call runs before the game's own drop handling. Review caught
+// that deferring the candidate was not enough on its own: the very first
+// route still asked for it, so GetImageGrid still ran ahead of stock code on
+// exactly the drop that crashed.
+//
+// These routes only need to know WHICH PLACED ITEM is under the point, and
+// the stock alpha resolver plus the fmap geometry answer that without ever
+// consulting a sprite. VF2TransparentFurnitureSlotAtPoint's blank-sprite gate
+// exists to stop a VISIBLE item being claimed by geometry; before the stock
+// handler has run there is no such claim to make, because these routes match
+// an exact item id and then hand off. So the gate is not needed here, and its
+// graphics call is precisely what must not happen this early.
+static int gVF2DropCandidateNoSpriteCache = -2;
+
+static int VF2DropCandidateNoSprite()
+{
+    if (gVF2DropCandidateNoSpriteCache == -2) {
+        int slot = VF2FurnitureSlotAtPoint(gVF2DropCandidateSample);
+        if (slot < 0) {
+            slot = VF2TransparentFurnitureSlotAtPointNoSprite(
+                gVF2DropCandidateSample);
+        }
+        gVF2DropCandidateNoSpriteCache = VF2FurnitureItemAtSlot(slot);
+    }
+    return gVF2DropCandidateNoSpriteCache;
 }
 
 bool const theMainScene::VF2HandleDropOnMobileFurniture(CVillager &villager)
@@ -31661,6 +31707,7 @@ ldwPoint sample = villager.FeetPos();
     // ordering for every drop the added furniture does not claim.
     gVF2DropCandidateSample = sample;
     gVF2DropCandidateCache = -2;
+    gVF2DropCandidateNoSpriteCache = -2;
 __VF2_ADDED_FURNITURE_DROP_DISPATCH__
 __VF2_COMPUTER_DROP_DISPATCH__
     // The Invisible Spa Lounger is a custom item, not ported mobile furniture,
@@ -31739,7 +31786,7 @@ __VF2_COMPUTER_DROP_DISPATCH__
     added_furniture_drop_dispatch = "" if not ENABLE_BEHAVIOR_PATCHES else """
     // Added-item identity must win before the stock hotspot: these items use
     // donor maps, so the stock hotspot would otherwise consume the drop first.
-    if (VF2DropCandidate() == __VF2_EXERCISE_BIKE_ITEM_ID__) {
+    if (VF2DropCandidateNoSprite() == __VF2_EXERCISE_BIKE_ITEM_ID__) {
         // BOTH bike variants must be reachable from a DROP.
         //
         // Reported in play: dropping a villager on the Exercise Bike only ever
@@ -31760,7 +31807,7 @@ __VF2_COMPUTER_DROP_DISPATCH__
         }
         return true;
     }
-    if (VF2DropCandidate() == __VF2_HOME_GYM_ITEM_ID__) {
+    if (VF2DropCandidateNoSprite() == __VF2_HOME_GYM_ITEM_ID__) {
         VF2HomeGymWorkout(villager);
         return true;
     }
@@ -31783,14 +31830,14 @@ __VF2_COMPUTER_DROP_DISPATCH__
     //
     // Pairing the stock id with the invisible one is the shape this dispatcher
     // already uses for exactly this situation; see the patio and picnic tables.
-    if (VF2DropCandidate() == 0x220 || VF2DropCandidate() == __VF2_YOGA_EQUIPMENT_ITEM_ID__) {
+    if (VF2DropCandidateNoSprite() == 0x220 || VF2DropCandidateNoSprite() == __VF2_YOGA_EQUIPMENT_ITEM_ID__) {
         VF2YogaEquipmentWorkout(villager);
         return true;
     }
     // BOTH ping-pong tables, visible and invisible, the way the yoga pair is
     // matched above.
-    if (VF2DropCandidate() == __VF2_PING_PONG_TABLE_ITEM_ID__ ||
-        VF2DropCandidate() == __VF2_INVISIBLE_PING_PONG_TABLE_ITEM_ID__) {
+    if (VF2DropCandidateNoSprite() == __VF2_PING_PONG_TABLE_ITEM_ID__ ||
+        VF2DropCandidateNoSprite() == __VF2_INVISIBLE_PING_PONG_TABLE_ITEM_ID__) {
         VF2PingPongPlay(villager);
         return true;
     }

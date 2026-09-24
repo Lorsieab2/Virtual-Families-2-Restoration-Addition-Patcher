@@ -57,7 +57,7 @@ import patch_mobile_furniture_pack as patcher  # noqa: E402
 ROUTED_INVISIBLE = {0x328, 0x329, 0x32A, 0x32B, 0x32F, 0x331}
 VISIBLE_SPA_LOUNGER = 0x330
 
-FALLBACK = "static int VF2TransparentFurnitureSlotAtPoint(ldwPoint point)"
+FALLBACK = "static int VF2TransparentFurnitureSlotAtPointEx(ldwPoint point, bool checkSprite)"
 HOOK = "if (slot < 0) slot = VF2TransparentFurnitureSlotAtPoint(point);"
 DROP_RESOLVE = "gVF2DropCandidateCache = VF2FurnitureItemAtSlot("
 DROP_RESOLVE2 = "VF2FurnitureSlotAtPointOrTransparent(gVF2DropCandidateSample));"
@@ -279,8 +279,11 @@ class TheDispatcherTemplate(unittest.TestCase):
         """
         self.assertIn("static bool VF2SpriteIsBlankAround(sFurnitureInfo *info, int localX, int localY)", self.src)
         self.assertIn("if (grid->PixelIsVisible(localX + dx, localY + dy)) return false;", self.src)
-        # Applied in the fallback, and the drop is rejected when it fails.
-        self.assertIn("if (!VF2SpriteIsBlankAround(info,", self.body)
+        # Applied in the fallback behind the checkSprite flag (#378): the
+        # sprite-free entry point must be able to skip it, so the call is
+        # guarded rather than unconditional.
+        self.assertIn("if (checkSprite &&", self.body)
+        self.assertIn("!VF2SpriteIsBlankAround(info,", self.body)
         # The declaration must match the stock export's signature or the
         # mangled name will not resolve at link.
         self.assertIn("bool PixelIsVisible(int x, int y);", self.src)
@@ -679,6 +682,61 @@ class TheRealLink(unittest.TestCase):
             self.assertGreater(exe.stat().st_size, 1_000_000)
 
 
+class NoGraphicsBeforeTheStockHandler(unittest.TestCase):
+    """No drop-path code may touch the graphics manager before stock handling.
+
+    Issue #378. The added-furniture routes are substituted AHEAD of
+    HandleDropOnHotSpot, so anything they call runs before the game's own drop
+    handling. B195 resolved the candidate on the dispatcher's first line, which
+    put VF2SpriteIsBlankAround -- and its theGraphicsManager::GetImageGrid call
+    -- on every drop in the game ahead of stock code.
+
+    Deferring the resolution was NOT sufficient on its own: review found the
+    first pre-hotspot route still asked for the candidate, so the graphics call
+    still happened first on exactly the drop that crashed. The pre-hotspot
+    routes therefore use VF2DropCandidateNoSprite(), which shares the geometry
+    walk but never consults a sprite.
+
+    This guard pins the ordering in the EMITTED unit, because that is what the
+    substitution produces and the template alone cannot show it.
+    """
+
+    def setUp(self):
+        self.unit, reason = _emitted_unit()
+        if reason:
+            self.skipTest(reason)
+
+    def _first(self, needle):
+        i = self.unit.find(needle)
+        self.assertGreater(i, 0, f"{needle!r} is not in the emitted dispatcher")
+        return i
+
+    def test_the_pre_hotspot_routes_never_consult_a_sprite(self):
+        hotspot = self._first("HandleDropOnHotSpot(villager)")
+        sprite_aware = self._first("if (VF2DropCandidate() ==")
+        no_sprite = self._first("if (VF2DropCandidateNoSprite() ==")
+        self.assertLess(
+            no_sprite, hotspot,
+            "the sprite-free routes should run before the stock handler")
+        self.assertLess(
+            hotspot, sprite_aware,
+            "a sprite-consulting lookup runs BEFORE HandleDropOnHotSpot; that is "
+            "the #378 ordering defect returning")
+
+    def test_the_sprite_free_lookup_does_not_reach_the_sprite_gate(self):
+        start = self.unit.index("static int VF2DropCandidateNoSprite()")
+        body = self.unit[start:self.unit.index(chr(10) + "}" + chr(10), start)]
+        self.assertIn("VF2TransparentFurnitureSlotAtPointNoSprite", body)
+        self.assertNotIn("VF2SpriteIsBlankAround", body)
+
+    def test_the_geometry_walk_gates_the_sprite_probe_on_its_flag(self):
+        # One walker, two entry points; the probe is behind the flag so the
+        # sprite-free path cannot reach GetImageGrid.
+        src = _source()
+        self.assertIn("static int VF2TransparentFurnitureSlotAtPointEx(ldwPoint point, bool checkSprite)", src)
+        self.assertIn("if (checkSprite &&", src)
+
+
 class TheDriftGuard(unittest.TestCase):
     """T4: the fallback's item set equals the invisible ids the dispatcher routes.
 
@@ -698,7 +756,7 @@ class TheDriftGuard(unittest.TestCase):
         # compares, PLUS the ids VF2IsMobileChaise accepts, because the
         # Invisible Lounger is folded into that predicate rather than compared
         # by literal (see the "chaise" binding spec).
-        routed = {int(x, 16) for x in re.findall(r"VF2DropCandidate\(\) == (0x[0-9A-Fa-f]+)", unit)}
+        routed = {int(x, 16) for x in re.findall(r"VF2DropCandidate(?:NoSprite)?\(\) == (0x[0-9A-Fa-f]+)", unit)}
         chaise_start = unit.index("static bool VF2IsMobileChaise(int item)")
         chaise = unit[chaise_start:unit.index("\n}\n", chaise_start)]
         routed |= {int(x, 16) for x in re.findall(r"item == (0x[0-9A-Fa-f]+)", chaise)}
