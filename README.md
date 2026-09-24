@@ -104,6 +104,10 @@ The load path is mostly extended by wrappers that run the native `LoadState` fir
 
 ## What's included
 
+*Accuracy audit: 2026-09-24, against the shipped B196 bundle. Claims below were
+checked against `manifest.json`, the release notes and the owner's confirmed
+play reports; superseded claims are marked rather than deleted.*
+
 The GUI reads its checkboxes from the shipped manifest, so the exact list follows
 the release you downloaded. B196's bundle offers 35 settings, grouped the way
 the GUI groups them, unchanged since B180.
@@ -116,9 +120,20 @@ files and generated assets that are not tied to a single feature. So 36 defined,
 less 2 unavailable, plus 1 generated, is the 35 the GUI shows.
 
 Two of the entries below are described for completeness but are **not** offered
-by the bundle: **Allow Same-Sex Marriage** (reachable in game through its Cheat
-Upgrade row instead, since its toggle moved to a persisted save byte) and
-**Transparent Store Bar**. Both have been absent since at least B174.1.
+by the bundle:
+
+- **Allow Same-Sex Marriage**, reachable in game through its Cheat Upgrade row
+  instead, since its toggle moved to a persisted save byte. Absent since at
+  least B174.1.
+- **Transparent Store Bar**, a defined setting whose replacement image lives in
+  the `OptionalVisualMods` tree rather than in this repository, so the export
+  has no source art to package and drops the setting. Also absent since at
+  least B174.1.
+
+Do not confuse **Transparent Store Bar** with **Store Scroll Bar**,
+**Transparent Menu Bar** or **Transparent Decor Tab**. Those are three separate
+settings, and all three *are* present and enabled by default in B196 --
+verified against the shipped `manifest.json`.
 
 ### Main patches (on by default)
 
@@ -144,7 +159,7 @@ Upgrades**. Each is marked below. Uncheck anything you do not want and click
 
 - **The startup crash that once blocked this setting is fixed and shipped.** Builds up to and including B181 faulted a few seconds after launch, before reaching play, whenever **Add mobile furniture behaviors** was enabled, and earlier revisions of this README told you to leave the setting off. That no longer applies: the setting is **on by default** in the current release and the crash does not occur. The cause was a skipped register restore -- an injected branch jumped into a stock epilogue past the instruction that restores a saved register, so the following restores took the wrong stack slots and the villager pointer ended up in the wrong register. The fix adds that restore on the injected path, and was confirmed in a built game rather than only in source: the corrected executable ran with the setting enabled without faulting, while an unfixed build in the same install still faulted within seconds. **The old "leave this setting off" instruction is superseded and is recorded here only so the history stays legible.** See `docs/Transparency Log.txt` for the measurements.
 - **Add mobile furniture behaviors** (on) - ported actions for genuine mobile furniture: weather-aware loungers, the Patio Umbrella and tables, Picnic Table, Birthday furniture, and the Holiday pieces. Ships 34 behavior maps and is gated by a one-byte `.vf2beh` runtime flag that is zero until the setting is enabled. It also carries the spa treatments on the two Spa Loungers - see [Spa treatments](#spa-treatments). The Picnic Table and Patio Table behaviours run. The meal and drinks did **not** appear on them in B181 and earlier: the two props are ids the desktop engine's prop array does not hold, so the state is tracked outside it and the draw had to be added from scratch. Four separate defects kept it from working and all four are now fixed in source -- the image descriptors were reserved but never populated, so the sprites could not be resolved at all; the draw hung off a call inside a per-prop branch, so it only ran while an unrelated stock prop was active; the position came from `info.point`, which is the tile a villager stands on rather than the table itself; and the draw used the `AddDecal` overload that has no bounds check. **Shipped in a built binary since B182, and partly confirmed in play.** The fixes have been through every matrix build since, so they are present in the released executables. The owner has since seen both props draw in play -- initially misaligned and behind the furniture -- and B189's playtest table records the **Patio drinks prop position as GOOD**. The **Picnic Table meal prop has no equivalent confirmation**, so that one remains unconfirmed.
-- Playtest follow-up as of B183, kept for the record: the Exercise Bike and Home Gym venue handlers now apply their own labels even when the borrowed donor keeps its native label, while preserving the donor animation and duration. Spa receiving now uses the stock SleepNW/SleepNE strips after a short settle and walks to a small upward-adjusted target. The B183 generated executable was startup-smoke tested from its self-contained package for 15 seconds with zero new matching Windows Application Error/WER events. **Player gameplay QA is still required for the reported behavior.**
+- Playtest follow-up as of B183, kept for the record: the Exercise Bike and Home Gym venue handlers now apply their own labels even when the borrowed donor keeps its native label, while preserving the donor animation and duration. Spa receiving now uses the stock SleepNW/SleepNE strips after a short settle and walks to a small upward-adjusted target. The B183 generated executable was startup-smoke tested from its self-contained package for 15 seconds with zero new matching Windows Application Error/WER events. **All of it has since been confirmed in play.** The owner verified the Spa Lounger receiving pose against the furniture (the remaining spa defect closed in B191), and reports the Exercise Bike and Home Gym System working as described.
 - **Use mobile sound assets** (on) - stages the 67 hash-pinned mobile behavior sounds and repoints the four PC WAV routes that must load OGG.
 - **Add Holiday Ornaments collection** (on) - 12 yard collectibles, six Collections Chest pages, the Ornamentologist and six-family goals, Lucky Rock rarity odds, and The Collector offer/sell handling.
 - **Add mobile-exclusive Island Events** (on) - all 25 authenticated mobile-exclusive Island Event records with their text and choice/result dialogs.
@@ -164,10 +179,10 @@ Upgrades**. Each is marked below. Uncheck anything you do not want and click
 - **Virtual Families 3 Furniture** - VF3 furniture imports, including the plaid/striped/flowered living-room set.
 - **Add Custom Couches and LDW Posters** - custom couch colourways and the LDW poster set.
 - **Add Invisible Furniture - Visible Graphics** and **Swap Invisible Furniture Graphics with Transparent Graphics** - the invisible furniture set, with a companion setting that swaps in fully transparent art. Nine outdoor pieces: the Kiddie Pool, Full-Size Pool, Hammock, Picnic Table, Patio Table, Yoga Equipment, Lounger, Spa Lounger, and (B193) Ping-Pong Table. Each borrows its donor's placement map byte for byte, so villagers treat it as they treat the piece it was cut from. Before B180 that was true only of the donors the base game ships: a borrower whose donor is one of the 34 maps Mobile Furniture Behaviors implements silently received the raw mobile map instead of the desktop-safe one, which is why villagers used the invisible Spa Lounger and Lounger wrongly. B180 routed those borrowers to the donor's desktop-safe map, which fixed the peep-slot anchors but also left them with almost no collision geometry: that map is deliberately sparse, which is correct under the donor's own name and not usable as a borrower's only map. The Patio Table borrower fell from 241 occupied cells to 8, the Picnic Table from 237 to 8, and both loungers from 154 to 12. A borrower now keeps the donor's geometry and takes only the translated anchors, so it has both. The donor's own map is unchanged. See `docs/discoveries.md` for the measurements.
-- **Four new visible furniture items** - Exercise Bike, Home Gym System, Ping-Pong Table, and Spa Lounger. These are ordinary store items with their own art, each built on the same donor arrangement as the invisible pieces above. Until B180 none of them did anything when a villager was dropped on one: this patcher's drop dispatcher matches on item id, and only the Invisible Spa Lounger was ever listed, so every other added piece had no route at all. Their records and placement maps were correct and simply never consulted. B180 gives the **Spa Lounger** a route of its own. The **Exercise Bike**, **Home Gym System**, **Ping-Pong Table** and the Yoga Equipment now each have villager actions of their own as well, described under "Actions for the added furniture" below. That replaces an earlier arrangement in which three of them borrowed a base-game action and relabelled it, and the Home Gym System had no action at all -- it was reported in play as doing nothing, which was accurate, because the Yoga Equipment it was modelled on consults no furniture in the base game. Those are actions a villager chooses on their own. **Whether dropping a villager onto the Exercise Bike, Home Gym System, Ping-Pong Table or Yoga Equipment makes them use it is a separate question, and remains unconfirmed.** Which of them has a drop route of its own depends on **Behavior Patches** -- the behavior-only executable overlay, not **Add mobile furniture behaviors**, which is a separate setting with its own `.vf2beh` runtime flag. With Behavior Patches off, only the Spa Lounger does, and the others rely on the game's native hotspot path, which dispatches on a hotspot rather than on an item id and so cannot tell one added item from another. With it on -- it is on by default -- the Exercise Bike, Home Gym System, Yoga Equipment and Ping-Pong Table are each matched by exact item id before the stock hotspot is consulted, so a drop on one reaches that item's own action. That routing is present in the emitted source. The owner has since confirmed in play that dropping a villager on the invisible Ping-Pong Table, Patio Table, Picnic Table, Spa Lounger, Lounger and Yoga Equipment reaches those items' own actions (B195 fixed the case where transparent art stopped the drop resolving at all). The Exercise Bike and Home Gym System drop routes remain unconfirmed in play.
+- **Four new visible furniture items** - Exercise Bike, Home Gym System, Ping-Pong Table, and Spa Lounger. These are ordinary store items with their own art, each built on the same donor arrangement as the invisible pieces above. Until B180 none of them did anything when a villager was dropped on one: this patcher's drop dispatcher matches on item id, and only the Invisible Spa Lounger was ever listed, so every other added piece had no route at all. Their records and placement maps were correct and simply never consulted. B180 gives the **Spa Lounger** a route of its own. The **Exercise Bike**, **Home Gym System**, **Ping-Pong Table** and the Yoga Equipment now each have villager actions of their own as well, described under "Actions for the added furniture" below. That replaces an earlier arrangement in which three of them borrowed a base-game action and relabelled it, and the Home Gym System had no action at all -- it was reported in play as doing nothing, which was accurate, because the Yoga Equipment it was modelled on consults no furniture in the base game. Those are actions a villager chooses on their own. **All of these drop routes are now confirmed in play by the owner** -- see the end of this entry. Which of them has a drop route of its own depends on **Behavior Patches** -- the behavior-only executable overlay, not **Add mobile furniture behaviors**, which is a separate setting with its own `.vf2beh` runtime flag. With Behavior Patches off, only the Spa Lounger does, and the others rely on the game's native hotspot path, which dispatches on a hotspot rather than on an item id and so cannot tell one added item from another. With it on -- it is on by default -- the Exercise Bike, Home Gym System, Yoga Equipment and Ping-Pong Table are each matched by exact item id before the stock hotspot is consulted, so a drop on one reaches that item's own action. That routing is present in the emitted source. The owner has confirmed in play that dropping a villager on the Spa Lounger, Patio Table, Picnic Table, Exercise Bike, Home Gym System, Ping-Pong Table, Lounger and Yoga Equipment -- visible and invisible alike -- reaches those items' own actions (B195 fixed the case where transparent art stopped the drop resolving at all). **No added-furniture drop route is outstanding.**
 - **Invisible Workspace Upgrades** - invisible variants of the workspace upgrade props.
 - **Lorsieab2's Custom Map Images** - replacement map art.
-- **Transparent Menu Bar**, **Transparent Store Bar**, **Transparent Decor Tab** - UI chrome transparency.
+- **Transparent Menu Bar**, **Store Scroll Bar**, **Transparent Decor Tab** - UI chrome transparency. A fourth, **Transparent Store Bar**, is defined but is not in the bundle; see [What's included](#whats-included).
 - **White Birds** - recoloured birds.
 - **Glowing Collectibles** - makes collectibles easier to spot.
 - **Misc Graphics Fixes** - assorted art corrections.
@@ -178,10 +193,26 @@ Upgrades**. Each is marked below. Uncheck anything you do not want and click
 Entries marked **(on)** are enabled by the release profile the bundle ships
 with; everything else is off until you tick it. Every optional feature is absent
 when its setting is off, and base-game autonomous behavior choices and
-likelihoods are left alone except where a patch documents otherwise. Several
-features are shipped with in-game QA still outstanding; `docs/REQUEST_LEDGER.md`
-records the per-request status and `docs/Transparency Log.txt` records the
+likelihoods are left alone except where a patch documents otherwise. As of the audit date above the owner has confirmed
+in play: every added-furniture drop route, the Home Gym's caption variation,
+the Cheat Upgrades (including Same-Sex Marriage and Reroll of Marriage
+Candidates) and the room renovations. The **Picnic Table meal prop** is the one
+feature still awaiting in-game confirmation. `docs/REQUEST_LEDGER.md` records
+the per-request status and `docs/Transparency Log.txt` records the
 disclosures.
+
+### Known issues
+
+- **A rare crash when dropping a villager on the Patio Table during bad
+  weather, with the drinks prop already drawn.** Reported once on B196 and
+  tracked as issue #378. It has **not** been reproduced since -- the same steps
+  on the same save now refuse correctly with "Don't like the weather!" instead
+  of faulting -- so no fix has shipped, because there is nothing yet to verify
+  a fix against. What the single crash dump does show: the fault is a
+  data-execution violation inside the game's own stock drop handler, reached
+  through a table index past the end of the range that handler initialises.
+  If you can reproduce it reliably, please say so on #378; a reproduction is
+  the missing piece.
 
 ## Cheat Upgrades in detail
 
@@ -409,9 +440,10 @@ relabelled at the last moment.
   high-intensity interval training, and weightlifting.
   - **In builds before B185 a villager only ever showed one of the ten, and
     B185 contains the intended fix for that.** Whether the defect actually
-    ends there is the open question below -- it has not been observed in
-    play, so this entry does not assert a boundary it cannot check. What was
-    observed: all ten were built and emitted, but the selection was stuck, so
+    ends there was an open question for several builds, and it is now
+    answered: the owner has confirmed in play that the captions do vary. What
+    was observed before the fix: all ten were built and emitted, but the
+    selection was stuck, so
     whichever variation a villager rolled on their first visit was the one
     they showed for the rest of the game. Reported in play as the gym "only
     showing one action out of its full possibilities", and that report was
@@ -426,36 +458,50 @@ relabelled at the last moment.
     instance, whether the label still belongs to the activity actually running.
     The intended effect is that a villager who is mid-workout keeps their
     caption rather than flickering, and that a new session rolls again. That
-    is what the code does; see below for what has and has not been observed.
-  - **What that claim rests on, and what it does not.** The fix is present in
-    the emitted C++: the gym's ten string ids are in the generated source, and
-    the generator the B185 build ran is
-    byte-identical to the one on main. All 32 B185 executables differ from
-    the B184 build they were seeded from, which rules out the failure where a
-    seeded build inherits the previous release's binary untouched -- but a
-    full relink changes every hash whether or not any particular feature is
-    in it, so that shows the executables were REBUILT and nothing narrower.
-    The executables *can* be examined -- the villager label field appears
-    475 times as a 4-byte immediate in the behaviour-patches build, so the
-    emitted code is locatable by decoding even though the function names are
-    gone -- but **that signature does not discriminate**: B184 predates the
-    fix and carries the identical 475. A marker both builds share proves
-    nothing, so **no binary check separating this build from the unfixed one
-    has been found**. **And nobody has yet watched a
-    villager use the gym repeatedly and seen the captions vary.** That is
-    in-game QA and it has not been done, so this entry describes what was
-    built and measured, not what has been observed in play.
+    is what the code does.
+  - **Confirmed in play.** The owner has since watched a villager use the gym
+    across sessions and reports that the captions **do** vary. That is the
+    in-game observation this entry spent several builds waiting for, and it
+    settles the question: the fix works in the shipped game, not merely in the
+    emitted source.
+  - **What the static evidence could and could not show, kept for method.**
+    Before that observation the entry rested only on build evidence, and it is
+    worth recording why that was never enough. The fix is present in the
+    emitted C++: the gym's ten string ids are in the generated source, and the
+    generator the B185 build ran is byte-identical to the one on main. All 32
+    B185 executables differ from the B184 build they were seeded from, which
+    rules out a seeded build inheriting the previous release's binary
+    untouched -- but a full relink changes every hash whether or not any
+    particular feature is in it, so that showed the executables were REBUILT
+    and nothing narrower. The executables *can* be examined -- the villager
+    label field appears 475 times as a 4-byte immediate in the
+    behaviour-patches build -- but **that signature does not discriminate**:
+    B184 predates the fix and carries the identical 475. A marker both builds
+    share proves nothing, so no binary check separating this build from the
+    unfixed one was ever found. **Static evidence alone could not close this;
+    only play could.**
   - **Claims this entry used to make, recorded rather than quietly removed.**
     Earlier drafts said the fix was "present in the emitted C++ *and in the
     shipped executables*", and that the defect held only "until B185" — a
-    runtime boundary nobody had observed. **Both were wrong.** They are noted
-    here because a reader seeing only the corrected text cannot tell which
-    claim was withdrawn, and because each is a conclusion someone would
-    otherwise reach again from the same evidence: a whole-executable hash
-    change shows a relink rather than a feature, and a fix being built is not
-    the same as a defect being over.
+    runtime boundary nobody had observed. **Both were unsupported when made.**
+    The play confirmation above has since borne the second one out, but that
+    does not retroactively make it evidenced at the time -- it was asserted
+    from build evidence that could not establish it, and it happened to be
+    right. They are noted here because a reader seeing only the corrected text
+    cannot tell which claim was withdrawn, and because each is a conclusion
+    someone would otherwise reach again from the same evidence: a
+    whole-executable hash change shows a relink rather than a feature, and a
+    fix being built is not the same as a defect being over.
 - The **Yoga Equipment** has its own action, labelled **Doing yoga**.
 - The **Ping-Pong Table** has its own action, labelled **Playing ping-pong**.
+  Villagers choose it on their own, and only while a ping-pong table is placed
+  -- the candidate carries the table's own content-map object, so raising how
+  often it is offered cannot make anyone play in a house without one. **B196
+  raised that frequency from 450 to 3000, matching the Pool Table it was cloned
+  from.** At 450 it was offered roughly a seventh as often as pool, which in
+  play read as villagers ignoring the table. Both the visible and the invisible
+  table count, since availability follows the object each map declares rather
+  than the item id.
 
 Each borrows its base-game counterpart for *animations and duration only* --
 those are deliberately unchanged, and reusing them is the point. What is not
