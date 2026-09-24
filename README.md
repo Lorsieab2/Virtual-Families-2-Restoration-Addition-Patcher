@@ -153,7 +153,7 @@ verified against the shipped `manifest.json`.
 ### Main patches (on by default)
 
 - **Patch game executable** - verifies a vanilla `Virtual Families 2.exe` and writes a clearly labeled modded EXE into a separate modded folder.
-- **Add mobile Holiday furniture** - mobile Holiday furniture records and generated assets (decorative for now).
+- **Add mobile Holiday furniture** (on) - mobile Holiday furniture records and generated assets. **All 28 pieces work in play, the Christmas trees included** (confirmed by the owner, 2026-09-24), and all 28 ship their own placement maps. **Corrected 2026-09-24:** this entry previously read "decorative for now". That was wrong twice over. It implied the whole set was inert, and it rested on a generator comment saying the two Christmas trees get deliberately emptied maps -- but the shipped maps are not empty. Decoded out of the B196 bundle, `ChristmasTree1.png.fmap` and `ChristmasTree2.png.fmap` are 1368 and 1456 bytes and each carries 11 occupied cells, more than the 7 in a working Wreath. The comment describes an intent the built artifact does not match, which is why the source read and the play report disagreed.
 - **Add Holiday outfits** - Holiday outfit body values and runtime frames; needed for Holiday rows in the expanded Outfit store.
 - **Add expanded Outfit store** - Outfit store rows for body values 0-49, icons, independent tray items, and body-field sync.
 - **Add additional mobile-exclusive furniture** - the non-Holiday mobile furniture set.
@@ -245,7 +245,8 @@ disclosures.
 
 Enabling **Cheat Upgrades** adds 43 rows under Special Upgrades. All are free
 except two: **Enable Same-Sex Marriage** and **Allow Reroll of Marriage
-Candidates** each cost 10,000 coins.
+Candidates** each cost 10,000 coins. **The owner confirms the Special Upgrade
+rows work in play (2026-09-24)**, including both paid rows.
 
 The toggle rows and the armed pregnancy one-shots are cancelled by buying them
 again: an armed one-shot shows a checkmark, and arming one clears the rows it is
