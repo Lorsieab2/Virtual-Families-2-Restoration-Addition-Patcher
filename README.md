@@ -182,7 +182,7 @@ Upgrades**. Each is marked below. Uncheck anything you do not want and click
 - **Four new visible furniture items** - Exercise Bike, Home Gym System, Ping-Pong Table, and Spa Lounger. These are ordinary store items with their own art, each built on the same donor arrangement as the invisible pieces above. Until B180 none of them did anything when a villager was dropped on one: this patcher's drop dispatcher matches on item id, and only the Invisible Spa Lounger was ever listed, so every other added piece had no route at all. Their records and placement maps were correct and simply never consulted. B180 gives the **Spa Lounger** a route of its own. The **Exercise Bike**, **Home Gym System**, **Ping-Pong Table** and the Yoga Equipment now each have villager actions of their own as well, described under "Actions for the added furniture" below. That replaces an earlier arrangement in which three of them borrowed a base-game action and relabelled it, and the Home Gym System had no action at all -- it was reported in play as doing nothing, which was accurate, because the Yoga Equipment it was modelled on consults no furniture in the base game. Those are actions a villager chooses on their own. **All of these drop routes are now confirmed in play by the owner** -- see the end of this entry. Which of them has a drop route of its own depends on **Behavior Patches** -- the behavior-only executable overlay, not **Add mobile furniture behaviors**, which is a separate setting with its own `.vf2beh` runtime flag. With Behavior Patches off, only the Spa Lounger does, and the others rely on the game's native hotspot path, which dispatches on a hotspot rather than on an item id and so cannot tell one added item from another. With it on -- it is on by default -- the Exercise Bike, Home Gym System, Yoga Equipment and Ping-Pong Table are each matched by exact item id before the stock hotspot is consulted, so a drop on one reaches that item's own action. That routing is present in the emitted source. The owner has confirmed in play that dropping a villager on the Spa Lounger, Patio Table, Picnic Table, Exercise Bike, Home Gym System, Ping-Pong Table, Lounger and Yoga Equipment -- visible and invisible alike -- reaches those items' own actions (B195 fixed the case where transparent art stopped the drop resolving at all). **No added-furniture drop route is outstanding.**
 - **Invisible Workspace Upgrades** - invisible variants of the workspace upgrade props.
 - **Lorsieab2's Custom Map Images** - replacement map art.
-- **Transparent Menu Bar**, **Store Scroll Bar**, **Transparent Decor Tab** - UI chrome transparency. A fourth, **Transparent Store Bar**, is defined but is not in the bundle; see [What's included](#whats-included).
+- **Transparent Menu Bar** and **Transparent Decor Tab** - UI chrome transparency. A third transparency setting, **Transparent Store Bar**, is defined but is not in the bundle; see [What's included](#whats-included). (**Store Scroll Bar** is a separate thing entirely -- it *adds* a scroll bar to the store rather than making anything transparent, and is listed under the experimental rule changes above.)
 - **White Birds** - recoloured birds.
 - **Glowing Collectibles** - makes collectibles easier to spot.
 - **Misc Graphics Fixes** - assorted art corrections.
@@ -196,9 +196,12 @@ when its setting is off, and base-game autonomous behavior choices and
 likelihoods are left alone except where a patch documents otherwise. As of the audit date above the owner has confirmed
 in play: every added-furniture drop route, the Home Gym's caption variation,
 the Cheat Upgrades (including Same-Sex Marriage and Reroll of Marriage
-Candidates) and the room renovations. The **Picnic Table meal prop** is the one
-feature still awaiting in-game confirmation. `docs/REQUEST_LEDGER.md` records
-the per-request status and `docs/Transparency Log.txt` records the
+Candidates) and the room renovations. Of the items in *that* list nothing is
+outstanding, but this is not the whole outstanding set -- other checks remain
+open, among them the **Picnic Table meal prop** drawing and whether B196's
+raised ping-pong frequency actually changes how often villagers choose the
+table on their own (see `docs/B196-release-notes.md`). `docs/REQUEST_LEDGER.md`
+records the per-request status and `docs/Transparency Log.txt` records the
 disclosures.
 
 ### Known issues
@@ -501,7 +504,9 @@ relabelled at the last moment.
   from.** At 450 it was offered roughly a seventh as often as pool, which in
   play read as villagers ignoring the table. Both the visible and the invisible
   table count, since availability follows the object each map declares rather
-  than the item id.
+  than the item id. The weight change is verified in the compiled code but
+  **not yet in play** -- the drop route is confirmed, but whether villagers now
+  pick the table more often on their own is still unobserved.
 
 Each borrows its base-game counterpart for *animations and duration only* --
 those are deliberately unchanged, and reusing them is the point. What is not
