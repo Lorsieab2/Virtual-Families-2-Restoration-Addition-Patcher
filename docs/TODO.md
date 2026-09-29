@@ -421,7 +421,10 @@ must remain visible as Needs source audit; it must not be silently omitted.
   payload.
 - Standalone patcher repo follow-up: keep patcher-only release ZIPs under the
   private `Virtual-Families-2-Restoration-Addition-Patcher` GitHub repo, and
-  keep the GUI `Check for updates` link pointed at that repo's Releases page.
+  keep the GUI `Check for updates` link pointed at that repo's base page,
+  `https://github.com/Lorsieab2/Virtual-Families-2-Restoration-Addition-Patcher/`.
+  (Superseded: this link used to point at the Releases page; the owner asked
+  for the base repository instead in #383.)
 - Settings Evict B118 validation: open Settings on a generation 1 and a later
   generation save, confirm the Evict button appears, then click it and verify
   the native confirmation/adoption reset path runs without crashing.

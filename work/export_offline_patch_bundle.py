@@ -610,6 +610,9 @@ PATCHER_DISPLAY_NAME = "Virtual Families 2 Restoration/Addition Patcher"
 PATCHER_RELEASE_REPO_DISPLAY_NAME = "Virtual Families 2 Restoration/Addition Patcher"
 PATCHER_RELEASE_REPO_NAME = "Virtual-Families-2-Restoration-Addition-Patcher"
 PATCHER_RELEASES_URL = f"https://github.com/Lorsieab2/{PATCHER_RELEASE_REPO_NAME}/releases"
+# The owner: "Check for updates" opens the base repository, not the releases
+# page -- the same URL the GUI's link opens (src/offline_vf2_patcher_gui.py).
+PATCHER_UPDATES_URL = f"https://github.com/Lorsieab2/{PATCHER_RELEASE_REPO_NAME}/"
 MODDED_EXE_OUTPUT_TEMPLATE = "Virtual Families 2 - Modded {build_label}.exe"
 MODDED_OUTPUT_FOLDER_TEMPLATE = "VF2-{build_label}-Modded"
 STALE_PATCHER_LAUNCHER_NAME = "Virtual Families 2 Restoration-Addition Patcher.exe"
@@ -3472,7 +3475,7 @@ folder. It checks that your original game folder looks correct before it
 changes anything.
 
 Check for updates:
-{PATCHER_RELEASES_URL}
+{PATCHER_UPDATES_URL}
 
 1. Download and install the official Virtual Families 2 PC version.
 

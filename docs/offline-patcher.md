@@ -826,8 +826,10 @@ B119 build-specific notes:
   `--island-events-exe`; it applies to the same B119 modded EXE name only when
   both `core_executable` and `island_events` are enabled.
 - The GUI header includes a `Check for updates` hyperlink to the standalone
-  private patcher release repository:
-  `https://github.com/Lorsieab2/Virtual-Families-2-Restoration-Addition-Patcher/releases`.
+  patcher repository's base page:
+  `https://github.com/Lorsieab2/Virtual-Families-2-Restoration-Addition-Patcher/`.
+  (Superseded: it used to open the `/releases` page; the owner asked for the
+  base repository instead in #383.)
   Future patcher ZIP releases should be published there only.
 
 B121 build-specific notes:

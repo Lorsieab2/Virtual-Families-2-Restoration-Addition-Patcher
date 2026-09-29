@@ -24,7 +24,7 @@ from tkinter import filedialog, messagebox, ttk
 import offline_vf2_patcher as patcher
 
 APP_DISPLAY_NAME = "Virtual Families 2 Restoration/Addition Patcher"
-PATCHER_RELEASES_URL = "https://github.com/Lorsieab2/Virtual-Families-2-Restoration-Addition-Patcher/releases"
+PATCHER_RELEASES_URL = "https://github.com/Lorsieab2/Virtual-Families-2-Restoration-Addition-Patcher/"
 PATCHER_ICON_PNG = "patcher_icon.png"
 PATCHER_ICON_ICO = "patcher_icon.ico"
 LOCAL_SETTINGS_FILE = "patcher_local_settings.json"
