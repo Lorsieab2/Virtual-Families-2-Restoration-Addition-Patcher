@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import importlib.util
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -37,6 +38,19 @@ class UpdateLinkBundleTests(unittest.TestCase):
     def test_the_how_to_use_template_uses_it(self):
         self.assertIn("Check for updates:\n{PATCHER_UPDATES_URL}", self.source.replace("\r\n", "\n"))
         self.assertNotIn("Check for updates:\n{PATCHER_RELEASES_URL}", self.source.replace("\r\n", "\n"))
+
+    def test_an_exported_bundle_carries_the_base_repository_link(self):
+        # Codex, #383: check the file the exporter actually writes, not just
+        # the template's source text.
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle_dir = Path(tmp)
+            written = self.bundle.write_bundle_runner_files(bundle_dir, "B196")
+            self.assertIn("How to Use.txt", written)
+            how_to = (bundle_dir / "How to Use.txt").read_text(encoding="utf-8").replace("\r\n", "\n")
+            self.assertIn("Check for updates:\n" + BASE + "\n", how_to)
+            self.assertNotIn(BASE + "releases", how_to)
+            gui = (bundle_dir / "offline_vf2_patcher_gui.py").read_text(encoding="utf-8")
+            self.assertIn(f'PATCHER_RELEASES_URL = "{BASE}"', gui)
 
     def test_the_shipped_how_to_use_and_the_gui_agree(self):
         how_to = (ROOT / "How to Use.txt").read_text(encoding="utf-8").replace("\r\n", "\n")
