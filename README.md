@@ -34,8 +34,8 @@ Backups default to a location under that output folder.
 
 Patching itself is offline: no step of validating, patching, or restoring
 contacts the network. The one exception is the **Check for updates** link in
-the GUI header, which opens the releases page in your browser when you click
-it.
+the GUI header, which opens the patcher's GitHub page in your browser when you
+click it.
 
 **If a release carries more than one archive, take the highest revision.**
 B196 carries a single archive, `VF2-B196-Release.zip`, so there is nothing to

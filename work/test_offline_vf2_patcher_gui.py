@@ -485,10 +485,12 @@ class OfflineVF2PatcherGUITests(unittest.TestCase):
                 },
             )
 
-    def test_update_link_points_to_standalone_patcher_releases_repo(self):
+    def test_update_link_points_to_standalone_patcher_base_repo(self):
+        # The owner: "Check for updates" opens the base GitHub repository,
+        # not the releases page.
         self.assertEqual(
             gui.PATCHER_RELEASES_URL,
-            "https://github.com/Lorsieab2/Virtual-Families-2-Restoration-Addition-Patcher/releases",
+            "https://github.com/Lorsieab2/Virtual-Families-2-Restoration-Addition-Patcher/",
         )
 
     def test_manifest_build_label_prefers_explicit_build_number(self):

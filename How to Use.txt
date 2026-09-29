@@ -7,7 +7,7 @@ folder. It checks that your original game folder looks correct before it
 changes anything.
 
 Check for updates:
-https://github.com/Lorsieab2/Virtual-Families-2-Restoration-Addition-Patcher/releases
+https://github.com/Lorsieab2/Virtual-Families-2-Restoration-Addition-Patcher/
 
 1. Download and install the official Virtual Families 2 PC version.
 
