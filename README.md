@@ -304,7 +304,7 @@ Price modes affect every purchase routed through the store price calculator.
 | Clean House | Removes the same four indoor mess categories as the stock Housekeeping Services event. Yard weeds and the laundry-room sock pile are preserved. |
 | Fill available yard slots with weeds | Spawns 15 weeds cycling all four weed types through the native spawner (4/4/4/3 per press; the cycle carries over between presses, so the type that gets three rotates); stops early when the 30 mess slots are full. Will not work if the Gardener is active. |
 | Clean Garden | Removes every weed from the yard without affecting other collectables. |
-| Max out sock pile | Sets only the laundry-room sock pile to 1,000,000 socks. |
+| Max out sock pile | Sets only the laundry-room sock pile to 1,000,000 socks. (Earlier builds set 2,147,483,647, which could break the three sock-laundering goals. Every executable now repairs such a save when it loads: negative laundering-goal progress becomes 0 and an oversized or negative pile becomes 1,000,000. Healthy saves are not changed.) |
 | No sock pile | Clears the laundry-room sock pile without awarding sock-laundering progress. |
 
 The Dryer lint fire remains a legitimate native random malfunction and requires a Dryer.

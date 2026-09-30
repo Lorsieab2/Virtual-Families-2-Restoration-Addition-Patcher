@@ -3032,6 +3032,18 @@
   last frame, and more than two billion deposits away from overflow. (The
   `SpawnSockInHouse` call described above was also already removed; the row
   writes only the counter.)
+- **Load-time repair (2026-09-30), in every executable.** Saves already
+  damaged by the old maximum are repaired when they load:
+  `VF2AchievementLoadStateAndReconcile` calls `VF2RepairSockLaunderingOverflow`
+  right after the native `LoadState` (stock `theGameState::Load` has already
+  memcpy'd the save into theGameState, so `+0x148` is the saved pile).
+  Negative progress on goals `0x3B`/`0x3C`/`0x3D` only is set to 0 -- those
+  goals only ever receive the pile, which normal play keeps at zero or above,
+  so a negative value can only be the wrap, and 0 is safe even for a complete
+  goal because `IncrementProgress` skips complete goals and `SetComplete`
+  never writes progress. A pile below 0 or above 1,000,000 (an unlaundered
+  old `INT_MAX` pile, or one wrapped to `INT_MIN`) is set to 1,000,000.
+  Saves with progress >= 0 and a pile of 0..1,000,000 are left untouched.
 - The full 213-test suite passes with one intentional skip. Compiled helper
   readback confirms both writes and the shared save call. The later combined
   B156 link uses the installed Visual Studio Community x86 ATL library and
