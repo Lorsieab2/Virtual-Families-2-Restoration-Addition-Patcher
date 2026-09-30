@@ -2752,13 +2752,14 @@ def assign_reconfigure_undo_sources(
       index (a record whose bytes ARE the clean file needs nothing);
     - a record writing a file the clean install does not have is removed.
 
-    Records that already declare a restore are left alone: a restore_requires
-    gate is a deliberate layer (No AI Icons over Cheat Upgrades) and the
-    Mobile Furniture Behaviors maps choose their own. The one exception is a
-    removal declared on a clean-install file (Holiday Ornaments'
-    collectables_small.png), which would delete a base-game image; it becomes
-    a restore instead. Paths outside Images/ and Assets/ are not in the clean
-    index and are not touched.
+    Records gated by restore_requires are a deliberate layer (No AI Icons over
+    Cheat Upgrades) and are left alone, as are restores on paths the clean
+    install does not have (the Mobile Furniture Behaviors maps choose their
+    own). On a clean-install path, a declared removal (Holiday Ornaments'
+    collectables_small.png, which would delete a base-game image) or a restore
+    to bytes that are not the clean file (Invisible Upgrades' Blender_NW and
+    juicer_NE) becomes a restore of the clean file. Paths outside Images/ and
+    Assets/ are not in the clean index and are not touched.
 
     A release bundle (strict) refuses to export when the base payload cannot
     supply a clean original; a development export lists those paths in the
@@ -2766,16 +2767,21 @@ def assign_reconfigure_undo_sources(
     """
     index = {key.casefold(): (key, entry) for key, entry in clean_base_game_index().items()}
     if not index:
-        return {"restores_added": 0, "removals_added": 0, "restore_unavailable": []}
-    restores_added = removals_added = 0
+        return {"restores_added": 0, "restores_corrected": 0, "removals_added": 0, "restore_unavailable": []}
+    restores_added = restores_corrected = removals_added = 0
     restore_unavailable: list[str] = []
     for record in asset_patches:
         target = str(record.get("output_file_path") or record.get("file_path") or "").replace("\\", "/")
         if target.lower().endswith(".exe") or not target.casefold().startswith(("images/", "assets/")):
             continue
-        if record.get("restore_source_path") or record.get("restore_requires"):
+        if record.get("restore_requires"):
             continue
         clean = index.get(target.casefold())
+        existing_restore = str(record.get("restore_source_sha256") or "").lower()
+        if record.get("restore_source_path") and (
+            clean is None or existing_restore == str(clean[1]["sha256"]).lower()
+        ):
+            continue
         if clean is None:
             if not record.get("remove_when_disabled"):
                 record["remove_when_disabled"] = True
@@ -2784,7 +2790,11 @@ def assign_reconfigure_undo_sources(
         clean_rel, clean_entry = clean
         record["remove_when_disabled"] = False
         clean_sha = str(clean_entry["sha256"]).lower()
-        if str(record.get("source_sha256", "")).lower() == clean_sha:
+        # An unconditional restore on a clean-install path that is NOT the
+        # clean file (Invisible Upgrades' Blender_NW/juicer_NE "originals")
+        # leaves bytes a fresh apply never would, so it is replaced.
+        correcting = bool(record.get("restore_source_path"))
+        if not correcting and str(record.get("source_sha256", "")).lower() == clean_sha:
             continue
         original = base_payload / clean_rel
         if not original.is_file() or sha256_file(original) != clean_sha:
@@ -2803,9 +2813,13 @@ def assign_reconfigure_undo_sources(
         record["restore_source_path"] = relative_posix(restore_rel)
         record["restore_source_sha256"] = clean_sha
         record["restore_source_size"] = int(clean_entry["size"])
-        restores_added += 1
+        if correcting:
+            restores_corrected += 1
+        else:
+            restores_added += 1
     return {
         "restores_added": restores_added,
+        "restores_corrected": restores_corrected,
         "removals_added": removals_added,
         "restore_unavailable": sorted(restore_unavailable),
     }

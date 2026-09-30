@@ -3103,6 +3103,8 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             "Images/collectables_small.png": {"sha256": sha(b"vanilla sheet"), "size": len(b"vanilla sheet")},
             "Images/unchanged.png": {"sha256": sha(b"same"), "size": len(b"same")},
             "Images/cheat_x.png": {"sha256": sha(b"cheat base"), "size": len(b"cheat base")},
+            "Images/Upgrades/Blender_NW.png": {"sha256": sha(b"clean blender"), "size": len(b"clean blender")},
+            "Images/Upgrades/toolwall.png": {"sha256": sha(b"clean wall"), "size": len(b"clean wall")},
         }
         with tempfile.TemporaryDirectory() as tmp:
             bundle = Path(tmp) / "bundle"
@@ -3110,6 +3112,7 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             for rel, data in (
                 ("Images/bird.png", b"vanilla bird"),
                 ("Images/collectables_small.png", b"vanilla sheet"),
+                ("Images/Upgrades/Blender_NW.png", b"clean blender"),
             ):
                 (base / rel).parent.mkdir(parents=True, exist_ok=True)
                 (base / rel).write_bytes(data)
@@ -3128,12 +3131,22 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
                 record("Assets/Behaviour.png.fmap", b"map", restore_source_path="payload/b.fmap"),
                 record("Sounds/menu.ogg", b"song"),
                 record("Virtual Families 2.exe", b"exe", output_file_path="Modded.exe"),
+                record("Images/Upgrades/Blender_NW.png", b"invisible", restore_source_path="payload/o.png",
+                       restore_source_sha256=sha(b"not the clean blender"), restore_source_size=21),
+                record("Images/Upgrades/toolwall.png", b"invisible", restore_source_path="payload/w.png",
+                       restore_source_sha256=sha(b"clean wall"), restore_source_size=10),
             ]
             with mock.patch.object(exporter, "clean_base_game_index", return_value=clean):
                 summary = exporter.assign_reconfigure_undo_sources(bundle, base, records)
 
-            bird, sheet, unchanged, new, layer, behaviour, sound, exe = records
-            self.assertEqual(summary, {"restores_added": 2, "removals_added": 1, "restore_unavailable": []})
+            bird, sheet, unchanged, new, layer, behaviour, sound, exe, blender, wall = records
+            self.assertEqual(
+                summary,
+                {"restores_added": 2, "restores_corrected": 1, "removals_added": 1, "restore_unavailable": []},
+            )
+            self.assertEqual((bundle / blender["restore_source_path"]).read_bytes(), b"clean blender")
+            self.assertEqual(blender["restore_source_sha256"], sha(b"clean blender"))
+            self.assertEqual(wall["restore_source_path"], "payload/w.png")
             for row, data in ((bird, b"vanilla bird"), (sheet, b"vanilla sheet")):
                 self.assertFalse(row["remove_when_disabled"])
                 shipped = bundle / row["restore_source_path"]
