@@ -286,7 +286,7 @@ SETTINGS = [
     {
         "id": "holiday_furniture",
         "label": "Add mobile Holiday furniture",
-        "description": "Adds mobile Holiday furniture records and generated assets. These are decorative-only for now.",
+        "description": "Adds mobile Holiday furniture records and generated assets. On its own the set is decorative; with Add mobile furniture behaviors (on by default) 23 of the 28 pieces also get their placement maps and villager actions.",
         "default": True,
         "category": "main",
     },
@@ -405,7 +405,7 @@ SETTINGS = [
     {
         "id": "mobile_furniture_behaviors",
         "label": "Add mobile furniture behaviors",
-        "description": "Optional patch: enables ported actions for genuine mobile furniture where implemented. B156 makes good-weather loungers choose among relaxing, reading, studying, sitting, napping, and sleeping with exhaustion-sensitive rest odds, plus spontaneous supported variants. Exact guarded manual routes cover the Patio Umbrella and tables, Picnic Table, Birthday furniture, Christmas Trees, Dreidel, Menorah, Stockings, Holiday Candles, Santa's Cookie Plate, ten Holiday figurines, Red Bow, Santa Wall Decoration, and both garlands. Invisible/custom/VF3 furniture is excluded. NOTE for the Picnic and Patio Tables: the meal and drinks props did not appear in B181 or earlier -- villagers prepared, ate and drank while the table stayed empty. Four causes were found and fixed; the props have not yet been confirmed in play.",
+        "description": "Optional patch: enables ported actions for genuine mobile furniture where implemented. B156 makes good-weather loungers choose among relaxing, reading, studying, sitting, napping, and sleeping with exhaustion-sensitive rest odds, plus spontaneous supported variants. Exact guarded manual routes cover the Patio Umbrella and tables, Picnic Table, Birthday furniture, Christmas Trees, Dreidel, Menorah, Stockings, Holiday Candles, Santa's Cookie Plate, ten Holiday figurines, Red Bow, Santa Wall Decoration, and both garlands. Invisible/custom/VF3 furniture is excluded. NOTE for the Picnic and Patio Tables: the meal and drinks props did not appear in B181 or earlier -- villagers prepared, ate and drank while the table stayed empty. Four causes were found and fixed; the owner has confirmed both props drawing in play (2026-09-24).",
         "default": True,
         "category": "optional",
     },

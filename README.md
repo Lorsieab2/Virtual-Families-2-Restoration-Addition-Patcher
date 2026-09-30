@@ -76,7 +76,7 @@ The [releases page](https://github.com/Lorsieab2/Virtual-Families-2-Restoration-
 
 - **`VF2-B<version>-Release.zip` is the patcher.** This is what you want. It contains `Launch_GUI.bat` and the manifest the GUI reads, and you point it at your own VF2 installation. Take the newest one.
 - **A `-r2` suffix means a corrected re-pack of that same release.** B180 carries both `VF2-B180-Release.zip` and `VF2-B180-Release-r2.zip`. Take the `-r2` one: it is the same build with one setting description corrected, and it is the same 32 executables byte for byte as the original -- only two of the archive's 7,459 members differ. The original stays attached because release assets are never deleted here, so the version people already downloaded remains available and verifiable.
-- **`VF2-B<version>-Playtest-All-Enabled.zip` is not a patcher.** It is a complete pre-patched game folder built for testing a specific change. There is no GUI and nothing to configure. A playtest build has no patcher step, so it bakes in what the patcher would otherwise apply: the mobile sound assets (all 67 staged, and the four hardcoded `.wav` sound routes rewritten to `.ogg`), plus the two experimental rule changes (Allow Older Pregnancies, Older Villager Mortality Curve) that are default-off in the GUI. The patcher bundle instead keeps the stock `.wav` routes in its executables and rewrites them only when you tick **Use mobile sound assets**, which is what keeps that setting reversible. A playtest artifact may be marked "Latest" while the newest patcher bundle is an earlier version, so check the filename rather than the Latest badge.
+- **`VF2-B<version>-Playtest-All-Enabled.zip` is not a patcher.** It is a complete pre-patched game folder built for testing a specific change. There is no GUI and nothing to configure. A playtest build has no patcher step, so it bakes in what the patcher would otherwise apply: the mobile sound assets (all 67 staged, and the four hardcoded `.wav` sound routes rewritten to `.ogg`), plus the two experimental rule changes (Allow Older Pregnancies, Older Villager Mortality Curve). (**Corrected 2026-09-29:** this used to call those two "default-off in the GUI"; the B196 manifest ships both with `default: true` and the GUI ticks them.) The patcher bundle instead keeps the stock `.wav` routes in its executables and rewrites them only when you tick **Use mobile sound assets**, which is what keeps that setting reversible. A playtest artifact may be marked "Latest" while the newest patcher bundle is an earlier version, so check the filename rather than the Latest badge.
 
 Release ZIPs and compiled game payloads are intentionally not committed to the source tree.
 
@@ -131,15 +131,22 @@ are **not** the same case, and an earlier revision of this README wrongly
 described both as simply absent:
 
 - **Allow Same-Sex Marriage** **works, and always has.** It is not a packaged
-  asset but compiled code, carried in the `.vf2same` section of the patched
-  executable and installed with the rest of the executable patch. You turn it
-  on in game with the **Enable Same-Sex Marriage** Special Upgrade (see
+  asset but compiled code, built into every patched executable and installed
+  with the rest of the executable patch. Its on/off state is a byte saved with
+  your game (inside the inventory record), not a section of the executable,
+  so it survives a relaunch. You turn it on in game with the **Enable Same-Sex
+  Marriage** Special Upgrade, which exists only when **Cheat Upgrades** is
+  ticked (see
   [Cheat Upgrades in detail](#cheat-upgrades-in-detail)), which is why it needs
   no checkbox of its own. **Corrected 2026-09-24:** this README previously
   listed it as "not offered by the bundle", which told players a working
   feature does not ship. It does ship. The bundle's settings list simply drops
   entries that have no packaged source assets, and a code-only feature has
   none -- that is a quirk of how the list is built, not a missing feature.
+  **Corrected 2026-09-29:** this entry previously said the feature is "carried
+  in the `.vf2same` section". No B196 executable has a `.vf2same` section; the
+  toggle moved into the saved inventory byte because a section byte reset on
+  every relaunch.
 - **Transparent Store Bar** genuinely is not applied. Unlike the above it is a
   pure image swap, and its replacement image (`main_no-comm.png`) lives in the
   `OptionalVisualMods` tree rather than in this repository, so the export has
@@ -153,7 +160,7 @@ verified against the shipped `manifest.json`.
 ### Main patches (on by default)
 
 - **Patch game executable** - verifies a vanilla `Virtual Families 2.exe` and writes a clearly labeled modded EXE into a separate modded folder.
-- **Add mobile Holiday furniture** (on) - mobile Holiday furniture records and generated assets. **All 28 pieces work in play, the Christmas trees included** (confirmed by the owner, 2026-09-24), and all 28 ship their own placement maps. **Corrected 2026-09-24:** this entry previously read "decorative for now". That was wrong twice over. It implied the whole set was inert, and it rested on a generator comment saying the two Christmas trees get deliberately emptied maps -- but the shipped maps are not empty. Decoded out of the B196 bundle, `ChristmasTree1.png.fmap` and `ChristmasTree2.png.fmap` are 1368 and 1456 bytes and each carries 11 occupied cells, more than the 7 in a working Wreath. The comment describes an intent the built artifact does not match, which is why the source read and the play report disagreed.
+- **Add mobile Holiday furniture** (on) - mobile Holiday furniture records and generated assets. **All 28 pieces work in play, the Christmas trees included** (confirmed by the owner, 2026-09-24), and all 28 ship their own placement maps. **Corrected 2026-09-24:** this entry previously read "decorative for now". That was wrong twice over. It implied the whole set was inert, and it rested on a generator comment saying the two Christmas trees get deliberately emptied maps -- but the shipped maps are not empty. **Corrected again 2026-09-29, with the maps decoded per setting:** this setting on its own installs placement maps with **0** occupied cells for all 28 pieces (so, on its own, the set really is decorative). The occupied maps come from **Add mobile furniture behaviors**, which replaces 23 of them -- `ChristmasTree1.png.fmap` with 14 occupied cells and `ChristmasTree2.png.fmap` with 13. The Candy Cane, Christmas Cookie, Poinsettia and both Wreaths keep empty maps in every configuration. The earlier figures here ("11 occupied cells each, more than the 7 in a working Wreath") matched no shipped configuration. The owner's in-play confirmation stands: it was made with both settings on, which is the default.
 - **Add Holiday outfits** - Holiday outfit body values and runtime frames; needed for Holiday rows in the expanded Outfit store.
 - **Add expanded Outfit store** - Outfit store rows for body values 0-49, icons, independent tray items, and body-field sync.
 - **Add additional mobile-exclusive furniture** - the non-Holiday mobile furniture set.
@@ -191,7 +198,7 @@ zero until you enable the setting -- note the SETTINGS themselves ship enabled i
 release bundle, like almost everything else)
 
 - **Allow Older Pregnancies** (`.vf2preg`) - normal fertility below 50, then a chance that tapers from 10% at 50 to a 0.1% floor at 69+; Next Generation also unlocks at 60 with a surviving child.
-- **Allow Same-Sex Marriage** (`.vf2same`) - flips only the spawned candidate's gender field when the in-game Special Upgrade is on; same-sex spouses keep native private romantic time and never become pregnant.
+- **Allow Same-Sex Marriage** (no settings row; see [What's included](#whats-included)) - flips only the spawned candidate's gender field when the in-game **Enable Same-Sex Marriage** Special Upgrade is on; same-sex spouses keep native private romantic time and never become pregnant. **Corrected 2026-09-29:** listed here before as a `.vf2same` one-byte runtime flag. It is not one -- its state is a byte saved with the game, turned on and off by the Cheat Upgrades row.
 - **Older Villager Mortality Curve** (`.vf2mort`) - replaces only the annual old-age death roll with a calibrated curve that accelerates past effective age 110. Active food groups still subtract 0-4 effective years. No hard maximum age.
 - **Store Scroll Bar** (`.vf2scrl`) (on) - adds a scroll bar to the store.
 
@@ -217,9 +224,15 @@ exactly one arrives off: **Swap Invisible Furniture Graphics with Transparent
 Graphics**. The `(on)` marks below are therefore not an exhaustive index --
 they were added to entries where the default has surprised people, and an
 entry without one is not thereby off. The shipped `manifest.json` is the
-authority, and the GUI shows each setting's real initial state. Every optional feature is absent
-when its setting is off, and base-game autonomous behavior choices and
-likelihoods are left alone except where a patch documents otherwise. As of the audit date above the owner has confirmed
+authority, and the GUI shows each setting's real initial state. Unticking a
+content setting removes its art, placement maps and sounds, but **not** its
+store rows: the furniture, outfit and hairstyle rows are compiled into every
+patched executable, so they stay listed. Base-game autonomous behavior choices
+and likelihoods are left alone except where a patch documents otherwise --
+and Behavior Patches does change several stock likelihoods; see
+[Behavior Patches in detail](#behavior-patches-in-detail).
+**Corrected 2026-09-29:** this paragraph used to say "Every optional feature
+is absent when its setting is off", which is untrue of the store rows. As of the audit date above the owner has confirmed
 in play: every added-furniture drop route, the Home Gym's caption variation,
 the Cheat Upgrades (including Same-Sex Marriage and Reroll of Marriage
 Candidates) and the room renovations. The **Picnic Table meal prop** and B196's
@@ -243,10 +256,12 @@ disclosures.
 
 ## Cheat Upgrades in detail
 
-Enabling **Cheat Upgrades** adds 43 rows under Special Upgrades. All are free
-except two: **Enable Same-Sex Marriage** and **Allow Reroll of Marriage
-Candidates** each cost 10,000 coins. **The owner confirms the Special Upgrade
-rows work in play (2026-09-24)**, including both paid rows.
+Enabling **Cheat Upgrades** adds 43 rows under Special Upgrades. **All 43 are
+free.** **The owner confirms the Special Upgrade rows work in play
+(2026-09-24).** **Corrected 2026-09-29:** this used to say Enable Same-Sex
+Marriage and Allow Reroll of Marriage Candidates cost 10,000 coins each. Both
+have been free since PR #95 ("Make every Cheat Upgrade free"); the build sets
+their catalog price to 0 and a test pins it.
 
 The toggle rows and the armed pregnancy one-shots are cancelled by buying them
 again: an armed one-shot shows a checkmark, and arming one clears the rows it is
@@ -314,8 +329,8 @@ The Dryer lint fire remains a legitimate native random malfunction and requires 
 | Row | Effect |
 | --- | --- |
 | Force Marriage Email | Queues a normal base-game marriage proposal with native candidate rules. |
-| Enable Same-Sex Marriage | **10,000 coins.** Toggle. Enables same-sex marriage candidates. Requires the Allow Same-Sex Marriage patch. |
-| Allow Reroll of Marriage Candidates | **10,000 coins.** Toggle. Lets Reject generate a new candidate until Accept is clicked. |
+| Enable Same-Sex Marriage | Toggle. Enables same-sex marriage candidates. The feature is built into every patched executable; this row (and so Cheat Upgrades) is what turns it on. |
+| Allow Reroll of Marriage Candidates | Toggle. Lets Reject generate a new candidate until Accept is clicked. |
 | Divorce Spouse | One-shot action. **WARNING: permanently removes the spouse from the Family Tree and House.** |
 
 **Pregnancy one-shots**
@@ -385,7 +400,10 @@ gates the donor behavior; with no matching placement, the native donor action
 falls through unchanged. The current main playtest was regenerated from
 current `main` with behavior
 patches enabled, and its complete package passed a 15-second startup smoke
-test. In-game/player QA is still separate and not complete.
+test. The owner has since confirmed every one of these drop routes in play
+(see **Four new visible furniture items** above). **Corrected 2026-09-29:**
+this paragraph previously ended "In-game/player QA is still separate and not
+complete", which those play confirmations superseded.
 
 ## Spa treatments
 
@@ -413,11 +431,14 @@ and sizing the strip from the leftover ticks is what used to make the receiver
 get up while the giver was still working (fixed in B191). The receiver's rest
 starts when they lie down and is not re-planned when a giver is dropped on
 them later, so a giver added in the last moments of a rest can outlast it.
-Both halves pay dirtiness and energy on the way out. The receiving
-villager takes the nap's own posture, chosen from the placed lounger's
-orientation rather than assumed, so a lounger set the other way round does not
-have someone lying across its arm. `gulpahh_01.ogg` plays periodically through
-the treatment, on the cadence shape the native refreshing-drink behavior uses.
+The receiving villager takes the nap's own posture, chosen from the placed
+lounger's orientation rather than assumed, so a lounger set the other way round
+does not have someone lying across its arm. When the rest ends the receiver
+plays `gulpahh_01.ogg` once, gains 2 dirtiness and **recovers** 7-11 energy; the
+giver's plan is the work interval alone, with no sound, dirtiness or energy
+change. **Corrected 2026-09-29:** this used to say "both halves pay dirtiness
+and energy" and that the sound "plays periodically through the treatment";
+neither matches the code, which plays it once, after the rest.
 
 One honesty note on the duration: it was written to the nap's pattern, and the
 byte-level provenance was not re-confirmed against a native `TakingANap` symbol,
@@ -437,6 +458,31 @@ Three parts of the patch go further than that, and are described in
 six-child private romantic time changes an outcome, and the computer drop gains
 a choice it did not have.
 
+**Stock likelihoods this patch changes**
+
+Several candidates in the lists below are ones the base game **already** lets
+villagers choose on their own. For those, Behavior Patches does not only keep
+them selectable: it replaces the base game's weight with its own fixed value,
+which also removes the base game's per-villager +/-20% variation. Decoded from
+the base game's `InitAI` and the B196 Behavior Patches executable (**recorded
+2026-09-29; whether these cuts are wanted is the owner's decision**):
+
+| Candidate | Base game | With Behavior Patches |
+| --- | --- | --- |
+| Heat up food (`0xD5`), Look for snacks (`0x25`) | 10000 | 450 |
+| Get a drink (`0x19`) | 4000 | 450 |
+| Watch TV (`0x3E`) | 4000 | 650 |
+| Browse the web (`0x5A`) | 3300, from age 14 | 650, all ages |
+| Nap on the couch (`0x83`) | 3000 | 350 |
+| Work out (`0x4A`) | 3000 | 450 |
+| Grande latte (`0xD9`) | 2000 | 150 |
+
+The same fixed values are written again every time a family is loaded, so a
+weight changed by praising or scolding a villager does not survive a reload.
+Earlier text in this section said the candidates keep everything native and
+"only selection eligibility and the displayed label change"; for the weights
+above that was not the whole story.
+
 **Made autonomously selectable**
 
 - Hammock anchored rest (Sunny/Cloudy weather only), warming hands by and watching the fireplace, pinball / slots / pachinko / pool table / foosball, and random radio or MP3 dancing/listening — all ages.
@@ -444,7 +490,7 @@ a choice it did not have.
 - Mending a button and ironing clothes — from displayed age 14. Kitchen, office, and workshop career work — adults only.
 - Checking weight, playing video games, browsing the web, watching TV, getting a drink, heating up food, looking for snacks, preparing a meal, bookshelf reading, showers and baths (including the north shower), coffee/tea and the rare grande latte, cocktails, the trampoline, board games, the swimming pool, watering flowers/roses/window boxes, bathroom sink washing and grooming, the telescope, working out, breakfast, teen homework, and teen online exams.
 - Teaching first words and the infant-care label family — nursing mothers carrying a baby only.
-- **"Needs to sit down" on couches and chairs** (`CBehavior::UseCouch`, `0x189`). This is the behavior a manual drop on a couch or chair runs via `CHotSpot::Couch`, and it is enabled as its own autonomous candidate at weight 450 so the AI picks it too. Native couch and age gates are retained.
+- **"Needs to sit down" on couches and chairs** (`CBehavior::UseCouch`, `0x189`). This is the behavior a manual drop on a couch or chair runs via `CHotSpot::Couch`, and it is enabled as its own autonomous candidate at weight 450 so the AI picks it too. The stock game has no autonomous record for it, so there is no candidate age gate; the couch requirement lives inside the behavior (it links to a free couch or chair, or does nothing). **Corrected 2026-09-29:** previously "Native couch and age gates are retained".
 - **RestingBody** (`0x127`) and its resting label family. Autonomous for all ages at weight 450. Its native sittable targeting and plans are retained. When **Add mobile furniture behaviors** is also enabled, that patch runs last and raises this candidate to weight 2000, where it additionally carries the chaise sunbathing and sit-down routes.
 
 **Label variations**
@@ -567,55 +613,31 @@ item" for every item, every time. Each placement carries a unique handle that
 the game returns alongside the match, and the record is now found by that
 handle, which also keeps two tables of the same kind apart.
 
-**Substantive changes** below: the hammock rest builds its own plan sequence,
-six-child private romantic time changes an outcome, and the computer drop gains
-a choice it did not have.
+**Labels on the shared stock machines**
 
-**Made autonomously selectable**
+The Exercise Bike still shares its donor object with the stock Treadmill, so a
+villager who reaches the bike through the stock Treadmill behaviours is
+relabelled there: walking says **Using the exercise bike** and running says
+**Doing high-intensity cycling**. The item is identified from the placement
+record under the villager's own feet, so a villager on a stock Treadmill keeps
+the stock treadmill labels even when a bike stands next to it. The Ping-Pong
+Table no longer needs this: it has its own content-map object, so the stock
+Pool Table behaviour only ever reaches a genuine pool table, and **Playing
+ping-pong** comes from the table's own action described above.
 
-- Hammock anchored rest (Sunny/Cloudy weather only), warming hands by and watching the fireplace, pinball / slots / pachinko / pool table / foosball, and random radio or MP3 dancing/listening — all ages.
-- Playhouse and playground (daytime only), playing quietly at the kids table, drawing at the easel, the sandbox, the toy train table, and "driving like a grownup" — children only.
-- Mending a button and ironing clothes — from displayed age 14. Kitchen, office, and workshop career work — adults only.
-- Checking weight, playing video games, browsing the web, watching TV, getting a drink, heating up food, looking for snacks, preparing a meal, bookshelf reading, showers and baths (including the north shower), coffee/tea and the rare grande latte, cocktails, the trampoline, board games, the swimming pool, watering flowers/roses/window boxes, bathroom sink washing and grooming, the telescope, working out, breakfast, teen homework, and teen online exams.
-- Teaching first words and the infant-care label family — nursing mothers carrying a baby only.
-- **"Needs to sit down" on couches and chairs** (`CBehavior::UseCouch`, `0x189`). This is the behavior a manual drop on a couch or chair runs via `CHotSpot::Couch`, and it is enabled as its own autonomous candidate at weight 450 so the AI picks it too. Native couch and age gates are retained.
-- **RestingBody** (`0x127`) and its resting label family. Autonomous for all ages at weight 450. Its native sittable targeting and plans are retained. When **Add mobile furniture behaviors** is also enabled, that patch runs last and raises this candidate to weight 2000, where it additionally carries the chaise sunbathing and sit-down routes.
-
-**Label variations**
-
-Grouped visible-label variants are applied to the native TV, web, video game, radio, reading, petting, mending, ironing, telescope, workout, career, shower/bath, coffee/tea, cocktail, pool, sandbox, toy train, playground, and snow-play routes. The wrappers preserve the original behavior plans and only change the displayed action text.
-
-The sit-down pool is shared: the couch/chair route, the chaise route, and RestingBody's own resting labels (`Resting`, `Resting legs`, `Resting tired feet`) all draw from the same age/career/gender-aware label set. RestingBody's wrapper only substitutes a label when the native behavior actually emitted one of its three stock resting labels, so no other native label is disturbed.
-
-**Labels for the added furniture**
-
-Three of the added items borrow a base-game machine whose label would otherwise
-name the wrong thing. Each wrapper looks at which piece of furniture the
-villager actually walked to, so a stock machine keeps its stock label:
-
-- The Ping-Pong Table borrows the Pool Table's behaviour, which labelled its
-  users "playing pool". It now says **Playing ping-pong**.
-- The Exercise Bike borrows the Treadmill's two behaviours, which labelled its
-  users as walking or running on a treadmill.
-  Walking now says **Using the exercise bike**, and running says
-  **Doing high-intensity cycling**. The animations are deliberately left as
-  they are.
-
-The furniture is identified by reading the placed furniture record the villager
-linked to and comparing its item id, rather than by asking which furniture the
-villager *could* use -- that second question reserves a link as a side effect,
-which is why an earlier attempt mislabelled ordinary pool games.
-
-Reported from live play on B180: villagers at the Ping-Pong Table were still
-labelled "Playing pool", and the same fault would have silenced the Exercise
-Bike's labels too. Recovering the record went through a point the game hands
-back for a different purpose -- the tile the villager stands on to *use* the
-item, not the item's own footprint -- and testing that point against the
-footprint asks "which furniture is the villager standing inside". For anything
-you stand beside, a table included, the answer is "none", so the check reported
-"not that item" for every item, every time. Each placement instead carries a
-unique handle that the game returns alongside the match, and the record is now
-found by that handle, which also keeps two tables of the same kind apart.
+**Superseded 2026-09-29 -- recorded rather than deleted.** Until this date the
+README carried a second copy of the "Made autonomously selectable" and "Label
+variations" sections at this point, word for word, followed by a section
+titled "Labels for the added furniture". That section said the Ping-Pong Table
+*borrows the Pool Table's behaviour* and is relabelled by a wrapper that looks
+at which table the villager walked to. **That describes the arrangement before
+PR #174 and is wrong for current builds:** the Pool Table wrapper
+(`VF2RandomPooltableLabel`) now deliberately classifies nothing and leaves the
+stock label alone, and the ping-pong caption is applied only by the table's own
+action. It also said the bike was identified "by reading the placed furniture
+record the villager linked to"; the current test is the placement under the
+villager's feet, adopted after the linked-furniture probe put the bike's
+caption on a nearby Treadmill in play.
 
 **Substantive changes**
 
@@ -699,14 +721,19 @@ A build still cannot be reproduced from source alone. 635 runtime images -- most
 of the VillagerBodies frames, the mobile furniture art, and the upgrade icons --
 reach a build only by inheriting from a previous build output. All 635 are now
 preserved under `patcher_assets/inherited_runtime_images`, so they can no longer
-be lost, but no build consumes them from there yet. Of those, 574 previously
+be lost, and the build restores them from there (`restore_preserved_inherited_art`,
+since PR #86), failing closed on a missing, corrupt or undigested file -- the
+B196 build manifest shows 540 of 540 runtime images present; the other 95 are
+editing sources that are never installed. **Corrected 2026-09-29:** this said
+"no build consumes them from there yet". Of those, 574 previously
 existed in no tracked location at all; the other 61 were already tracked
 elsewhere and only their runtime copies arrived by inheritance. `work/build_playtest.ps1` takes that
 predecessor with `-PreviousBuildDir` and checks both it and the produced build
 against the recorded inventory in `data/vf2/inherited-only-images.json`.
 Omitting the flag does not reliably produce an unseeded build: the generator
 also scans `outputs/` for an older one, and whichever seed it resolves is
-reported after generation. A build that genuinely inherits from nothing is
-missing all 635, and says so in red rather than finishing quietly.
+reported after generation. Before PR #86 a build that inherited from nothing
+was missing all 635 and said so in red; it now takes them from the preserved
+store instead.
 
 The GUI modules need a Python build with `tkinter` available.
