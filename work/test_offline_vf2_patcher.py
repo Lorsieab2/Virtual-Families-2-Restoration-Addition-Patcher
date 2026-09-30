@@ -3468,6 +3468,168 @@ class OfflineVF2PatcherTests(unittest.TestCase):
             self.assertEqual(game_file.read_bytes(), bytes([1, 0x99, 3, 4]))
 
 
+def dependency_manifest():
+    """The B196 record shape in miniature, plus the #390 Bathroom 2 gating.
+
+    Settings, and which of them each record requires, are copied from the
+    shipped B196 manifest: No AI Icons records also require Cheat Upgrades and
+    the executable; Holiday Ornaments has executable variants AND an image that
+    needs nothing else; Text fixes and the core-assets row gate no record.
+    """
+    def asset(path, *requires):
+        return {"file_path": path, "source_path": "payload/x", "source_sha256": "0" * 64, "requires": list(requires)}
+
+    ids = [
+        "core_executable", "cheat_upgrades", "no_ai_icons", "holiday_ornaments_collection",
+        "mobile_renovations", "ai_generated_bathroom2_renovations", "text_fixes", "core_assets",
+        "invisible_furniture_visible_graphics", "invisible_furniture_transparent_graphics",
+    ]
+    return {
+        "manifest_version": 1,
+        "settings": [{"id": setting_id, "label": setting_id.replace("_", " ").title(), "default": True} for setting_id in ids],
+        "asset_patches": [
+            asset("Virtual Families 2.exe", "core_executable"),
+            asset("Virtual Families 2.exe", "core_executable", "cheat_upgrades"),
+            asset("Virtual Families 2.exe", "core_executable", "holiday_ornaments_collection"),
+            asset("Virtual Families 2.exe", "core_executable", "mobile_renovations"),
+            asset("Images/cheat_fill.png", "core_executable", "cheat_upgrades"),
+            asset("Images/cheat_fill_no_ai.png", "core_executable", "cheat_upgrades", "no_ai_icons"),
+            asset("Images/collectables_small.png", "holiday_ornaments_collection"),
+            asset("Images/AIGeneratedBathroom2/a.png", "core_executable", "ai_generated_bathroom2_renovations", "mobile_renovations"),
+            asset("Images/Furniture/InvisibleChair.png", "invisible_furniture_visible_graphics"),
+            asset("Images/Furniture/InvisibleChair.png", "invisible_furniture_visible_graphics", "invisible_furniture_transparent_graphics"),
+        ],
+        "export_summary": {"native_core_settings": ["text_fixes"]},
+    }
+
+
+class SettingDependencyTests(unittest.TestCase):
+    """Dependencies come from the records, and the log reports what took effect.
+
+    Measured on B196: with Cheat Upgrades unticked every No AI Icons record is
+    inactive, yet the log and the GUI's success popup listed No AI Icons as
+    enabled. Same for every setting needing the executable when it is off.
+    """
+
+    def setUp(self):
+        self.manifest = dependency_manifest()
+        self.settings = patcher_mod.manifest_settings(self.manifest)
+
+    def test_prerequisites_are_derived_from_the_records(self):
+        deps = patcher_mod.setting_dependencies(self.manifest, self.settings)
+        self.assertEqual(deps["no_ai_icons"], frozenset({"core_executable", "cheat_upgrades"}))
+        self.assertEqual(deps["cheat_upgrades"], frozenset({"core_executable"}))
+        self.assertEqual(
+            deps["ai_generated_bathroom2_renovations"], frozenset({"core_executable", "mobile_renovations"})
+        )
+        self.assertEqual(
+            deps["invisible_furniture_transparent_graphics"], frozenset({"invisible_furniture_visible_graphics"})
+        )
+        # One ornament record needs nothing else, so the executable is not a prerequisite.
+        self.assertEqual(deps["holiday_ornaments_collection"], frozenset())
+        self.assertEqual(deps["core_executable"], frozenset())
+        self.assertEqual(deps["text_fixes"], frozenset({"core_executable"}))
+        self.assertEqual(deps["core_assets"], frozenset())
+
+    def test_zero_record_settings_are_informational(self):
+        self.assertEqual(
+            patcher_mod.informational_settings(self.manifest, self.settings),
+            {"text_fixes": frozenset({"core_executable"}), "core_assets": frozenset()},
+        )
+        empty = {"settings": self.manifest["settings"]}
+        self.assertEqual(patcher_mod.informational_settings(empty, patcher_mod.manifest_settings(empty)), {})
+
+    def test_report_lists_a_setting_as_enabled_only_when_a_record_took_effect(self):
+        selected = set(self.settings) - {"cheat_upgrades"}
+        report = patcher_mod.effective_settings_report(self.manifest, self.settings, selected)
+        self.assertNotIn("no_ai_icons", report["enabled"])
+        self.assertEqual(report["inactive"]["no_ai_icons"], "selected but inactive: requires cheat_upgrades")
+        self.assertIn("holiday_ornaments_collection", report["enabled"])
+        self.assertIn("text_fixes", report["enabled"])
+
+        selected = set(self.settings) - {"core_executable"}
+        report = patcher_mod.effective_settings_report(self.manifest, self.settings, selected)
+        for setting_id in ("cheat_upgrades", "no_ai_icons", "ai_generated_bathroom2_renovations", "text_fixes"):
+            with self.subTest(setting=setting_id):
+                self.assertNotIn(setting_id, report["enabled"])
+                self.assertIn("requires core_executable", report["inactive"][setting_id])
+        self.assertIn("holiday_ornaments_collection", report["enabled"])
+        self.assertIn("core_assets", report["enabled"])
+
+        selected = set(self.settings) - {"mobile_renovations"}
+        report = patcher_mod.effective_settings_report(self.manifest, self.settings, selected)
+        self.assertEqual(
+            report["inactive"]["ai_generated_bathroom2_renovations"],
+            "selected but inactive: requires mobile_renovations",
+        )
+
+        log = patcher_mod.settings_log(self.settings, selected, report)
+        self.assertNotIn("ai_generated_bathroom2_renovations", log["enabled"])
+        self.assertNotIn("ai_generated_bathroom2_renovations", log["disabled"])
+        self.assertIn("ai_generated_bathroom2_renovations", log["selected_but_inactive"])
+        row = next(r for r in log["available"] if r["id"] == "ai_generated_bathroom2_renovations")
+        self.assertFalse(row["enabled"])
+        self.assertTrue(row["selected"])
+        row = next(r for r in log["available"] if r["id"] == "text_fixes")
+        self.assertFalse(row["selectable"])
+        self.assertIn("built into the patched executable", row["informational"])
+
+    def test_settings_log_without_a_report_is_unchanged(self):
+        log = patcher_mod.settings_log(self.settings, {"cheat_upgrades"})
+        self.assertEqual(log["enabled"], ["cheat_upgrades"])
+        self.assertNotIn("selected_but_inactive", log)
+
+    def test_dry_run_log_and_output_report_inactive_settings(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            game = tmp_path / "game"
+            game.mkdir()
+            exe = game / "Virtual Families 2.exe"
+            exe.write_bytes(b"vanilla exe")
+            payload = tmp_path / "payload"
+            payload.mkdir()
+            (payload / "icon.png").write_bytes(b"icon")
+            (payload / "noai.png").write_bytes(b"noai")
+            icon_sha = sha256_bytes(b"icon")
+            manifest = {
+                "manifest_version": 1,
+                "settings": [
+                    {"id": "cheat_upgrades", "label": "Cheat Upgrades", "default": True},
+                    {"id": "no_ai_icons", "label": "No AI Icons", "default": True},
+                    {"id": "text_fixes", "label": "Text fixes", "default": True},
+                    {"id": "holiday_furniture", "label": "Holiday furniture", "default": True},
+                ],
+                "target_files": [{"path": exe.name, "sha256": sha256_bytes(b"vanilla exe"), "size": 11}],
+                "asset_patches": [
+                    {"file_path": "Images/candy.png", "source_path": "payload/icon.png", "source_sha256": icon_sha,
+                     "allow_missing_target": True, "requires": ["holiday_furniture"]},
+                    {"file_path": "Images/cheat.png", "source_path": "payload/icon.png", "source_sha256": icon_sha,
+                     "allow_missing_target": True, "requires": ["cheat_upgrades"]},
+                    {"file_path": "Images/cheat_noai.png", "source_path": "payload/noai.png",
+                     "source_sha256": sha256_bytes(b"noai"), "allow_missing_target": True,
+                     "requires": ["cheat_upgrades", "no_ai_icons"]},
+                ],
+            }
+            manifest_path = tmp_path / "manifest.json"
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            log_path = tmp_path / "dry.json"
+            result = OfflineVF2PatcherTests.run_patcher(
+                self, "apply", "--game-dir", str(game), "--manifest", str(manifest_path),
+                "--dry-run", "--disable", "cheat_upgrades", "--disable", "text_fixes", "--log", str(log_path),
+            )
+            log = json.loads(log_path.read_text(encoding="utf-8"))["settings"]
+        self.assertNotIn("no_ai_icons", log["enabled"])
+        self.assertEqual(log["selected_but_inactive"], {"no_ai_icons": "selected but inactive: requires cheat_upgrades"})
+        self.assertIn("text_fixes", log["enabled"], "an informational setting cannot be switched off")
+        self.assertIn("Selected but inactive settings: no_ai_icons (selected but inactive: requires cheat_upgrades)", result.stdout)
+        self.assertIn("Always-on settings (cannot be switched off separately): text_fixes", result.stdout)
+        enabled_line = next(line for line in result.stdout.splitlines() if line.startswith("Enabled settings:"))
+        self.assertNotIn("no_ai_icons", enabled_line)
+
+    def run_patcher(self, *args, expect=0):
+        return OfflineVF2PatcherTests.run_patcher(self, *args, expect=expect)
+
+
 class ShippedRunnerPythonFloorTests(unittest.TestCase):
     """The shipped runners must run on the Python the README advertises.
 

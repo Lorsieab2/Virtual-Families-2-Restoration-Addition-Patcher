@@ -236,6 +236,53 @@ def build_apply_namespace(
     )
 
 
+def setting_closure_maps(
+    manifest: dict[str, object],
+    settings: dict[str, patcher.PatchSetting],
+) -> tuple[dict[str, frozenset[str]], dict[str, frozenset[str]]]:
+    """(transitive prerequisites, informational settings) for a loaded manifest.
+
+    A manifest the engine would reject yields empty maps, so the checkboxes
+    behave as independent toggles exactly as before and apply reports the error.
+    """
+    try:
+        direct = patcher.setting_dependencies(manifest, settings)
+        informational = patcher.informational_settings(manifest, settings)
+    except patcher.PatchError:
+        return {}, {}
+    prerequisites: dict[str, frozenset[str]] = {}
+    for setting_id in settings:
+        seen: set[str] = set()
+        stack = list(direct.get(setting_id, ()))
+        while stack:
+            other = stack.pop()
+            if other in seen or other == setting_id:
+                continue
+            seen.add(other)
+            stack.extend(direct.get(other, ()))
+        prerequisites[setting_id] = frozenset(seen)
+    return prerequisites, informational
+
+
+def _setting_labels(setting_ids: frozenset[str], settings: dict[str, patcher.PatchSetting]) -> str:
+    return ", ".join(settings[other].label if other in settings else other for other in sorted(setting_ids))
+
+
+def requires_note(prerequisites: frozenset[str], settings: dict[str, patcher.PatchSetting]) -> str:
+    if not prerequisites:
+        return ""
+    return f" **Requires: {_setting_labels(prerequisites, settings)}.**"
+
+
+def informational_setting_note(prerequisites: frozenset[str], settings: dict[str, patcher.PatchSetting]) -> str:
+    if prerequisites:
+        return (
+            "**Built into the patched game executable, so it cannot be switched off separately; "
+            f"it is included whenever {_setting_labels(prerequisites, settings)} is ticked.**"
+        )
+    return "**Always on: no file in this build is controlled by this setting on its own.**"
+
+
 def build_restore_namespace(*, backup_dir: str, game_dir: str | None = None, log: str | None = None) -> Namespace:
     return Namespace(
         backup_dir=required_path(backup_dir, "Backup directory"),
@@ -365,6 +412,10 @@ class VF2PatcherGUI:
 
         self.settings: dict[str, patcher.PatchSetting] = {}
         self.setting_vars: dict[str, tk.BooleanVar] = {}
+        # Derived from the loaded manifest's records (see setting_closure_maps).
+        self.setting_prerequisites: dict[str, frozenset[str]] = {}
+        self.informational_settings: dict[str, frozenset[str]] = {}
+        self._syncing_settings = False
         self.description_widgets: list[tk.Text] = []
         self.loaded_manifest_path: str | None = None
         self.loaded_manifest_data: dict[str, object] | None = None
@@ -699,6 +750,8 @@ class VF2PatcherGUI:
             # a hidden selection nobody could see.
             self.settings = {}
             self.setting_vars = {}
+            self.setting_prerequisites = {}
+            self.informational_settings = {}
             self.loaded_manifest_path = None
             self.loaded_manifest_data = None
             self.version_var.set("Build: unknown")
@@ -713,6 +766,9 @@ class VF2PatcherGUI:
         self.version_var.set(f"Build: {build_label}" if build_label else "Build: unknown")
         self.setting_vars = {}
         self.description_widgets = []
+        self.setting_prerequisites, self.informational_settings = setting_closure_maps(
+            manifest if isinstance(manifest, dict) else {}, settings
+        )
         for child in self.settings_inner.winfo_children():
             child.destroy()
 
@@ -724,22 +780,30 @@ class VF2PatcherGUI:
                 self._category_header(self.settings_inner, label, color).grid(row=row, column=0, sticky="ew", pady=(8 if row else 0, 4))
                 row += 1
                 for setting in category_settings:
-                    var = tk.BooleanVar(value=setting.default and not setting.blocked)
+                    informational = setting.id in self.informational_settings
+                    var = tk.BooleanVar(value=informational or (setting.default and not setting.blocked))
                     self.setting_vars[setting.id] = var
                     item = ttk.Frame(self.settings_inner, padding=(0, 4))
                     item.grid(row=row, column=0, sticky="ew")
                     item.columnconfigure(0, weight=1)
                     checkbutton = ttk.Checkbutton(item, text=setting.label, variable=var)
-                    if setting.blocked:
+                    if setting.blocked or informational:
                         checkbutton.state(["disabled"])
                     checkbutton.grid(row=0, column=0, sticky="w")
                     if setting.blocked:
                         details = f"{setting.id} - BLOCKED - {setting.readiness_reason}"
+                    elif informational:
+                        details = f"{setting.id} - always on - {setting.description}" if setting.description else f"{setting.id} - always on"
+                        details += " " + informational_setting_note(self.informational_settings[setting.id], settings)
                     else:
                         state = "default on" if setting.default else "default off"
                         details = f"{setting.id} - {state} - {setting.description}" if setting.description else f"{setting.id} - {state}"
+                        details += requires_note(self.setting_prerequisites.get(setting.id, frozenset()), settings)
                     self._markup_label(item, details).grid(row=1, column=0, sticky="ew", padx=(22, 0))
                     row += 1
+            for setting_id, var in self.setting_vars.items():
+                var.trace_add("write", lambda *_args, setting_id=setting_id: self._on_setting_toggled(setting_id))
+            self._normalize_setting_selection()
         # Every setting widget now exists, so the render the popup was
         # covering is genuinely finished. This is the earliest point at which
         # closing it does not leave the window looking frozen: each setting
@@ -915,23 +979,102 @@ class VF2PatcherGUI:
         ttk.Label(self.settings_inner, text=text, style="Muted.TLabel", padding=(0, 8)).grid(row=0, column=0, sticky="w")
 
     def select_default_settings(self) -> None:
-        for setting_id, var in self.setting_vars.items():
-            setting = self.settings[setting_id]
-            var.set(setting.default and not setting.blocked)
+        with self._bulk_setting_change():
+            for setting_id, var in self.setting_vars.items():
+                setting = self.settings[setting_id]
+                var.set(setting.default and not setting.blocked)
 
     def select_all_settings(self) -> None:
-        for setting_id, var in self.setting_vars.items():
-            var.set(not self.settings[setting_id].blocked)
+        with self._bulk_setting_change():
+            for setting_id, var in self.setting_vars.items():
+                var.set(not self.settings[setting_id].blocked)
 
     def clear_all_settings(self) -> None:
-        for var in self.setting_vars.values():
-            var.set(False)
+        with self._bulk_setting_change():
+            for var in self.setting_vars.values():
+                var.set(False)
 
     def select_category_settings(self, category: str) -> None:
-        for setting_id in setting_ids_for_category(self.settings, category):
-            var = self.setting_vars.get(setting_id)
-            if var is not None and not self.settings[setting_id].blocked:
-                var.set(True)
+        with self._bulk_setting_change():
+            for setting_id in setting_ids_for_category(self.settings, category):
+                var = self.setting_vars.get(setting_id)
+                if var is not None and not self.settings[setting_id].blocked:
+                    var.set(True)
+                    self._tick_prerequisites(setting_id)
+
+    @contextlib.contextmanager
+    def _bulk_setting_change(self):
+        """Set many checkboxes, then make the result consistent once.
+
+        Cascading per checkbox would make the outcome depend on the order the
+        settings happen to be listed in.
+        """
+        previous = getattr(self, "_syncing_settings", False)
+        self._syncing_settings = True
+        try:
+            yield
+        finally:
+            self._syncing_settings = previous
+        if not previous:
+            self._normalize_setting_selection()
+
+    def _on_setting_toggled(self, setting_id: str) -> None:
+        """Dependencies close in both directions.
+
+        Ticking a setting ticks what it needs; unticking a prerequisite
+        unticks everything that needs it (No AI Icons when Cheat Upgrades
+        goes), which _normalize_setting_selection does for every change. The
+        graph comes from the manifest's records, never from a hardcoded list.
+        """
+        if getattr(self, "_syncing_settings", False):
+            return
+        var = self.setting_vars.get(setting_id)
+        if var is None:
+            return
+        if var.get():
+            self._syncing_settings = True
+            try:
+                self._tick_prerequisites(setting_id)
+            finally:
+                self._syncing_settings = False
+        self._normalize_setting_selection()
+
+    def _tick_prerequisites(self, setting_id: str) -> None:
+        prerequisites = getattr(self, "setting_prerequisites", {}).get(setting_id, frozenset())
+        var = self.setting_vars[setting_id]
+        if any(self.settings[other].blocked for other in prerequisites if other in self.settings):
+            # A prerequisite that cannot be selected makes this one unusable too.
+            var.set(False)
+            return
+        for other in sorted(prerequisites):
+            other_var = self.setting_vars.get(other)
+            if other_var is not None:
+                other_var.set(True)
+
+    def _normalize_setting_selection(self) -> None:
+        """Untick any setting whose prerequisite is unticked; informational rows follow theirs."""
+        prerequisite_map = getattr(self, "setting_prerequisites", {})
+        informational = getattr(self, "informational_settings", {})
+        previous = getattr(self, "_syncing_settings", False)
+        self._syncing_settings = True
+        try:
+            changed = True
+            while changed:
+                changed = False
+                for setting_id, var in self.setting_vars.items():
+                    prerequisites = prerequisite_map.get(setting_id, frozenset())
+                    satisfied = all(
+                        self.setting_vars[other].get() for other in prerequisites if other in self.setting_vars
+                    )
+                    if setting_id in informational:
+                        if var.get() != satisfied:
+                            var.set(satisfied)
+                            changed = True
+                    elif not satisfied and var.get():
+                        var.set(False)
+                        changed = True
+        finally:
+            self._syncing_settings = previous
 
     def start_apply(self, *, dry_run: bool) -> None:
         if not self._ensure_manifest_settings_loaded():
@@ -1220,16 +1363,25 @@ class VF2PatcherGUI:
 
     def _show_apply_success(self, summary: dict[str, object]) -> None:
         settings = summary.get("settings", {})
+        # "enabled" in the engine's report means the setting took effect; a
+        # ticked setting whose prerequisite was off is listed with the reason
+        # instead of being reported as enabled.
         enabled_labels = []
         if isinstance(settings, dict):
             for row in settings.get("available", []):
                 if isinstance(row, dict) and row.get("enabled"):
-                    enabled_labels.append(str(row.get("label") or row.get("id")))
+                    label = str(row.get("label") or row.get("id"))
+                    if row.get("informational"):
+                        label += " (built in)"
+                    enabled_labels.append(label)
         disabled_labels = []
         if isinstance(settings, dict):
             for row in settings.get("available", []):
                 if isinstance(row, dict) and not row.get("enabled"):
-                    disabled_labels.append(str(row.get("label") or row.get("id")))
+                    label = str(row.get("label") or row.get("id"))
+                    if row.get("inactive_reason"):
+                        label += f" ({row['inactive_reason']})"
+                    disabled_labels.append(label)
         altered_files = []
         for key in ("patched_files", "asset_files"):
             rows = summary.get(key, [])

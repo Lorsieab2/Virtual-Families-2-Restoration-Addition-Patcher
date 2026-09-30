@@ -663,6 +663,27 @@ Patch records, asset records, and target-file checks can include `requires`,
 `settings`, or `setting`. A record is active only when all required settings
 are enabled. If a record has no setting requirement, it is always active.
 
+Setting dependencies are derived from those records, not from a separate list:
+setting B is a prerequisite of setting A when every record that requires A also
+requires B (No AI Icons needs Cheat Upgrades and Patch game executable; with
+the Bathroom 2 gating, 2nd Bathroom renovations also need Mobile room
+renovations). The GUI closes them in both directions: unticking a prerequisite
+unticks its dependents, and ticking a dependent ticks its prerequisites. The
+patch log and the success window list a setting as enabled only when at least
+one of its records took effect; a ticked setting whose records all need an
+unticked prerequisite is reported as `selected but inactive: requires <id>`
+(`settings.selected_but_inactive` in the log).
+
+A setting that no byte, asset or post-asset record requires is
+*informational*: the exporter marks it `"informational": true`, and the patcher
+treats an unmarked zero-record setting the same way for older manifests. It is
+shown ticked and cannot be unticked. Settings listed in
+`export_summary.native_core_settings` (Text fixes, Add unused pets, Add visible
+mobile version purchases) are compiled into every patched executable, so they
+are present exactly when Patch game executable is. Superseded (wrong, B196 and
+earlier): these rows were ordinary checkboxes, and unticking one was reported
+as "disabled/restored to vanilla" although nothing changed.
+
 Unchecked settings must not leave their feature files in the fresh modded output
 folder. The exporter therefore assigns optional visual source folders,
 Invisible Furniture visible graphics, Invisible Furniture transparent graphics,
