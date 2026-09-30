@@ -795,6 +795,43 @@ class TheWideningIsMeasuredOnTheMapItWrites(unittest.TestCase):
             raise
         return gen, holder, assets, seeded, manifest, donors / DONOR.name
 
+    def test_no_map_the_generator_writes_carries_a_mobile_hotspot(self):
+        """Issue #378, checked on the files the production path writes.
+
+        test_borrowed_maps_carry_no_mobile_hotspot exercises the merge helper
+        directly; this runs sync_behavior_assets -> copy_donor_fmap and reads
+        the maps it actually installs, so a later step that bypassed or
+        overwrote the sanitised bytes would fail here.
+        """
+        gen, holder, assets, _seeded, _m, donor = self._run("_gen_hotspots_under_test")
+        try:
+            # The DONOR's own file is excluded: copy_donor_fmap writes the raw
+            # donor under its own name, and a later pass (Mobile Furniture
+            # Behaviors' desktop-safe maps) owns that name. Checked on a full
+            # build of this branch: no installed Assets/*.fmap carries a
+            # hotspot above the stock 0x5C that vanilla PetBowls already uses.
+            written = sorted(
+                path for path in assets.glob("*.fmap") if path.name != donor.name
+            )
+            names = {path.name for path in written}
+            for target in gen.SPA_LOUNGER_WIDENED_FMAPS:
+                self.assertIn(target, names, "the borrower maps were not written")
+            for path in written:
+                data = path.read_bytes()
+                if data[:4] != b"QAMF":
+                    continue
+                width, height = struct.unpack_from("<II", data, 24)
+                cells = struct.unpack_from("<%dI" % (width * height), data, 32)
+                with self.subTest(map=path.name):
+                    self.assertEqual(
+                        [hex(gen.fmap_cell_hotspot(c)) for c in cells
+                         if gen.fmap_cell_hotspot(c) > gen.DESKTOP_MAX_HOTSPOT],
+                        [],
+                        "the generator installed a hotspot id the desktop drop "
+                        "dispatcher cannot hold (issue #378)")
+        finally:
+            holder.cleanup()
+
     def test_it_claims_the_footprint_and_leaves_the_anchor_alone(self):
         gen, holder, assets, seeded, _m, _d = self._run(
             "_gen_bytes_under_test")
