@@ -317,7 +317,8 @@ every asset record's source and restore source is present and matches its
 manifest SHA-256 and size; every payload file is referenced by some record;
 every post-asset record covers exactly the shipped executables, with its
 expected bytes at its offset, and every one-byte runtime flag points at the raw
-pointer of the `.vf2*` section it names; and every `runner_files` entry and the
+pointer of the `.vf2*` section it names; every advertised runtime-flag setting
+whose section the executables carry has its toggle record; and every `runner_files` entry and the
 transparency log are members of the archive. (Superseded, recorded as wrong:
 this paragraph used to say the contract checks "four executable variants" and
 "15 mobile-renovation PNGs", and implied that was the whole contract. Through

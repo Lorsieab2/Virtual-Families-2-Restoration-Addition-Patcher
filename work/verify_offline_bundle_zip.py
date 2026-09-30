@@ -397,8 +397,16 @@ def _verify_post_patch_targets(
     posts: list[dict],
     exe_bytes: dict[str, bytes],
     exe_output_path: str,
+    setting_ids: set[str],
 ) -> None:
     """Every post-asset variant must land where the exporter says it does.
+
+    Every advertised runtime-flag setting whose .vf2* section the shipped
+    executables carry must also HAVE its toggle record. The section's byte
+    defaults to 00, so an archive that dropped the Holiday Furniture goals or
+    Mobile Furniture Behaviors record still passed "advertised setting has no
+    reachable record" (their asset records remain) while ticking the setting
+    installed the files and left the feature off.
 
     The runtime-flag toggles are written by the exporter at the raw pointer
     of a one-byte .vf2* section in each executable
@@ -424,6 +432,7 @@ def _verify_post_patch_targets(
     # ranges overlap in one payload, so a duplicated record, or a second
     # record for the same section, would pass here and fail at install.
     claimed: dict[str, list[tuple[int, int, int]]] = {sha: [] for sha in exe_hashes}
+    toggled_settings: set[str] = set()
     for index, record in enumerate(posts):
         requires = frozenset(_requires(record, f"post-asset record {index}"))
         label = f"post-asset record {index} {sorted(requires)}"
@@ -447,6 +456,7 @@ def _verify_post_patch_targets(
             if len(settings) != 1 or settings[0] not in section_by_setting:
                 _fail(f"{label} is not a known runtime-flag setting")
             section = section_by_setting[settings[0]]
+            toggled_settings.add(settings[0])
             section_names = set(_SECTION_IN_NOTE.findall(str(record.get("note", ""))))
             if section_names != {section}:
                 _fail(
@@ -487,6 +497,18 @@ def _verify_post_patch_targets(
                         f"{label} offset {variant.get('offset')} is not the {section} raw "
                         f"pointer {matches[0][0]:#x} in executable {sha}"
                     )
+    untoggled = sorted(
+        setting
+        for setting, section in section_by_setting.items()
+        if setting in setting_ids
+        and setting not in toggled_settings
+        and any(section in _pe_sections(data, f"executable {sha}") for sha, data in exe_bytes.items())
+    )
+    if untoggled:
+        _fail(
+            f"advertised runtime-flag setting(s) {untoggled} have no post-asset toggle record, "
+            "but the executables carry their section; ticking them would leave the feature off"
+        )
 
 
 def _verify_runner_members(names: set[str], root: str, export_summary: dict) -> set[str]:
@@ -793,7 +815,7 @@ def verify_archive(
             )
             for record in exe_records
         }
-        _verify_post_patch_targets(posts, exe_bytes, _executable_output_path(exe_records))
+        _verify_post_patch_targets(posts, exe_bytes, _executable_output_path(exe_records), setting_ids)
 
         export_summary = manifest.get("export_summary")
         if not isinstance(export_summary, dict):

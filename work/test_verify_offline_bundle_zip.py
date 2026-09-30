@@ -855,6 +855,24 @@ class EveryRecordIsVerifiedTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "matching its setting"):
             self.verify()
 
+    def test_a_dropped_runtime_flag_record_fails_when_the_setting_has_assets(self):
+        # Holiday Furniture and Mobile Furniture Behaviors ship asset records
+        # too, so dropping only their toggle kept the setting "reachable" and
+        # passed, against the published B196 archive as well, while ticking
+        # it installed the files and never set the flag byte.
+        self.manifest["asset_patches"].append(
+            _record("Assets/Mortality.fmap", b"mortality asset", ["older_villager_mortality"], self.files)
+        )
+        self.verify()
+        posts = self.manifest["post_asset_patches"]
+        count = len(posts)
+        self.manifest["post_asset_patches"] = [
+            p for p in posts if "older_villager_mortality" not in p["requires"]
+        ]
+        self.assertEqual(len(self.manifest["post_asset_patches"]), count - 1)
+        with self.assertRaisesRegex(ValueError, r"\['older_villager_mortality'\] have no post-asset toggle record"):
+            self.verify()
+
     def test_an_unknown_runtime_flag_setting_fails(self):
         flag = self._flag(self.manifest, "older_villager_mortality")
         flag["requires"] = ["core_executable", "some_new_setting"]
