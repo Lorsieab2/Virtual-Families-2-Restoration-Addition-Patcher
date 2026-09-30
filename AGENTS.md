@@ -189,7 +189,10 @@ and a skip is not a pass.
 - **Identify furniture by placement handle, never by point.** `info.point` is
   the walk-to anchor, not the furniture's position, and returns `-1` for
   anything a villager stands beside. Match `info.unknown0` against
-  `record[+0x04]`. Reference implementation: `VF2CaptureTableProp`.
+  `record[+0x04]`. Reference implementations: `VF2LinkedSeatIndex` and the
+  table-prop on-state (`VF2TablePropTurnOnAll`). `VF2CaptureTableProp`, the
+  reference named here earlier, was removed when the picnic/patio props moved
+  to the mobile per-table on-state; it matched by handle the same way.
 - **Bike/treadmill, ping-pong/pool and Home Gym/Yoga share object IDs**, so
   `info.object` alone cannot distinguish them.
 - **`FindFurniture` and `LinkPeepToFurniture` do not answer the same

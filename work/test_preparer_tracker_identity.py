@@ -147,17 +147,24 @@ class ThePraiseRestartIsAccepted(unittest.TestCase):
 class TheIdentityIsRecordedWhenPreparationStarts(unittest.TestCase):
     def test_both_preparers_record_their_identity(self):
         """Recording must happen where the preparer is set, or the tracker
-        compares against whatever was left from a previous villager."""
+        compares against whatever was left from a previous villager.
+
+        SUPERSEDED FORM: the preparers were single pointers
+        (`gVF2PicnicPreparer = &villager;`). They are now slot arrays, because
+        mobile's GetVillagerDoing asks whether ANY villager is preparing; each
+        slot is set and recorded together inside VF2AddPreparer."""
         source = _source()
-        for setter in ("gVF2PatioDrinksPreparer = &villager;",
-                       "gVF2PicnicPreparer = &villager;"):
+        for setter in ("VF2AddPreparer(gVF2PatioDrinksPreparers, villager);",
+                       "VF2AddPreparer(gVF2PicnicPreparers, villager);"):
             with self.subTest(setter=setter):
-                index = source.index(setter)
-                following = source[index:index + 400]
-                self.assertIn(
-                    "VF2RememberPreparer(", following,
-                    "the preparer is set without recording the identity the "
-                    "tracker will compare against")
+                self.assertIn(setter, source)
+        start = source.index("static void VF2AddPreparer(")
+        adder = source[start:source.index("\n}", start)]
+        set_at = adder.index("slots[chosen].villager = &villager;")
+        self.assertIn(
+            "VF2RememberPreparer(", adder[set_at:],
+            "the preparer is set without recording the identity the "
+            "tracker will compare against")
 
     def test_the_recorder_captures_all_three_fields(self):
         source = _source()
@@ -169,46 +176,26 @@ class TheIdentityIsRecordedWhenPreparationStarts(unittest.TestCase):
 
 
 class TheSuccessfulCompletionPathsAreUnchanged(unittest.TestCase):
-    """Scope guard.
+    """SUPERSEDED, recorded rather than deleted.
 
-    The paths that clear the preparer AFTER VF2CaptureTableProp are correct as
-    they stand -- the preparation really has finished there. If a future change
-    starts routing those through the identity check, that is a behaviour change
-    and should be deliberate rather than incidental.
+    This class used to pin that the SetProp wrapper cleared the preparer right
+    after VF2CaptureTableProp, on the reasoning that the preparation had
+    finished there. It had not: after the prop activates the preparer still
+    drops the basket, waits and applies the stat changes, and on mobile
+    GetVillagerDoing keeps counting it until its behaviour changes. The early
+    clear was also what made the prop vanish with two preparers -- the second
+    SetProp found the pointer already cleared and captured nothing.
+
+    The rule now pinned: the SetProp wrapper does not touch the preparers.
     """
 
-    def test_the_capture_paths_still_clear_the_preparer_directly(self):
-        """Each VF2CaptureTableProp call is followed by its own direct clear.
-
-        Checked per call site rather than over one window, because the picnic
-        and patio branches sit in separate arms of the same if/else and a
-        fixed-size window that happens to span both would pass even if one
-        branch stopped clearing.
-        """
+    def test_the_setprop_wrapper_leaves_the_preparers_alone(self):
         source = _source()
-        expected = {
-            "gVF2PicnicPreparer": "gVF2PicnicPreparer = 0;",
-            "gVF2PatioDrinksPreparer": "gVF2PatioDrinksPreparer = 0;",
-        }
-        calls = [m.start() for m in re.finditer(r"VF2CaptureTableProp\(", source)]
-        seen = set()
-        for index, start in enumerate(calls):
-            # Stop at the NEXT capture call so one branch's window cannot
-            # borrow the following branch's clear and report a false pass.
-            stop = calls[index + 1] if index + 1 < len(calls) else start + 400
-            window = source[start:stop]
-            for name, clear in expected.items():
-                if "%s," % name in window:
-                    with self.subTest(preparer=name):
-                        self.assertIn(
-                            clear, window,
-                            "%s is captured but no longer cleared on the "
-                            "successful-completion path" % name)
-                    seen.add(name)
-        self.assertEqual(
-            seen, set(expected),
-            "a VF2CaptureTableProp completion path for one of the preparers "
-            "has gone missing; this guard would otherwise pass vacuously")
+        start = source.index("VF2PatioSetPropAndTrack(\n")
+        wrapper = source[start:source.index("\n}\n", start)]
+        code = "\n".join(line.split("//")[0] for line in wrapper.split("\n"))
+        self.assertNotIn("Preparer", code)
+        self.assertNotIn("VF2CaptureTableProp", code)
 
 
 if __name__ == "__main__":
