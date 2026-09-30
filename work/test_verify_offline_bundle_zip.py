@@ -604,6 +604,7 @@ def _synthetic_bundle():
     posts = []
     for index, route in enumerate(SOUND_ROUTES):
         posts.append({
+            "file_path": "Virtual Families 2 - Modded B999.exe",
             "requires": ["core_executable", "mobile_sound_assets"],
             "variants": [
                 {
@@ -617,6 +618,7 @@ def _synthetic_bundle():
             ],
         })
     posts.append({
+        "file_path": "Virtual Families 2 - Modded B999.exe",
         "requires": ["core_executable", "older_villager_mortality"],
         "note": "Exact-SHA runtime toggle for Older Villager Mortality Curve (.vf2mort).",
         "variants": [
@@ -782,6 +784,28 @@ class EveryRecordIsVerifiedTests(unittest.TestCase):
                 self.assertNotIn(name, files)
                 with self.assertRaisesRegex(ValueError, "missing from ZIP"):
                     verifier.verify_archive(_write_bundle(self.dir, files, self.manifest))
+
+    def test_a_post_record_must_target_the_executable_output(self):
+        for bad in (None, "Images/cheat_add_coins.png", "Virtual Families 2.exe"):
+            with self.subTest(file_path=bad):
+                files, manifest, _ = _synthetic_bundle()
+                post = manifest["post_asset_patches"][-1]
+                if bad is None:
+                    del post["file_path"]
+                    self.assertNotIn("file_path", post)
+                else:
+                    post["file_path"] = bad
+                with self.assertRaisesRegex(ValueError, "not the executable output"):
+                    verifier.verify_archive(_write_bundle(self.dir, files, manifest))
+
+    def test_a_runtime_flag_must_enable_with_exactly_01(self):
+        for replacement in ("00", "02", "ff"):
+            with self.subTest(replacement=replacement):
+                files, manifest, _ = _synthetic_bundle()
+                post = next(p for p in manifest["post_asset_patches"] if "older_villager_mortality" in p["requires"])
+                post["variants"][0]["replacement_bytes"] = replacement
+                with self.assertRaisesRegex(ValueError, "must replace the one-byte 00 default with 01"):
+                    verifier.verify_archive(_write_bundle(self.dir, files, manifest))
 
     def test_the_transparency_log_must_be_named(self):
         del self.manifest["export_summary"]["transparency_log"]

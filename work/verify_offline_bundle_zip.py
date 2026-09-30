@@ -361,7 +361,27 @@ _SECTION_IN_NOTE = re.compile(r"\((\.vf2[A-Za-z0-9_]+)\)")
 SOUND_ROUTE_REQUIRES = frozenset({"core_executable", "mobile_sound_assets"})
 
 
-def _verify_post_patch_targets(posts: list[dict], exe_bytes: dict[str, bytes]) -> None:
+def _path_key(value: str) -> str:
+    return value.replace("\\", "/").strip("/").casefold()
+
+
+def _executable_output_path(exe_records: list[dict]) -> str:
+    """The one file every executable variant is written to."""
+    outputs = {
+        _path_key(str(record.get("output_file_path") or record.get("file_path") or ""))
+        for record in exe_records
+    }
+    if len(outputs) != 1 or "" in outputs:
+        _fail(f"executable variants do not share one output path: {sorted(outputs)}")
+    record = exe_records[0]
+    return str(record.get("output_file_path") or record.get("file_path"))
+
+
+def _verify_post_patch_targets(
+    posts: list[dict],
+    exe_bytes: dict[str, bytes],
+    exe_output_path: str,
+) -> None:
     """Every post-asset variant must land where the exporter says it does.
 
     The runtime-flag toggles are written by the exporter at the raw pointer
@@ -374,11 +394,23 @@ def _verify_post_patch_targets(posts: list[dict], exe_bytes: dict[str, bytes]) -
     variant's expected bytes must be the bytes at its offset in the
     executable with that hash, and every runtime-flag record must name its
     section and point at that section's raw pointer.
+
+    Each record must also target the file the executable records write: post
+    patches run on the OUTPUT after the asset pass, and the patcher refuses a
+    record with no file_path and fails on one whose target does not exist.
+    A runtime flag must flip its one-byte 00 default to exactly 01; a
+    00 -> 00 "enable" is a no-op that leaves the feature off.
     """
     exe_hashes = set(exe_bytes)
     for index, record in enumerate(posts):
         requires = frozenset(_requires(record, f"post-asset record {index}"))
         label = f"post-asset record {index} {sorted(requires)}"
+        target = record.get("file_path")
+        if not isinstance(target, str) or _path_key(target) != _path_key(exe_output_path):
+            _fail(
+                f"{label} targets {target!r}, not the executable output "
+                f"{exe_output_path!r}"
+            )
         variants = _dict_list(record.get("variants"), f"{label} variants")
         shas = [str(variant.get("asset_sha256", "")).lower() for variant in variants]
         if len(shas) != len(set(shas)) or set(shas) != exe_hashes:
@@ -400,6 +432,11 @@ def _verify_post_patch_targets(posts: list[dict], exe_bytes: dict[str, bytes]) -
             if offset < 0 or data[offset:offset + len(expected)] != expected:
                 _fail(f"{label} expected bytes are not at {variant.get('offset')} in executable {sha}")
             if section is not None:
+                if expected != b"\x00" or replacement != b"\x01":
+                    _fail(
+                        f"{label} variant for {sha} must replace the one-byte 00 "
+                        f"default with 01, not {expected.hex()} -> {replacement.hex()}"
+                    )
                 matches = _pe_sections(data, f"executable {sha}").get(section, [])
                 if len(matches) != 1:
                     _fail(f"{label}: executable {sha} has {len(matches)} {section} sections, expected 1")
@@ -714,7 +751,7 @@ def verify_archive(
             )
             for record in exe_records
         }
-        _verify_post_patch_targets(posts, exe_bytes)
+        _verify_post_patch_targets(posts, exe_bytes, _executable_output_path(exe_records))
 
         export_summary = manifest.get("export_summary")
         if not isinstance(export_summary, dict):
