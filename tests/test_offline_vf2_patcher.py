@@ -556,6 +556,229 @@ class OfflineVF2PatcherTests(unittest.TestCase):
             write_icon_resources.assert_called_once()
             self.assertEqual(existing_exe.read_bytes(), b"FLAG\x01DATA|stock-icons")
 
+    def real_icon_overlay_fixture(self, tmp_path):
+        """Vanilla EXE with a real icon, two overlay payloads, and a toggle in .reloc.
+
+        Unlike stock_icon_manifest_fixture nothing is mocked: apply runs the
+        real Windows resource rewrite, which inserts .rsrc ahead of .reloc
+        exactly as it does on the shipped payloads, so the produced EXE is
+        never a raw payload hash and the .reloc toggle moves.
+        """
+
+        def two_section_pe(marker):
+            data = bytearray(resource_capable_pe_bytes())
+            coff = 0x84
+            struct.pack_into("<H", data, coff + 2, 2)
+            opt = coff + 20
+            struct.pack_into("<I", data, opt + 56, 0x3000)
+            reloc = opt + 0xE0 + 40
+            data[reloc:reloc + 8] = b".reloc\0\0"
+            struct.pack_into("<IIII", data, reloc + 8, 0x10, 0x2000, 0x200, 0x400)
+            struct.pack_into("<I", data, reloc + 36, 0x42000040)
+            data += bytes(0x200)
+            data[0x201] = marker
+            return bytes(data)
+
+        game_dir = tmp_path / "game"
+        game_dir.mkdir()
+        vanilla = game_dir / "Virtual Families 2.exe"
+        vanilla.write_bytes(two_section_pe(0))
+        patcher_mod._update_executable_icon_resources(vanilla, real_shell_icon_resources())
+        vanilla_data = vanilla.read_bytes()
+        output_name = "Virtual Families 2 - Modded BIcon.exe"
+        payloads = {
+            ("core_executable",): two_section_pe(1),
+            ("core_executable", "cheat_upgrades"): two_section_pe(2),
+        }
+        records = []
+        variants = []
+        for index, (requires, data) in enumerate(payloads.items()):
+            source = tmp_path / "payload" / f"payload{index}.exe"
+            source.parent.mkdir(exist_ok=True)
+            source.write_bytes(data)
+            records.append(
+                {
+                    "file_path": vanilla.name,
+                    "output_file_path": output_name,
+                    "source_path": f"payload/{source.name}",
+                    "source_sha256": sha256_bytes(data),
+                    "source_size": len(data),
+                    "expected_target_sha256": sha256_bytes(vanilla_data),
+                    "expected_target_size": len(vanilla_data),
+                    "overwrite_existing": True,
+                    "requires": list(requires),
+                }
+            )
+            variants.append(
+                {
+                    "asset_sha256": sha256_bytes(data),
+                    "offset": "0x405",
+                    "expected_asset_bytes": "00",
+                    "replacement_bytes": "01",
+                }
+            )
+        manifest_data = {
+            "manifest_version": 1,
+            "name": "real icon overlay reconfigure test",
+            "output": {
+                "default_folder_name": "VF2-BIcon-Modded",
+                "default_exe_name": output_name,
+                "preserve_stock_exe_icon": True,
+            },
+            "settings": [
+                {"id": "core_executable", "label": "Core", "default": True},
+                {"id": "cheat_upgrades", "label": "Cheat", "default": False, "category": "optional"},
+                {"id": "reloc_toggle", "label": "Toggle", "default": False, "category": "optional"},
+            ],
+            "target_files": [
+                {"path": vanilla.name, "sha256": sha256_bytes(vanilla_data), "size": len(vanilla_data)}
+            ],
+            "asset_patches": records,
+            "post_asset_patches": [
+                {
+                    "file_path": output_name,
+                    "requires": ["core_executable", "reloc_toggle"],
+                    "note": "Toggle a byte in the section the icon rewrite moves.",
+                    "variants": variants,
+                }
+            ],
+        }
+        manifest = tmp_path / "manifest.json"
+        manifest.write_text(json.dumps(manifest_data, indent=2), encoding="utf-8")
+        return game_dir, manifest, output_name
+
+    @unittest.skipUnless(sys.platform == "win32", "Windows resource APIs are required")
+    def test_reconfigure_accepts_real_icon_preserved_output_and_matches_fresh_apply(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            game_dir, manifest, output_name = self.real_icon_overlay_fixture(tmp_path)
+
+            def fresh(folder, *selection):
+                self.run_patcher(
+                    "apply", "--game-dir", str(game_dir), "--output-dir", str(tmp_path / folder),
+                    "--manifest", str(manifest), *selection,
+                )
+                return (tmp_path / folder / output_name).read_bytes()
+
+            modded = tmp_path / "VF2-BIcon-Modded"
+            first = fresh(modded.name, "--enable", "reloc_toggle")
+            payload_hashes = {
+                patcher_mod.sha256_file(path) for path in (tmp_path / "payload").glob("*.exe")
+            }
+            # The icon rewrite really did change the file, so only the
+            # icon-aware identity check can accept it.
+            self.assertNotIn(sha256_bytes(first), payload_hashes)
+            self.assertGreater(len(first), len((tmp_path / "payload" / "payload0.exe").read_bytes()))
+
+            for selection in (
+                ("--enable", "cheat_upgrades", "--enable", "reloc_toggle"),
+                ("--enable", "cheat_upgrades"),
+                (),
+                ("--enable", "reloc_toggle"),
+            ):
+                self.run_patcher("apply", "--output-dir", str(modded), "--manifest", str(manifest), *selection)
+                expected = fresh(f"fresh-{len(list(tmp_path.iterdir()))}", *selection)
+                self.assertEqual((modded / output_name).read_bytes(), expected, selection)
+
+            tampered = bytearray((modded / output_name).read_bytes())
+            tampered[0x201] ^= 0xFF
+            (modded / output_name).write_bytes(bytes(tampered))
+            result = self.run_patcher(
+                "apply", "--output-dir", str(modded), "--manifest", str(manifest), expect=2,
+            )
+            self.assertIn("unknown current SHA-256", result.stdout + result.stderr)
+            self.assertEqual((modded / output_name).read_bytes(), bytes(tampered))
+
+    @unittest.skipUnless(sys.platform == "win32", "Windows resource APIs are required")
+    def test_executable_off_skips_stock_icon_preservation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            game_dir, manifest, output_name = self.real_icon_overlay_fixture(tmp_path)
+            vanilla = (game_dir / "Virtual Families 2.exe").read_bytes()
+            output_dir = tmp_path / "VF2-BIcon-Modded"
+            with mock.patch.object(patcher_mod, "read_executable_icon_resources") as read_icons:
+                args = patcher_mod.build_parser().parse_args(
+                    [
+                        "apply", "--game-dir", str(game_dir), "--output-dir", str(output_dir),
+                        "--manifest", str(manifest), "--disable-all",
+                    ]
+                )
+                args.progress_callback = lambda _message: None
+                patcher_mod.apply_manifest(args)
+            read_icons.assert_not_called()
+            # The vanilla EXE is carried over untouched under the modded name,
+            # so it keeps its own stock icon.
+            self.assertEqual((output_dir / output_name).read_bytes(), vanilla)
+            self.assertFalse((output_dir / "Virtual Families 2.exe").exists())
+
+    @unittest.skipUnless(sys.platform == "win32", "Windows resource APIs are required")
+    def test_executable_off_never_carries_a_stale_modded_exe_from_the_game_folder(self):
+        # An earlier in-place apply leaves a modded EXE under the output name
+        # beside the vanilla one.  With the executable off the output must be
+        # the vanilla EXE renamed, never that stale build.
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            game_dir, manifest, output_name = self.real_icon_overlay_fixture(tmp_path)
+            vanilla = (game_dir / "Virtual Families 2.exe").read_bytes()
+            (game_dir / output_name.lower()).write_bytes(b"stale modded build")
+            output_dir = tmp_path / "VF2-BIcon-Modded"
+            self.run_patcher(
+                "apply", "--game-dir", str(game_dir), "--output-dir", str(output_dir),
+                "--manifest", str(manifest), "--disable-all",
+            )
+            exes = sorted(path.name.lower() for path in output_dir.glob("*.exe"))
+            self.assertEqual(exes, [output_name.lower()])
+            self.assertEqual((output_dir / output_name).read_bytes(), vanilla)
+            self.assertEqual((game_dir / output_name).read_bytes(), b"stale modded build")
+
+    @unittest.skipUnless(sys.platform == "win32", "Windows resource APIs are required")
+    def test_executable_off_in_place_still_fails_icon_preservation(self):
+        # In place (output folder == game folder) nothing renames the EXE, so
+        # skipping preservation would report success with no modded EXE.
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            game_dir, manifest, output_name = self.real_icon_overlay_fixture(tmp_path)
+            art = tmp_path / "payload" / "art.png"
+            art.write_bytes(b"loose art")
+            data = json.loads(manifest.read_text(encoding="utf-8"))
+            data["settings"].append({"id": "loose_art", "label": "Art", "default": True})
+            data["asset_patches"].append(
+                {
+                    "file_path": "Images/art.png",
+                    "source_path": "payload/art.png",
+                    "source_sha256": sha256_bytes(b"loose art"),
+                    "source_size": len(b"loose art"),
+                    "allow_missing_target": True,
+                    "requires": ["loose_art"],
+                }
+            )
+            manifest.write_text(json.dumps(data), encoding="utf-8")
+            vanilla = (game_dir / "Virtual Families 2.exe").read_bytes()
+            result = self.run_patcher(
+                "apply", "--game-dir", str(game_dir), "--output-dir", str(game_dir),
+                "--manifest", str(manifest), "--disable", "core_executable", expect=2,
+            )
+            self.assertIn("no active executable replacement", result.stdout + result.stderr)
+            self.assertEqual((game_dir / "Virtual Families 2.exe").read_bytes(), vanilla)
+            self.assertFalse((game_dir / output_name).exists())
+            self.assertFalse((game_dir / "Images" / "art.png").exists())
+
+    @unittest.skipUnless(sys.platform == "win32", "Windows resource APIs are required")
+    def test_icon_preservation_still_fails_when_an_exe_replacement_writes_another_name(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            game_dir, manifest, _output_name = self.real_icon_overlay_fixture(tmp_path)
+            data = json.loads(manifest.read_text(encoding="utf-8"))
+            for record in data["asset_patches"]:
+                record["output_file_path"] = "Some Other Name.exe"
+            data["post_asset_patches"] = []
+            manifest.write_text(json.dumps(data), encoding="utf-8")
+            result = self.run_patcher(
+                "apply", "--game-dir", str(game_dir), "--output-dir", str(tmp_path / "VF2-BIcon-Modded"),
+                "--manifest", str(manifest), "--dry-run", expect=2,
+            )
+            self.assertIn("no active executable replacement", result.stdout + result.stderr)
+
     def assert_post_asset_validation_failure(self, variants_factory, expected_error):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)

@@ -2005,6 +2005,166 @@ def suppress_active_assets_replaced_by_restore(
     ]
 
 
+def _pe_raw_sections(data: bytes | bytearray) -> dict[str, tuple[int, int]] | None:
+    """Return {section name: (raw pointer, raw size)}, or None if not a plain PE32."""
+    try:
+        if len(data) < 0x40 or data[:2] != b"MZ":
+            return None
+        pe_off = struct.unpack_from("<I", data, 0x3C)[0]
+        if pe_off + 0x18 > len(data) or data[pe_off:pe_off + 4] != b"PE\0\0":
+            return None
+        section_count = struct.unpack_from("<H", data, pe_off + 6)[0]
+        opt_size = struct.unpack_from("<H", data, pe_off + 20)[0]
+        section_table = pe_off + 24 + opt_size
+        if section_table + section_count * 40 > len(data):
+            return None
+        sections: dict[str, tuple[int, int]] = {}
+        for index in range(section_count):
+            off = section_table + index * 40
+            name = bytes(data[off:off + 8]).split(b"\0", 1)[0].decode("ascii", "replace")
+            raw_size, raw_ptr = struct.unpack_from("<II", data, off + 16)
+            if name in sections or raw_ptr + raw_size > len(data):
+                return None
+            sections[name] = (raw_ptr, raw_size)
+        return sections
+    except struct.error:
+        return None
+
+
+def _post_asset_ranges_for_payload(
+    raw_post_patches: list[Any],
+    output_key: str,
+    base_sha: str,
+) -> list[tuple[int, bytes, bytes]] | None:
+    """Collect the post-asset toggle ranges a payload's own variants declare."""
+    ranges: list[tuple[int, bytes, bytes]] = []
+    for post_index, raw in enumerate(raw_post_patches):
+        if not isinstance(raw, dict):
+            continue
+        file_value = raw.get("file_path", raw.get("file", raw.get("path")))
+        if not isinstance(file_value, str) or canonical_rel_path_key(normalize_rel_path(
+            file_value, f"post-asset patch #{post_index} file path"
+        )) != output_key:
+            continue
+        for variant_index, variant in enumerate(raw.get("variants", [])):
+            if not isinstance(variant, dict):
+                continue
+            variant_sha = normalize_sha256(
+                variant.get("asset_sha256", variant.get("expected_asset_sha256", variant.get("source_sha256"))),
+                f"post-asset patch #{post_index} variant #{variant_index} asset_sha256",
+                required=True,
+            )
+            if variant_sha != base_sha:
+                continue
+            expected = parse_hex_bytes(
+                variant.get("expected_asset_bytes", variant.get("expected_bytes", variant.get("expected"))),
+                f"post-asset patch #{post_index} variant #{variant_index} expected bytes",
+            )
+            replacement = parse_hex_bytes(
+                variant.get("replacement_bytes", variant.get("replacement", variant.get("new"))),
+                f"post-asset patch #{post_index} variant #{variant_index} replacement bytes",
+            )
+            offset = parse_int(
+                variant.get("offset"),
+                f"post-asset patch #{post_index} variant #{variant_index} offset",
+            )
+            if not expected or len(expected) != len(replacement) or offset < 0:
+                return None
+            ranges.append((offset, expected, replacement))
+            break
+    return ranges
+
+
+def _normalize_rebased_post_ranges(
+    current: bytes,
+    source_sections: dict[str, tuple[int, int]],
+    current_sections: dict[str, tuple[int, int]],
+    ranges: list[tuple[int, bytes, bytes]],
+) -> bytearray | None:
+    """Reset each toggle range to its expected bytes, section-relative.
+
+    Mirrors rebase_post_asset_checks_to_output: ranges are authored against the
+    payload EXE and keep their offset within the same-named section of the
+    icon-rewritten output.  Any range holding neither its expected nor its
+    replacement bytes rejects the file.
+    """
+    normalized = bytearray(current)
+    for offset, expected, replacement in ranges:
+        rebased = None
+        for name, (raw_ptr, raw_size) in source_sections.items():
+            if raw_ptr <= offset and offset + len(expected) <= raw_ptr + raw_size:
+                if name not in current_sections:
+                    return None
+                target_ptr, target_size = current_sections[name]
+                rebased = target_ptr + (offset - raw_ptr)
+                if rebased + len(expected) > target_ptr + target_size:
+                    return None
+                break
+        if rebased is None:
+            return None
+        if bytes(normalized[rebased:rebased + len(expected)]) not in (expected, replacement):
+            return None
+        normalized[rebased:rebased + len(expected)] = expected
+    return normalized
+
+
+def icon_preserved_payload_matches(
+    target: Path,
+    current_data: bytes,
+    base_sources: dict[str, Path],
+    raw_post_patches: list[Any],
+    output_key: str,
+) -> bool:
+    """True only if the output EXE is a bundled payload after the apply-time icon rewrite.
+
+    For each bundled payload, the output's non-resource sections must equal the
+    payload's once the manifest's post-asset toggle ranges are reset; the
+    surviving payload is then run through the same stock-icon rewrite apply
+    uses (with the icons the output already carries) and the whole file must
+    match byte for byte.  Anything else -- a hand-edited EXE, a foreign build,
+    or an unreadable icon set -- is rejected.
+    """
+    current_sections = _pe_raw_sections(current_data)
+    if current_sections is None:
+        return False
+    try:
+        icons = read_executable_icon_resources(target)
+    except (PatchError, OSError, AttributeError):
+        return False
+    with tempfile.TemporaryDirectory(prefix="vf2-reconfigure-exe-") as temp_dir:
+        for base_sha, source in sorted(base_sources.items()):
+            ranges = _post_asset_ranges_for_payload(raw_post_patches, output_key, base_sha)
+            if ranges is None:
+                continue
+            source_data = source.read_bytes()
+            source_sections = _pe_raw_sections(source_data)
+            if source_sections is None:
+                continue
+            normalized = _normalize_rebased_post_ranges(current_data, source_sections, current_sections, ranges)
+            if normalized is None:
+                continue
+            # Cheap filter before the resource rewrite: every section the
+            # payload already has, except its resources, must be unchanged.
+            if any(
+                name not in current_sections
+                or current_sections[name][1] != raw_size
+                or bytes(normalized[current_sections[name][0]:current_sections[name][0] + raw_size])
+                != source_data[raw_ptr:raw_ptr + raw_size]
+                for name, (raw_ptr, raw_size) in source_sections.items()
+                if name != ".rsrc"
+            ):
+                continue
+            candidate = Path(temp_dir) / f"{base_sha}.exe"
+            shutil.copyfile(source, candidate)
+            try:
+                write_executable_icon_resources_atomic(candidate, icons)
+            except (PatchError, OSError, AttributeError):
+                continue
+            if candidate.read_bytes() == bytes(normalized):
+                return True
+    return False
+
+
 def verify_reconfigure_executable_identity(
     manifest: dict[str, Any],
     manifest_dir: Path,
@@ -2031,6 +2191,7 @@ def verify_reconfigure_executable_identity(
         return
     candidates: dict[str, set[str]] = {}
     base_candidates: dict[str, set[str]] = {}
+    base_sources: dict[str, dict[str, Path]] = {}
     for index, raw in enumerate(raw_assets):
         if not isinstance(raw, dict):
             continue
@@ -2059,6 +2220,7 @@ def verify_reconfigure_executable_identity(
         output_key = canonical_rel_path_key(output_path)
         candidates.setdefault(output_key, set()).add(actual_source_sha)
         base_candidates.setdefault(output_key, set()).add(actual_source_sha)
+        base_sources.setdefault(output_key, {})[actual_source_sha] = source
 
     raw_post_patches = manifest.get("post_asset_patches", [])
     if isinstance(raw_post_patches, list):
@@ -2163,6 +2325,23 @@ def verify_reconfigure_executable_identity(
                 ):
                     composed_toggle_match = True
                     break
+        if (
+            current_sha not in allowed_hashes
+            and not composed_toggle_match
+            and manifest_preserve_stock_exe_icon(manifest)
+        ):
+            # A normal apply rewrites the payload's icon resources (adding or
+            # rebuilding .rsrc) before the post-asset toggles, so the produced
+            # EXE is never a raw payload hash.  Accept it only when it is
+            # byte-identical to a bundled payload re-run through that same
+            # icon rewrite, modulo the manifest's own post-asset toggle ranges.
+            composed_toggle_match = icon_preserved_payload_matches(
+                target,
+                current_data,
+                base_sources.get(output_key, {}),
+                raw_post_patches if isinstance(raw_post_patches, list) else [],
+                output_key,
+            )
         if current_sha not in allowed_hashes and not composed_toggle_match:
             raise PatchError(
                 f"Refusing output-only executable replacement for {output_path}: "
@@ -3468,6 +3647,7 @@ def apply_manifest(args: argparse.Namespace) -> int:
         preserve_stock_exe_icon = manifest_preserve_stock_exe_icon(manifest)
         captured_icon_resources: tuple[IconResource, ...] = ()
         icon_source: Path | None = None
+        icon_asset_check: dict[str, Any] | None = None
         if preserve_stock_exe_icon:
             desired_exe_name = manifest_output_exe_name(manifest)
             if not desired_exe_name:
@@ -3484,11 +3664,35 @@ def apply_manifest(args: argparse.Namespace) -> int:
                 ),
                 None,
             )
-            if icon_asset_check is None:
+            # Skipping is only safe for a separate output folder, where
+            # enforce_modded_exe_name renames the carried-over vanilla EXE.
+            # In place it returns early, so no modded EXE would exist.
+            if icon_asset_check is None and (
+                output_dir.resolve() == game_dir.resolve()
+                or any(
+                    Path(str(check.get(field) or "")).suffix.lower() == ".exe"
+                    for check in asset_checks
+                    for field in ("file_path", "output_file_path")
+                )
+            ):
                 raise PatchError(
                     "Manifest requests stock EXE icon preservation, but no active executable replacement "
                     f"writes {desired_exe_name}."
                 )
+            if icon_asset_check is None:
+                # No executable replacement is selected (core_executable off),
+                # so the output keeps the vanilla EXE, which already carries
+                # the stock icon.  There is nothing to preserve.
+                preserve_stock_exe_icon = False
+                log_process_event(
+                    process_log,
+                    phase="validate",
+                    kind="exe_icon_resources",
+                    status="skipped",
+                    output_file_path=desired_exe_name,
+                    note="No executable replacement is active; the vanilla EXE keeps its own icon.",
+                )
+        if preserve_stock_exe_icon and icon_asset_check is not None:
             icon_source = resolve_under_game_dir(game_dir, str(icon_asset_check["target_file_path"]))
             emit_progress(args, f"Validating stock executable icon resources: {icon_source}")
             try:
@@ -3529,6 +3733,19 @@ def apply_manifest(args: argparse.Namespace) -> int:
                 for check in asset_checks
                 if str(check.get("output_file_path") or check["file_path"]) != str(check["file_path"])
             }
+            desired_output_exe = manifest_output_exe_name(manifest)
+            if desired_output_exe:
+                # A vanilla folder that once had an in-place apply also holds a
+                # modded EXE under the output name.  The output's modded EXE is
+                # always written by the executable asset or renamed from the
+                # vanilla EXE, so never carry that stale build over: with the
+                # executable off, enforce_modded_exe_name would keep it and
+                # delete the vanilla EXE.
+                skip_copy_paths.update(
+                    child.name
+                    for child in game_dir.iterdir()
+                    if child.is_file() and child.name.lower() == desired_output_exe.lower()
+                )
             if args.backup_dir:
                 backup_dir = Path(args.backup_dir).resolve()
             else:
