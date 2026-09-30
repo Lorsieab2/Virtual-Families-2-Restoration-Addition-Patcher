@@ -471,9 +471,10 @@ class TestAddedFurnitureContract(unittest.TestCase):
            clones on their STOCK DONORS, so bike autonomy needs a Treadmill
            placed and ping-pong needs a Pool Table. That is exactly the
            cross-targeting bug the owner reported.
-        2. The four zero-valued sites (WateringWindowBoxes, Home Gym, Yoga,
-           WorkKitchen0) set to the bike object gates Home Gym and Yoga on an
-           unrelated Exercise Bike existing.
+        2. The zero-valued sites (WateringWindowBoxes, Home Gym, Yoga, and
+           then also WorkKitchen0, whose clone has since been removed) set to
+           the bike object gates Home Gym and Yoga on an unrelated Exercise
+           Bike existing.
 
         A third, found by review on the first revision of THIS test: prefixing
         a call with `//` left all twelve assertions passing while the
@@ -560,7 +561,10 @@ class TestAddedFurnitureContract(unittest.TestCase):
             (0x04A, 0x0B3, "0"),                             # Home Gym System
             (0x08B, 0x0B4, "0"),                             # Yoga Equipment
             (0x099, 0x0B8, "0x9a"),                          # Ping-Pong Table
-            (0x047, 0x048, "0"),                             # WorkKitchen0
+            # SUPERSEDED: (0x047, 0x048, "0") WorkKitchen0 was pinned here.
+            # That clone made the non-candidate 0x048 a second kitchen-career
+            # row and is removed so career work matches vanilla; see
+            # work/test_career_rows_match_vanilla.py.
         ]
 
         # Assert against PREPROCESSED C++, not source text.
