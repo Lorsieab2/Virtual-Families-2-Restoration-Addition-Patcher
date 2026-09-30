@@ -373,6 +373,15 @@ Only the drawing is affected. The click path still reads the real answer, so a
 reversible row stays clickable: buying Unlock Everything a second time restores
 the locks, and buying a different multiplier still switches to it.
 
+Unlock Everything In The Store is saved with the village and re-applied when
+the save is loaded; it used to reset silently on every relaunch. Cheat state
+saved with a village -- the store unlock, the armed pregnancy rows, and the
+Same-Sex Marriage and Reroll toggles -- is acted on only by an executable built
+with Cheat Upgrades. An executable without them keeps the base-game store locks,
+pregnancies, marriage candidates and Reject button, and the saved state comes
+back when you return to a Cheat Upgrades executable. A same-sex marriage that
+already exists keeps working in every executable.
+
 The two Flea Market rows themselves are untouched base game, and both are independently repurchaseable in every patched executable — including saves where the effect flag is already cleared. Elsewhere, rebuying the Maid or Gardener fires that worker, and rebuying an owned house renovation returns it and rebuilds the native content map so it can be purchased again.
 
 ## Current furniture-routing status

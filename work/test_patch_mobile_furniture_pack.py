@@ -4,6 +4,7 @@ import copy
 import hashlib
 import json
 import os
+import re
 import shutil
 import struct
 import tempfile
@@ -9012,10 +9013,14 @@ class OutfitStoreMappingTests(unittest.TestCase):
         self.assertIn('"name": "Unlock everything in the store"', source)
         self.assertIn("static volatile unsigned char gVF2UnlockEverythingInStore = 0;", source)
         self.assertIn("if (gVF2UnlockEverythingInStore != 0) return 0;", source)
-        self.assertIn("gVF2UnlockEverythingInStore = 1;", source)
-        self.assertIn("gVF2UnlockEverythingInStore = 0;", source)
-        self.assertIn("VF2SetInventoryItemInfoLocksUnlocked(true);", source)
-        self.assertIn("VF2SetInventoryItemInfoLocksUnlocked(false);", source)
+        # SUPERSEDED, recorded rather than deleted: the purchase used to
+        # write gVF2UnlockEverythingInStore = 1/0 and call
+        # VF2SetInventoryItemInfoLocksUnlocked(true/false) directly, all
+        # session-only state, so a relaunch re-locked the store. The one
+        # apply routine now follows the saved flag; see
+        # test_unlock_everything_in_store_is_saved_and_reapplied_on_load.
+        self.assertIn("gVF2UnlockEverythingInStore = unlocked ? 1 : 0;", source)
+        self.assertIn("VF2SetInventoryItemInfoLocksUnlocked(unlocked);", source)
         self.assertIn("return VF2AllStoreLocksUnlocked() ? 0 : -1;", source)
         self.assertIn("INVENTORY_ITEMINFO_RECORD_SIZE = 0x24", source)
         self.assertIn("INVENTORY_ITEMINFO_LOCK_OFFSET = 0x10", source)
@@ -11762,7 +11767,8 @@ class OlderPregnancyPatchTests(unittest.TestCase):
             source,
         )
         self.assertIn("bool succeeded = villager->Impregnate(", source)
-        self.assertIn("if (succeeded) {", source)
+        # Spent only by a cheat build; elsewhere the armed bits stay saved.
+        self.assertIn("if (succeeded && kVF2CheatUpgradesBuilt) {", source)
         self.assertIn("VF2PersistentCheatAndPurchaseMask() &= ~0xFCu;", source)
         self.assertIn("storedMask = (storedMask & ~0x3u) | newMask;", source)
         self.assertNotIn("VF2PersistentCheatAndPurchaseMask() = 0;", source)
@@ -12438,6 +12444,137 @@ class MarriageCandidateRerollContractTests(unittest.TestCase):
                 self.assertIn("no longer touched", contract["accept"])
         finally:
             patcher.PATCHED = old_patched
+
+    def _generated_function_body(self, source, signature):
+        return source.split(signature, 1)[1].split("\n}", 1)[0]
+
+    def test_non_cheat_builds_neutralise_the_saved_marriage_toggle_hooks(self):
+        # The Same-Sex and Reroll bytes are saved with the village. A build
+        # without Cheat Upgrades has no row to turn them off, so its two
+        # trampolines must never take the flag path.
+        old_patched = patcher.PATCHED
+        old_cheats = patcher.ENABLE_CHEAT_UPGRADES
+        try:
+            for cheats in (True, False):
+                with self.subTest(cheats=cheats), tempfile.TemporaryDirectory() as tmp:
+                    temp_root = Path(tmp)
+                    for filename in ("DatingScene.obj", "VillagerManager.obj", "theMainScene.obj"):
+                        shutil.copy2(patcher.SRC_OBJS / filename, temp_root / filename)
+                    patcher.PATCHED = temp_root
+                    patcher.ENABLE_CHEAT_UPGRADES = cheats
+                    manifest = {}
+                    patcher.patch_marriage_candidate_reroll(manifest)
+                    patcher.patch_same_sex_marriage(manifest)
+                    dating = CoffObject(temp_root / "DatingScene.obj")
+
+                    def cave(symbol_name, hook):
+                        sym = dating.symbol(symbol_name)
+                        sec = dating.section(sym.section)
+                        raw_hook = sec.raw_ptr + sym.value + hook
+                        self.assertEqual(dating.buf[raw_hook], 0xE9)
+                        rel = struct.unpack_from("<i", dating.buf, raw_hook + 1)[0]
+                        start = sec.raw_ptr + sym.value + hook + 5 + rel
+                        return bytes(dating.buf[start:start + 9])
+
+                    reroll = cave("?HandleMessage@CDatingScene@@UAE_NHJ@Z", 0x85)
+                    gender = cave("?GeneratePeepCandidate@CDatingScene@@AAEXXZ", 0x7D)
+                    # Both still read the saved byte first.
+                    self.assertEqual(reroll[:2], b"\x80\x3D")
+                    self.assertEqual(gender[:2], b"\x80\x3D")
+                    if cheats:
+                        self.assertEqual(reroll[7], 0x74)             # je inactive
+                        self.assertEqual(gender[7:9], b"\x75\x0B")    # jne enabled
+                    else:
+                        self.assertEqual(reroll[7:9], b"\xEB\x36")    # jmp inactive
+                        self.assertEqual(gender[7:9], b"\x90\x90")    # stock path only
+        finally:
+            patcher.PATCHED = old_patched
+            patcher.ENABLE_CHEAT_UPGRADES = old_cheats
+
+    def test_pregnancy_one_shots_only_act_in_a_cheat_build(self):
+        source = Path(patcher.__file__).read_text(encoding="utf-8")
+        self.assertIn(
+            "static const bool kVF2CheatUpgradesBuilt = __VF2_CHEAT_UPGRADES_BUILT__;",
+            source,
+        )
+        self.assertIn(
+            '"__VF2_CHEAT_UPGRADES_BUILT__",\n'
+            '        "true" if ENABLE_CHEAT_UPGRADES else "false",',
+            source,
+        )
+        for signature, gate in (
+            ('extern "C" bool __cdecl VF2ForceSuccessfulPregnancyArmed() {', "kVF2CheatUpgradesBuilt"),
+            ('extern "C" bool __fastcall VF2ChanceOfPregnancyForced(', "kVF2CheatUpgradesBuilt"),
+            ('extern "C" void __cdecl VF2ApplyForcedBirthCount(', "!kVF2CheatUpgradesBuilt"),
+            ('extern "C" bool __fastcall VF2ImpregnateAndClearForce(', "succeeded && kVF2CheatUpgradesBuilt"),
+            ('extern "C" int __fastcall VF2SpawnBirthPeepWithForcedGender(', "kVF2EnableB150CheatUpgrades"),
+        ):
+            with self.subTest(signature=signature):
+                body = self._generated_function_body(source, signature)
+                self.assertIn(gate, body)
+                self.assertIn("VF2PersistentCheatAndPurchaseMask()", body)
+
+    def test_same_sex_predicate_keeps_existing_marriages_in_every_build(self):
+        # Deliberate: this predicate only supports marriages that already
+        # exist; gating it on the build would un-marry a same-sex couple.
+        source = Path(patcher.__file__).read_text(encoding="utf-8")
+        body = self._generated_function_body(
+            source, 'extern "C" bool __cdecl VF2SameSexMarriageToggleActive() {{'
+        )
+        self.assertNotIn("kVF2EnableB150CheatUpgrades", body)
+        self.assertIn("VF2CheatToggleActiveByte({SAME_SEX_MARRIAGE_ITEM_ID:#x}) != 0", body)
+
+    def test_unlock_everything_in_store_is_saved_and_reapplied_on_load(self):
+        source = Path(patcher.__file__).read_text(encoding="utf-8")
+        bit = int(
+            source.split("static const unsigned int kVF2UnlockEverythingPersistentBit = ", 1)[1]
+            .split("u;", 1)[0],
+            16,
+        )
+        # Record 0xA8 +0x00: bits 0-4 are the Bathroom 2 remodels, byte 0 is
+        # the record's native complete byte. The store flag must avoid both.
+        bathroom2_bits = (1 << len(patcher.AI_BATHROOM2_PC_ITEM_IDS)) - 1
+        self.assertEqual(bit & bathroom2_bits, 0)
+        self.assertEqual(bit & 0xFF, 0)
+        self.assertIn("static const int kVF2AIBathroom2PersistentMaskOffset = 0x00;", source)
+        accessor = self._generated_function_body(
+            source, "static unsigned int &VF2PersistentRecordA8FirstDword() {"
+        )
+        self.assertIn("(unsigned char *)&Achievement + 0xA8 * 12;", accessor)
+        self.assertIn("return *(unsigned int *)record;", accessor)
+        # Below the reserved records LoadState's legacy clear still wipes.
+        self.assertLess(0xA8, patcher.CUSTOM_ACHIEVEMENT_RESERVED_FIRST_ID)
+        # Not the native owned-items array that broke Bathroom 2.
+        saved = self._generated_function_body(
+            source, "static bool VF2UnlockEverythingInStoreSaved() {"
+        )
+        self.assertNotIn("0x2A3", saved)
+        self.assertIn("kVF2CheatUpgradesBuilt", saved)
+        # The purchase writes the saved bit and the common save persists it.
+        case = source.split("    case 0x123:\n        {", 1)[1].split("    case 0x124:", 1)[0]
+        self.assertIn("firstDword | kVF2UnlockEverythingPersistentBit", case)
+        self.assertIn("firstDword & ~kVF2UnlockEverythingPersistentBit", case)
+        self.assertIn("VF2ApplyUnlockEverythingInStore(unlock);", case)
+        # Loading a save re-applies it...
+        load = self._generated_function_body(
+            source, 'extern "C" bool __fastcall VF2AchievementLoadStateAndReconcile('
+        )
+        self.assertIn("VF2SyncUnlockEverythingInStore();", load)
+        # ...and the checkmark/price query resyncs too.
+        locks = self._generated_function_body(source, "static bool VF2AllStoreLocksUnlocked() {")
+        self.assertLess(
+            locks.index("VF2SyncUnlockEverythingInStore();"),
+            locks.index("if (gVF2UnlockEverythingInStore != 0) return true;"),
+        )
+        # Reset Achievements keeps the whole dword the flag lives in.
+        reset = source.split("case 0x124:", 1)[1].split("case 0x125:", 1)[0]
+        self.assertIn("unsigned int aiBathroom2 = VF2PersistentAIBathroom2Mask();", reset)
+        self.assertIn("VF2PersistentAIBathroom2Mask() = aiBathroom2;", reset)
+        # And nothing else toggles the in-memory state behind the saved flag.
+        self.assertEqual(
+            len(re.findall(r"^\s+gVF2UnlockEverythingInStore = ", source, re.M)), 1
+        )
+        self.assertIn("    gVF2UnlockEverythingInStore = unlocked ? 1 : 0;", source)
 
     def test_reroll_and_same_sex_accept_guards_coexist_in_main_order(self):
         old_patched = patcher.PATCHED

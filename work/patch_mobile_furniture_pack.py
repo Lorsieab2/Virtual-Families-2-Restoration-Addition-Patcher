@@ -13025,6 +13025,17 @@ extern "C" bool __cdecl VF2SameSexMarriageToggleActive() {{
     // The dedicated persisted byte is authoritative. Inventory history is not
     // state: using HaveUpgrade here would make ReturnOne leave the toggle
     // active after the second purchase.
+    //
+    // DELIBERATELY NOT GATED ON THE CHEAT BUILD. Every consumer of this
+    // predicate supports a same-sex marriage that already exists (spouse
+    // accessors, finalization, embrace, pregnancy guard, Married status,
+    // drop classification). Gating it would quietly un-marry an existing
+    // same-sex couple as soon as the player switched to an executable
+    // without Cheat Upgrades. What a non-cheat build must not do is make NEW
+    // same-sex matches or reroll candidates: those two hooks read the byte
+    // in their own trampolines and are neutralised at generation time when
+    // Cheat Upgrades are not built (patch_same_sex_marriage,
+    // patch_marriage_candidate_reroll).
     return *VF2CheatToggleActiveByte({SAME_SEX_MARRIAGE_ITEM_ID:#x}) != 0;
 }}
 static const bool kVF2EnableB150CheatUpgrades = {"true" if ENABLE_CHEAT_UPGRADES else "false"};
@@ -13232,7 +13243,9 @@ extern "C" int __fastcall VF2SpawnBirthPeepWithForcedGender(
     int y,
     bool adopted
 ) {{
-    unsigned int mask = VF2PersistentCheatAndPurchaseMask();
+    // Next Babies Male/Female: a cheat build only (see kVF2CheatUpgradesBuilt).
+    unsigned int mask = kVF2EnableB150CheatUpgrades
+        ? VF2PersistentCheatAndPurchaseMask() : 0u;
     if (mask & 0x8) gender = eGenderMale;
     if (mask & 0x10) gender = eGenderFemale;
     return manager->SpawnSpecificPeep(
@@ -15671,6 +15684,13 @@ __VF2_MORTALITY_HAZARD_ARRAY__
 
 static const bool kVF2IncludeOrnamentologistGoal = __VF2_INCLUDE_ORNAMENT_GOAL__;
 static const bool kVF2IncludeBehaviorGoals = __VF2_INCLUDE_BEHAVIOR_GOALS__;
+// Cheat Upgrades compiled into this executable. The armed pregnancy
+// one-shots (record 0xA8 +0x04 bits 2-7) are saved with the village, so a
+// save armed under a cheat build still carries them into an executable
+// without Cheat Upgrades. Only a cheat build acts on them or spends them:
+// elsewhere pregnancies are stock and the bits stay in the save, so going
+// back to a cheat build finds them still armed.
+static const bool kVF2CheatUpgradesBuilt = __VF2_CHEAT_UPGRADES_BUILT__;
 
 static int VF2PregnancyAgeYears(int internalAge) {
     return internalAge / 20;
@@ -16256,7 +16276,8 @@ extern "C" __declspec(naked) void __cdecl VF2PushEmbraceBehaviorSecond() {
 static unsigned int &VF2PersistentCheatAndPurchaseMask();
 
 extern "C" bool __cdecl VF2ForceSuccessfulPregnancyArmed() {
-    return (VF2PersistentCheatAndPurchaseMask() & 0x4u) != 0;
+    return kVF2CheatUpgradesBuilt &&
+        (VF2PersistentCheatAndPurchaseMask() & 0x4u) != 0;
 }
 
 extern "C" bool __cdecl VF2SkipSameSexTryToMakeBaby() {
@@ -16550,6 +16571,8 @@ extern "C" void __fastcall VF2MaybeCompleteAchiever(
     achievement->SetComplete(achiever);
 }
 
+static void VF2SyncUnlockEverythingInStore();
+
 static void VF2MaybeCompleteDisciplineProps(CAchievement *achievement) {
     if (!kVF2IncludeBehaviorGoals ||
         achievement->IsComplete((EAchievement)0xA5) ||
@@ -16574,6 +16597,9 @@ extern "C" bool __fastcall VF2AchievementLoadStateAndReconcile(
     if (loaded) {
         VF2MaybeCompleteDisciplineProps(achievement);
         VF2MaybeCompleteAchiever(achievement, 0);
+        // Unlock everything in the store is saved in this record array;
+        // bring the in-memory locks in line with the save just loaded.
+        VF2SyncUnlockEverythingInStore();
     }
     return loaded;
 }
@@ -17238,7 +17264,7 @@ extern "C" bool __fastcall VF2ChanceOfPregnancyForced(
     if (VF2IsSameSexMarriage()) {
         return false;
     }
-    if (VF2PersistentCheatAndPurchaseMask() & 0x4) {
+    if (kVF2CheatUpgradesBuilt && (VF2PersistentCheatAndPurchaseMask() & 0x4)) {
         return true;
     }
     return state->ChanceOfPregnancy(motherAge, fatherAge, fatherFertility);
@@ -17283,7 +17309,7 @@ extern "C" void __cdecl VF2ApplyForcedBirthCount(
     CVillager *mother,
     int availableSlots
 ) {
-    if (!mother || availableSlots <= 0) {
+    if (!mother || availableSlots <= 0 || !kVF2CheatUpgradesBuilt) {
         return;
     }
     unsigned int mask = VF2PersistentCheatAndPurchaseMask();
@@ -17312,7 +17338,7 @@ extern "C" bool __fastcall VF2ImpregnateAndClearForce(
     bool succeeded = villager->Impregnate(
         count, name, motherBody, fatherBody, adopted
     );
-    if (succeeded) {
+    if (succeeded && kVF2CheatUpgradesBuilt) {
         VF2PersistentCheatAndPurchaseMask() &= ~0xFCu;
     }
     return succeeded;
@@ -17367,6 +17393,8 @@ struct sFurnitureInfo {
 extern sFurnitureInfo itemInfo[];
 
 static volatile unsigned char gVF2UnlockEverythingInStore = 0;
+static void VF2UnlockAllFurnitureGenerationLocks();
+static void VF2RestoreFurnitureGenerationLocks();
 __VF2_FURNITURE_LOCK_ARRAY__
 static const int kVF2FurnitureRecordCount = __VF2_FURNITURE_RECORD_COUNT__;
 
@@ -17380,7 +17408,64 @@ static bool VF2AllFurnitureLocksUnlocked() {
     return true;
 }
 
+// UNLOCK EVERYTHING IN THE STORE IS SAVED WITH THE VILLAGE.
+//
+// It used to live only in gVF2UnlockEverythingInStore, the in-memory
+// itemInfo generation locks and the generation-lock unit's own byte, none
+// of which is saved: relaunching the game silently re-locked the store and
+// cleared the row's checkmark (the same defect the Same-Sex Marriage and
+// Reroll toggles had before they were persisted).
+//
+// The flag is bit 8 of record 0xA8's first dword. That record is the
+// patcher's scratch record: CAchievement::SaveState/LoadState copy all
+// twelve bytes of every record verbatim, LoadState's legacy clear is
+// narrowed to the reserved records above 0xAB, and no native code names
+// id 0xA8. Bits 0-4 of the same dword are the Bathroom 2 remodel flags
+// (VF2PersistentAIBathroom2Mask), and Reset Achievements already keeps the
+// whole dword. Bit 8 sits in byte 1, clear of byte 0, which is also the
+// record's native "complete" byte. It is deliberately NOT the
+// InventoryManager + itemId + 0x2A3 owned-items array the two marriage
+// toggles use: native code reads that array, which is what broke the
+// Bathroom 2 fixtures (docs/bathroom2-and-same-sex-findings.md).
+static const unsigned int kVF2UnlockEverythingPersistentBit = 0x100u;
+
+static unsigned int &VF2PersistentRecordA8FirstDword() {
+    unsigned char *record =
+        (unsigned char *)&Achievement + 0xA8 * 12;
+    return *(unsigned int *)record;
+}
+
+// Only a cheat build honours the saved flag; elsewhere the store keeps its
+// stock locks and the bit simply stays in the save.
+static bool VF2UnlockEverythingInStoreSaved() {
+    return kVF2CheatUpgradesBuilt &&
+        (VF2PersistentRecordA8FirstDword() & kVF2UnlockEverythingPersistentBit) != 0;
+}
+
+static void VF2ApplyUnlockEverythingInStore(bool unlocked) {
+    gVF2UnlockEverythingInStore = unlocked ? 1 : 0;
+    if (unlocked) {
+        VF2UnlockAllFurnitureGenerationLocks();
+    } else {
+        VF2RestoreFurnitureGenerationLocks();
+    }
+    VF2SetInventoryItemInfoLocksUnlocked(unlocked);
+}
+
+// Make the in-memory locks match the saved flag. A no-op when they already
+// agree, so the stock locks of a village that never used the cheat are
+// never rewritten.
+static void VF2SyncUnlockEverythingInStore() {
+    bool saved = VF2UnlockEverythingInStoreSaved();
+    if (saved == (gVF2UnlockEverythingInStore != 0)) return;
+    VF2ApplyUnlockEverythingInStore(saved);
+}
+
 static bool VF2AllStoreLocksUnlocked() {
+    // The store asks this for the row's checkmark and price; syncing here
+    // also catches a new village started in the same session, whose
+    // Achievement.Reset cleared the saved flag.
+    VF2SyncUnlockEverythingInStore();
     if (gVF2UnlockEverythingInStore != 0) return true;
     return VF2AllFurnitureLocksUnlocked() &&
         VF2AllInventoryItemInfoLocksUnlocked();
@@ -17754,15 +17839,17 @@ extern "C" void __cdecl VF2ApplyVisibleSpecialUpgrade(int itemId) {
         VF2FoodAdjustAndAward(&FoodStore, 0, 0x7FFFFFFF);
         break;
     case 0x123:
-        if (gVF2UnlockEverythingInStore != 0) {
-            gVF2UnlockEverythingInStore = 0;
-            VF2RestoreFurnitureGenerationLocks();
-            VF2SetInventoryItemInfoLocksUnlocked(false);
-            break;
+        {
+        // Toggle the SAVED flag (the common save below writes it), then
+        // make the in-memory locks follow it.
+        VF2SyncUnlockEverythingInStore();
+        bool unlock = gVF2UnlockEverythingInStore == 0;
+        unsigned int &firstDword = VF2PersistentRecordA8FirstDword();
+        firstDword = unlock
+            ? (firstDword | kVF2UnlockEverythingPersistentBit)
+            : (firstDword & ~kVF2UnlockEverythingPersistentBit);
+        VF2ApplyUnlockEverythingInStore(unlock);
         }
-        gVF2UnlockEverythingInStore = 1;
-        VF2UnlockAllFurnitureGenerationLocks();
-        VF2SetInventoryItemInfoLocksUnlocked(true);
         break;
     case 0x124:
         {
@@ -17923,6 +18010,10 @@ extern "C" void __cdecl VF2ApplyVisibleSpecialUpgrade(int itemId) {
     special_upgrade_helper_cpp = special_upgrade_helper_cpp.replace(
         "__VF2_INCLUDE_BEHAVIOR_GOALS__",
         "true" if ENABLE_BEHAVIOR_PATCHES else "false",
+    )
+    special_upgrade_helper_cpp = special_upgrade_helper_cpp.replace(
+        "__VF2_CHEAT_UPGRADES_BUILT__",
+        "true" if ENABLE_CHEAT_UPGRADES else "false",
     )
     special_upgrade_helper_cpp = special_upgrade_helper_cpp.replace(
         "__VF2_MOBILE_RENOVATION_ENABLED__",
@@ -22586,6 +22677,13 @@ def patch_marriage_candidate_reroll(manifest):
     if len(payload) != 75:
         raise AssertionError("Marriage Reject reroll cave size drifted")
     struct.pack_into("<b", payload, 8, 63 - 9)   # je inactive (offset 63)
+    # The toggle byte is saved with the village. A build without Cheat
+    # Upgrades has no row to turn it off, so there the flag test is
+    # replaced by an unconditional jump to the stock route (same length,
+    # same target): the byte stays in the save and a cheat build honours it
+    # again.
+    if not ENABLE_CHEAT_UPGRADES:
+        payload[7] = 0xEB  # jmp short inactive
     struct.pack_into("<b", payload, 16, 39 - 17)  # je reset (offset 39, skip deactivation)
     struct.pack_into("<b", payload, 31, 39 - 32)  # je reset (offset 39, fail closed)
     struct.pack_into("<i", payload, 59, reroll_return_offset - (cave + 63))
@@ -22870,6 +22968,11 @@ def patch_same_sex_marriage(manifest):
     if len(gender_trampoline) != 30:
         raise AssertionError("Same-sex candidate gender trampoline size drifted")
     struct.pack_into("<b", gender_trampoline, 8, 20 - 9)  # jne enabled (offset 20)
+    # As for the reroll hook: without Cheat Upgrades the saved byte is
+    # ignored. The conditional jump to the same-gender path becomes two
+    # NOPs, so the exact stock computation always runs.
+    if not ENABLE_CHEAT_UPGRADES:
+        gender_trampoline[7:9] = b"\x90\x90"
     struct.pack_into("<i", gender_trampoline, 16, rejoin - (gender_cave + 20))
     struct.pack_into("<i", gender_trampoline, 26, rejoin - (gender_cave + 30))
     struct.pack_into("<I", gender_trampoline, 2, same_sex_flag_addend)
