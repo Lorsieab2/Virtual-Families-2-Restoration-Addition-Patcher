@@ -3021,6 +3021,29 @@
   route; the native 30-record pool bounds physical sock creation while the
   persistent pile counter retains the requested signed-int maximum. The stock
   decal still saturates at its largest frame for every count at or above 30.
+- **Superseded (2026-09-30): `0x7FFFFFFF` was a defect.** The deposit at
+  action `0x4C` is an unclamped `inc dword ptr [gs+0x148]`, so one more sock
+  wrapped the pile to `INT_MIN`; and stock `CAchievement::IncrementProgress`
+  is `add [record+4], amount` then a signed `jl` against the target, so
+  laundering an `INT_MAX` pile on top of any partial progress on goals
+  `0x3B`/`0x3C`/`0x3D` (targets 10/50/100 in `achievementList`) wrapped the
+  progress negative and left those goals unreachable. Max out sock pile now
+  sets 1,000,000: at least the largest laundering target, above the decal's
+  last frame, and more than two billion deposits away from overflow. (The
+  `SpawnSockInHouse` call described above was also already removed; the row
+  writes only the counter.)
+- **Load-time repair (2026-09-30), in every executable.** Saves already
+  damaged by the old maximum are repaired when they load:
+  `VF2AchievementLoadStateAndReconcile` calls `VF2RepairSockLaunderingOverflow`
+  right after the native `LoadState` (stock `theGameState::Load` has already
+  memcpy'd the save into theGameState, so `+0x148` is the saved pile).
+  Negative progress on goals `0x3B`/`0x3C`/`0x3D` only is set to 0 -- those
+  goals only ever receive the pile, which normal play keeps at zero or above,
+  so a negative value can only be the wrap, and 0 is safe even for a complete
+  goal because `IncrementProgress` skips complete goals and `SetComplete`
+  never writes progress. A pile below 0 or above 1,000,000 (an unlaundered
+  old `INT_MAX` pile, or one wrapped to `INT_MIN`) is set to 1,000,000.
+  Saves with progress >= 0 and a pile of 0..1,000,000 are left untouched.
 - The full 213-test suite passes with one intentional skip. Compiled helper
   readback confirms both writes and the shared save call. The later combined
   B156 link uses the installed Visual Studio Community x86 ATL library and
@@ -4433,3 +4456,83 @@ different image-relative addresses, because the builds shifted by 0x430:
 In B180's layout, 0xC8ACE lands in a different function entirely. Any RVA in
 this entry is only valid for the build it was measured on; re-derive it per
 binary rather than carrying it across.
+
+## 2026-09-30 - Picnic and Patio tables against the shipping mobile code
+
+Decoded from the owner's `Virtual Families 2_1.7.16_APKPure.xapk`,
+`lib/x86/libVirtualFamilies2.so` (symbols intact), with IDA 9.4. Addresses are
+that library's. PC evidence is the desktop object files in
+`work/desktop_obj_files`.
+
+- **Drop routing.** `CHotSpot::PicnicTable` @0x1EEDB0 and
+  `CHotSpot::PatioChairs` @0x1EEEA0: ForgetPlans; prop 0x55/0x56 active -> eat /
+  drink (behaviours 437/439); raw age < 280 -> ShakeHead (373) + DealerSay 2023;
+  food < 31 -> ShakeHead + DealerSay 2919; else prepare (436/438). Both tables
+  use the SAME two strings: mobile 2023 `eSayTooYoung` "This person is too
+  young!" and 2919 `eWorriedFood` "Worried about food". The desktop table
+  numbers them 0x73D / 0xA41 (theStringManager.obj S_CONSTANT records). The
+  PC picnic route used the raw mobile ids 0x7E7 / 0xB67; PC 0x7E7 is
+  `eSayPlayPuddles` "Playing in puddles" and 0xB67 is in the patcher-appended
+  range. **Fixed.** `CHotSpot::PatioUmbrella` @0x1EEF90 -> 441, unchanged.
+- **Behaviour bodies.** `PreparingPicnic` @0x1BA5F0, `PreparingDrinks`
+  @0x1BAA00, `EatAtPicnicTable` @0x1BA7C0, `DrinkAtPatioChair` @0x1BAB50 and
+  `AdjustingUmbrella` @0x1BAEC0 match the PC ports plan for plan, including
+  every random range, sound, stat change and label. Two mobile quirks are kept
+  on purpose: a failed patio seat link walks to EObject 0x97 (the PICNIC table)
+  before "There's nowhere to sit!", and bad weather says string 2 "Don't like
+  the weather!". Not replicated: mobile's two EatAtPicnicTable refusal paths
+  skip StartNewBehavior (0x1BA897 jumps past the call at 0x1BA9D3), so the
+  refusal plan starts on the next CVillagerAI::Update tick instead of at once.
+- **Sounds.** Mobile's sound table (id -> file) was read from the library:
+  0x6A eating.ogg, 0x6B eating3.ogg, 0x6C eating2.ogg, 0xC7 dishes.ogg,
+  0x101 gulpahh_01.ogg, 0xC0 ahh_drinking.ogg -- the same files the PC ids
+  play. The item records carry no on-state sound (+0x24 = -1).
+- **Prop activation.** Mobile calls `CEnvironment::SetProp` from BOTH
+  `CVillagerPlans::StartNewBehavior` @0x1D6580 and `ProcessCurrentPlan`
+  @0x1D6ED0 (case 0x2A in each). PC routed only `ProcessCurrentPlan+0x21B` to
+  `VF2PatioSetPropAndTrack`; `StartNewBehavior+0x396` still called the stock
+  SetProp, which drops ids above 0x54. An activate-prop plan is started by
+  StartNewBehavior with its expiry set to the current second, so when no AI
+  update followed within that second the meal/drinks were never made ready.
+  **Fixed** by retargeting that relocation too.
+- **Prop display: the per-table on-state.** SetProp(0x55/0x56) @0x1EA910 sets
+  the prop active for 240 s. `CEnvironment::Update` @0x1E92A0 (5% of calls,
+  when not paused) runs `FindFurniture(0x97/0x98, (0,0), random)` and, unless
+  furniture is being placed, `CFurnitureManager::SetOnState(handle, true, 1,
+  300, -1)`: that table switches on for 300 s and shows the floating anim from
+  its item record's per-orientation slots -- picnic SE anim 64 (mealSE) at
+  +(35,1), SW anim 65 (mealSW) at +(29,2); patio anim 66 (patioDrinks) at
+  +(56,21) for both; NE/NW slots are empty. `UpdateProps` @0x1EB480 switches
+  ONE random table off at the 240 s expiry; `CheckTimers` @0x13D7D0 switches
+  each table off at its own 300 s. PC drew only on the table nearest the
+  preparer at activation, lost it when a second preparer's SetProp found the
+  preparer already cleared, and lost it when that table was sold. **Replaced**
+  by an external on-state list keyed by placement handle that reproduces the
+  steady state (every table on while ready, each for 300 s, one random off at
+  240 s, none switched on during furniture placement). Not reproduced: mobile's
+  first appearance lags by a random number of environment ticks.
+- **Autonomous records 0x1B4-0x1B7.** Re-read from `CVillager::InitAI`
+  @0x1C5060 and confirmed against the PC selector. One difference: the
+  GetVillagerDoing exclusion counts every villager doing the preparation; PC
+  tracked only the latest preparer. **Fixed** with a preparer slot array.
+- **Not changed, owner decisions.** (a) Patio seat animation: mobile plays
+  `Sit In Chair NW` for seat marker 0x14 and NE otherwise, whatever the
+  table's orientation; PC's per-seat rule agrees for SE tables and is mirrored
+  for SW tables, and PC's rule is the one the owner confirmed in play. Picnic
+  seating agrees for SE and SW. (b) Prop draw offsets: the PC nudges were
+  measured by the owner in play; mobile's are listed above. (c) Mobile
+  `StudyingOnPatio` @0x179B30 sits at a patio table 30% of the time in fair
+  weather; PC's rebound version uses the lounger by owner request.
+- **Not ported yet.** Mobile `WritingMemoirs` @0x176840 also uses the picnic
+  and patio seats (30%, weather <= 1, daytime) with memoir props 0x57/0x58
+  (anim 67 `memoirs.png` at +(74,26) / +(61,36)), sharing the same table
+  on-state -- a memoir session on a table that already shows a meal switches
+  it off. It rebinds a stock desktop behaviour and is left for its own change.
+- **Engine limits.** Mobile starts these through `CVillager::NewBehavior`
+  @0x1CA6B0, which can swap the behaviour for an event one while certain
+  environment props are active; PC cannot, because ids 0x1B4-0x1B7 exceed the
+  desktop 0x19B-entry table. The readiness and on-state timers are not saved
+  (see the 2026-08-06 persistence entry).
+- **Evidence status.** Static and build evidence only: the generated unit
+  compiles and the new tests are mutation-checked. Nobody has seen the new prop
+  model in play.

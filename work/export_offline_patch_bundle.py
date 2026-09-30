@@ -70,7 +70,21 @@ FINAL_PLAYTEST_NATIVE_REQUIRES = [
 # reads. .xcf is a GIMP project file; SDL_image cannot decode one, and nothing
 # in the engine's asset tables names one. B176 shipped 30 of them: 49,028,504
 # uncompressed bytes, 43,823,872 compressed -- 24.7% of that entire download.
-NON_RUNTIME_SOURCE_SUFFIXES = {".bak", ".xcf"}
+#
+# .jbf is a Paint Shop Pro browser thumbnail cache (B196 installed a 568,926-byte
+# Images/pspbrwse.jbf into every game folder). .pngORIGINAL is the generator's
+# build-side transparent backup of each Invisible* furniture image: the
+# generator reads it from the BUILD to make the "Invisible Furniture -
+# Transparent" set (sync_invisible_furniture_reference_sets), and that set is
+# what the patcher installs; B196 also copied all 33 into Images/Furniture of
+# the game, where nothing loads them. None of the three names appears in any
+# of B196's 32 executables. Compared case-insensitively.
+NON_RUNTIME_SOURCE_SUFFIXES = {".bak", ".xcf", ".jbf", ".pngoriginal"}
+
+# Individual files a build leaves behind that are not game data. PkgInfo is a
+# macOS application-bundle marker ("APPL????", 8 bytes); the Windows game has
+# none, and B196 installed it as Assets/PkgInfo.
+NON_RUNTIME_SOURCE_NAMES = {"pkginfo"}
 
 # Working folders a build leaves inside Images/ that the game never reads. The
 # engine loads Images/Upgrades/<name>.png; these two subfolders are the swap
@@ -89,6 +103,8 @@ NON_RUNTIME_SOURCE_DIRS = {
 def is_non_runtime_source_path(rel) -> bool:
     """True when a build-relative path is an editing source, not runtime art."""
     if rel.suffix.lower() in NON_RUNTIME_SOURCE_SUFFIXES:
+        return True
+    if rel.name.lower() in NON_RUNTIME_SOURCE_NAMES:
         return True
     parts = tuple(rel.parts)
     return any(parts[: len(prefix)] == prefix for prefix in NON_RUNTIME_SOURCE_DIRS)
@@ -286,7 +302,7 @@ SETTINGS = [
     {
         "id": "holiday_furniture",
         "label": "Add mobile Holiday furniture",
-        "description": "Adds mobile Holiday furniture records and generated assets. These are decorative-only for now.",
+        "description": "Adds mobile Holiday furniture records and generated assets. On its own the set is decorative; with Add mobile furniture behaviors (on by default) 23 of the 28 pieces also get their placement maps and villager actions.",
         "default": True,
         "category": "main",
     },
@@ -405,7 +421,7 @@ SETTINGS = [
     {
         "id": "mobile_furniture_behaviors",
         "label": "Add mobile furniture behaviors",
-        "description": "Optional patch: enables ported actions for genuine mobile furniture where implemented. B156 makes good-weather loungers choose among relaxing, reading, studying, sitting, napping, and sleeping with exhaustion-sensitive rest odds, plus spontaneous supported variants. Exact guarded manual routes cover the Patio Umbrella and tables, Picnic Table, Birthday furniture, Christmas Trees, Dreidel, Menorah, Stockings, Holiday Candles, Santa's Cookie Plate, ten Holiday figurines, Red Bow, Santa Wall Decoration, and both garlands. Invisible/custom/VF3 furniture is excluded. NOTE for the Picnic and Patio Tables: the meal and drinks props did not appear in B181 or earlier -- villagers prepared, ate and drank while the table stayed empty. Four causes were found and fixed; the props have not yet been confirmed in play.",
+        "description": "Optional patch: enables ported actions for genuine mobile furniture where implemented. B156 makes good-weather loungers choose among relaxing, reading, studying, sitting, napping, and sleeping with exhaustion-sensitive rest odds, plus spontaneous supported variants. Exact guarded manual routes cover the Patio Umbrella and tables, Picnic Table, Birthday furniture, Christmas Trees, Dreidel, Menorah, Stockings, Holiday Candles, Santa's Cookie Plate, ten Holiday figurines, Red Bow, Santa Wall Decoration, and both garlands. Invisible/custom/VF3 furniture is excluded. NOTE for the Picnic and Patio Tables: the meal and drinks props did not appear in B181 or earlier -- villagers prepared, ate and drank while the table stayed empty. Four causes were found and fixed; the owner has confirmed both props drawing in play (2026-09-24).",
         "default": True,
         "category": "optional",
     },
@@ -422,7 +438,9 @@ SETTINGS = [
         "description": ""
         "Warning: These Bathroom 2 renovation images are AI-generated based on the Bathroom 1's mobile renovations art, "
         "but manually edited by me. (Sorry, I'm too lazy to hand-make the art myself. I'm busy with other stuff, but feel "
-        "free to make some yourself and open an Issue on the Github if you want to change it- Lorsieab2)",
+        "free to make some yourself and open an Issue on the Github if you want to change it- Lorsieab2) "
+        "Requires Add mobile room renovations: the Bathroom 2 renovations exist only in that executable, so this "
+        "art is not installed while it is unticked.",
         "default": True,
         "category": "optional",
     },
@@ -951,6 +969,21 @@ def _is_persisted_byte_flag(runtime_flag: dict[str, Any]) -> bool:
     )
 
 
+# The one-byte runtime-flag PE section each setting's post-asset toggle flips.
+# The single source of truth: the emitters below look their section up here,
+# and work/verify_offline_bundle_zip.py imports this table to bind each
+# shipped record to its section, so a record carrying another setting's
+# section (swapped notes and variants) cannot pass the release gate.
+RUNTIME_FLAG_SECTION_BY_SETTING = {
+    "allow_older_pregnancies": ".vf2preg",
+    "older_villager_mortality": ".vf2mort",
+    "same_sex_marriage": ".vf2same",
+    "holiday_furniture": ".vf2goal",
+    "mobile_furniture_behaviors": ".vf2beh",
+    "store_scroll_bar": ".vf2scrl",
+}
+
+
 def setting_runtime_flag_post_asset_patches(
     executable_sources: list[Path],
     *,
@@ -961,6 +994,11 @@ def setting_runtime_flag_post_asset_patches(
     feature_label: str,
 ) -> list[dict[str, Any]]:
     """Emit one exact-SHA setting gate covering every linked matrix payload."""
+    if RUNTIME_FLAG_SECTION_BY_SETTING.get(setting_id) != section_name:
+        raise ValueError(
+            f"{setting_id} runtime flag section {section_name} disagrees with "
+            "RUNTIME_FLAG_SECTION_BY_SETTING."
+        )
     if runtime_flag.get("source_section") != section_name:
         raise ValueError(
             f"Build manifest has an invalid {feature_label} runtime flag contract."
@@ -1015,7 +1053,7 @@ def older_pregnancy_post_asset_patches(
         executable_sources,
         output_exe_name=output_exe_name,
         runtime_flag=runtime_flag,
-        section_name=".vf2preg",
+        section_name=RUNTIME_FLAG_SECTION_BY_SETTING["allow_older_pregnancies"],
         setting_id="allow_older_pregnancies",
         feature_label="Allow Older Pregnancies",
     )
@@ -1039,7 +1077,7 @@ def older_mortality_post_asset_patches(
         executable_sources,
         output_exe_name=output_exe_name,
         runtime_flag=runtime_flag,
-        section_name=".vf2mort",
+        section_name=RUNTIME_FLAG_SECTION_BY_SETTING["older_villager_mortality"],
         setting_id="older_villager_mortality",
         feature_label="Older Villager Mortality Curve",
     )
@@ -1091,7 +1129,7 @@ def same_sex_marriage_post_asset_patches(
         executable_sources,
         output_exe_name=output_exe_name,
         runtime_flag=runtime_flag,
-        section_name=".vf2same",
+        section_name=RUNTIME_FLAG_SECTION_BY_SETTING["same_sex_marriage"],
         setting_id="same_sex_marriage",
         feature_label="Same-Sex Marriage",
     )
@@ -1115,7 +1153,7 @@ def holiday_furniture_goal_post_asset_patches(
         executable_sources,
         output_exe_name=output_exe_name,
         runtime_flag=runtime_flag,
-        section_name=".vf2goal",
+        section_name=RUNTIME_FLAG_SECTION_BY_SETTING["holiday_furniture"],
         setting_id="holiday_furniture",
         feature_label="Holiday Furniture goals",
     )
@@ -1139,7 +1177,7 @@ def mobile_furniture_behavior_post_asset_patches(
         executable_sources,
         output_exe_name=output_exe_name,
         runtime_flag=runtime_flag,
-        section_name=".vf2beh",
+        section_name=RUNTIME_FLAG_SECTION_BY_SETTING["mobile_furniture_behaviors"],
         setting_id="mobile_furniture_behaviors",
         feature_label="Mobile Furniture Behaviors",
     )
@@ -1293,7 +1331,7 @@ def store_scroll_bar_post_asset_patches(
         executable_sources,
         output_exe_name=output_exe_name,
         runtime_flag=runtime_flag,
-        section_name=".vf2scrl",
+        section_name=RUNTIME_FLAG_SECTION_BY_SETTING["store_scroll_bar"],
         setting_id="store_scroll_bar",
         feature_label="Store Scroll Bar",
     )
@@ -1797,6 +1835,15 @@ def setting_for_asset(rel_path: Path) -> str:
         return "vf3_tv_assets_recognition"
     if text.startswith("Images/GenerationLocks/") or text == "Images/locked.png":
         return "core_executable"
+    # The 100 hairstyle store rows and their icon descriptors are generated
+    # into EVERY executable unconditionally (patch_mobile_furniture_pack.py:
+    # "the hairstyle icons are always generated"; all 32 B196 executables
+    # carry 100 "HairstyleIcons/" paths). No setting turns the rows off, so
+    # their icons belong to the executable. They used to fall through to the
+    # mobile_furniture fallback, so unticking that setting left the icons out
+    # while the rows stayed in the store.
+    if text.startswith("Images/HairstyleIcons/"):
+        return "core_executable"
     if (
         text.startswith("Images/CollectionOrnaments/")
         or "CollectionOrnament" in stem
@@ -1856,8 +1903,38 @@ def asset_requires_for_setting(setting: str) -> list[str]:
     }:
         if setting == "no_ai_icons":
             return ["core_executable", "cheat_upgrades", "no_ai_icons"]
+        if setting == "ai_generated_bathroom2_renovations":
+            # The Bathroom 2 renderer, rows and descriptors exist only in the
+            # mobile_renovations executables: build-matrix-toggles.json pairs
+            # the two in every variant, and B196's 16 non-renovation
+            # executables contain no "AIGeneratedBathroom2/" path at all. Art
+            # installed without Mobile Renovations is unreachable.
+            return ["core_executable", "mobile_renovations", setting]
         return ["core_executable", setting]
     return [setting]
+
+
+def regate_hairstyle_icons_without_executable(
+    asset_patches: list[dict[str, Any]],
+    has_executable: bool,
+) -> None:
+    """Keep hairstyle icons valid in a bundle that ships no executable.
+
+    The icons require core_executable because the hairstyle rows are compiled
+    into every executable. An asset/byte bundle exported without
+    --include-exe-replacement has no core_executable setting at all
+    (default_settings drops it), and the patcher rejects any record naming an
+    unknown setting -- so the whole bundle would refuse to load. There the
+    icons fall back to core_assets, the always-present support-files setting.
+    """
+    if has_executable:
+        return
+    for row in asset_patches:
+        if (
+            str(row.get("file_path", "")).startswith("Images/HairstyleIcons/")
+            and row.get("requires") == ["core_executable"]
+        ):
+            row["requires"] = ["core_assets"]
 
 
 def is_invisible_furniture_image(rel_path: Path) -> bool:
@@ -2730,6 +2807,108 @@ def no_ai_icon_asset_patches(
     return records
 
 
+CLEAN_INSTALL_RESTORE_DIR = Path("payload") / "Original Virtual Families 2 Assets" / "Clean Install"
+
+
+def assign_reconfigure_undo_sources(
+    bundle_dir: Path,
+    base_payload: Path,
+    asset_patches: list[dict[str, Any]],
+    *,
+    strict: bool = True,
+) -> dict[str, Any]:
+    """Give every Images/Assets record a way back to what a fresh apply leaves.
+
+    An Enable/Disable run on an existing modded folder has no vanilla folder to
+    copy from, so unticking a setting can only undo files whose records say
+    how. A fresh apply with the setting off leaves the clean-install bytes at a
+    path the base game has, and nothing at a path it does not. So:
+
+    - a record writing over a clean-install file restores that file, shipped
+      in the bundle from the base payload after checking it against the clean
+      index (a record whose bytes ARE the clean file needs nothing);
+    - a record writing a file the clean install does not have is removed.
+
+    Records gated by restore_requires are a deliberate layer (No AI Icons over
+    Cheat Upgrades) and are left alone, as are restores on paths the clean
+    install does not have (the Mobile Furniture Behaviors maps choose their
+    own). On a clean-install path, a declared removal (Holiday Ornaments'
+    collectables_small.png, which would delete a base-game image) or a restore
+    to bytes that are not the clean file (Invisible Upgrades' Blender_NW and
+    juicer_NE) becomes a restore of the clean file. Paths outside Images/ and
+    Assets/ are not in the clean index and are not touched.
+
+    A release bundle (strict) refuses to export when the base payload cannot
+    supply a clean original; a development export lists those paths in the
+    summary instead, and a reconfigure then leaves them as they are.
+    """
+    index = {key.casefold(): (key, entry) for key, entry in clean_base_game_index().items()}
+    if not index:
+        # Without the clean index no record can be classified, so every
+        # Images/Assets record would ship with no way back. A release must not.
+        if strict:
+            raise ValueError(
+                f"Cannot assign reconfigure undo sources: the clean-install index {CLEAN_BASE_GAME_ASSETS} "
+                "is missing or empty."
+            )
+        return {"restores_added": 0, "restores_corrected": 0, "removals_added": 0, "restore_unavailable": []}
+    restores_added = restores_corrected = removals_added = 0
+    restore_unavailable: list[str] = []
+    for record in asset_patches:
+        target = str(record.get("output_file_path") or record.get("file_path") or "").replace("\\", "/")
+        if target.lower().endswith(".exe") or not target.casefold().startswith(("images/", "assets/")):
+            continue
+        if record.get("restore_requires"):
+            continue
+        clean = index.get(target.casefold())
+        existing_restore = str(record.get("restore_source_sha256") or "").lower()
+        if record.get("restore_source_path") and (
+            clean is None or existing_restore == str(clean[1]["sha256"]).lower()
+        ):
+            continue
+        if clean is None:
+            if not record.get("remove_when_disabled"):
+                record["remove_when_disabled"] = True
+                removals_added += 1
+            continue
+        clean_rel, clean_entry = clean
+        record["remove_when_disabled"] = False
+        clean_sha = str(clean_entry["sha256"]).lower()
+        # An unconditional restore on a clean-install path that is NOT the
+        # clean file (Invisible Upgrades' Blender_NW/juicer_NE "originals")
+        # leaves bytes a fresh apply never would, so it is replaced.
+        correcting = bool(record.get("restore_source_path"))
+        if not correcting and str(record.get("source_sha256", "")).lower() == clean_sha:
+            continue
+        original = base_payload / clean_rel
+        if not original.is_file() or sha256_file(original) != clean_sha:
+            if strict:
+                raise ValueError(
+                    f"Cannot ship the clean-install original of {clean_rel} as a restore source: "
+                    f"{original} is missing or does not match the clean index."
+                )
+            restore_unavailable.append(clean_rel)
+            continue
+        restore_rel = CLEAN_INSTALL_RESTORE_DIR / clean_rel
+        restore_target = bundle_dir / restore_rel
+        if not restore_target.is_file():
+            restore_target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(original, restore_target)
+        record["restore_source_path"] = relative_posix(restore_rel)
+        record["restore_source_sha256"] = clean_sha
+        record["restore_source_size"] = int(clean_entry["size"])
+        if correcting:
+            restores_corrected += 1
+        else:
+            restores_added += 1
+    return {
+        "restores_added": restores_added,
+        "restores_corrected": restores_corrected,
+        "removals_added": removals_added,
+        "restore_unavailable": sorted(restore_unavailable),
+    }
+
+
 def validate_bundle_asset_sources(bundle_dir: Path, asset_patches: list[dict[str, Any]]) -> None:
     bundle_root = bundle_dir.resolve()
     for index, record in enumerate(asset_patches):
@@ -3106,6 +3285,49 @@ def default_settings(
     return settings
 
 
+INFORMATIONAL_NATIVE_NOTE = (
+    " Built into the patched game executable: it cannot be switched off separately and is "
+    "present whenever Patch game executable is enabled."
+)
+INFORMATIONAL_EMPTY_NOTE = " No file in this build is controlled by this setting on its own, so it is always on."
+
+
+def mark_informational_settings(
+    settings: list[dict[str, Any]],
+    records: list[dict[str, Any]],
+    native_core_settings: set[str],
+) -> list[dict[str, Any]]:
+    """Mark settings that gate no record as ``informational``.
+
+    B196 listed Text fixes, Add unused pets, Add visible mobile version
+    purchases and the core-assets row as ordinary checkboxes. No record
+    requires any of them -- the first three are compiled into all 32
+    executables and core_assets had no files -- so unticking one changed
+    nothing while the GUI reported it "disabled/restored to vanilla". They
+    stay listed (the release verifier and the docs expect them), but as
+    always-on rows whose description says why.
+    """
+    if not records:
+        # A bundle without records (a settings-only or dry export) describes
+        # no build; the patcher treats it the same way.
+        return settings
+    required = {
+        setting
+        for record in records
+        for setting in (record.get("requires") or [])
+    }
+    marked: list[dict[str, Any]] = []
+    for row in settings:
+        row = dict(row)
+        if row["id"] not in required:
+            row["informational"] = True
+            note = INFORMATIONAL_NATIVE_NOTE if row["id"] in native_core_settings else INFORMATIONAL_EMPTY_NOTE
+            if note.strip() not in str(row.get("description", "")):
+                row["description"] = (str(row.get("description", "")) + note).strip()
+        marked.append(row)
+    return marked
+
+
 def apply_final_playtest_defaults(
     settings: list[dict[str, Any]],
     available_settings: set[str],
@@ -3442,6 +3664,14 @@ patch records.
 Click Enable/Disable Patches after changing checkboxes. Unchecked patches are
 restored by rebuilding the modded folder from the vanilla install and applying
 only the checked patches. Payload files are read-only/copy-only during apply.
+Each such rebuild first saves a complete copy of the old modded folder (about
+230 MB), by default in a new timestamped folder under .vf2_patch_backups; if
+you set the Backup folder field (or --backup-dir) to a folder that already
+exists -- one picked with Browse always does -- each run writes a new
+timestamped folder inside it; a path that does not exist yet is created and
+used as given. The patcher never deletes these; delete older ones yourself,
+from wherever they were written, to reclaim disk space, keeping the newest if
+you may want to restore from it.
 
 Dry Run / Validate Only validates that the patcher's working. It checks whether
 the selected VF2 folder looks right, whether the EXE is the expected official
@@ -4162,9 +4392,17 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
     )
     invisible_upgrades_source = Path(args.invisible_upgrades_dir).resolve() if args.invisible_upgrades_dir else None
     original_upgrades_source = Path(args.original_upgrades_dir).resolve() if args.original_upgrades_dir else None
-    asset_patches.extend(invisible_upgrades_asset_patches(bundle_dir, invisible_upgrades_source, original_upgrades_source))
     asset_patches.extend(optional_visual_asset_patches(bundle_dir))
     asset_patches.extend(optional_patch_asset_patches(bundle_dir))
+    # Invisible Workspace Upgrades is emitted AFTER the misc/optional visual
+    # records on purpose. Records that share a target with distinct requires
+    # are a layered override and the patcher applies them in manifest order,
+    # so the LAST active record is what the player sees. Misc Graphics Fixes
+    # also writes Images/Upgrades/superFridge_NW.png (the ice-maker fix);
+    # emitted after the invisible set, as it was through B196, it won whenever
+    # both default-on settings were ticked and left the Super Fridge visible
+    # under Invisible Workspace Upgrades.
+    asset_patches.extend(invisible_upgrades_asset_patches(bundle_dir, invisible_upgrades_source, original_upgrades_source))
     if args.include_exe_replacement and cheat_upgrades_exe is not None:
         icon_defaults_available = all(
             (
@@ -4470,6 +4708,12 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
                 & (EXECUTABLE_OVERLAY_OPTIONAL_SETTINGS - overlay_settings)
             )
         ]
+    reconfigure_undo_sources = assign_reconfigure_undo_sources(
+        bundle_dir,
+        base_payload,
+        asset_patches,
+        strict=bool(getattr(args, "release_bundle", False)),
+    )
     payload_deduplication = deduplicate_payload_files(bundle_dir, asset_patches)
     validate_bundle_asset_sources(bundle_dir, asset_patches)
     payload_pruning = prune_unreferenced_payload_files(bundle_dir, asset_patches)
@@ -4489,6 +4733,8 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
             getattr(args, "final_playtest_all_enabled", False)
         ),
     ) if exe_replacement_record is not None else []
+
+    regate_hairstyle_icons_without_executable(asset_patches, exe_replacement_record is not None)
 
     asset_counts_by_setting: dict[str, int] = {}
     for row in asset_patches:
@@ -4516,6 +4762,11 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
         available_settings,
     )
     settings = apply_crash_warning_for_build(settings, build_label)
+    settings = mark_informational_settings(
+        settings,
+        [*byte_patches, *asset_patches, *post_asset_patches],
+        native_core_settings,
+    )
     final_profile = None
     if getattr(args, "final_playtest_all_enabled", False):
         settings = apply_final_playtest_defaults(settings, available_settings)
@@ -4608,6 +4859,7 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
             "payload_file_count": count_files(bundle_dir / "payload"),
             "payload_pruning": payload_pruning,
             "payload_deduplication": payload_deduplication,
+            "reconfigure_undo_sources": reconfigure_undo_sources,
             "base_payload": base_payload.name,
             "asset_mode": args.asset_mode,
             "exe_replacement": exe_replacement_record is not None,

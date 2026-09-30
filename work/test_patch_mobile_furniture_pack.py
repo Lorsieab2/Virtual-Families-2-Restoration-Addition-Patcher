@@ -2000,10 +2000,24 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                 self.assertIn('"Preparing a picnic"', picnic_helper)
                 self.assertIn('"Having a picnic"', picnic_helper)
                 self.assertIn("VF2PicnicReadyActive()", picnic_helper)
-                self.assertIn("eStringPicnicTooYoung = 0x7E7", helper)
+                # SUPERSEDED, recorded rather than deleted: this pinned
+                # eStringPicnicTooYoung = 0x7E7 and
+                # eStringPicnicWorriedAboutFood = 0xB67, the raw MOBILE ids.
+                # On PC 0x7E7 is eSayPlayPuddles ("Playing in puddles"). The
+                # picnic refusals now use the desktop ids of the same two
+                # mobile strings, like the patio table.
+                self.assertIn("eStringTooYoung = 0x73D", helper)
+                self.assertIn("eStringWorriedAboutFood = 0xA41", helper)
                 self.assertIn(
-                    "eStringPicnicWorriedAboutFood = 0xB67", helper
+                    "VF2ManualPatioRefusal(villager, eStringTooYoung)",
+                    picnic_helper,
                 )
+                # Comments may name the old ids; the code must not use them.
+                helper_code = "\n".join(
+                    line.split("//")[0] for line in helper.split("\n")
+                )
+                self.assertNotIn("0x7E7", helper_code)
+                self.assertNotIn("0xB67", helper_code)
                 self.assertIn(
                     "ldwGameState::GetRandom(7) + 0x0D", picnic_helper
                 )
@@ -2205,10 +2219,18 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                 self.assertIn("behavior == 0x05A", helper)
                 self.assertIn("ldwGameState::GetRandom(2) != 0", helper)
                 self.assertIn("eBehaviorPlayingVideoGame", helper)
+                # The EXACT line, not a substring: "+ 0x6A54" (age) also
+                # appears in unrelated age checks in this unit, so the old
+                # substring assertion passed with the flip reading age.
+                block = helper[
+                    helper.index("bool handled = HandleDropOnHotSpot(villager);"):
+                ]
+                block = block[: block.index("return true;")]
                 self.assertIn(
-                    "reinterpret_cast<unsigned char *>(&villager) + 0x6A54",
-                    helper,
+                    "reinterpret_cast<unsigned char *>(&villager) + 0x1BBA0);",
+                    block,
                 )
+                self.assertNotIn("(&villager) + 0x6A54", block)
                 self.assertNotIn("0x114 * 0xD0", helper)
                 self.assertEqual(
                     manifest["ComputerDropVideoGame"],
@@ -8735,7 +8757,7 @@ class MobileSpecialUpgradeContractTests(unittest.TestCase):
             source,
         )
         self.assertIn(
-            "VF2PersistentCheatAndPurchaseMask() = generation;",
+            "VF2PersistentCheatAndPurchaseMask() = generationAndOneShots;",
             source,
         )
         self.assertIn(
@@ -8811,10 +8833,13 @@ class MobileSpecialUpgradeContractTests(unittest.TestCase):
             "VF2PersistentHealthPlanAndRenovationMask() = healthPlanAndRenovations;",
             reset_case,
         )
-        self.assertIn("VF2PersistentCheatAndPurchaseMask() = generation;", reset_case)
+        self.assertIn(
+            "VF2PersistentCheatAndPurchaseMask() = generationAndOneShots;",
+            reset_case,
+        )
         self.assertIn("record + 4", source)
         self.assertIn("VF2PersistentCheatAndPurchaseMask() >> 8", source)
-        self.assertIn("VF2PersistentCheatAndPurchaseMask() & 0xFFFFFF00u", source)
+        self.assertIn("VF2PersistentCheatAndPurchaseMask() & 0xFFFFFFFCu", reset_case)
         health_plan_helper = source.split(
             "static unsigned int &VF2PersistentHealthPlanAndRenovationMask()",
             1,
@@ -8974,7 +8999,10 @@ class OutfitStoreMappingTests(unittest.TestCase):
         self.assertEqual(patcher.SAME_SEX_MARRIAGE_CATALOG_PRICE, 0)
         self.assertEqual(rows[0x11B]["price"], 0)
         self.assertEqual(rows[0x133]["name"], "Max out sock pile")
-        self.assertIn("maximum signed integer", rows[0x133]["description"])
+        self.assertEqual(
+            rows[0x133]["description"],
+            "Sets only the laundry-room sock pile to 1,000,000 socks.",
+        )
         self.assertEqual(rows[0x134]["name"], "No sock pile")
         self.assertIn("without awarding sock-laundering progress", rows[0x134]["description"])
         self.assertEqual(rows[0x135]["name"], "Clean House")
@@ -9112,14 +9140,18 @@ class OutfitStoreMappingTests(unittest.TestCase):
         self.assertIn("Achievement.IsComplete((EAchievement)sellingGoal)", source)
         self.assertIn("Achievement.IncrementProgress((EAchievement)0x54, completedSellingGoals)", source)
         self.assertIn("static void VF2CompleteAchievementForCheat(int achievement)", source)
-        self.assertIn("if (!Achievement.IsComplete(id))", source)
-        self.assertIn("static void VF2ClearAchievementNotificationQueueRaw()", source)
-        self.assertIn("(unsigned char *)&Achievement + 0xDBC", source)
-        self.assertIn("for (int index = 0; index < 0x5F; ++index)", source)
-        self.assertLess(
-            source.index("VF2ClearAchievementNotificationQueueRaw();"),
-            source.index("Achievement.SetComplete(id);"),
+        # Already-complete goals are skipped, so nothing is paid twice.
+        self.assertIn(
+            "if (Achievement.IsComplete(id)) {\n        return;\n    }", source
         )
+        # SUPERSEDED, recorded rather than deleted: this used to require
+        # VF2ClearAchievementNotificationQueueRaw() before every SetComplete.
+        # Emptying the queue discarded every earlier completion's entry, and
+        # stock Update pays a reward only when an entry pops, so the cheat
+        # paid one or two rewards in total. The per-completion behaviour is
+        # pinned by test_complete_all_achievements_pays_each_goal_once.
+        self.assertNotIn("VF2ClearAchievementNotificationQueueRaw", source)
+        self.assertIn("(unsigned char *)&Achievement + 0xDBC", source)
         self.assertIn("static void VF2CompleteAllAchievements()", source)
         # THE CHEAT DERIVES ITS LIST FROM THE VISIBLE ORDER ARRAY.
         #
@@ -9220,7 +9252,7 @@ class OutfitStoreMappingTests(unittest.TestCase):
         self.assertIn("static void VF2SetSockPileCount(int count)", source)
         self.assertIn("*(int *)(gameState + 0x148) = count;", source)
         self.assertIn("case 0x133:", source)
-        self.assertIn("static const int kVF2MaximumSockPileCount = 0x7FFFFFFF;", source)
+        self.assertIn("static const int kVF2MaximumSockPileCount = 1000000;", source)
         sock_pile_case = source.split("case 0x133:", 1)[1].split("case 0x134:", 1)[0]
         self.assertNotIn("CollectableItem.SpawnSockInHouse", sock_pile_case)
         self.assertIn("VF2SetSockPileCount(kVF2MaximumSockPileCount);", source)
@@ -10133,6 +10165,127 @@ class OutfitStoreMappingTests(unittest.TestCase):
         self.assertIn("case 0x124:", source)
         self.assertIn("Achievement.Reset();", source)
 
+    def test_reset_achievements_keeps_armed_pregnancy_one_shots(self):
+        # Record 0xA8's dword: bits 0-1 Taters purchase record, bits 2-7 the
+        # armed pregnancy one-shots, bits 8-31 the lifetime generation count.
+        # Reset must keep everything except the Taters goal progress.
+        source = Path(patcher.__file__).read_text(encoding="utf-8")
+        reset_case = source.split("case 0x124:", 1)[1].split("case 0x125:", 1)[0]
+        keep_mask = int(
+            reset_case.split("VF2PersistentCheatAndPurchaseMask() & ", 1)[1]
+            .split("u;", 1)[0],
+            16,
+        )
+        one_shot_bits = 0
+        for bit in re.findall(r"VF2ToggleOneShotUpgrade\((0x[0-9A-Fa-f]+)u,", source):
+            one_shot_bits |= int(bit, 16)
+        self.assertEqual(one_shot_bits, 0xFC)
+        self.assertEqual(keep_mask & one_shot_bits, one_shot_bits)
+        self.assertEqual(keep_mask & 0xFFFFFF00, 0xFFFFFF00)
+        self.assertEqual(keep_mask & 0x3, 0)
+
+    def test_max_sock_pile_cannot_overflow_native_sock_arithmetic(self):
+        # Deposit is `inc [gs+0x148]` and laundering adds the whole pile to
+        # goals 0x3B/0x3C/0x3D with a signed, unclamped IncrementProgress.
+        source = Path(patcher.__file__).read_text(encoding="utf-8")
+        value = int(
+            source.split("static const int kVF2MaximumSockPileCount = ", 1)[1]
+            .split(";", 1)[0],
+            0,
+        )
+        achievement = CoffObject(patcher.SRC_OBJS / "Achievement.obj")
+        table = achievement.symbol("?achievementList@@3PAUsAchievementListEntry@@A")
+        section = achievement.section(table.section)
+        targets = [
+            struct.unpack_from(
+                "<i",
+                achievement.buf,
+                section.raw_ptr + table.value + goal * 0x1C + 4,
+            )[0]
+            for goal in (0x3B, 0x3C, 0x3D)
+        ]
+        self.assertEqual(targets, [10, 50, 100])
+        # One wash completes every laundering goal from zero progress...
+        self.assertGreaterEqual(value, max(targets))
+        # ...and incomplete progress (< target) plus the pile plus a million
+        # more deposits stays a positive signed int.
+        self.assertLess(value + max(targets) + 1000000, 0x7FFFFFFF)
+
+    def test_load_repairs_saves_damaged_by_the_old_sock_pile_maximum(self):
+        # Saves that laundered the old INT_MAX pile hold wrapped-negative
+        # progress on goals 0x3B-0x3D (and may still hold the INT_MAX pile,
+        # or INT_MIN after one more deposit). The load reconciler repairs
+        # exactly that and nothing else. The emitted function is compiled and
+        # run against a damaged and a healthy state.
+        source = Path(patcher.__file__).read_text(encoding="utf-8")
+        load = source.split(
+            'extern "C" bool __fastcall VF2AchievementLoadStateAndReconcile(', 1
+        )[1].split("\n}\n", 1)[0]
+        self.assertLess(
+            load.index("bool loaded = achievement->LoadState(state);"),
+            load.index("VF2RepairSockLaunderingOverflow(achievement);"),
+        )
+        signature = "static void VF2RepairSockLaunderingOverflow(CAchievement *achievement) {"
+        body = signature + source.split(signature, 1)[1].split("\n}\n", 1)[0] + "\n}\n"
+        self.assertIn("for (int goal = 0x3B; goal <= 0x3D; ++goal) {", body)
+
+        import subprocess
+        import test_generated_cpp_compiles as compiles
+        vcvars = compiles._vcvars()
+        if vcvars is None:
+            self.skipTest("no Visual Studio toolchain on this machine")
+        harness = (
+            "#include <stdio.h>\n"
+            "#include <string.h>\n"
+            "class CAchievement {};\n"
+            "class theGameState { public: static theGameState *Get(); };\n"
+            "static int gState[0x100];\n"
+            "theGameState *theGameState::Get() { return (theGameState *)gState; }\n"
+            "static const int kVF2MaximumSockPileCount = 1000000;\n"
+            + body +
+            "static int gRecords[0x125 * 3];\n"
+            "static void run(int pile, int p3a, int p3b, int p3c, int p3d, int p3e, int complete3c) {\n"
+            "    memset(gRecords, 0, sizeof(gRecords));\n"
+            "    gRecords[0x3A * 3 + 1] = p3a; gRecords[0x3B * 3 + 1] = p3b;\n"
+            "    gRecords[0x3C * 3 + 1] = p3c; gRecords[0x3D * 3 + 1] = p3d;\n"
+            "    gRecords[0x3E * 3 + 1] = p3e;\n"
+            "    ((unsigned char *)&gRecords[0x3C * 3])[0] = (unsigned char)complete3c;\n"
+            "    gState[0x148 / 4] = pile;\n"
+            "    VF2RepairSockLaunderingOverflow((CAchievement *)gRecords);\n"
+            "    printf(\"%d %d %d %d %d %d %d\\n\", gState[0x148 / 4], gRecords[0x3A * 3 + 1],\n"
+            "        gRecords[0x3B * 3 + 1], gRecords[0x3C * 3 + 1], gRecords[0x3D * 3 + 1],\n"
+            "        gRecords[0x3E * 3 + 1], ((unsigned char *)&gRecords[0x3C * 3])[0]);\n"
+            "}\n"
+            "int main() {\n"
+            "    run(0x7FFFFFFF, -5, -2147483643, -2147483600, -7, -9, 1);\n"
+            "    run((int)0x80000000u, 3, -1, 4, 5, 6, 0);\n"
+            "    run(29, 3, 9, 49, 99, 7, 0);\n"
+            "    run(1000000, 0, 0, 12, 0, 0, 1);\n"
+            "    return 0;\n"
+            "}\n"
+        )
+        with tempfile.TemporaryDirectory() as work:
+            (Path(work) / "repair.cpp").write_text(harness, encoding="ascii")
+            result = subprocess.run(
+                f'"{vcvars}" >nul 2>&1 && cd /d "{work}" && '
+                f'cl /nologo /EHsc repair.cpp >nul && .\\repair.exe',
+                shell=True, capture_output=True, text=True,
+            )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(
+            result.stdout.split(),
+            [
+                # Damaged: INT_MAX pile -> maximum; 0x3B-0x3D negatives -> 0,
+                # including a complete one; neighbours 0x3A/0x3E untouched.
+                "1000000", "-5", "0", "0", "0", "-9", "1",
+                # A pile wrapped to INT_MIN by one more deposit.
+                "1000000", "3", "0", "4", "5", "6", "0",
+                # Healthy saves are byte-for-byte unchanged.
+                "29", "3", "9", "49", "99", "7", "0",
+                "1000000", "0", "0", "12", "0", "0", "1",
+            ],
+        )
+
     def test_holiday_outfit_item_ids_decode_to_body_values_50_53(self):
         for gender in patcher.OUTFIT_STORE_GENDERS:
             for body_value in patcher.HOLIDAY_BODY_VALUES:
@@ -10972,7 +11125,7 @@ class CustomAchievementAwardDispatchTests(unittest.TestCase):
                     source,
                 )
                 self.assertIn(
-                    "VF2PersistentCheatAndPurchaseMask() & 0xFFFFFF00u",
+                    "VF2PersistentCheatAndPurchaseMask() & 0xFFFFFFFCu",
                     source,
                 )
                 self.assertIn(
@@ -13944,6 +14097,80 @@ class HolidayOrnamentGateTests(unittest.TestCase):
                 ),
                 relocs,
             )
+
+        self.with_temp_patched_objs(["Achievement.obj", "AchievementsScene.obj"], run)
+
+    def test_complete_all_achievements_pays_each_goal_once(self):
+        source = Path(patcher.__file__).read_text(encoding="utf-8")
+        helper = source.split(
+            "static void VF2CompleteAchievementForCheat(int achievement) {", 1
+        )[1].split("\n}\n", 1)[0]
+        set_complete = helper.index("Achievement.SetComplete(id);")
+        # The player's waiting queue is set aside and emptied BEFORE the
+        # completion, so nothing the completion enqueues can be dropped...
+        before = helper[:set_complete]
+        self.assertIn("waiting[index] = queue[index];", before)
+        self.assertIn("queue[index] = -1;", before)
+        # ...every entry the completion enqueued is paid once, here...
+        after = helper[set_complete:]
+        pay = after.index("VF2PayAchievementRewardLikeUpdate(queue[index]);")
+        restore = after.index("queue[index] = waiting[index];")
+        self.assertLess(pay, restore)
+        # ...and the original queue is put back, so the cheat's entries never
+        # reach Update (which would pay them a second time).
+        self.assertNotIn("VF2PayAchievementRewardLikeUpdate(waiting", after)
+        self.assertIn("kVF2AchievementNotifyQueueCount = 0x5F;", source)
+        self.assertEqual(patcher.CUSTOM_ACHIEVEMENT_NOTIFICATION_QUEUE_COUNT, 0x5F)
+        # The reward formula is Update's own: row +0x18, 25 when zero, false.
+        pay_helper = source.split(
+            "static void VF2PayAchievementRewardLikeUpdate(int achievement) {", 1
+        )[1].split("\n}\n", 1)[0]
+        self.assertIn("achievementList[achievement].coinReward", pay_helper)
+        self.assertIn("reward != 0 ? reward : 25", pay_helper)
+        # Update's own Adjust call is rerouted through the resource-goal
+        # observer in the built game; the cheat must pay through it too.
+        self.assertIn("VF2MoneyAdjustAndAward(&Money, 0,", pay_helper)
+        self.assertIn(", false);", pay_helper)
+        self.assertNotIn("Money.Adjust(", pay_helper)
+        self.assertIn(
+            '"?Adjust@CMoney@@QAEXM_N@Z": "@VF2MoneyAdjustAndAward@16"', source
+        )
+        struct_block = source.split("struct sAchievementListEntry {", 1)[1].split("};", 1)[0]
+        fields = [line.strip() for line in struct_block.strip().splitlines()]
+        self.assertEqual(len(fields), patcher.ACHIEVEMENT_ROW_SIZE // 4)
+        self.assertEqual(fields[0x18 // 4], "int coinReward;")
+
+        stock = CoffObject(patcher.SRC_OBJS / "Achievement.obj")
+        update = stock.symbol("?Update@CAchievement@@QAEXXZ")
+        update_sec = stock.section(update.section)
+        update_data = bytes(
+            stock.buf[update_sec.raw_ptr + update.value : update_sec.raw_ptr + update_sec.raw_size]
+        )
+        self.assertEqual(update_data[0x85:0x87], b"\x6A\x00")
+        self.assertEqual(
+            update_data[0x90:0xA1],
+            b"\x8B\x04\x8D\x18\x00\x00\x00\x85\xC0\xB9\x19\x00\x00\x00\x0F\x45\xC8",
+        )
+
+        def run(temp_root):
+            manifest = {}
+            patcher.patch_custom_achievements(manifest)
+            obj = CoffObject(temp_root / "Achievement.obj")
+            listing = obj.symbol("?achievementList@@3PAUsAchievementListEntry@@A")
+            storage_class = struct.unpack_from("<B", obj.buf, listing.off + 16)[0]
+            self.assertEqual(storage_class, patcher.IMAGE_SYM_CLASS_EXTERNAL)
+            self.assertGreater(listing.section, 0)
+            list_sec = obj.section(listing.section)
+            for achievement_id, reward in patcher.CUSTOM_ACHIEVEMENT_COIN_REWARDS.items():
+                self.assertEqual(
+                    struct.unpack_from(
+                        "<i",
+                        obj.buf,
+                        list_sec.raw_ptr + listing.value
+                        + achievement_id * patcher.ACHIEVEMENT_ROW_SIZE + 0x18,
+                    )[0],
+                    reward,
+                )
 
         self.with_temp_patched_objs(["Achievement.obj", "AchievementsScene.obj"], run)
 
