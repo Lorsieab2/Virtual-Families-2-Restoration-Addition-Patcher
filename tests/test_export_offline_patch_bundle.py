@@ -564,6 +564,57 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             "outfit_store_expansion",
         )
 
+    def test_hairstyle_icons_load_in_a_bundle_without_an_executable(self):
+        """A no-EXE export has no core_executable setting to require.
+
+        Exported without --include-exe-replacement, default_settings() drops
+        core_executable, and the patcher's manifest_asset_patches() rejects a
+        record naming an unknown setting -- so the icons must fall back to a
+        setting that exists there. Exercised through the exporter and parsed
+        by the patcher itself.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            build = tmp_path / "build"
+            out = tmp_path / "bundle"
+            icon = build / "Images" / "HairstyleIcons" / "Female_Head_00.png"
+            icon.parent.mkdir(parents=True)
+            icon.write_bytes(b"hairstyle icon")
+            (build / "Virtual Families 2 - Additive Mobile Furniture Pack.exe").write_bytes(b"patched")
+            (build / "patch-manifest.json").write_text("{}", encoding="ascii")
+            self.run_exporter(
+                "--build-dir", str(build),
+                "--base-payload", str(tmp_path / "base"),
+                "--out-dir", str(out),
+            )
+            manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        setting_ids = {row["id"] for row in manifest["settings"]}
+        self.assertNotIn("core_executable", setting_ids)
+        record = next(
+            row for row in manifest["asset_patches"]
+            if row["file_path"] == "Images/HairstyleIcons/Female_Head_00.png"
+        )
+        self.assertEqual(record["requires"], ["core_assets"])
+        settings = patcher.manifest_settings(manifest)
+        enabled = {row["id"] for row in manifest["settings"] if row.get("default")}
+        active = patcher.manifest_asset_patches(manifest, settings, enabled)
+        self.assertIn(
+            patcher.canonical_rel_path_key("Images/HairstyleIcons/Female_Head_00.png"),
+            {patcher.canonical_rel_path_key(asset.file_path) for asset in active},
+        )
+
+    def test_hairstyle_icons_keep_the_executable_gate_when_one_ships(self):
+        rows = [
+            {"file_path": "Images/HairstyleIcons/Male_Head_03.png", "requires": ["core_executable"]},
+            {"file_path": "Images/GenerationLocks/lock_02.png", "requires": ["core_executable"]},
+        ]
+        exporter.regate_hairstyle_icons_without_executable(rows, True)
+        self.assertEqual(rows[0]["requires"], ["core_executable"])
+        exporter.regate_hairstyle_icons_without_executable(rows, False)
+        self.assertEqual(rows[0]["requires"], ["core_assets"])
+        # Only the hairstyle icons are re-gated by this helper.
+        self.assertEqual(rows[1]["requires"], ["core_executable"])
+
     def test_ai_bathroom2_asset_source_option_is_exported_separately_from_exe_matrix(self):
         source = EXPORTER.read_text(encoding="utf-8")
         self.assertIn("--ai-generated-bathroom2-dir", source)

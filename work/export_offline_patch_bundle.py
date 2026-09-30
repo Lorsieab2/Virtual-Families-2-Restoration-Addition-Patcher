@@ -1894,6 +1894,29 @@ def asset_requires_for_setting(setting: str) -> list[str]:
     return [setting]
 
 
+def regate_hairstyle_icons_without_executable(
+    asset_patches: list[dict[str, Any]],
+    has_executable: bool,
+) -> None:
+    """Keep hairstyle icons valid in a bundle that ships no executable.
+
+    The icons require core_executable because the hairstyle rows are compiled
+    into every executable. An asset/byte bundle exported without
+    --include-exe-replacement has no core_executable setting at all
+    (default_settings drops it), and the patcher rejects any record naming an
+    unknown setting -- so the whole bundle would refuse to load. There the
+    icons fall back to core_assets, the always-present support-files setting.
+    """
+    if has_executable:
+        return
+    for row in asset_patches:
+        if (
+            str(row.get("file_path", "")).startswith("Images/HairstyleIcons/")
+            and row.get("requires") == ["core_executable"]
+        ):
+            row["requires"] = ["core_assets"]
+
+
 def is_invisible_furniture_image(rel_path: Path) -> bool:
     parts = rel_path.parts
     return len(parts) >= 3 and parts[0] == "Images" and parts[1] == "Furniture" and rel_path.stem.startswith("Invisible")
@@ -4531,6 +4554,8 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
             getattr(args, "final_playtest_all_enabled", False)
         ),
     ) if exe_replacement_record is not None else []
+
+    regate_hairstyle_icons_without_executable(asset_patches, exe_replacement_record is not None)
 
     asset_counts_by_setting: dict[str, int] = {}
     for row in asset_patches:
