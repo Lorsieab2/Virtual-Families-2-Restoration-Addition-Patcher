@@ -16,6 +16,7 @@ import json
 import os
 import re
 import shutil
+import stat
 import struct
 import sys
 import tempfile
@@ -1376,12 +1377,51 @@ def resolve_apply_output_dir(
     return game_dir
 
 
-def prepare_output_dir(
-    game_dir: Path,
-    output_dir: Path,
-    skip_rel_paths: set[str],
-    args: argparse.Namespace,
-) -> None:
+def make_writable(path: Path) -> None:
+    """Clear the read-only attribute of a file or folder the patcher is about to replace or delete.
+
+    Windows refuses to delete, rename over or overwrite a read-only file, and
+    shutil.copy2 carries the attribute from the vanilla install into the output
+    folder. Symlinks are left alone so the chmod cannot reach outside the tree.
+    """
+    try:
+        info = os.lstat(path)
+    except FileNotFoundError:
+        return
+    if stat.S_ISLNK(info.st_mode):
+        return
+    if not info.st_mode & stat.S_IWRITE:
+        os.chmod(path, stat.S_IMODE(info.st_mode) | stat.S_IWRITE)
+
+
+def _retry_after_clearing_read_only(func: Callable[..., Any], path: str, exc: Any) -> None:
+    error = exc if isinstance(exc, BaseException) else exc[1]
+    if not isinstance(error, PermissionError) or os.path.islink(path):
+        raise error
+    make_writable(Path(path))
+    func(path)
+
+
+def remove_output_entry(path: Path) -> None:
+    """Delete one top-level entry of a modded output folder, including read-only files."""
+    if path.is_dir():
+        if sys.version_info >= (3, 12):
+            shutil.rmtree(path, onexc=_retry_after_clearing_read_only)
+        else:
+            shutil.rmtree(path, onerror=_retry_after_clearing_read_only)
+    else:
+        make_writable(path)
+        path.unlink()
+
+
+def check_output_dir_refresh_allowed(game_dir: Path, output_dir: Path) -> None:
+    """Refuse an output folder the refresh must not touch.
+
+    Must run BEFORE anything is written to the output folder: the default
+    backup location is <output>/.vf2_patch_backups, and once create_backup has
+    made it, any folder "looks like" a modded output folder and the refresh
+    would move the user's own files into a backup and delete them.
+    """
     source_root = game_dir.resolve()
     output_root = output_dir.resolve()
     if output_root == source_root:
@@ -1398,14 +1438,25 @@ def prepare_output_dir(
                 "Output directory already exists and is not recognized as a VF2 modded output folder: "
                 f"{output_root}"
             )
+
+
+def prepare_output_dir(
+    game_dir: Path,
+    output_dir: Path,
+    skip_rel_paths: set[str],
+    args: argparse.Namespace,
+) -> None:
+    source_root = game_dir.resolve()
+    output_root = output_dir.resolve()
+    if output_root == source_root:
+        return
+    check_output_dir_refresh_allowed(game_dir, output_dir)
+    if output_root.exists() and any(output_root.iterdir()):
         emit_progress(args, f"Refreshing modded output folder from vanilla install: {output_root}")
         for child in output_root.iterdir():
             if child.name == DEFAULT_BACKUP_ROOT:
                 continue
-            if child.is_dir():
-                shutil.rmtree(child)
-            else:
-                child.unlink()
+            remove_output_entry(child)
     elif output_root.exists():
         emit_progress(args, f"Refreshing empty modded output folder from vanilla install: {output_root}")
     else:
@@ -1427,6 +1478,9 @@ def prepare_output_dir(
         elif source.is_file():
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source, target)
+            # copy2 carries a read-only attribute over from the vanilla file,
+            # and the next refresh or reconfigure could then not replace it.
+            make_writable(target)
 
 
 def is_recognized_modded_output_dir(path: Path) -> bool:
@@ -1476,6 +1530,7 @@ def enforce_modded_exe_name(
     modded_exe = output_dir / desired_name
     if modded_exe.exists():
         if vanilla_exe.exists() and vanilla_exe.resolve() != modded_exe.resolve():
+            make_writable(vanilla_exe)
             vanilla_exe.unlink()
             log_process_event(
                 process_log,
@@ -2831,6 +2886,7 @@ def apply_asset_patches(
                         f"Refusing removal of {output_file_path}: target SHA-256 changed "
                         f"from {check['source_sha256']} to {actual_sha}."
                     )
+                make_writable(target)
                 target.unlink()
             except OSError as exc:
                 raise PatchError(f"Could not remove disabled asset {output_file_path}: {exc}") from exc
@@ -2903,6 +2959,8 @@ def apply_asset_patches(
             if temp.is_symlink():
                 raise PatchError(f"Temporary patch path must not be a symlink: {temp}")
             shutil.copy2(source, temp)
+            make_writable(temp)
+            make_writable(target)
             temp.replace(target)
         except OSError as exc:
             log_process_event(
@@ -3216,6 +3274,9 @@ def create_backup(
             destination = resolve_under_backup_dir(backup_dir, str(backup_rel))
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source, destination)
+            # A read-only source would otherwise leave a read-only backup copy
+            # that a second row for the same file cannot overwrite.
+            make_writable(destination)
             backup_sha = sha256_file(destination)
             source_sha = sha256_file(source)
             if backup_sha != source_sha:
@@ -3254,6 +3315,7 @@ def atomic_write(path: Path, data: bytes) -> None:
     if temp.is_symlink():
         raise PatchError(f"Temporary patch path must not be a symlink: {temp}")
     temp.write_bytes(data)
+    make_writable(path)
     temp.replace(path)
 
 
@@ -3457,6 +3519,10 @@ def apply_manifest(args: argparse.Namespace) -> int:
                 ),
             )
 
+        if not reconfigure_output:
+            # Before create_backup: with the default backup location the backup
+            # itself would make an unrelated folder pass this check.
+            check_output_dir_refresh_allowed(game_dir, output_dir)
         if not args.dry_run:
             skip_copy_paths = {
                 str(check.get("target_file_path") or check["file_path"])
@@ -3676,13 +3742,17 @@ def apply_manifest(args: argparse.Namespace) -> int:
             print(f"Backup: {backup_dir}")
             print(f"Patch log: {log_path}")
         return 0
-    except PatchError as exc:
+    except (PatchError, OSError) as exc:
+        # An OSError (read-only or locked file, full disk, missing permission)
+        # is as much a failed apply as a PatchError: it must leave a failure
+        # log and reach the CLI and GUI as a clean error, not a traceback.
         if args.log:
             failure_log_path = Path(args.log).resolve()
         elif backup_dir:
             failure_log_path = backup_dir / "patch_error_log.json"
         else:
             failure_log_path = manifest_path.with_name("patch_error_log.json")
+        error_text = str(exc) if isinstance(exc, PatchError) else f"File operation failed: {exc}"
         failure_log = {
             "action": "apply",
             "dry_run": bool(args.dry_run),
@@ -3692,16 +3762,21 @@ def apply_manifest(args: argparse.Namespace) -> int:
             "manifest": str(manifest_path),
             "backup_dir": None if backup_dir is None else str(backup_dir),
             "settings": settings_log(settings, enabled_settings) if settings else None,
-            "error": str(exc),
+            "error": error_text,
             "process_log": process_log,
         }
-        write_json(failure_log_path, failure_log)
-        emit_progress(args, f"Patch failed. Failure log: {failure_log_path}")
+        try:
+            write_json(failure_log_path, failure_log)
+            emit_progress(args, f"Patch failed. Failure log: {failure_log_path}")
+        except OSError as log_exc:
+            emit_progress(args, f"Patch failed. Could not write failure log {failure_log_path}: {log_exc}")
         if settings:
             disabled_settings = sorted(set(settings) - enabled_settings)
             emit_progress(args, "Enabled settings: " + (", ".join(sorted(enabled_settings)) if enabled_settings else "(none)"))
             emit_progress(args, "Disabled settings: " + (", ".join(disabled_settings) if disabled_settings else "(none)"))
-        raise
+        if isinstance(exc, PatchError):
+            raise
+        raise PatchError(error_text) from exc
 
 
 def list_manifest_settings(args: argparse.Namespace) -> int:
@@ -3742,7 +3817,29 @@ def restore_backup(args: argparse.Namespace) -> int:
     if not backup_manifest_path.is_file():
         raise PatchError(f"Backup manifest not found: {backup_manifest_path}")
     backup_manifest = read_json(backup_manifest_path)
-    game_dir = Path(args.game_dir).resolve() if args.game_dir else Path(str(backup_manifest["game_dir"])).resolve()
+    recorded = backup_manifest.get("game_dir")
+    recorded_dir = Path(str(recorded)).resolve() if recorded else None
+    if args.game_dir:
+        game_dir = Path(args.game_dir).resolve()
+        # A backup holds the files of the folder it was taken from, and its
+        # "existed": false rows mean "delete this path". Restoring it anywhere
+        # else writes that folder's files over the destination and deletes
+        # destination files it never recorded -- e.g. a modded-output backup
+        # restored into the vanilla install. Only an explicit force allows it.
+        if (
+            recorded_dir is not None
+            and os.path.normcase(str(game_dir)) != os.path.normcase(str(recorded_dir))
+            and not getattr(args, "force_game_dir", False)
+        ):
+            raise PatchError(
+                "This backup was taken from a different folder and would overwrite or delete files "
+                f"in {game_dir}. It belongs to: {recorded_dir}. Omit the destination to restore it there, "
+                "or pass --force-game-dir to restore it elsewhere anyway."
+            )
+    elif recorded_dir is not None:
+        game_dir = recorded_dir
+    else:
+        raise PatchError("Backup manifest does not record the folder it was taken from; pass --game-dir.")
     if not game_dir.is_dir():
         raise PatchError(f"Game directory does not exist: {game_dir}")
 
@@ -3793,6 +3890,7 @@ def restore_backup(args: argparse.Namespace) -> int:
         else:
             removed = False
             if target.exists():
+                make_writable(target)
                 target.unlink()
                 removed = True
             restored.append({"file_path": rel_path, "removed": removed, "existed": False})
@@ -3846,7 +3944,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     restore_cmd = sub.add_parser("restore", help="Restore files from a patcher backup directory.")
     restore_cmd.add_argument("--backup-dir", required=True, help="Backup directory created by apply.")
-    restore_cmd.add_argument("--game-dir", help="Override restore destination. Defaults to original game_dir in backup.")
+    restore_cmd.add_argument("--game-dir", help="Restore destination. Defaults to the folder recorded in the backup; a different folder is refused unless --force-game-dir is given.")
+    restore_cmd.add_argument(
+        "--force-game-dir",
+        action="store_true",
+        help="Allow --game-dir to differ from the folder the backup was taken from. Files the backup did not record as existing are deleted there.",
+    )
     restore_cmd.add_argument("--log", help="Restore log JSON path. Defaults inside the backup directory.")
     restore_cmd.set_defaults(func=restore_backup)
     return parser

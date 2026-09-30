@@ -3545,5 +3545,285 @@ class ShippedRunnerPythonFloorTests(unittest.TestCase):
                 )
 
 
+class OutputAndRestoreSafetyTests(unittest.TestCase):
+    """The apply and restore paths must never write outside the modded output folder.
+
+    Measured on the shipped B196 engine: GUI Restore Backup restored a modded-output
+    backup into the vanilla install (overwriting it and deleting vanilla files the
+    backup recorded as absent); --output-dir pointed at a folder of personal files
+    moved them into a backup and repopulated it as a game, because the default
+    backup folder was created before the "recognized output folder" guard ran;
+    and a read-only vanilla file made the next refresh die with a traceback after
+    part of the output was already deleted, with no failure log.
+    """
+
+    EXE_NAME = "Virtual Families 2 - Modded Safety.exe"
+
+    def make_install(self, tmp_path):
+        game = tmp_path / "Virtual Families 2"
+        (game / "Images").mkdir(parents=True)
+        exe = game / "Virtual Families 2.exe"
+        exe.write_bytes(b"vanilla exe")
+        (game / "Images" / "a.png").write_bytes(b"vanilla a")
+        (game / "Images" / "b.png").write_bytes(b"vanilla b")
+        payload = tmp_path / "payload"
+        payload.mkdir()
+        (payload / "mod.exe").write_bytes(b"modded exe")
+        (payload / "a.png").write_bytes(b"modded a")
+        (payload / "c.png").write_bytes(b"new c")
+        manifest = {
+            "manifest_version": 1,
+            "name": "output safety",
+            "output": {"default_folder_name": "VF2-BSafety-Modded", "default_exe_name": self.EXE_NAME},
+            "settings": [{"id": "core_executable", "default": True}, {"id": "art", "default": True}],
+            "target_files": [{"path": exe.name, "sha256": sha256_bytes(b"vanilla exe"), "size": 11}],
+            "asset_patches": [
+                {
+                    "file_path": exe.name,
+                    "output_file_path": self.EXE_NAME,
+                    "source_path": "payload/mod.exe",
+                    "source_sha256": sha256_bytes(b"modded exe"),
+                    "expected_target_sha256": sha256_bytes(b"vanilla exe"),
+                    "overwrite_existing": True,
+                    "requires": ["core_executable"],
+                },
+                {
+                    "file_path": "Images/a.png",
+                    "source_path": "payload/a.png",
+                    "source_sha256": sha256_bytes(b"modded a"),
+                    "overwrite_existing": True,
+                    "requires": ["art"],
+                },
+                {
+                    "file_path": "Images/c.png",
+                    "source_path": "payload/c.png",
+                    "source_sha256": sha256_bytes(b"new c"),
+                    "allow_missing_target": True,
+                    "requires": ["art"],
+                },
+            ],
+        }
+        manifest_path = tmp_path / "manifest.json"
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+        return game, exe, manifest_path, tmp_path / "VF2-BSafety-Modded"
+
+    def apply(self, *extra, expect=0):
+        return OfflineVF2PatcherTests.run_patcher(self, "apply", *extra, expect=expect)
+
+    def run_patcher(self, *args, expect=0):
+        return OfflineVF2PatcherTests.run_patcher(self, *args, expect=expect)
+
+    @staticmethod
+    def snapshot(root):
+        return {
+            path.relative_to(root).as_posix(): path.read_bytes()
+            for path in sorted(root.rglob("*"))
+            if path.is_file()
+        }
+
+    @staticmethod
+    def unlock(root):
+        import os
+        import stat
+
+        for path in root.rglob("*"):
+            try:
+                os.chmod(path, stat.S_IWRITE | stat.S_IREAD)
+            except OSError:
+                pass
+
+    # --- D2: output folder guard runs before anything is written -------------
+
+    def test_unrecognized_output_dir_is_refused_before_the_backup_is_written(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            game, exe, manifest, _ = self.make_install(Path(tmp))
+            personal = Path(tmp) / "My Documents Stuff"
+            (personal / "photos").mkdir(parents=True)
+            (personal / "thesis.docx").write_bytes(b"precious")
+            (personal / "photos" / "p1.jpg").write_bytes(b"jpg")
+            before = self.snapshot(personal)
+
+            for dry in ((), ("--dry-run",)):
+                with self.subTest(dry_run=bool(dry)):
+                    result = self.apply(
+                        "--exe", str(exe), "--manifest", str(manifest), "--output-dir", str(personal), *dry,
+                        expect=2,
+                    )
+                    self.assertIn("not recognized as a VF2 modded output folder", result.stderr)
+                    self.assertEqual(self.snapshot(personal), before)
+                    self.assertEqual(sorted(p.name for p in personal.iterdir()), ["photos", "thesis.docx"])
+
+    def test_output_dir_inside_vanilla_folder_is_refused_before_anything_is_created(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            game, exe, manifest, _ = self.make_install(Path(tmp))
+            vanilla_before = self.snapshot(game)
+            inside = game / "modded_here"
+            result = self.apply(
+                "--exe", str(exe), "--manifest", str(manifest), "--output-dir", str(inside), expect=2
+            )
+            self.assertIn("not inside the vanilla game folder", result.stderr)
+            self.assertFalse(inside.exists())
+            self.assertEqual(self.snapshot(game), vanilla_before)
+
+    def test_recognized_and_empty_output_folders_still_refresh(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            game, exe, manifest, default_out = self.make_install(Path(tmp))
+            self.apply("--exe", str(exe), "--manifest", str(manifest))
+            (default_out / "stale.txt").write_bytes(b"left by an older build")
+            self.apply("--exe", str(exe), "--manifest", str(manifest))
+            self.assertFalse((default_out / "stale.txt").exists())
+            self.assertEqual((default_out / "Images" / "a.png").read_bytes(), b"modded a")
+
+            empty = Path(tmp) / "Chosen Empty Folder"
+            empty.mkdir()
+            self.apply("--exe", str(exe), "--manifest", str(manifest), "--output-dir", str(empty))
+            # Second run: the folder is now recognized by its own backup folder.
+            self.apply("--exe", str(exe), "--manifest", str(manifest), "--output-dir", str(empty))
+            self.assertEqual((empty / self.EXE_NAME).read_bytes(), b"modded exe")
+
+    # --- D3: read-only files and file errors ---------------------------------
+
+    def test_read_only_vanilla_file_does_not_break_the_next_refresh(self):
+        import os
+        import stat
+
+        with tempfile.TemporaryDirectory() as tmp:
+            game, exe, manifest, out = self.make_install(Path(tmp))
+            read_only = game / "Images" / "b.png"
+            os.chmod(read_only, stat.S_IREAD)
+            try:
+                self.apply("--exe", str(exe), "--manifest", str(manifest))
+                self.assertTrue(os.access(out / "Images" / "b.png", os.W_OK), "copy kept the read-only attribute")
+                self.apply("--exe", str(exe), "--manifest", str(manifest))
+                self.assertEqual((out / "Images" / "b.png").read_bytes(), b"vanilla b")
+                self.assertEqual((out / "Images" / "a.png").read_bytes(), b"modded a")
+                self.assertFalse(os.access(read_only, os.W_OK), "the vanilla file itself must be left alone")
+            finally:
+                os.chmod(read_only, stat.S_IWRITE | stat.S_IREAD)
+                self.unlock(out)
+
+    def test_read_only_files_already_in_the_output_are_replaced(self):
+        # An output folder built by B196 or earlier already carries read-only
+        # copies; the refresh must delete them and the backup must copy them.
+        import os
+        import stat
+
+        with tempfile.TemporaryDirectory() as tmp:
+            game, exe, manifest, out = self.make_install(Path(tmp))
+            self.apply("--exe", str(exe), "--manifest", str(manifest))
+            os.chmod(out / "Images" / "a.png", stat.S_IREAD)
+            os.chmod(out / "Images" / "b.png", stat.S_IREAD)
+            os.chmod(out / "Images", stat.S_IREAD)
+            try:
+                self.apply("--exe", str(exe), "--manifest", str(manifest))
+                self.assertEqual((out / "Images" / "a.png").read_bytes(), b"modded a")
+                self.assertTrue(os.access(out / "Images" / "b.png", os.W_OK))
+            finally:
+                self.unlock(out)
+
+    def test_remove_output_entry_deletes_read_only_tree(self):
+        import os
+        import stat
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tree = Path(tmp) / "Images"
+            (tree / "deep").mkdir(parents=True)
+            (tree / "deep" / "x.png").write_bytes(b"x")
+            (tree / "y.png").write_bytes(b"y")
+            single = Path(tmp) / "single.txt"
+            single.write_bytes(b"s")
+            for path in (tree / "deep" / "x.png", tree / "y.png", tree / "deep", single):
+                os.chmod(path, stat.S_IREAD)
+            try:
+                patcher_mod.remove_output_entry(tree)
+                patcher_mod.remove_output_entry(single)
+            finally:
+                self.unlock(Path(tmp))
+            self.assertFalse(tree.exists())
+            self.assertFalse(single.exists())
+
+    def test_os_error_during_apply_writes_failure_log_and_raises_patch_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            game, exe, manifest, out = self.make_install(Path(tmp))
+            args = patcher_mod.build_parser().parse_args(
+                ["apply", "--exe", str(exe), "--manifest", str(manifest)]
+            )
+            with mock.patch.object(
+                patcher_mod, "apply_asset_patches", side_effect=PermissionError(13, "Access is denied", "x.png")
+            ), mock.patch("sys.stdout"):
+                with self.assertRaises(patcher_mod.PatchError) as caught:
+                    patcher_mod.apply_manifest(args)
+            self.assertIn("Access is denied", str(caught.exception))
+            self.assertIsInstance(caught.exception.__cause__, PermissionError)
+            logs = list((out / patcher_mod.DEFAULT_BACKUP_ROOT).glob("*/patch_error_log.json"))
+            self.assertEqual(len(logs), 1)
+            failure = json.loads(logs[0].read_text(encoding="utf-8"))
+            self.assertEqual(failure["status"], "failure")
+            self.assertIn("Access is denied", failure["error"])
+
+    def test_os_error_before_backup_reaches_cli_as_clean_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            game, exe, manifest, out = self.make_install(Path(tmp))
+            with mock.patch.object(
+                patcher_mod, "verify_asset_patches", side_effect=PermissionError(13, "Access is denied", "a.png")
+            ), mock.patch("sys.stdout"), mock.patch("sys.stderr"):
+                code = patcher_mod.main(["apply", "--exe", str(exe), "--manifest", str(manifest)])
+            self.assertEqual(code, 2)
+            self.assertTrue((Path(tmp) / "patch_error_log.json").is_file())
+
+    # --- D1: restore goes back where the backup came from --------------------
+
+    def make_two_backups(self, tmp_path):
+        game, exe, manifest, out = self.make_install(tmp_path)
+        self.apply("--exe", str(exe), "--manifest", str(manifest))
+        (out / "Images" / "c.png").write_bytes(b"player tweak")
+        self.apply("--exe", str(exe), "--manifest", str(manifest))
+        backups = sorted((out / patcher_mod.DEFAULT_BACKUP_ROOT).iterdir())
+        self.assertEqual(len(backups), 2)
+        return game, out, backups
+
+    def test_restore_refuses_a_destination_the_backup_was_not_taken_from(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            game, out, backups = self.make_two_backups(Path(tmp))
+            vanilla_before = self.snapshot(game)
+            for backup in backups:
+                with self.subTest(backup=backup.name):
+                    result = self.run_patcher(
+                        "restore", "--backup-dir", str(backup), "--game-dir", str(game), expect=2
+                    )
+                    self.assertIn("taken from a different folder", result.stderr)
+                    self.assertEqual(self.snapshot(game), vanilla_before)
+                    with self.assertRaises(patcher_mod.PatchError):
+                        patcher_mod.restore_backup(
+                            patcher_mod.argparse.Namespace(backup_dir=str(backup), game_dir=str(game), log=None)
+                        )
+                    self.assertEqual(self.snapshot(game), vanilla_before)
+
+    def test_restore_defaults_to_and_accepts_the_recorded_folder(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            game, out, backups = self.make_two_backups(Path(tmp))
+            vanilla_before = self.snapshot(game)
+            self.run_patcher("restore", "--backup-dir", str(backups[1]))
+            self.assertEqual((out / "Images" / "c.png").read_bytes(), b"player tweak")
+            (out / "Images" / "c.png").write_bytes(b"changed again")
+            # Same folder spelled in a different case is the same folder on Windows.
+            self.run_patcher(
+                "restore", "--backup-dir", str(backups[1]), "--game-dir", str(out).upper()
+                if sys.platform == "win32" else str(out)
+            )
+            self.assertEqual((out / "Images" / "c.png").read_bytes(), b"player tweak")
+            self.assertEqual(self.snapshot(game), vanilla_before)
+
+    def test_restore_force_game_dir_allows_an_explicit_other_destination(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            game, out, backups = self.make_two_backups(Path(tmp))
+            elsewhere = Path(tmp) / "Copy Of Output"
+            elsewhere.mkdir()
+            self.run_patcher(
+                "restore", "--backup-dir", str(backups[1]), "--game-dir", str(elsewhere), "--force-game-dir"
+            )
+            self.assertEqual((elsewhere / "Images" / "c.png").read_bytes(), b"player tweak")
+
+
 if __name__ == "__main__":
     unittest.main()

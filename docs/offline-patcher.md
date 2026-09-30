@@ -50,7 +50,15 @@ folder to a separate modded sibling folder and writes changed files there:
 
 Use `--output-dir` to choose the exact modded output folder. Alternatively,
 use `--output-parent-dir` to choose where the manifest-named folder is created;
-`--output-dir` takes precedence when both are supplied. B156 uses the stable
+`--output-dir` takes precedence when both are supplied. An existing non-empty
+output folder is refreshed (its contents replaced from the vanilla install)
+only when it is recognized as a modded output folder -- it already holds a
+`.vf2_patch_backups` folder or is named `VF2-*-Modded`; any other non-empty
+folder, or one inside the vanilla folder, is refused before anything is
+written, including the backup (B196 and earlier created the backup first, which
+made every folder pass the check). Read-only files in the vanilla install are
+copied as writable, and a file error during apply is reported as a normal
+failure with `patch_error_log.json`. B156 uses the stable
 folder and executable names `Virtual Families 2 - Modded` and
 `Virtual Families 2 - Modded.exe`. Its save folder is exactly
 `Documents/LDW/Virtual Families 2 - Modded`.
@@ -342,12 +350,25 @@ relative, so their `scope` is `object_relative` and their `apply_status` is
 
 ```powershell
 & "C:\Path\To\Python\python.exe" work\offline_vf2_patcher.py restore `
-  --backup-dir "C:\Games\Virtual Families 2\.vf2_patch_backups\20260702_example"
+  --backup-dir "C:\Games\Virtual Families 2 - Modded\.vf2_patch_backups\20260702_example"
 ```
 
 The restore command reads `vf2_patch_backup_manifest.json` from the backup
 folder, copies original files back, and removes files that the patcher created
-when the original target did not exist.
+when the original target did not exist. It restores into the folder recorded in
+the backup (`game_dir`), which for an output-folder manifest is the modded
+output folder, not the vanilla install. `--game-dir` may only name that same
+folder; a different destination is refused unless `--force-game-dir` is also
+given, because the backup's "did not exist" rows delete those paths wherever
+the restore runs. The GUI's Restore Backup button always restores into the
+recorded folder and never uses the vanilla game folder field.
+
+Superseded (wrong, B196 and earlier): the example above previously showed a
+backup under the vanilla folder (`C:\Games\Virtual Families 2\.vf2_patch_backups`),
+and `--game-dir` was described as a free "override". The GUI passed the vanilla
+game folder field as that override, so Restore Backup wrote a modded-output
+backup into the vanilla install and deleted vanilla files it had recorded as
+absent.
 
 ## Manifest Contract
 

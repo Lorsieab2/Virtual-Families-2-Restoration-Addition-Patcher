@@ -244,6 +244,15 @@ def build_restore_namespace(*, backup_dir: str, game_dir: str | None = None, log
     )
 
 
+def restore_destination_text(backup_dir: str) -> str:
+    """' (<folder>)' naming where a backup restores to, or '' if the backup cannot be read."""
+    try:
+        recorded = patcher.read_json(Path(backup_dir) / patcher.BACKUP_MANIFEST).get("game_dir")
+    except (patcher.PatchError, OSError, ValueError, AttributeError):
+        return ""
+    return f" ({recorded})" if recorded else ""
+
+
 # How often the main thread pumps the event loop while a worker runs. Small
 # enough that the bar animates smoothly, large enough not to spin the CPU.
 WAIT_POLL_SECONDS = 0.03
@@ -971,15 +980,24 @@ class VF2PatcherGUI:
 
     def start_restore(self) -> None:
         try:
+            # No destination: a backup is restored into the folder it was
+            # taken from, which the backup records. The vanilla game folder
+            # field must never be passed here -- backups are taken of the
+            # modded output folder, and restoring one into the vanilla install
+            # overwrites it with modded files and deletes vanilla files.
             args = build_restore_namespace(
                 backup_dir=self.restore_backup_var.get(),
-                game_dir=self.game_dir_var.get(),
+                game_dir=None,
                 log=self.restore_log_var.get(),
             )
         except patcher.PatchError as exc:
             self._set_error(str(exc))
             return
-        if not messagebox.askyesno(APP_DISPLAY_NAME, "Restore the selected backup into the game folder?"):
+        if not messagebox.askyesno(
+            APP_DISPLAY_NAME,
+            "Restore the selected backup into the folder it was taken from"
+            f"{restore_destination_text(args.backup_dir)}?",
+        ):
             return
         self._run_worker("Restore backup", lambda: patcher.restore_backup(args))
 
@@ -1128,7 +1146,7 @@ class VF2PatcherGUI:
     # same string the status line and the log already use.
     _WORK_WAIT_DETAIL = {
         "Dry run": "Checking your game files. Nothing is written in a dry run.",
-        "Restore backup": "Restoring the selected backup into the game folder.",
+        "Restore backup": "Restoring the selected backup into the folder it was taken from.",
     }
 
     def _work_wait_detail(self, label: str) -> str:

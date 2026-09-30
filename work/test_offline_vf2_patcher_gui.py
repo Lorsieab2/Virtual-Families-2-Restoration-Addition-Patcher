@@ -206,6 +206,49 @@ class OfflineVF2PatcherGUITests(unittest.TestCase):
         self.assertIsNone(args.game_dir)
         self.assertIsNone(args.log)
 
+    def test_restore_button_never_restores_into_the_vanilla_folder_field(self):
+        # B196: Restore Backup passed the vanilla game folder field as the
+        # restore destination, so a modded-output backup was written into the
+        # vanilla install and vanilla files it recorded as absent were deleted.
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "VF2-BTest-Modded"
+            backup = output / ".vf2_patch_backups" / "b1"
+            backup.mkdir(parents=True)
+            (backup / patcher.BACKUP_MANIFEST).write_text(
+                json.dumps({"game_dir": str(output), "files": []}), encoding="utf-8"
+            )
+            vanilla = Path(tmp) / "Virtual Families 2"
+            vanilla.mkdir()
+
+            class Var:
+                def __init__(self, value):
+                    self.value = value
+
+                def get(self):
+                    return self.value
+
+            calls = []
+            fake = mock.Mock()
+            fake.restore_backup_var = Var(str(backup))
+            fake.game_dir_var = Var(str(vanilla))
+            fake.restore_log_var = Var("")
+            fake._run_worker = lambda label, func, **kw: calls.append(func)
+            prompts = []
+
+            def ask(title, message):
+                prompts.append(message)
+                return True
+
+            with mock.patch.object(gui.messagebox, "askyesno", side_effect=ask), mock.patch.object(
+                patcher, "restore_backup", side_effect=lambda args: args
+            ):
+                gui.VF2PatcherGUI.start_restore(fake)
+                self.assertEqual(len(calls), 1)
+                args = calls[0]()
+            self.assertIsNone(args.game_dir)
+            self.assertIn(str(output), prompts[0])
+            self.assertNotIn(str(vanilla), prompts[0])
+
     def test_saved_paths_round_trip_local_settings_file(self):
         with tempfile.TemporaryDirectory() as tmp:
             settings_path = Path(tmp) / "patcher_local_settings.json"
