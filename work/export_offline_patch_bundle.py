@@ -3444,11 +3444,10 @@ restored by rebuilding the modded folder from the vanilla install and applying
 only the checked patches. Payload files are read-only/copy-only during apply.
 Each such rebuild first saves a complete copy of the old modded folder (about
 230 MB), by default in a new timestamped folder under .vf2_patch_backups; if
-you set the Backup folder field (or --backup-dir), it goes to exactly that
-folder instead, which must not exist yet: a run whose Backup folder already
-exists (one picked with Browse, or one an earlier run wrote) stops with an
-error before changing anything, so give each run a new folder name or leave
-the field empty. The patcher never deletes these; delete older ones yourself,
+you set the Backup folder field (or --backup-dir) to a folder that already
+exists -- one picked with Browse always does -- each run writes a new
+timestamped folder inside it; a path that does not exist yet is created and
+used as given. The patcher never deletes these; delete older ones yourself,
 from wherever they were written, to reclaim disk space, keeping the newest if
 you may want to restore from it.
 

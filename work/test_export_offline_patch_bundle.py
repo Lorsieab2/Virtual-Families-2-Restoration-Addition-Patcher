@@ -3332,17 +3332,22 @@ class TestBundleReadmeWarnsAboutBackupGrowth(unittest.TestCase):
         for phrase in (
             "Each such rebuild first saves a complete copy of the old modded folder (about 230 MB)",
             "by default in a new timestamped folder under .vf2_patch_backups",
-            "if you set the Backup folder field (or --backup-dir), it goes to exactly that folder instead",
-            "which must not exist yet: a run whose Backup folder already exists "
-            "(one picked with Browse, or one an earlier run wrote) stops with an error before changing anything",
+            "if you set the Backup folder field (or --backup-dir) to a folder that already exists",
+            "one picked with Browse always does -- each run writes a new timestamped folder inside it",
+            "a path that does not exist yet is created and used as given",
             "The patcher never deletes these",
             "delete older ones yourself, from wherever they were written, to reclaim disk space",
         ):
             self.assertIn(phrase, text)
 
-    def test_an_existing_backup_folder_is_refused_as_the_readme_says(self):
-        # The READMEs tell the player a Backup folder that already exists stops
-        # the run.  If that ever changes, both texts must change with it.
+    def test_create_backup_itself_never_reuses_a_folder(self):
+        # create_backup still refuses an existing folder, so no run can write
+        # over an earlier backup. apply_manifest is what gives an existing
+        # Backup folder (the only kind Browse returns) a fresh per-run
+        # subfolder -- pinned by test_an_existing_backup_folder_gets_a_fresh_
+        # subfolder_per_run in the patcher suite. Superseded: this test used to
+        # pin "an existing Backup folder stops the run", which made Browse
+        # unusable and is now fixed.
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             game = root / "game"

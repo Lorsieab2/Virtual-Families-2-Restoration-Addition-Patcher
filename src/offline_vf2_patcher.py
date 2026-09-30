@@ -3464,7 +3464,19 @@ def apply_manifest(args: argparse.Namespace) -> int:
                 if str(check.get("output_file_path") or check["file_path"]) != str(check["file_path"])
             }
             if args.backup_dir:
-                backup_dir = Path(args.backup_dir).resolve()
+                # A folder that already exists gets a fresh per-run subfolder,
+                # exactly as the default location does. The GUI's Browse dialog
+                # can only return an existing folder, and create_backup refuses
+                # to reuse one (mkdir exist_ok=False) so that no run overwrites
+                # an earlier backup -- so a browsed Backup folder used to fail
+                # every time, and a second run into the same new folder failed
+                # too. A path that does not exist yet is still used as given.
+                chosen_backup = Path(args.backup_dir).resolve()
+                backup_dir = (
+                    chosen_backup / backup_slug(manifest_path)
+                    if chosen_backup.is_dir()
+                    else chosen_backup
+                )
             else:
                 backup_dir = output_dir / DEFAULT_BACKUP_ROOT / backup_slug(manifest_path)
             emit_progress(args, f"Creating backup: {backup_dir}")
@@ -3822,7 +3834,7 @@ def build_parser() -> argparse.ArgumentParser:
     apply_cmd.add_argument("--manifest", required=True, help="Path to the JSON patch manifest.")
     apply_cmd.add_argument("--output-dir", help="Optional modded game output folder. Defaults to the manifest output folder when a vanilla game folder is supplied. If --game-dir is omitted, this must be an existing modded folder to reconfigure.")
     apply_cmd.add_argument("--output-parent-dir", help="Optional parent folder for the manifest-named modded output folder. Ignored when --output-dir is supplied.")
-    apply_cmd.add_argument("--backup-dir", help="Backup output directory. Defaults under the game directory.")
+    apply_cmd.add_argument("--backup-dir", help="Backup output directory. A folder that already exists receives a new per-run subfolder; a new path is used as given. Defaults to a per-run folder under .vf2_patch_backups in the output folder.")
     apply_cmd.add_argument("--log", help="Patch log JSON path. Defaults inside the backup directory.")
     apply_cmd.add_argument("--dry-run", action="store_true", help="Validate only; do not back up or modify files.")
     apply_cmd.add_argument("--enable", action="append", help="Enable a manifest setting. Repeat or comma-separate IDs.")
