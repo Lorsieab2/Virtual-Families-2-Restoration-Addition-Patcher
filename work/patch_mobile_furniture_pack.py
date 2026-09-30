@@ -40675,8 +40675,11 @@ def main():
     # executable; optional settings only filter order and completion routes.
     patch_custom_achievements(manifest)
     patch_achiever_load_reconciliation(manifest)
-    patch_new_village_clears_patcher_achievement_state(manifest)
     patch_career_room_goal_reconciliation(manifest)
+    # Retargets Init's Reset call; independent of the two Load-path patches
+    # above (a different function of theGameState.obj), so it runs after them
+    # and leaves their required adjacency intact.
+    patch_new_village_clears_patcher_achievement_state(manifest)
     patch_event_collectable_slot_replacement(manifest)
     # Always link the dormant B152 hook. The offline patcher's exact-SHA
     # post-asset phase changes .vf2preg from 00 to 01 only when selected, so
