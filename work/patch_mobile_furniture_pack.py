@@ -24708,6 +24708,160 @@ def patch_new_village_clears_patcher_achievement_state(manifest):
     }
 
 
+# Title-menu Start Over (stock defect, present in the vanilla executable too).
+#
+# theMenuScene::HandleMessage compares the clicked button id against Play
+# ([this+0xC0], id 1, "Play"/"Continue") and Start Over ([this+0xC8], id 6,
+# eSayStartOver) and sends BOTH to the same code at +0x119: click sound, then
+# "if (GameStats[0] != 0) resume the current game (scene 0)" else start the
+# intro story (scene 9). GameStats[0] is written by CStoryScene when the intro
+# story ends and cleared by CGameStats::Reset, and the menu constructor tests
+# the same dword to relabel Play as "Continue". So once a village exists,
+# Start Over did exactly what Continue does. theGameState::RestartCurrentGame
+# and eSayConfirmRestart (0x744, "Are you sure you want to restart the
+# current game?") exist in the game but nothing in the desktop game calls
+# either one.
+#
+# The fix re-points only Start Over's `je` at a stub appended to the function:
+#   no village yet (GameStats[0] == 0) -> the stock +0x119 path, unchanged;
+#   otherwise click sound, ShowMessageBox(this, eSayConfirmRestart, 0, true)
+#     No  (-1) -> the function's own "return true" epilogue at +0x103, so the
+#                 menu stays up and nothing is changed;
+#     Yes (0)  -> theGameState::RestartCurrentGame() (Init with the player
+#                 name kept, then SaveCurrentGame), then +0x128, the stock
+#                 path after its click sound. Init has just cleared
+#                 GameStats[0], so that path starts the intro story (scene 9)
+#                 exactly as Play does for a new village.
+# Mobile 1.7.16 shows the intended shape: theMenuScene::HandleDialog calls
+# RestartCurrentGame and then this same story/scene-9 path on result 0.
+START_OVER_MENU_FUNCTION = "?HandleMessage@theMenuScene@@UAE_NHJ@Z"
+START_OVER_SHOW_MESSAGE_BOX_SYMBOL = "?ShowMessageBox@@YAHPAVldwScene@@W4StringId@@H_N@Z"
+START_OVER_RESTART_SYMBOL = "?RestartCurrentGame@theGameState@@QAEXXZ"
+START_OVER_CONFIRM_STRING_ID = 0x744  # eSayConfirmRestart
+START_OVER_BRANCH_OFFSET = 0x64       # je taken when the id is Start Over's
+START_OVER_SHARED_PATH = 0x119        # stock Play/Start Over handler
+START_OVER_AFTER_SOUND = 0x128        # same handler, after its click sound
+START_OVER_RETURN_TRUE = 0x103        # mov al,1 and the function epilogue
+
+
+def patch_title_menu_start_over_confirms(manifest):
+    obj_path = PATCHED / "theMenuScene.obj"
+    obj = CoffObject(obj_path)
+    func = obj.symbol(START_OVER_MENU_FUNCTION)
+    sec = obj.section(func.section)
+    if func.value != 0 or sec.raw_size != 0x1DD:
+        raise RuntimeError(
+            f"theMenuScene::HandleMessage layout drifted: value {func.value:#x}, "
+            f"section size {sec.raw_size:#x}"
+        )
+    code = bytes(obj.buf[sec.raw_ptr : sec.raw_ptr + sec.raw_size])
+    anchors = {
+        # msg == 8; the id against Play then Start Over, both -> +0x119
+        0x2D: bytes.fromhex("837D0808"),
+        0x52: bytes.fromhex("3B87C00000000F84BB000000"),
+        0x5E: bytes.fromhex("3B87C80000000F84AF000000"),
+        # return-true epilogue shared with the Change Player path
+        0x103: bytes.fromhex("B0018B4DF464890D00000000595F5E5B8BE55DC20800"),
+        # shared handler: click sound, then the GameStats[0] test
+        0x119: bytes.fromhex("68B9000000B900000000E800000000"),
+        0x128: bytes.fromhex("833D00000000008B4F0C7418"),
+        # no-village path: player exists -> SetStory(0), scene 9
+        0x14C: bytes.fromhex("83B9205B020000753F"),
+        0x194: bytes.fromhex("6A00B900000000E8000000008B4F0C"),
+        0x1AF: bytes.fromhex("C781B85C020009000000"),
+    }
+    for offset, expected in anchors.items():
+        if code[offset : offset + len(expected)] != expected:
+            raise RuntimeError(
+                f"theMenuScene::HandleMessage +{offset:#x} drifted: "
+                f"{code[offset:offset + len(expected)].hex()} != {expected.hex()}"
+            )
+    relocations = {}
+    for index in range(sec.nreloc):
+        vaddr, symbol_index, rtype = struct.unpack_from(
+            "<IIH", obj.buf, sec.reloc_ptr + index * 10
+        )
+        relocations[vaddr] = (obj.symbol_by_index[symbol_index].name, rtype)
+    expected_relocations = {
+        0x11F: ("?Sound@@3VCSound@@A", IMAGE_REL_I386_DIR32),
+        0x124: ("?Play@CSound@@QAEXW4ESound@@@Z", IMAGE_REL_I386_REL32),
+        0x12A: ("?GameStats@@3VCGameStats@@A", IMAGE_REL_I386_DIR32),
+        0x197: ("?Story@@3VCStory@@A", IMAGE_REL_I386_DIR32),
+        0x19C: ("?SetStory@CStory@@QAEXW4EStory@1@@Z", IMAGE_REL_I386_REL32),
+    }
+    for vaddr, expected in expected_relocations.items():
+        if relocations.get(vaddr) != expected:
+            raise RuntimeError(
+                f"theMenuScene::HandleMessage relocation +{vaddr:#x} drifted: "
+                f"{relocations.get(vaddr)} != {expected}"
+            )
+    # The ids come from the constructor: Play 1, Start Over 6.
+    ctor = obj.symbol("??0theMenuScene@@QAE@XZ")
+    ctor_sec = obj.section(ctor.section)
+    ctor_raw = ctor_sec.raw_ptr + ctor.value
+    for offset, expected in (
+        (0x180, bytes.fromhex("C786C000000001000000")),
+        (0x194, bytes.fromhex("C786C800000006000000")),
+        (0x3F0, bytes.fromhex("6876070000")),  # Start Over button text: eSayStartOver
+    ):
+        if bytes(obj.buf[ctor_raw + offset : ctor_raw + offset + len(expected)]) != expected:
+            raise RuntimeError(f"theMenuScene constructor +{offset:#x} drifted")
+
+    stub_off = sec.raw_size
+    branch_disp = lambda at, size, target: struct.pack("<i", target - (stub_off + at + size))
+    stub = bytearray()
+    stub += b"\x83\x3D\0\0\0\0\x00"                                   # +00 cmp [GameStats],0
+    stub += b"\x0F\x84" + branch_disp(0x07, 6, START_OVER_SHARED_PATH)  # +07 je stock path
+    stub += b"\x68\xB9\x00\x00\x00"                                   # +0D push 0B9h
+    stub += b"\xB9\0\0\0\0"                                           # +12 mov ecx,Sound
+    stub += b"\xE8\0\0\0\0"                                           # +17 call CSound::Play
+    stub += b"\x6A\x01"                                               # +1C push 1 (yes/no)
+    stub += b"\x6A\x00"                                               # +1E push 0
+    stub += b"\x68" + struct.pack("<I", START_OVER_CONFIRM_STRING_ID)  # +20 push 744h
+    stub += b"\x57"                                                   # +25 push edi (menu)
+    stub += b"\xE8\0\0\0\0"                                           # +26 call ShowMessageBox
+    stub += b"\x83\xC4\x10"                                           # +2B add esp,10h
+    stub += b"\x85\xC0"                                               # +2E test eax,eax
+    stub += b"\x0F\x85" + branch_disp(0x30, 6, START_OVER_RETURN_TRUE)  # +30 jne return true
+    stub += b"\x8B\x4F\x0C"                                           # +36 mov ecx,[edi+0Ch]
+    stub += b"\xE8\0\0\0\0"                                           # +39 call RestartCurrentGame
+    stub += b"\xE9" + branch_disp(0x3E, 5, START_OVER_AFTER_SOUND)    # +3E jmp +0x128
+    assert len(stub) == 0x43
+
+    obj.insert_section_bytes(sec.index, stub_off, bytes(stub))
+    sec = obj.section(func.section)
+    raw = sec.raw_ptr
+    struct.pack_into(
+        "<i", obj.buf, raw + START_OVER_BRANCH_OFFSET + 2,
+        stub_off - (START_OVER_BRANCH_OFFSET + 6),
+    )
+    game_stats = obj.symbol("?GameStats@@3VCGameStats@@A").index
+    sound = obj.symbol("?Sound@@3VCSound@@A").index
+    play = obj.symbol("?Play@CSound@@QAEXW4ESound@@@Z").index
+    show = obj.append_undefined_symbol(START_OVER_SHOW_MESSAGE_BOX_SYMBOL)
+    restart = obj.append_undefined_symbol(START_OVER_RESTART_SYMBOL)
+    for at, symidx, rtype in (
+        (0x02, game_stats, IMAGE_REL_I386_DIR32),
+        (0x13, sound, IMAGE_REL_I386_DIR32),
+        (0x18, play, IMAGE_REL_I386_REL32),
+        (0x27, show, IMAGE_REL_I386_REL32),
+        (0x3A, restart, IMAGE_REL_I386_REL32),
+    ):
+        obj.append_relocation(sec.index, stub_off + at, symidx, rtype)
+    obj.write(obj_path)
+    manifest["TitleMenuStartOverConfirms"] = {
+        "status": "installed",
+        "function": START_OVER_MENU_FUNCTION,
+        "branch": hex(START_OVER_BRANCH_OFFSET),
+        "stub_offset": hex(stub_off),
+        "prompt": "eSayConfirmRestart (0x744) via ShowMessageBox(scene, id, 0, true)",
+        "confirm": "theGameState::RestartCurrentGame, then the stock story/scene-9 path at +0x128",
+        "cancel": "return true at +0x103; the menu stays and nothing changes",
+        "no_village": "stock +0x119 path, unchanged (GameStats[0] == 0)",
+        "owner_report": "Pressing start over keeps going into the current game instead of bringing the start over prompt.",
+    }
+
+
 def patch_achiever_load_reconciliation(manifest):
     """Award the final meta-goal after loading an already-complete save."""
     obj_path = PATCHED / "theGameState.obj"
@@ -40680,6 +40834,9 @@ def main():
     # above (a different function of theGameState.obj), so it runs after them
     # and leaves their required adjacency intact.
     patch_new_village_clears_patcher_achievement_state(manifest)
+    # Base-game fix, every executable: the title menu's Start Over asks
+    # before restarting instead of resuming the current village.
+    patch_title_menu_start_over_confirms(manifest)
     patch_event_collectable_slot_replacement(manifest)
     # Always link the dormant B152 hook. The offline patcher's exact-SHA
     # post-asset phase changes .vf2preg from 00 to 01 only when selected, so

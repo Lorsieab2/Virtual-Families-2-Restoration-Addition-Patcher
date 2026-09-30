@@ -4553,6 +4553,13 @@ player (`theCreateNickNameDlg`/`theChangePlayerDlg`), for Start Over
 (`RestartCurrentGame`, which then calls `SaveCurrentGame`), and at the start of
 every load (`LoadCurrentGame`, `theGameState::Load`).
 
+Correction (2026-09-30, see "The title menu's Start Over resumed the village"
+below): the Start Over clause above was wrong for the stock desktop game.
+Nothing in the desktop objects or the vanilla executable calls
+`RestartCurrentGame`; the title menu's Start Over button ran the Play/Continue
+handler. The clause is true only once `patch_title_menu_start_over_confirms`
+is installed, which is what makes Start Over reach `RestartCurrentGame`.
+
 Record `0xA8` is the patcher's scratch record, and its `+0x08` dword is village
 state that Reset leaves: bit 0 is the Health Plan entitlement, bits 1-15 the
 mobile-renovation ever-purchased history, bits 16-31 the Oldest Villager record.
@@ -4571,3 +4578,34 @@ thiscall it replaces), which runs the stock Reset and then zeroes record 0xA8's
 `+0x00` and `+0x08` dwords. No other Reset caller is touched; Reset
 Achievements (cheat 0x124) calls Reset directly and keeps its own save/restore.
 Not yet checked in play.
+
+## The title menu's Start Over resumed the village (2026-09-30)
+
+Owner report: pressing Start Over went into the current game instead of
+bringing up the Start Over prompt. It is a stock defect, present unchanged in
+the vanilla executable (`0x443F4A`-`0x443F5C`) and in `theMenuScene.obj`.
+
+`theMenuScene::HandleMessage` compares the clicked id against Play
+(`[this+0xC0]`, id 1, labelled "Continue" when `GameStats[0] != 0`) at `+0x52`
+and Start Over (`[this+0xC8]`, id 6, `eSayStartOver`) at `+0x5E`, and both
+`je` to `+0x119`: click sound, then `GameStats[0] != 0` -> scene 0 (resume)
+else intro story and scene 9. `GameStats[0]` is written by
+`CStoryScene::Activate(false)` when the intro story ends and cleared by
+`CGameStats::Reset` (from `theGameState::Init`). So with a village, Start Over
+was Continue. `theGameState::RestartCurrentGame` (save the player name, Init,
+restore it, `SaveCurrentGame`) and `eSayConfirmRestart` (0x744, "Are you sure
+you want to restart the current game?") exist but have no caller anywhere in
+the desktop game. Mobile 1.7.16 has the same shared handler; its
+`theMenuScene::HandleDialog` holds the intended confirm path (result 0 ->
+`RestartCurrentGame`, then the story/scene-9 path), but nothing in the menu
+opens that dialog.
+
+Fix (`patch_title_menu_start_over_confirms`, every executable): Start Over's
+`je` at `+0x64` goes to a stub appended to the function. With no village
+(`GameStats[0] == 0`) it takes the stock `+0x119` path unchanged. Otherwise it
+plays the click, calls `ShowMessageBox(this, 0x744, 0, true)` (the same yes/no
+box the Settings Evict and throw-out prompts use: Yes returns 0, No -1); No
+returns through the function's own `mov al,1` epilogue at `+0x103` with
+nothing changed; Yes calls `RestartCurrentGame` on `[this+0x0C]` and joins the
+stock path at `+0x128`, which (Init having cleared `GameStats[0]`) starts the
+intro story exactly as Play does for a new village. Not yet checked in play.

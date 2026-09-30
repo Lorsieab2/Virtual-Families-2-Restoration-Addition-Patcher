@@ -14116,6 +14116,96 @@ class HolidayOrnamentGateTests(unittest.TestCase):
         # the record was cleared (it saw 0), so a new village starts locked.
         self.assertEqual(result.stdout.split(), ["0", "0", "0", "0", "1", "0"])
 
+    @staticmethod
+    def _start_over_function(obj):
+        func = obj.symbol(patcher.START_OVER_MENU_FUNCTION)
+        sec = obj.section(func.section)
+        code = bytes(obj.buf[sec.raw_ptr : sec.raw_ptr + sec.raw_size])
+        relocations = {}
+        for index in range(sec.nreloc):
+            vaddr, symbol_index, rtype = struct.unpack_from(
+                "<IIH", obj.buf, sec.reloc_ptr + index * 10
+            )
+            relocations[vaddr] = (obj.symbol_by_index[symbol_index].name, rtype)
+        return code, relocations
+
+    @staticmethod
+    def _je_target(code, offset):
+        assert code[offset : offset + 2] == b"\x0F\x84", code[offset : offset + 2].hex()
+        return offset + 6 + struct.unpack_from("<i", code, offset + 2)[0]
+
+    def test_title_menu_start_over_is_the_play_handler_in_the_stock_game(self):
+        # The defect itself, pinned from the stock object: Play (+0x52, id at
+        # this+0xC0) and Start Over (+0x5E, id at this+0xC8) jump to the same
+        # handler, and no code in the menu can reach the restart or its prompt.
+        stock = CoffObject(patcher.SRC_OBJS / "theMenuScene.obj")
+        code, relocations = self._start_over_function(stock)
+        self.assertEqual(code[0x52:0x58], bytes.fromhex("3B87C0000000"))
+        self.assertEqual(code[0x5E:0x64], bytes.fromhex("3B87C8000000"))
+        self.assertEqual(self._je_target(code, 0x58), patcher.START_OVER_SHARED_PATH)
+        self.assertEqual(self._je_target(code, 0x64), patcher.START_OVER_SHARED_PATH)
+        names = {name for name, _rtype in relocations.values()}
+        self.assertNotIn(patcher.START_OVER_RESTART_SYMBOL, names)
+        self.assertNotIn(patcher.START_OVER_SHOW_MESSAGE_BOX_SYMBOL, names)
+        self.assertNotIn(b"RestartCurrentGame", bytes(stock.buf))
+
+    def test_title_menu_start_over_confirms_then_restarts(self):
+        from capstone import Cs, CS_ARCH_X86, CS_MODE_32
+
+        def run(temp_root):
+            manifest = {}
+            patcher.patch_title_menu_start_over_confirms(manifest)
+            obj = CoffObject(temp_root / "theMenuScene.obj")
+            code, relocations = self._start_over_function(obj)
+            stub = 0x1DD
+            self.assertEqual(len(code), stub + 0x43)
+            # Play still takes the stock handler; only Start Over is re-pointed.
+            self.assertEqual(self._je_target(code, 0x58), patcher.START_OVER_SHARED_PATH)
+            self.assertEqual(self._je_target(code, 0x64), stub)
+            # The stock body before the stub is otherwise byte-identical.
+            stock_code, stock_relocations = self._start_over_function(
+                CoffObject(patcher.SRC_OBJS / "theMenuScene.obj")
+            )
+            self.assertEqual(code[:0x66] + code[0x6A:stub], stock_code[:0x66] + stock_code[0x6A:])
+            for vaddr, target in stock_relocations.items():
+                self.assertEqual(relocations[vaddr], target)
+            decoded = [
+                (ins.address, ins.mnemonic, ins.op_str)
+                for ins in Cs(CS_ARCH_X86, CS_MODE_32).disasm(code[stub:], stub)
+            ]
+            self.assertEqual(decoded, [
+                (stub + 0x00, "cmp", "dword ptr [0], 0"),
+                (stub + 0x07, "je", hex(patcher.START_OVER_SHARED_PATH)),
+                (stub + 0x0D, "push", "0xb9"),
+                (stub + 0x12, "mov", "ecx, 0"),
+                (stub + 0x17, "call", hex(stub + 0x1C)),
+                (stub + 0x1C, "push", "1"),
+                (stub + 0x1E, "push", "0"),
+                (stub + 0x20, "push", "0x744"),
+                (stub + 0x25, "push", "edi"),
+                (stub + 0x26, "call", hex(stub + 0x2B)),
+                (stub + 0x2B, "add", "esp, 0x10"),
+                (stub + 0x2E, "test", "eax, eax"),
+                (stub + 0x30, "jne", hex(patcher.START_OVER_RETURN_TRUE)),
+                (stub + 0x36, "mov", "ecx, dword ptr [edi + 0xc]"),
+                (stub + 0x39, "call", hex(stub + 0x3E)),
+                (stub + 0x3E, "jmp", hex(patcher.START_OVER_AFTER_SOUND)),
+            ])
+            self.assertEqual(relocations[stub + 0x02], ("?GameStats@@3VCGameStats@@A", patcher.IMAGE_REL_I386_DIR32))
+            self.assertEqual(relocations[stub + 0x13], ("?Sound@@3VCSound@@A", patcher.IMAGE_REL_I386_DIR32))
+            self.assertEqual(relocations[stub + 0x18], ("?Play@CSound@@QAEXW4ESound@@@Z", patcher.IMAGE_REL_I386_REL32))
+            self.assertEqual(relocations[stub + 0x27], (patcher.START_OVER_SHOW_MESSAGE_BOX_SYMBOL, patcher.IMAGE_REL_I386_REL32))
+            self.assertEqual(relocations[stub + 0x3A], (patcher.START_OVER_RESTART_SYMBOL, patcher.IMAGE_REL_I386_REL32))
+            self.assertEqual(manifest["TitleMenuStartOverConfirms"]["status"], "installed")
+            # The string the prompt shows is the game's own confirmation.
+            self.assertEqual(patcher.START_OVER_CONFIRM_STRING_ID, 0x744)
+
+        self.with_temp_patched_objs(["theMenuScene.obj"], run)
+        # A base-game fix: installed unconditionally by main(), in every executable.
+        source = Path(patcher.__file__).read_text(encoding="utf-8")
+        main_body = source.split("\ndef main():\n", 1)[1].split("\ndef ", 1)[0]
+        self.assertIn("\n    patch_title_menu_start_over_confirms(manifest)\n", main_body)
+
     def test_ornamentologist_completion_hook_is_idempotent(self):
         def run(temp_root):
             manifest = {}
