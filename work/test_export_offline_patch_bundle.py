@@ -3316,6 +3316,29 @@ class TestSuiteCopiesInSyncTests(unittest.TestCase):
                 )
 
 
+class TestBundleReadmeWarnsAboutBackupGrowth(unittest.TestCase):
+    """Every Enable/Disable rebuild keeps a full ~230 MB copy that is never pruned.
+
+    The player-facing bundle README is where that cost has to be stated, so the
+    written file (not just the exporter source) must carry the warning.
+    """
+
+    def test_written_patcher_readme_states_backup_size_location_and_retention(self):
+        with tempfile.TemporaryDirectory() as td:
+            bundle = Path(td) / "bundle"
+            bundle.mkdir()
+            exporter.write_bundle_runner_files(bundle, "B999")
+            text = " ".join((bundle / "README-B999-PATCHER.txt").read_text(encoding="ascii").split())
+        for phrase in (
+            "Each such rebuild first saves a complete copy of the old modded folder (about 230 MB)",
+            "by default in a new timestamped folder under .vf2_patch_backups",
+            "if you set the Backup folder field (or --backup-dir), it goes to exactly that folder instead",
+            "The patcher never deletes these",
+            "delete older ones yourself, from wherever they were written, to reclaim disk space",
+        ):
+            self.assertIn(phrase, text)
+
+
 class TestBundleChangelogReachesTheWrittenLog(unittest.TestCase):
     """The changelog blocks must survive into the file, not just the source.
 
