@@ -1,3 +1,4 @@
+import hashlib
 import re
 import sys
 import tempfile
@@ -502,6 +503,414 @@ class OfflineBundleZipVerifierTests(unittest.TestCase):
     def test_require_identities_sets_completeness_on_the_cli(self):
         source = Path(verifier.__file__).read_text(encoding="utf-8")
         self.assertIn("require_complete=args.require_identities", source)
+
+
+SYNTH_ROOT = "VF2-B999-Release"
+SOUND_ROUTES = ("beaker", "Child3", "Child7", "Child8")
+FLAG_RAW_POINTER = 0x100
+PREG_RAW_POINTER = 0x1C0
+
+
+def _synthetic_exe(marker: int) -> bytes:
+    """A minimal PE with one .vf2mort section and the four sound route names."""
+    data = bytearray(0x400)
+    data[0:2] = b"MZ"
+    data[0x3C:0x40] = (0x40).to_bytes(4, "little")
+    data[0x40:0x44] = b"PE\0\0"
+    data[0x44:0x46] = (0x14C).to_bytes(2, "little")
+    data[0x46:0x48] = (2).to_bytes(2, "little")  # two sections
+    # SizeOfOptionalHeader stays 0, so the section table follows at 0x58.
+    for slot, (name, raw_pointer, raw_size) in enumerate((
+        (b".vf2mort", FLAG_RAW_POINTER, 0x80),  # zero padding after the flag
+        (b".vf2preg", PREG_RAW_POINTER, 0x20),
+    )):
+        section = bytearray(40)
+        section[0:8] = name
+        section[8:12] = (1).to_bytes(4, "little")  # virtual size
+        section[16:20] = raw_size.to_bytes(4, "little")
+        section[20:24] = raw_pointer.to_bytes(4, "little")
+        data[0x58 + 40 * slot:0x58 + 40 * (slot + 1)] = section
+    for index, route in enumerate(SOUND_ROUTES):
+        text = (route + ".wav").encode("ascii")
+        data[0x200 + 0x20 * index:0x200 + 0x20 * index + len(text)] = text
+    data[0x3F0:0x3F4] = marker.to_bytes(4, "little")
+    return bytes(data)
+
+
+def _sha(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def _record(path: str, data: bytes, requires: list, files: dict, **extra) -> dict:
+    source = f"payload/{path}"
+    files[source] = data
+    row = {
+        "file_path": path,
+        "source_path": source,
+        "source_sha256": _sha(data),
+        "source_size": len(data),
+        "requires": requires,
+    }
+    row.update(extra)
+    return row
+
+
+def _synthetic_bundle():
+    """(files, manifest, exe bytes by hash) for a release meeting every contract."""
+    files: dict[str, bytes] = {}
+    assets = []
+    exe_hashes = []
+    exe_bytes = {}
+    for marker, requires in enumerate(sorted(verifier.EXECUTABLE_VARIANT_REQUIREMENTS, key=sorted)):
+        data = _synthetic_exe(marker)
+        name = "Virtual Families 2 - Modded %02d.exe" % marker
+        assets.append(_record(
+            name, data, sorted(requires), files,
+            output_file_path="Virtual Families 2 - Modded B999.exe",
+            expected_target_sha256=verifier.TARGET_SHA256,
+            expected_target_size=verifier.TARGET_SIZE,
+        ))
+        exe_hashes.append(_sha(data))
+        exe_bytes[_sha(data)] = data
+    for index in range(35):
+        assets.append(_record(
+            f"Images/MobileRenovations/r{index:02d}.png", b"PNG renovation %d" % index,
+            ["core_executable", "mobile_renovations"], files, remove_when_disabled=True,
+        ))
+    for index in range(63):
+        row = _record(
+            f"Sounds/s{index:02d}.ogg", b"OggS mobile %d" % index,
+            ["core_executable", "mobile_sound_assets"], files,
+        )
+        restore = f"payload/Original/s{index:02d}.ogg"
+        files[restore] = b"OggS stock %d" % index
+        row.update(
+            restore_source_path=restore,
+            restore_source_sha256=_sha(files[restore]),
+            restore_source_size=len(files[restore]),
+        )
+        assets.append(row)
+    for route in SOUND_ROUTES:
+        assets.append(_record(
+            f"Sounds/{route}.ogg", b"OggS route " + route.encode(),
+            ["core_executable", "mobile_sound_assets"], files, remove_when_disabled=True,
+        ))
+    assets.append(_record("Assets/Wreath1.png.fmap", b"holiday fmap", ["holiday_furniture"], files))
+    assets.append(_record("Assets/Wreath2.png.fmap", b"second holiday fmap", ["holiday_furniture"], files))
+    song = _record("Sounds/menu.ogg", b"OggS song mod", ["optional_song_mods"], files)
+    files["payload/Original/menu.ogg"] = b"OggS stock menu"
+    song.update(
+        restore_source_path="payload/Original/menu.ogg",
+        restore_source_sha256=_sha(files["payload/Original/menu.ogg"]),
+        restore_source_size=len(files["payload/Original/menu.ogg"]),
+    )
+    assets.append(song)
+    assets.append(_record("Images/cheat_add_coins.png", b"cheat icon", ["core_executable", "cheat_upgrades"], files))
+    posts = []
+    for index, route in enumerate(SOUND_ROUTES):
+        posts.append({
+            "file_path": "Virtual Families 2 - Modded B999.exe",
+            "requires": ["core_executable", "mobile_sound_assets"],
+            "variants": [
+                {
+                    "asset_sha256": sha,
+                    "offset": hex(0x200 + 0x20 * index),
+                    "expected_asset_bytes": (route + ".wav").encode().hex(),
+                    "replacement_bytes": (route + ".ogg").encode().hex(),
+                    "note": f"Enable mobile sound route {route}.wav -> {route}.ogg.",
+                }
+                for sha in exe_hashes
+            ],
+        })
+    posts.append({
+        "file_path": "Virtual Families 2 - Modded B999.exe",
+        "requires": ["core_executable", "older_villager_mortality"],
+        "note": "Exact-SHA runtime toggle for Older Villager Mortality Curve (.vf2mort).",
+        "variants": [
+            {
+                "asset_sha256": sha,
+                "offset": hex(FLAG_RAW_POINTER),
+                "expected_asset_bytes": "00",
+                "replacement_bytes": "01",
+            }
+            for sha in exe_hashes
+        ],
+    })
+    posts.append({
+        "file_path": "Virtual Families 2 - Modded B999.exe",
+        "requires": ["core_executable", "allow_older_pregnancies"],
+        "note": "Exact-SHA runtime toggle for Allow Older Pregnancies (.vf2preg).",
+        "variants": [
+            {
+                "asset_sha256": sha,
+                "offset": hex(PREG_RAW_POINTER),
+                "expected_asset_bytes": "00",
+                "replacement_bytes": "01",
+            }
+            for sha in exe_hashes
+        ],
+    })
+    setting_ids = sorted({req for row in assets + posts for req in row["requires"]})
+    runners = sorted(verifier.REQUIRED_RUNNERS | {"Apply_B999_Patcher.bat", "README-B999-PATCHER.txt"})
+    for name in runners + ["Transparency Log.txt"]:
+        files[name] = b"runner " + name.encode()
+    manifest = {
+        "target_files": [{
+            "path": "Virtual Families 2.exe",
+            "sha256": verifier.TARGET_SHA256,
+            "size": verifier.TARGET_SIZE,
+        }],
+        "settings": [{"id": setting_id} for setting_id in setting_ids],
+        "asset_patches": assets,
+        "post_asset_patches": posts,
+        "export_summary": {
+            "native_core_settings": [],
+            "runner_files": runners,
+            "transparency_log": "Transparency Log.txt",
+        },
+    }
+    return files, manifest, exe_bytes
+
+
+def _write_bundle(directory: Path, files: dict, manifest: dict) -> Path:
+    path = directory / f"{SYNTH_ROOT}.zip"
+    with zipfile.ZipFile(path, "w") as zipped:
+        zipped.writestr(f"{SYNTH_ROOT}/manifest.json", json.dumps(manifest))
+        for name, data in files.items():
+            zipped.writestr(f"{SYNTH_ROOT}/{name}", data)
+    return path
+
+
+class EveryRecordIsVerifiedTests(unittest.TestCase):
+    """A corrupted archive the player's patcher refuses must not pass.
+
+    Before this, the verifier checked the executables, the 35 renovation PNGs,
+    No AI Icons and the 67 sounds, and nothing else: against the published
+    B196 archive, deleting or corrupting a holiday fmap, a behaviour fmap, an
+    ornament PNG, a cheat icon or a Bathroom 2 PNG, dropping 27 of the 28
+    holiday fmap records, moving the .vf2mort offset 0x40 bytes, or deleting
+    offline_vf2_patcher_gui.py all printed RELEASE GATE PASSED.
+
+    Each case mutates a synthetic release that passes every contract, and
+    asserts the mutation landed before asserting the verifier rejects it.
+    """
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.dir = Path(self._tmp.name)
+        self.files, self.manifest, self.exe_bytes = _synthetic_bundle()
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def verify(self):
+        return verifier.verify_archive(_write_bundle(self.dir, self.files, self.manifest))
+
+    def record(self, file_path):
+        return next(r for r in self.manifest["asset_patches"] if r["file_path"] == file_path)
+
+    def test_the_synthetic_release_passes(self):
+        summary = self.verify()
+        self.assertEqual(summary["executable_variants"], len(verifier.EXECUTABLE_VARIANT_REQUIREMENTS))
+
+    def test_a_missing_non_executable_source_fails(self):
+        for path in ("Assets/Wreath1.png.fmap", "Images/cheat_add_coins.png"):
+            with self.subTest(path=path):
+                files = dict(self.files)
+                source = self.record(path)["source_path"]
+                del files[source]
+                self.assertNotIn(source, files)
+                with self.assertRaisesRegex(ValueError, "missing from ZIP"):
+                    verifier.verify_archive(_write_bundle(self.dir, files, self.manifest))
+
+    def test_a_corrupted_non_executable_source_fails(self):
+        source = self.record("Assets/Wreath1.png.fmap")["source_path"]
+        before = self.files[source]
+        self.files[source] = bytes([before[0] ^ 0xFF]) + before[1:]
+        self.assertNotEqual(self.files[source], before)
+        self.assertEqual(len(self.files[source]), len(before))
+        with self.assertRaisesRegex(ValueError, "SHA-256 does not match"):
+            self.verify()
+
+    def test_a_truncated_source_fails_on_size(self):
+        source = self.record("Images/cheat_add_coins.png")["source_path"]
+        self.files[source] = self.files[source][:-1]
+        with self.assertRaisesRegex(ValueError, "size does not match"):
+            self.verify()
+
+    def test_a_corrupted_restore_source_fails(self):
+        row = self.record("Sounds/menu.ogg")
+        restore = row["restore_source_path"]
+        self.files[restore] = self.files[restore] + b"!"
+        with self.assertRaisesRegex(ValueError, "restore"):
+            self.verify()
+
+    def test_an_incomplete_restore_identity_fails(self):
+        row = self.record("Sounds/menu.ogg")
+        del row["restore_source_sha256"]
+        with self.assertRaisesRegex(ValueError, "incomplete restore identity"):
+            self.verify()
+
+    def test_dropped_records_whose_files_remain_fail(self):
+        before = len(self.manifest["asset_patches"])
+        self.manifest["asset_patches"] = [
+            r for r in self.manifest["asset_patches"] if r["file_path"] != "Assets/Wreath1.png.fmap"
+        ]
+        self.assertEqual(len(self.manifest["asset_patches"]), before - 1)
+        with self.assertRaisesRegex(ValueError, "referenced by no asset record"):
+            self.verify()
+
+    def test_a_stray_payload_file_fails(self):
+        self.files["payload/debug_notes.txt"] = b"stray notes"
+        with self.assertRaisesRegex(ValueError, "referenced by no asset record"):
+            self.verify()
+
+    def test_a_runtime_flag_offset_off_its_section_fails(self):
+        post = next(p for p in self.manifest["post_asset_patches"] if "older_villager_mortality" in p["requires"])
+        variant = post["variants"][0]
+        variant["offset"] = hex(FLAG_RAW_POINTER + 0x40)
+        # The moved offset still reads 00 -- section padding -- which is
+        # exactly why a byte comparison alone would let it through.
+        self.assertEqual(self.exe_bytes[variant["asset_sha256"]][FLAG_RAW_POINTER + 0x40], 0)
+        with self.assertRaisesRegex(ValueError, "is not the .vf2mort raw pointer"):
+            self.verify()
+
+    def test_a_runtime_flag_record_must_name_its_section(self):
+        post = next(p for p in self.manifest["post_asset_patches"] if "older_villager_mortality" in p["requires"])
+        post["note"] = "Exact-SHA runtime toggle for Older Villager Mortality Curve."
+        with self.assertRaisesRegex(ValueError, "does not name exactly one .vf2 runtime-flag section"):
+            self.verify()
+
+    def test_a_post_record_missing_one_executable_fails(self):
+        post = next(p for p in self.manifest["post_asset_patches"] if "older_villager_mortality" in p["requires"])
+        count = len(post["variants"])
+        post["variants"] = post["variants"][1:]
+        self.assertEqual(len(post["variants"]), count - 1)
+        with self.assertRaisesRegex(ValueError, "do not cover exactly the shipped executables"):
+            self.verify()
+
+    def test_a_post_record_whose_bytes_are_not_at_its_offset_fails(self):
+        post = self.manifest["post_asset_patches"][0]
+        post["variants"][0]["offset"] = hex(int(post["variants"][0]["offset"], 16) + 1)
+        with self.assertRaisesRegex(ValueError, "expected bytes are not at"):
+            self.verify()
+
+    def test_a_missing_runner_member_fails(self):
+        for name in ("offline_vf2_patcher_gui.py", "README-B999-PATCHER.txt", "Transparency Log.txt"):
+            with self.subTest(name=name):
+                files = dict(self.files)
+                del files[name]
+                self.assertNotIn(name, files)
+                with self.assertRaisesRegex(ValueError, "missing from ZIP"):
+                    verifier.verify_archive(_write_bundle(self.dir, files, self.manifest))
+
+    def test_a_post_record_must_target_the_executable_output(self):
+        for bad in (None, "Images/cheat_add_coins.png", "Virtual Families 2.exe"):
+            with self.subTest(file_path=bad):
+                files, manifest, _ = _synthetic_bundle()
+                post = manifest["post_asset_patches"][-1]
+                if bad is None:
+                    del post["file_path"]
+                    self.assertNotIn("file_path", post)
+                else:
+                    post["file_path"] = bad
+                with self.assertRaisesRegex(ValueError, "not the executable output"):
+                    verifier.verify_archive(_write_bundle(self.dir, files, manifest))
+
+    def test_a_runtime_flag_must_enable_with_exactly_01(self):
+        for replacement in ("00", "02", "ff"):
+            with self.subTest(replacement=replacement):
+                files, manifest, _ = _synthetic_bundle()
+                post = next(p for p in manifest["post_asset_patches"] if "older_villager_mortality" in p["requires"])
+                post["variants"][0]["replacement_bytes"] = replacement
+                with self.assertRaisesRegex(ValueError, "must replace the one-byte 00 default with 01"):
+                    verifier.verify_archive(_write_bundle(self.dir, files, manifest))
+
+    def _flag(self, manifest, setting):
+        return next(p for p in manifest["post_asset_patches"] if setting in p["requires"])
+
+    def test_a_duplicated_runtime_flag_record_fails(self):
+        posts = self.manifest["post_asset_patches"]
+        count = len(posts)
+        posts.append(json.loads(json.dumps(self._flag(self.manifest, "older_villager_mortality"))))
+        self.assertEqual(len(posts), count + 1)
+        with self.assertRaisesRegex(ValueError, "overlaps post-asset record"):
+            self.verify()
+
+    def test_a_second_record_for_the_same_bytes_fails(self):
+        # Same section, different (unknown to the gate) wording: still two
+        # writes to one byte, which the patcher refuses at install.
+        second = json.loads(json.dumps(self._flag(self.manifest, "older_villager_mortality")))
+        second["note"] = "Another Older Villager Mortality toggle (.vf2mort)."
+        self.manifest["post_asset_patches"].append(second)
+        with self.assertRaisesRegex(ValueError, "overlaps post-asset record"):
+            self.verify()
+
+    def test_swapped_runtime_flag_notes_and_variants_fail(self):
+        mort = self._flag(self.manifest, "older_villager_mortality")
+        preg = self._flag(self.manifest, "allow_older_pregnancies")
+        for key in ("note", "variants"):
+            mort[key], preg[key] = preg[key], mort[key]
+        self.assertEqual(mort["variants"][0]["offset"], hex(PREG_RAW_POINTER))
+        with self.assertRaisesRegex(ValueError, "matching its setting"):
+            self.verify()
+
+    def test_a_dropped_runtime_flag_record_fails_when_the_setting_has_assets(self):
+        # Holiday Furniture and Mobile Furniture Behaviors ship asset records
+        # too, so dropping only their toggle kept the setting "reachable" and
+        # passed, against the published B196 archive as well, while ticking
+        # it installed the files and never set the flag byte.
+        self.manifest["asset_patches"].append(
+            _record("Assets/Mortality.fmap", b"mortality asset", ["older_villager_mortality"], self.files)
+        )
+        self.verify()
+        posts = self.manifest["post_asset_patches"]
+        count = len(posts)
+        self.manifest["post_asset_patches"] = [
+            p for p in posts if "older_villager_mortality" not in p["requires"]
+        ]
+        self.assertEqual(len(self.manifest["post_asset_patches"]), count - 1)
+        with self.assertRaisesRegex(ValueError, r"\['older_villager_mortality'\] have no post-asset toggle record"):
+            self.verify()
+
+    def test_an_unknown_runtime_flag_setting_fails(self):
+        flag = self._flag(self.manifest, "older_villager_mortality")
+        flag["requires"] = ["core_executable", "some_new_setting"]
+        self.manifest["settings"] = [
+            row for row in self.manifest["settings"] if row["id"] != "older_villager_mortality"
+        ] + [{"id": "some_new_setting"}]
+        with self.assertRaisesRegex(ValueError, "not a known runtime-flag setting"):
+            self.verify()
+
+    def test_the_section_table_is_the_exporters_own(self):
+        import export_offline_patch_bundle as exporter
+
+        self.assertIs(
+            verifier._runtime_flag_sections().__class__, dict
+        )
+        self.assertEqual(verifier._runtime_flag_sections(), exporter.RUNTIME_FLAG_SECTION_BY_SETTING)
+        # And the exporter refuses to emit a section the table does not give.
+        with self.assertRaisesRegex(ValueError, "disagrees with RUNTIME_FLAG_SECTION_BY_SETTING"):
+            exporter.setting_runtime_flag_post_asset_patches(
+                [],
+                output_exe_name="x.exe",
+                runtime_flag={"source_section": ".vf2preg"},
+                section_name=".vf2preg",
+                setting_id="older_villager_mortality",
+                feature_label="Older Villager Mortality Curve",
+            )
+
+    def test_the_transparency_log_must_be_named(self):
+        del self.manifest["export_summary"]["transparency_log"]
+        with self.assertRaisesRegex(ValueError, "transparency_log"):
+            self.verify()
+
+    def test_the_newest_real_release_passes(self):
+        archive = newest_release_zip()
+        identities = newest_release_identities()
+        if archive is None or identities is None or not identities.is_file():
+            self.skipTest("no release ZIP or identities file present in outputs/")
+        verifier.verify_archive(archive, identities)
 
 
 if __name__ == "__main__":

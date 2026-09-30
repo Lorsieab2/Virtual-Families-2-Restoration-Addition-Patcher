@@ -519,12 +519,101 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
         )
         self.assertEqual(
             exporter.asset_requires_for_setting("ai_generated_bathroom2_renovations"),
-            ["core_executable", "ai_generated_bathroom2_renovations"],
+            ["core_executable", "mobile_renovations", "ai_generated_bathroom2_renovations"],
         )
         self.assertIn(
             "ai_generated_bathroom2_renovations",
             exporter.OUTPUT_ONLY_REMOVABLE_ASSET_SETTINGS,
         )
+
+    def test_ai_bathroom2_art_is_inactive_without_mobile_renovations(self):
+        """Bathroom 2 code exists only in the mobile_renovations executables.
+
+        build-matrix-toggles.json pairs the two in every variant, and B196's 16
+        non-renovation executables contain no "AIGeneratedBathroom2/" path.
+        The art used to require only core_executable plus its own setting, so
+        with renovations off it was installed where nothing could draw it.
+        """
+        requires = tuple(exporter.asset_requires_for_setting("ai_generated_bathroom2_renovations"))
+        base = {"core_executable", "ai_generated_bathroom2_renovations"}
+        self.assertFalse(patcher.record_is_active(requires, base))
+        self.assertTrue(patcher.record_is_active(requires, base | {"mobile_renovations"}))
+        by_id = {row["id"]: row for row in exporter.SETTINGS}
+        description = by_id["ai_generated_bathroom2_renovations"]["description"]
+        self.assertIn("Requires Add mobile room renovations", description)
+        # The owner's own warning text is kept verbatim.
+        self.assertTrue(description.startswith("Warning: These Bathroom 2 renovation images are AI-generated"))
+        self.assertIn("change it- Lorsieab2)", description)
+        self.assertEqual(by_id["mobile_renovations"]["label"], "Add mobile room renovations")
+
+    def test_hairstyle_icons_belong_to_the_executable(self):
+        """The 100 hairstyle rows are generated into every executable.
+
+        They fell through to the mobile_furniture fallback, so unticking that
+        setting left the icons out while the rows stayed in the store.
+        """
+        for name in ("Female_Head_00.png", "Male_Head_49.png"):
+            rel = Path("Images") / "HairstyleIcons" / name
+            with self.subTest(name=name):
+                setting = exporter.setting_for_asset(rel)
+                self.assertEqual(setting, "core_executable")
+                self.assertEqual(exporter.asset_requires_for_setting(setting), ["core_executable"])
+        # Neighbouring art keeps its owner.
+        self.assertEqual(
+            exporter.setting_for_asset(Path("Images") / "OutfitIcons" / "female_00.png"),
+            "outfit_store_expansion",
+        )
+
+    def test_hairstyle_icons_load_in_a_bundle_without_an_executable(self):
+        """A no-EXE export has no core_executable setting to require.
+
+        Exported without --include-exe-replacement, default_settings() drops
+        core_executable, and the patcher's manifest_asset_patches() rejects a
+        record naming an unknown setting -- so the icons must fall back to a
+        setting that exists there. Exercised through the exporter and parsed
+        by the patcher itself.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            build = tmp_path / "build"
+            out = tmp_path / "bundle"
+            icon = build / "Images" / "HairstyleIcons" / "Female_Head_00.png"
+            icon.parent.mkdir(parents=True)
+            icon.write_bytes(b"hairstyle icon")
+            (build / "Virtual Families 2 - Additive Mobile Furniture Pack.exe").write_bytes(b"patched")
+            (build / "patch-manifest.json").write_text("{}", encoding="ascii")
+            self.run_exporter(
+                "--build-dir", str(build),
+                "--base-payload", str(tmp_path / "base"),
+                "--out-dir", str(out),
+            )
+            manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        setting_ids = {row["id"] for row in manifest["settings"]}
+        self.assertNotIn("core_executable", setting_ids)
+        record = next(
+            row for row in manifest["asset_patches"]
+            if row["file_path"] == "Images/HairstyleIcons/Female_Head_00.png"
+        )
+        self.assertEqual(record["requires"], ["core_assets"])
+        settings = patcher.manifest_settings(manifest)
+        enabled = {row["id"] for row in manifest["settings"] if row.get("default")}
+        active = patcher.manifest_asset_patches(manifest, settings, enabled)
+        self.assertIn(
+            patcher.canonical_rel_path_key("Images/HairstyleIcons/Female_Head_00.png"),
+            {patcher.canonical_rel_path_key(asset.file_path) for asset in active},
+        )
+
+    def test_hairstyle_icons_keep_the_executable_gate_when_one_ships(self):
+        rows = [
+            {"file_path": "Images/HairstyleIcons/Male_Head_03.png", "requires": ["core_executable"]},
+            {"file_path": "Images/GenerationLocks/lock_02.png", "requires": ["core_executable"]},
+        ]
+        exporter.regate_hairstyle_icons_without_executable(rows, True)
+        self.assertEqual(rows[0]["requires"], ["core_executable"])
+        exporter.regate_hairstyle_icons_without_executable(rows, False)
+        self.assertEqual(rows[0]["requires"], ["core_assets"])
+        # Only the hairstyle icons are re-gated by this helper.
+        self.assertEqual(rows[1]["requires"], ["core_executable"])
 
     def test_ai_bathroom2_asset_source_option_is_exported_separately_from_exe_matrix(self):
         source = EXPORTER.read_text(encoding="utf-8")
@@ -1521,7 +1610,15 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             self.assertEqual(asset_by_path["Images/VillagerDetailBodies/Female/Body_50/Frame00.png"]["requires"], ["holiday_outfits"])
             self.assertEqual(asset_by_path["Assets/VF3LargeFlatScreenTV.png.fmap"]["requires"], ["core_executable", "vf3_tv_assets_recognition"])
             self.assertEqual(asset_by_path["Assets/LDWPoster1Std.fmap"]["requires"], ["custom_couches_ldw_posters"])
-            self.assertEqual(asset_by_path["Images/Upgrades/superFridge_NW.png"]["requires"], ["misc_graphics_fixes"])
+            # asset_by_path keeps the LAST record per path. The Super Fridge
+            # has two layered writers, and Invisible Workspace Upgrades is now
+            # deliberately last, so check the Misc Graphics Fixes record exists
+            # among them rather than that it is the final one.
+            self.assertIn(
+                ["misc_graphics_fixes"],
+                [row["requires"] for row in manifest["asset_patches"]
+                 if row["file_path"] == "Images/Upgrades/superFridge_NW.png"],
+            )
             self.assertEqual(asset_by_path["Images/collectables_small.png"]["requires"], ["glowing_collectibles"])
             self.assertEqual(manifest["export_summary"]["asset_counts_by_setting"]["holiday_furniture"], 1)
             self.assertEqual(manifest["export_summary"]["asset_counts_by_setting"]["holiday_outfits"], 1)
@@ -2890,6 +2987,67 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             # Default ON, per the owner's standing rule.
             self.assertTrue(settings_by_id["invisible_upgrades_graphics"]["default"])
 
+    def test_invisible_upgrades_win_over_misc_graphics_fixes_for_the_super_fridge(self):
+        """Both default-on settings write Images/Upgrades/superFridge_NW.png.
+
+        Records sharing a target with distinct requires are a layered override
+        applied in manifest order, so the last active record is what the
+        player sees. B196 emitted the Misc Graphics Fixes record (7561) after
+        the Invisible Workspace Upgrades one (7497), so a default install kept
+        the Super Fridge visible under Invisible Workspace Upgrades. Resolved
+        through the patcher's own record selection, not by reading the list.
+        """
+        bundled_fix = exporter.OPTIONAL_PATCH_ASSET_DIR / "misc_graphics_fixes" / "superFridge_NW.png"
+        self.assertTrue(bundled_fix.is_file(), bundled_fix)
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            base = tmp_path / "base"
+            build = tmp_path / "build"
+            out = tmp_path / "bundle"
+            invisible = tmp_path / "invisible_upgrades"
+            original = tmp_path / "original_upgrades"
+            for folder in (build, invisible, original):
+                folder.mkdir()
+            (build / "Virtual Families 2 - Additive Mobile Furniture Pack.exe").write_bytes(b"patched")
+            (build / "patch-manifest.json").write_text("{}", encoding="ascii")
+            (invisible / "superFridge_NW.png").write_bytes(b"invisible fridge")
+            (original / "superFridge_NW.png").write_bytes(b"original fridge")
+
+            self.run_exporter(
+                "--build-dir", str(build),
+                "--base-payload", str(base),
+                "--out-dir", str(out),
+                "--invisible-upgrades-dir", str(invisible),
+                "--original-upgrades-dir", str(original),
+            )
+            manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+
+        target = "Images/Upgrades/superFridge_NW.png"
+        writers = [row for row in manifest["asset_patches"] if row["file_path"] == target]
+        self.assertEqual(
+            sorted(tuple(row["requires"]) for row in writers),
+            [("invisible_upgrades_graphics",), ("misc_graphics_fixes",)],
+        )
+        settings = patcher.manifest_settings(manifest)
+
+        def final_writer(enabled):
+            active = [
+                asset for asset in patcher.manifest_asset_patches(manifest, settings, enabled)
+                if patcher.canonical_rel_path_key(asset.file_path) == patcher.canonical_rel_path_key(target)
+            ]
+            patcher.validate_asset_target_plan(active)
+            return active[-1].requires if active else None
+
+        defaults = {row["id"] for row in manifest["settings"] if row.get("default")}
+        self.assertTrue({"invisible_upgrades_graphics", "misc_graphics_fixes"} <= defaults)
+        self.assertEqual(final_writer(defaults), ("invisible_upgrades_graphics",))
+        self.assertEqual(
+            final_writer(defaults - {"invisible_upgrades_graphics"}), ("misc_graphics_fixes",)
+        )
+        self.assertEqual(
+            final_writer(defaults - {"misc_graphics_fixes"}), ("invisible_upgrades_graphics",)
+        )
+
     def test_disable_all_refreshes_existing_modded_output_to_vanilla(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
@@ -3088,6 +3246,106 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             self.assertFalse(second.exists())
             exporter.validate_bundle_asset_sources(bundle, records)
 
+    def test_every_asset_record_can_be_undone_like_a_fresh_apply(self):
+        # A reconfigure has no vanilla folder: unticking a setting must restore
+        # a clean-install file the record overwrote, and remove a file the
+        # clean install does not have, or the folder no longer matches a fresh
+        # apply with that selection.
+        from unittest import mock
+
+        def sha(data):
+            return hashlib.sha256(data).hexdigest()
+
+        clean = {
+            "Images/bird.png": {"sha256": sha(b"vanilla bird"), "size": len(b"vanilla bird")},
+            "Images/collectables_small.png": {"sha256": sha(b"vanilla sheet"), "size": len(b"vanilla sheet")},
+            "Images/unchanged.png": {"sha256": sha(b"same"), "size": len(b"same")},
+            "Images/cheat_x.png": {"sha256": sha(b"cheat base"), "size": len(b"cheat base")},
+            "Images/Upgrades/Blender_NW.png": {"sha256": sha(b"clean blender"), "size": len(b"clean blender")},
+            "Images/Upgrades/toolwall.png": {"sha256": sha(b"clean wall"), "size": len(b"clean wall")},
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = Path(tmp) / "bundle"
+            base = Path(tmp) / "base"
+            for rel, data in (
+                ("Images/bird.png", b"vanilla bird"),
+                ("Images/collectables_small.png", b"vanilla sheet"),
+                ("Images/Upgrades/Blender_NW.png", b"clean blender"),
+            ):
+                (base / rel).parent.mkdir(parents=True, exist_ok=True)
+                (base / rel).write_bytes(data)
+
+            def record(path, data, **extra):
+                return {"file_path": path, "source_sha256": sha(data), "source_size": len(data),
+                        "requires": ["x"], **extra}
+
+            records = [
+                record("Images/bird.png", b"white bird"),
+                record("images/COLLECTABLES_SMALL.png", b"ornaments", remove_when_disabled=True),
+                record("Images/unchanged.png", b"same"),
+                record("Images/Furniture/New.png", b"new art"),
+                record("Images/cheat_x.png", b"no ai", restore_source_path="payload/x.png",
+                       restore_requires=["core_executable", "cheat_upgrades"]),
+                record("Assets/Behaviour.png.fmap", b"map", restore_source_path="payload/b.fmap"),
+                record("Sounds/menu.ogg", b"song"),
+                record("Virtual Families 2.exe", b"exe", output_file_path="Modded.exe"),
+                record("Images/Upgrades/Blender_NW.png", b"invisible", restore_source_path="payload/o.png",
+                       restore_source_sha256=sha(b"not the clean blender"), restore_source_size=21),
+                record("Images/Upgrades/toolwall.png", b"invisible", restore_source_path="payload/w.png",
+                       restore_source_sha256=sha(b"clean wall"), restore_source_size=10),
+            ]
+            with mock.patch.object(exporter, "clean_base_game_index", return_value=clean):
+                summary = exporter.assign_reconfigure_undo_sources(bundle, base, records)
+
+            bird, sheet, unchanged, new, layer, behaviour, sound, exe, blender, wall = records
+            self.assertEqual(
+                summary,
+                {"restores_added": 2, "restores_corrected": 1, "removals_added": 1, "restore_unavailable": []},
+            )
+            self.assertEqual((bundle / blender["restore_source_path"]).read_bytes(), b"clean blender")
+            self.assertEqual(blender["restore_source_sha256"], sha(b"clean blender"))
+            self.assertEqual(wall["restore_source_path"], "payload/w.png")
+            for row, data in ((bird, b"vanilla bird"), (sheet, b"vanilla sheet")):
+                self.assertFalse(row["remove_when_disabled"])
+                shipped = bundle / row["restore_source_path"]
+                self.assertEqual(shipped.read_bytes(), data)
+                self.assertEqual(row["restore_source_sha256"], sha(data))
+                self.assertEqual(row["restore_source_size"], len(data))
+            self.assertTrue(bird["restore_source_path"].startswith(
+                "payload/Original Virtual Families 2 Assets/Clean Install/Images/"))
+            self.assertNotIn("restore_source_path", unchanged)
+            self.assertFalse(unchanged["remove_when_disabled"])
+            self.assertTrue(new["remove_when_disabled"])
+            self.assertNotIn("remove_when_disabled", layer)
+            self.assertEqual(layer["restore_source_path"], "payload/x.png")
+            self.assertEqual(behaviour["restore_source_path"], "payload/b.fmap")
+            self.assertNotIn("remove_when_disabled", sound)
+            self.assertNotIn("remove_when_disabled", exe)
+            self.assertNotIn("restore_source_path", exe)
+
+            (base / "Images" / "bird.png").write_bytes(b"polluted payload copy")
+            again = [record("Images/bird.png", b"white bird")]
+            with mock.patch.object(exporter, "clean_base_game_index", return_value=clean):
+                with self.assertRaisesRegex(ValueError, "clean-install original of Images/bird.png"):
+                    exporter.assign_reconfigure_undo_sources(bundle, base, again)
+                lenient = exporter.assign_reconfigure_undo_sources(bundle, base, again, strict=False)
+            self.assertEqual(lenient["restore_unavailable"], ["Images/bird.png"])
+            self.assertNotIn("restore_source_path", again[0])
+
+            # No clean index at all: a release export must refuse rather than
+            # ship every Images/Assets record with no undo; a development
+            # export leaves the records untouched.
+            orphan = [record("Images/Furniture/Other.png", b"other art")]
+            with mock.patch.object(exporter, "clean_base_game_index", return_value={}):
+                with self.assertRaisesRegex(ValueError, "clean-install index"):
+                    exporter.assign_reconfigure_undo_sources(bundle, base, orphan)
+                empty = exporter.assign_reconfigure_undo_sources(bundle, base, orphan, strict=False)
+            self.assertEqual(
+                empty,
+                {"restores_added": 0, "restores_corrected": 0, "removals_added": 0, "restore_unavailable": []},
+            )
+            self.assertNotIn("remove_when_disabled", orphan[0])
+
 
 class CleanBaseGameReferenceTests(unittest.TestCase):
     """The additive diff must never consult the working payload.
@@ -3187,8 +3445,31 @@ class NonRuntimeSourceExclusionTests(unittest.TestCase):
 
     def test_xcf_and_bak_are_both_excluded(self):
         self.assertEqual(
-            exporter.NON_RUNTIME_SOURCE_SUFFIXES, {".bak", ".xcf"}
+            exporter.NON_RUNTIME_SOURCE_SUFFIXES,
+            {".bak", ".xcf", ".jbf", ".pngoriginal"},
         )
+
+    def test_build_leftovers_b196_installed_are_excluded(self):
+        """B196 installed 35 files into the game folder that nothing reads.
+
+        Images/pspbrwse.jbf (a 568,926-byte Paint Shop Pro thumbnail cache),
+        Assets/PkgInfo (a macOS bundle marker) and 33
+        Images/Furniture/Invisible*.pngORIGINAL build-side backups. None of the
+        three names appears in any of B196's 32 executables; the generator
+        reads .pngORIGINAL from the BUILD to make the Transparent set, which is
+        what the patcher installs.
+        """
+        for rel, expected in (
+            (Path("Images/pspbrwse.jbf"), True),
+            (Path("Images/Furniture/pspbrwse.JBF"), True),
+            (Path("Assets/PkgInfo"), True),
+            (Path("Images/Furniture/InvisibleHammock.pngORIGINAL"), True),
+            (Path("Images/Furniture/InvisibleHammock.png"), False),
+            (Path("Assets/InvisibleHammock.png.fmap"), False),
+            (Path("OptionalVisualMods/Invisible Furniture - Transparent/InvisibleHammock.png"), False),
+        ):
+            with self.subTest(path=str(rel)):
+                self.assertEqual(exporter.is_non_runtime_source_path(rel), expected)
 
     def test_nested_upgrade_source_folders_are_excluded(self):
         """The two working folders inside Images/Upgrades are not runtime art.
@@ -3224,7 +3505,10 @@ class NonRuntimeSourceExclusionTests(unittest.TestCase):
             drop_a = build / "Images" / "Upgrades" / "invisible images" / "toolwall.png"
             drop_b = build / "Images" / "Upgrades" / "original images" / "toolwall.png"
             drop_c = build / "Images" / "Furniture" / "BlackBookshelf.xcf"
-            for path in (keep, drop_a, drop_b, drop_c):
+            drop_d = build / "Images" / "pspbrwse.jbf"
+            drop_e = build / "Assets" / "PkgInfo"
+            drop_f = build / "Images" / "Furniture" / "InvisibleHammock.pngORIGINAL"
+            for path in (keep, drop_a, drop_b, drop_c, drop_d, drop_e, drop_f):
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_bytes(b"x")
             found = {
@@ -3236,6 +3520,9 @@ class NonRuntimeSourceExclusionTests(unittest.TestCase):
             "Images/Upgrades/invisible images/toolwall.png",
             "Images/Upgrades/original images/toolwall.png",
             "Images/Furniture/BlackBookshelf.xcf",
+            "Images/pspbrwse.jbf",
+            "Assets/PkgInfo",
+            "Images/Furniture/InvisibleHammock.pngORIGINAL",
         ):
             self.assertNotIn(excluded, found)
 
@@ -3314,6 +3601,53 @@ class TestSuiteCopiesInSyncTests(unittest.TestCase):
                     f"tests/{name} has drifted from work/{name}; "
                     "sync the two rather than editing one.",
                 )
+
+
+class TestBundleReadmeWarnsAboutBackupGrowth(unittest.TestCase):
+    """Every Enable/Disable rebuild keeps a full ~230 MB copy that is never pruned.
+
+    The player-facing bundle README is where that cost has to be stated, so the
+    written file (not just the exporter source) must carry the warning.
+    """
+
+    def test_written_patcher_readme_states_backup_size_location_and_retention(self):
+        with tempfile.TemporaryDirectory() as td:
+            bundle = Path(td) / "bundle"
+            bundle.mkdir()
+            exporter.write_bundle_runner_files(bundle, "B999")
+            text = " ".join((bundle / "README-B999-PATCHER.txt").read_text(encoding="ascii").split())
+        for phrase in (
+            "Each such rebuild first saves a complete copy of the old modded folder (about 230 MB)",
+            "by default in a new timestamped folder under .vf2_patch_backups",
+            "if you set the Backup folder field (or --backup-dir) to a folder that already exists",
+            "one picked with Browse always does -- each run writes a new timestamped folder inside it",
+            "a path that does not exist yet is created and used as given",
+            "The patcher never deletes these",
+            "delete older ones yourself, from wherever they were written, to reclaim disk space",
+        ):
+            self.assertIn(phrase, text)
+
+    def test_create_backup_itself_never_reuses_a_folder(self):
+        # create_backup still refuses an existing folder, so no run can write
+        # over an earlier backup. apply_manifest is what gives an existing
+        # Backup folder (the only kind Browse returns) a fresh per-run
+        # subfolder -- pinned by test_an_existing_backup_folder_gets_a_fresh_
+        # subfolder_per_run in the patcher suite. Superseded: this test used to
+        # pin "an existing Backup folder stops the run", which made Browse
+        # unusable and is now fixed.
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            game = root / "game"
+            game.mkdir()
+            output = root / "VF2-X-Modded"
+            output.mkdir()
+            (output / "kept.txt").write_text("kept", encoding="ascii")
+            existing = root / "chosen-with-browse"
+            existing.mkdir()
+            with self.assertRaises(FileExistsError):
+                patcher.create_backup(game, output, existing, {}, [], [], root / "manifest.json")
+            self.assertEqual(list(existing.iterdir()), [])
+            self.assertEqual((output / "kept.txt").read_text(encoding="ascii"), "kept")
 
 
 class TestBundleChangelogReachesTheWrittenLog(unittest.TestCase):
@@ -3457,6 +3791,116 @@ class MobileFurnitureCrashWarningScopeTests(unittest.TestCase):
                     "release state belongs in the build-scoped warning, "
                     "not in the table every bundle shares",
                 )
+
+
+class EverySelectableSettingGatesSomethingTests(unittest.TestCase):
+    """A checkbox must change something, or say that it cannot.
+
+    B196 offered Text fixes, Add unused pets, Add visible mobile version
+    purchases and the core-assets row as ordinary checkboxes, yet no record in
+    its manifest required any of them: the first three are compiled into all
+    32 executables and core_assets had no files. Unticking one changed nothing
+    while the GUI reported it "disabled/restored to vanilla".
+    """
+
+    def assert_every_setting_gates_a_record_or_is_informational(self, manifest):
+        records = [
+            *manifest.get("patches", []),
+            *manifest.get("asset_patches", []),
+            *manifest.get("post_asset_patches", []),
+        ]
+        required = {setting for record in records for setting in record.get("requires", [])}
+        for row in manifest["settings"]:
+            with self.subTest(setting=row["id"]):
+                self.assertTrue(
+                    row["id"] in required or row.get("informational") is True,
+                    f"{row['id']} is selectable but no record requires it and it is not marked informational",
+                )
+                if row.get("informational"):
+                    self.assertNotIn(row["id"], required, "an informational setting must gate nothing")
+
+    def test_zero_record_settings_are_marked_informational(self):
+        settings = [
+            {"id": "core_executable", "description": "Exe."},
+            {"id": "text_fixes", "description": "Misc text fixes."},
+            {"id": "unused_pets", "description": "Pets."},
+            {"id": "mobile_purchases", "description": "Upgrades."},
+            {"id": "core_assets", "description": "Copies files."},
+            {"id": "cheat_upgrades", "description": "Cheats."},
+        ]
+        records = [
+            {"requires": ["core_executable"]},
+            {"requires": ["core_executable", "cheat_upgrades"]},
+        ]
+        native = {"text_fixes", "unused_pets", "mobile_purchases"}
+        marked = {row["id"]: row for row in exporter.mark_informational_settings(settings, records, native)}
+        self.assertEqual(
+            {setting_id for setting_id, row in marked.items() if row.get("informational")},
+            {"text_fixes", "unused_pets", "mobile_purchases", "core_assets"},
+        )
+        self.assertIn("Built into the patched game executable", marked["text_fixes"]["description"])
+        self.assertIn("always on", marked["core_assets"]["description"])
+        self.assertNotIn("informational", marked["cheat_upgrades"])
+        self.assertEqual(marked["cheat_upgrades"]["description"], "Cheats.")
+        # Idempotent: marking twice must not repeat the note.
+        again = exporter.mark_informational_settings(list(marked.values()), records, native)
+        self.assertEqual(
+            {row["id"]: row["description"] for row in again},
+            {row["id"]: row["description"] for row in marked.values()},
+        )
+        self.assert_every_setting_gates_a_record_or_is_informational(
+            {"settings": list(marked.values()), "asset_patches": records}
+        )
+        # The patcher reads the same rows as informational, with the executable as prerequisite.
+        manifest = {
+            "settings": list(marked.values()),
+            "asset_patches": records,
+            "export_summary": {"native_core_settings": sorted(native)},
+        }
+        parsed = patcher.manifest_settings(manifest)
+        self.assertEqual(
+            patcher.informational_settings(manifest, parsed),
+            {
+                "text_fixes": frozenset({"core_executable"}),
+                "unused_pets": frozenset({"core_executable"}),
+                "mobile_purchases": frozenset({"core_executable"}),
+                "core_assets": frozenset(),
+            },
+        )
+
+    def test_a_manifest_without_records_is_left_alone(self):
+        settings = [{"id": "core_assets", "description": "Copies files."}]
+        self.assertEqual(exporter.mark_informational_settings(settings, [], set()), settings)
+
+    def test_an_exported_bundle_has_no_setting_that_gates_nothing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            base = tmp_path / "base"
+            build = tmp_path / "build"
+            out = tmp_path / "bundle"
+            base.mkdir()
+            build.mkdir()
+            vanilla = tmp_path / "vanilla.exe"
+            vanilla.write_bytes(bytes([1, 2, 3, 4, 5, 6]))
+            (build / "Virtual Families 2 - Additive Mobile Furniture Pack.exe").write_bytes(bytes([1, 2, 0xAA, 0xBB, 5, 6]))
+            result = subprocess.run(
+                [
+                    sys.executable, str(EXPORTER),
+                    "--build-dir", str(build),
+                    "--base-payload", str(base),
+                    "--out-dir", str(out),
+                    "--vanilla-exe", str(vanilla),
+                    "--include-byte-patches",
+                ],
+                cwd=ROOT, text=True, capture_output=True,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        by_id = {row["id"]: row for row in manifest["settings"]}
+        # core_assets has no file in this bundle; the byte patch gates core_native_patch.
+        self.assertTrue(by_id["core_assets"].get("informational"))
+        self.assertNotIn("informational", by_id["core_native_patch"])
+        self.assert_every_setting_gates_a_record_or_is_informational(manifest)
 
 
 if __name__ == "__main__":

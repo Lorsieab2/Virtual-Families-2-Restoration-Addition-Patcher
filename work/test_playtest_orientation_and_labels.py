@@ -310,11 +310,16 @@ class TheTreadmillDoesNotUseAPositionBlindQuery(unittest.TestCase):
 
     def test_the_wrappers_use_their_own_probe(self):
         text = source_text()
-        # The TREADMILL wrappers still need their own probe: the Exercise Bike
-        # keeps borrowing the stock treadmill behaviours for its LABELS, so a
-        # villager at either machine reaches the same wrapper and it must
-        # decide which caption to apply.
-        self.assertIn("bool const onBike = bike;", text)
+        # SUPERSEDED, recorded rather than deleted (AGENTS.md 11): this
+        # required `bool const onBike = bike;` in the TREADMILL wrappers, on the
+        # reasoning that the Exercise Bike borrowed the stock treadmill
+        # behaviours for its labels. It does not: the bike's own behaviours
+        # 0x0B1/0x0B2 run the donors directly and apply the bike captions, and
+        # with the bike on object 0x99 the stock treadmill behaviours (0x04)
+        # only reach a Treadmill. The pre-walk "standing on the bike" probe
+        # could only put a bike caption on a treadmill action, so the treadmill
+        # wrappers now classify nothing, like the pool wrapper.
+        self.assertNotIn("bool const onBike = bike;", text)
         # SUPERSEDED for the pool wrapper, recorded rather than deleted
         # (AGENTS.md 11): this also required `bool const onPingPong = pingPong;`.
         # That variable is gone because the Ping-Pong Table now has its own

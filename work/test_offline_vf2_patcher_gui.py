@@ -206,6 +206,49 @@ class OfflineVF2PatcherGUITests(unittest.TestCase):
         self.assertIsNone(args.game_dir)
         self.assertIsNone(args.log)
 
+    def test_restore_button_never_restores_into_the_vanilla_folder_field(self):
+        # B196: Restore Backup passed the vanilla game folder field as the
+        # restore destination, so a modded-output backup was written into the
+        # vanilla install and vanilla files it recorded as absent were deleted.
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "VF2-BTest-Modded"
+            backup = output / ".vf2_patch_backups" / "b1"
+            backup.mkdir(parents=True)
+            (backup / patcher.BACKUP_MANIFEST).write_text(
+                json.dumps({"game_dir": str(output), "files": []}), encoding="utf-8"
+            )
+            vanilla = Path(tmp) / "Virtual Families 2"
+            vanilla.mkdir()
+
+            class Var:
+                def __init__(self, value):
+                    self.value = value
+
+                def get(self):
+                    return self.value
+
+            calls = []
+            fake = mock.Mock()
+            fake.restore_backup_var = Var(str(backup))
+            fake.game_dir_var = Var(str(vanilla))
+            fake.restore_log_var = Var("")
+            fake._run_worker = lambda label, func, **kw: calls.append(func)
+            prompts = []
+
+            def ask(title, message):
+                prompts.append(message)
+                return True
+
+            with mock.patch.object(gui.messagebox, "askyesno", side_effect=ask), mock.patch.object(
+                patcher, "restore_backup", side_effect=lambda args: args
+            ):
+                gui.VF2PatcherGUI.start_restore(fake)
+                self.assertEqual(len(calls), 1)
+                args = calls[0]()
+            self.assertIsNone(args.game_dir)
+            self.assertIn(str(output), prompts[0])
+            self.assertNotIn(str(vanilla), prompts[0])
+
     def test_saved_paths_round_trip_local_settings_file(self):
         with tempfile.TemporaryDirectory() as tmp:
             settings_path = Path(tmp) / "patcher_local_settings.json"
@@ -1159,6 +1202,145 @@ class PleaseWaitFeedbackTests(unittest.TestCase):
         widget = tk.Text(self.root)
         widget.destroy()
         self.app._resize_markup_label(widget)
+
+
+class SettingDependencyGuiTests(unittest.TestCase):
+    """Dependencies close in both directions, from the manifest's records.
+
+    Measured on the shipped B196 manifest with the real GUI class: unticking
+    Cheat Upgrades left No AI Icons ticked (every one of its records also
+    requires Cheat Upgrades), unticking Patch game executable left thirteen
+    settings that need it ticked, and Text fixes / Add unused pets / Add
+    visible mobile version purchases / the core-assets row were ordinary
+    checkboxes although no record requires them.
+    """
+
+    SETTINGS = (
+        "core_executable", "cheat_upgrades", "no_ai_icons", "holiday_ornaments_collection",
+        "mobile_renovations", "ai_generated_bathroom2_renovations", "text_fixes", "core_assets",
+    )
+
+    def setUp(self):
+        try:
+            import tkinter as tk
+        except ImportError:  # pragma: no cover - tkinter is part of CPython
+            self.skipTest("tkinter is not available")
+        try:
+            self.root = tk.Tk()
+        except Exception:
+            self.skipTest("no display available for Tk")
+        self.root.withdraw()
+        self.app = gui.VF2PatcherGUI(self.root)
+        self.tmp = tempfile.TemporaryDirectory()
+
+        def asset(path, *requires):
+            return {"file_path": path, "source_path": "payload/x", "source_sha256": "0" * 64, "requires": list(requires)}
+
+        manifest = {
+            "manifest_version": 1,
+            "settings": [
+                {"id": setting_id, "label": setting_id.replace("_", " ").title(), "default": True, "description": "Base."}
+                for setting_id in self.SETTINGS
+            ],
+            "asset_patches": [
+                asset("Virtual Families 2.exe", "core_executable"),
+                asset("Virtual Families 2.exe", "core_executable", "cheat_upgrades"),
+                asset("Virtual Families 2.exe", "core_executable", "holiday_ornaments_collection"),
+                asset("Virtual Families 2.exe", "core_executable", "mobile_renovations"),
+                asset("Images/cheat_fill_no_ai.png", "core_executable", "cheat_upgrades", "no_ai_icons"),
+                asset("Images/collectables_small.png", "holiday_ornaments_collection"),
+                asset("Images/AIGeneratedBathroom2/a.png", "core_executable", "ai_generated_bathroom2_renovations", "mobile_renovations"),
+            ],
+            "export_summary": {"native_core_settings": ["text_fixes"]},
+        }
+        path = Path(self.tmp.name) / "manifest.json"
+        path.write_text(json.dumps(manifest), encoding="utf-8")
+        self.app.manifest_var.set(str(path))
+        self.assertTrue(self.app.load_manifest_settings())
+        self.root.update()
+
+    def tearDown(self):
+        self.tmp.cleanup()
+        self.root.destroy()
+
+    def ticked(self):
+        return {setting_id for setting_id, var in self.app.setting_vars.items() if var.get()}
+
+    def set(self, setting_id, value):
+        self.app.setting_vars[setting_id].set(value)
+        self.root.update()
+
+    def test_unticking_a_prerequisite_unticks_its_dependents(self):
+        self.set("cheat_upgrades", False)
+        self.assertFalse(self.app.setting_vars["no_ai_icons"].get())
+        self.assertTrue(self.app.setting_vars["core_executable"].get())
+
+        self.app.select_default_settings()
+        self.set("core_executable", False)
+        self.assertEqual(self.ticked(), {"holiday_ornaments_collection", "core_assets"})
+
+        self.app.select_default_settings()
+        self.set("mobile_renovations", False)
+        self.assertFalse(self.app.setting_vars["ai_generated_bathroom2_renovations"].get())
+
+    def test_ticking_a_dependent_ticks_its_prerequisites(self):
+        self.app.clear_all_settings()
+        self.root.update()
+        self.assertEqual(self.ticked(), {"core_assets"})
+        self.set("no_ai_icons", True)
+        self.assertEqual(self.ticked(), {"no_ai_icons", "cheat_upgrades", "core_executable", "text_fixes", "core_assets"})
+        self.set("ai_generated_bathroom2_renovations", True)
+        self.assertTrue(self.app.setting_vars["mobile_renovations"].get())
+
+    def test_bulk_selections_are_consistent(self):
+        self.app.select_all_settings()
+        self.assertEqual(self.ticked(), set(self.SETTINGS))
+        self.app.select_default_settings()
+        self.assertEqual(self.ticked(), set(self.SETTINGS))
+        self.app.clear_all_settings()
+        self.assertEqual(self.ticked(), {"core_assets"})
+
+    def test_informational_settings_cannot_be_unticked_and_say_why(self):
+        self.assertEqual(set(self.app.informational_settings), {"text_fixes", "core_assets"})
+        descriptions = "\n".join(getattr(w, "_vf2_description_text", "") for w in self.app.description_widgets)
+        self.assertIn("text_fixes - always on", descriptions)
+        self.assertIn("Built into the patched game executable", descriptions)
+        self.assertIn("no_ai_icons - default on - Base. **Requires: Cheat Upgrades, Core Executable.**", descriptions)
+        disabled = []
+        for frame in self.app.settings_inner.winfo_children():
+            for child in frame.winfo_children():
+                if child.winfo_class() == "TCheckbutton" and child.instate(["disabled"]):
+                    disabled.append(child.cget("text"))
+        self.assertEqual(sorted(disabled), ["Core Assets", "Text Fixes"])
+        # Following the executable: an informational row is ticked exactly when it is present.
+        self.set("text_fixes", False)
+        self.assertTrue(self.app.setting_vars["text_fixes"].get())
+        self.set("core_executable", False)
+        self.assertFalse(self.app.setting_vars["text_fixes"].get())
+        self.assertTrue(self.app.setting_vars["core_assets"].get())
+
+    def test_success_popup_does_not_call_an_inactive_setting_enabled(self):
+        settings = patcher.manifest_settings(self.app.loaded_manifest_data)
+        selected = set(self.SETTINGS) - {"cheat_upgrades"}
+        report = patcher.effective_settings_report(self.app.loaded_manifest_data, settings, selected)
+        summary = {"settings": patcher.settings_log(settings, selected, report), "patched_files": [], "asset_files": []}
+        before = set(self.root.winfo_children())
+        self.app._show_apply_success(summary)
+        popup = next(w for w in self.root.winfo_children() if w not in before)
+        texts = []
+        stack = [popup]
+        while stack:
+            widget = stack.pop(0)  # breadth first keeps creation order
+            stack.extend(widget.winfo_children())
+            if widget.winfo_class() == "TLabel":
+                texts.append(str(widget.cget("text")))
+        popup.destroy()
+        enabled_text = texts[texts.index("Patches enabled successfully:") + 1]
+        disabled_text = texts[texts.index("Patches disabled/restored to vanilla:") + 1]
+        self.assertNotIn("No Ai Icons", enabled_text)
+        self.assertIn("No Ai Icons (selected but inactive: requires cheat_upgrades)", disabled_text)
+        self.assertIn("Text Fixes (built in)", enabled_text)
+
 
 class UpdatesLinkTests(unittest.TestCase):
     """The Check for updates link must exist and look clickable.
