@@ -10179,6 +10179,81 @@ class OutfitStoreMappingTests(unittest.TestCase):
         # more deposits stays a positive signed int.
         self.assertLess(value + max(targets) + 1000000, 0x7FFFFFFF)
 
+    def test_load_repairs_saves_damaged_by_the_old_sock_pile_maximum(self):
+        # Saves that laundered the old INT_MAX pile hold wrapped-negative
+        # progress on goals 0x3B-0x3D (and may still hold the INT_MAX pile,
+        # or INT_MIN after one more deposit). The load reconciler repairs
+        # exactly that and nothing else. The emitted function is compiled and
+        # run against a damaged and a healthy state.
+        source = Path(patcher.__file__).read_text(encoding="utf-8")
+        load = source.split(
+            'extern "C" bool __fastcall VF2AchievementLoadStateAndReconcile(', 1
+        )[1].split("\n}\n", 1)[0]
+        self.assertLess(
+            load.index("bool loaded = achievement->LoadState(state);"),
+            load.index("VF2RepairSockLaunderingOverflow(achievement);"),
+        )
+        signature = "static void VF2RepairSockLaunderingOverflow(CAchievement *achievement) {"
+        body = signature + source.split(signature, 1)[1].split("\n}\n", 1)[0] + "\n}\n"
+        self.assertIn("for (int goal = 0x3B; goal <= 0x3D; ++goal) {", body)
+
+        import subprocess
+        import test_generated_cpp_compiles as compiles
+        vcvars = compiles._vcvars()
+        if vcvars is None:
+            self.skipTest("no Visual Studio toolchain on this machine")
+        harness = (
+            "#include <stdio.h>\n"
+            "#include <string.h>\n"
+            "class CAchievement {};\n"
+            "class theGameState { public: static theGameState *Get(); };\n"
+            "static int gState[0x100];\n"
+            "theGameState *theGameState::Get() { return (theGameState *)gState; }\n"
+            "static const int kVF2MaximumSockPileCount = 1000000;\n"
+            + body +
+            "static int gRecords[0x125 * 3];\n"
+            "static void run(int pile, int p3a, int p3b, int p3c, int p3d, int p3e, int complete3c) {\n"
+            "    memset(gRecords, 0, sizeof(gRecords));\n"
+            "    gRecords[0x3A * 3 + 1] = p3a; gRecords[0x3B * 3 + 1] = p3b;\n"
+            "    gRecords[0x3C * 3 + 1] = p3c; gRecords[0x3D * 3 + 1] = p3d;\n"
+            "    gRecords[0x3E * 3 + 1] = p3e;\n"
+            "    ((unsigned char *)&gRecords[0x3C * 3])[0] = (unsigned char)complete3c;\n"
+            "    gState[0x148 / 4] = pile;\n"
+            "    VF2RepairSockLaunderingOverflow((CAchievement *)gRecords);\n"
+            "    printf(\"%d %d %d %d %d %d %d\\n\", gState[0x148 / 4], gRecords[0x3A * 3 + 1],\n"
+            "        gRecords[0x3B * 3 + 1], gRecords[0x3C * 3 + 1], gRecords[0x3D * 3 + 1],\n"
+            "        gRecords[0x3E * 3 + 1], ((unsigned char *)&gRecords[0x3C * 3])[0]);\n"
+            "}\n"
+            "int main() {\n"
+            "    run(0x7FFFFFFF, -5, -2147483643, -2147483600, -7, -9, 1);\n"
+            "    run((int)0x80000000u, 3, -1, 4, 5, 6, 0);\n"
+            "    run(29, 3, 9, 49, 99, 7, 0);\n"
+            "    run(1000000, 0, 0, 12, 0, 0, 1);\n"
+            "    return 0;\n"
+            "}\n"
+        )
+        with tempfile.TemporaryDirectory() as work:
+            (Path(work) / "repair.cpp").write_text(harness, encoding="ascii")
+            result = subprocess.run(
+                f'"{vcvars}" >nul 2>&1 && cd /d "{work}" && '
+                f'cl /nologo /EHsc repair.cpp >nul && .\\repair.exe',
+                shell=True, capture_output=True, text=True,
+            )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(
+            result.stdout.split(),
+            [
+                # Damaged: INT_MAX pile -> maximum; 0x3B-0x3D negatives -> 0,
+                # including a complete one; neighbours 0x3A/0x3E untouched.
+                "1000000", "-5", "0", "0", "0", "-9", "1",
+                # A pile wrapped to INT_MIN by one more deposit.
+                "1000000", "3", "0", "4", "5", "6", "0",
+                # Healthy saves are byte-for-byte unchanged.
+                "29", "3", "9", "49", "99", "7", "0",
+                "1000000", "0", "0", "12", "0", "0", "1",
+            ],
+        )
+
     def test_holiday_outfit_item_ids_decode_to_body_values_50_53(self):
         for gender in patcher.OUTFIT_STORE_GENDERS:
             for body_value in patcher.HOLIDAY_BODY_VALUES:
