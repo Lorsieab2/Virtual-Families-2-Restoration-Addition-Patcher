@@ -124,6 +124,20 @@ class ReadmeCountsTests(unittest.TestCase):
             "post_asset_patches", []
         )
 
+    def _renovation_room_pngs(self):
+        """Mobile renovation art owned by mobile_renovations itself.
+
+        Since the AI Bathroom 2 art was made to require mobile_renovations as
+        well as its own setting (its code ships only in the renovation
+        executables), "requires mobile_renovations" no longer means "belongs
+        to mobile_renovations". A record that requires the Bathroom 2 setting
+        is Bathroom 2's, whatever else it requires.
+        """
+        return (
+            self._pngs_requiring("mobile_renovations")
+            - self._pngs_requiring("ai_generated_bathroom2_renovations")
+        )
+
     def _pngs_requiring(self, setting):
         found = set()
         for record in self._records():
@@ -170,7 +184,7 @@ class ReadmeCountsTests(unittest.TestCase):
     def test_the_renovation_count_excludes_the_bathroom_2_art(self):
         """Room images only -- store icons and curtains are not renovations."""
         rooms = {
-            p for p in self._pngs_requiring("mobile_renovations")
+            p for p in self._renovation_room_pngs()
             if "/store_icons/" not in p and "/curtains/" not in p
         }
         self.assertIn(
@@ -184,9 +198,19 @@ class ReadmeCountsTests(unittest.TestCase):
         """The reason the two counts are separate, pinned so it stays true."""
         own = self._pngs_requiring("ai_generated_bathroom2_renovations")
         self.assertTrue(own, "Bathroom 2 art is no longer gated on its own setting")
-        shared = own & self._pngs_requiring("mobile_renovations")
+        # It may ALSO require mobile_renovations (its code is only in the
+        # renovation executables), but no Bathroom 2 file may be installed by
+        # mobile_renovations without its own setting: a player who declines
+        # the AI art must not receive it by ticking the genuine renovations.
+        # SUPERSEDED form: "must not also require mobile_renovations", which
+        # forbade the dependency the renovation-only code needs.
+        leaked = {
+            p for p in self._pngs_requiring("mobile_renovations")
+            if "AIGeneratedBathroom2/" in p and p not in own
+        }
         self.assertEqual(
-            shared, set(), "Bathroom 2 art must not also ship under mobile_renovations"
+            leaked, set(),
+            "Bathroom 2 art is installed by mobile_renovations without its own setting",
         )
 
     def test_the_behavior_map_count_matches_the_manifest(self):
@@ -218,7 +242,7 @@ class ReadmeCountsTests(unittest.TestCase):
         defect recorded rather than papered over.
         """
         rooms = {
-            p for p in self._pngs_requiring("mobile_renovations")
+            p for p in self._renovation_room_pngs()
             if "/store_icons/" not in p and "/curtains/" not in p
         }
         description = next(
