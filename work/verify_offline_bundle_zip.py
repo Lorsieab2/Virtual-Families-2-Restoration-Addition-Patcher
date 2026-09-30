@@ -263,6 +263,179 @@ def _verify_file_record(zipped: zipfile.ZipFile, names: set[str], root: str, rec
         _fail(f"{label} source SHA-256 does not match its manifest")
 
 
+_RESTORE_FIELDS = ("restore_source_path", "restore_source_sha256", "restore_source_size")
+
+
+def _verify_every_asset_source(zipped: zipfile.ZipFile, names: set[str], root: str, assets: list[dict]) -> set[str]:
+    """Check EVERY asset record's source (and restore source) against the ZIP.
+
+    The player's patcher refuses to install when any selected record's source
+    is missing or does not hash to its manifest identity
+    (offline_vf2_patcher.verify_asset_patches). This verifier used to check
+    only the executables, the renovation PNGs, No AI Icons and the sounds, so
+    deleting or corrupting a holiday fmap, a behaviour fmap, an ornament PNG,
+    a cheat icon or a Bathroom 2 PNG still printed RELEASE GATE PASSED for an
+    archive the player could not install. Every record is now checked, and
+    the set of payload members the manifest references is returned so the
+    caller can reject payload files no record owns.
+    """
+    digests: dict[str, tuple[str, int]] = {}
+
+    def check(relative: object, expected_sha: object, expected_size: object, label: str) -> None:
+        name = _member_name(root, relative, label)  # type: ignore[arg-type]
+        if name not in names:
+            _fail(f"{label} is missing from ZIP: {relative}")
+        if name not in digests:
+            data = zipped.read(name)
+            digests[name] = (_sha256(data), len(data))
+        actual_sha, actual_size = digests[name]
+        if not isinstance(expected_size, int) or expected_size <= 0 or actual_size != expected_size:
+            _fail(f"{label} size does not match its manifest: {relative}")
+        wanted = str(expected_sha or "").lower()
+        if not re.fullmatch(r"[0-9a-f]{64}", wanted) or actual_sha != wanted:
+            _fail(f"{label} SHA-256 does not match its manifest: {relative}")
+
+    for index, record in enumerate(assets):
+        label = f"asset record {index} ({record.get('file_path')})"
+        check(record.get("source_path"), record.get("source_sha256"), record.get("source_size"), f"{label} source")
+        present = [field for field in _RESTORE_FIELDS if record.get(field) is not None]
+        if present and len(present) != len(_RESTORE_FIELDS):
+            _fail(f"{label} has an incomplete restore identity: {sorted(present)}")
+        if present:
+            check(
+                record["restore_source_path"],
+                record["restore_source_sha256"],
+                record["restore_source_size"],
+                f"{label} restore source",
+            )
+    return set(digests)
+
+
+def _reject_unreferenced_payload(names: set[str], root: str, referenced: set[str]) -> None:
+    """Every payload member must be the source of some asset record.
+
+    Dropping records from the manifest while their files stay in the payload
+    -- 27 of 28 holiday fmaps, say -- leaves every remaining record valid, so a
+    per-record check alone cannot see it. The exporter writes exactly the
+    files its records reference (B196: 7456 payload files, 7456 referenced),
+    so an unowned payload file means records went missing or a stray file was
+    added, and either way the archive is not what the exporter produced.
+    """
+    prefix = f"{root}/payload/"
+    orphans = sorted(
+        name[len(root) + 1:]
+        for name in names
+        if name.startswith(prefix) and not name.endswith("/") and name not in referenced
+    )
+    if orphans:
+        _fail(
+            f"{len(orphans)} payload file(s) are referenced by no asset record "
+            f"(records dropped or stray files added): {orphans[:5]}"
+        )
+
+
+def _pe_sections(data: bytes, label: str) -> dict[str, list[tuple[int, int, int]]]:
+    """Section name -> [(raw_data_pointer, raw_data_size, virtual_size)]."""
+    if len(data) < 0x40 or data[:2] != b"MZ":
+        _fail(f"{label} is not a PE file")
+    pe = int.from_bytes(data[0x3C:0x40], "little")
+    if pe + 24 > len(data) or data[pe:pe + 4] != b"PE\0\0":
+        _fail(f"{label} is not a PE file")
+    count = int.from_bytes(data[pe + 6:pe + 8], "little")
+    optional_size = int.from_bytes(data[pe + 20:pe + 22], "little")
+    table = pe + 24 + optional_size
+    if table + 40 * count > len(data):
+        _fail(f"{label} has a truncated PE section table")
+    sections: dict[str, list[tuple[int, int, int]]] = {}
+    for index in range(count):
+        entry = data[table + 40 * index: table + 40 * (index + 1)]
+        name = entry[:8].rstrip(b"\0").decode("latin-1")
+        virtual_size = int.from_bytes(entry[8:12], "little")
+        raw_size = int.from_bytes(entry[16:20], "little")
+        raw_pointer = int.from_bytes(entry[20:24], "little")
+        sections.setdefault(name, []).append((raw_pointer, raw_size, virtual_size))
+    return sections
+
+
+_SECTION_IN_NOTE = re.compile(r"\((\.vf2[A-Za-z0-9_]+)\)")
+SOUND_ROUTE_REQUIRES = frozenset({"core_executable", "mobile_sound_assets"})
+
+
+def _verify_post_patch_targets(posts: list[dict], exe_bytes: dict[str, bytes]) -> None:
+    """Every post-asset variant must land where the exporter says it does.
+
+    The runtime-flag toggles are written by the exporter at the raw pointer
+    of a one-byte .vf2* section in each executable
+    (export_offline_patch_bundle.runtime_flag_variant_for_exe). Only the four
+    sound routes used to be checked here, so a .vf2mort variant moved 0x40
+    bytes into its own zero padding passed: the patcher would write the
+    enable byte somewhere the game never reads and the feature would stay
+    off. Every record must now cover exactly the shipped executables, every
+    variant's expected bytes must be the bytes at its offset in the
+    executable with that hash, and every runtime-flag record must name its
+    section and point at that section's raw pointer.
+    """
+    exe_hashes = set(exe_bytes)
+    for index, record in enumerate(posts):
+        requires = frozenset(_requires(record, f"post-asset record {index}"))
+        label = f"post-asset record {index} {sorted(requires)}"
+        variants = _dict_list(record.get("variants"), f"{label} variants")
+        shas = [str(variant.get("asset_sha256", "")).lower() for variant in variants]
+        if len(shas) != len(set(shas)) or set(shas) != exe_hashes:
+            _fail(f"{label} variants do not cover exactly the shipped executables")
+        section_names = set(_SECTION_IN_NOTE.findall(str(record.get("note", ""))))
+        if requires != SOUND_ROUTE_REQUIRES and len(section_names) != 1:
+            _fail(f"{label} does not name exactly one .vf2 runtime-flag section")
+        section = next(iter(section_names)) if requires != SOUND_ROUTE_REQUIRES else None
+        for sha, variant in zip(shas, variants):
+            data = exe_bytes[sha]
+            try:
+                offset = int(str(variant.get("offset", "")), 0)
+                expected = bytes.fromhex(str(variant.get("expected_asset_bytes", "")))
+                replacement = bytes.fromhex(str(variant.get("replacement_bytes", "")))
+            except ValueError:
+                _fail(f"{label} has a malformed variant for {sha}")
+            if not expected or len(replacement) != len(expected):
+                _fail(f"{label} variant for {sha} has mismatched byte lengths")
+            if offset < 0 or data[offset:offset + len(expected)] != expected:
+                _fail(f"{label} expected bytes are not at {variant.get('offset')} in executable {sha}")
+            if section is not None:
+                matches = _pe_sections(data, f"executable {sha}").get(section, [])
+                if len(matches) != 1:
+                    _fail(f"{label}: executable {sha} has {len(matches)} {section} sections, expected 1")
+                if offset != matches[0][0]:
+                    _fail(
+                        f"{label} offset {variant.get('offset')} is not the {section} raw "
+                        f"pointer {matches[0][0]:#x} in executable {sha}"
+                    )
+
+
+def _verify_runner_members(names: set[str], root: str, export_summary: dict) -> set[str]:
+    """Every runner and the transparency log must actually be in the archive.
+
+    runner_files is the exporter's own list; checking the list without the
+    members let an archive missing offline_vf2_patcher_gui.py -- the file
+    Launch_GUI.bat runs -- pass the gate.
+    """
+    runner_value = export_summary.get("runner_files")
+    if not isinstance(runner_value, list) or any(not isinstance(item, str) for item in runner_value):
+        _fail("manifest export_summary.runner_files must be a list of paths")
+    runner_files = set(runner_value)
+    if not REQUIRED_RUNNERS <= runner_files:
+        _fail(f"required patcher/crash-capture runners are missing: {sorted(REQUIRED_RUNNERS - runner_files)}")
+    transparency = export_summary.get("transparency_log")
+    if not isinstance(transparency, str) or not transparency:
+        _fail("manifest export_summary.transparency_log must name the transparency log")
+    absent = sorted(
+        relative
+        for relative in runner_files | {transparency}
+        if _member_name(root, relative, "runner file") not in names
+    )
+    if absent:
+        _fail(f"runner/transparency files listed by the manifest are missing from ZIP: {absent}")
+    return runner_files
+
+
 def _verify_zip_inventory(zipped: zipfile.ZipFile, zip_path: Path) -> tuple[str, set[str]]:
     try:
         bad = zipped.testzip()
@@ -533,15 +706,20 @@ def verify_archive(
         if seen_routes != SOUND_ROUTE_NAMES:
             _fail("mobile sound post-route set is incomplete")
 
+        referenced = _verify_every_asset_source(zipped, names, root, assets)
+        _reject_unreferenced_payload(names, root, referenced)
+        exe_bytes = {
+            str(record.get("source_sha256", "")).lower(): zipped.read(
+                _member_name(root, record["source_path"], "executable")
+            )
+            for record in exe_records
+        }
+        _verify_post_patch_targets(posts, exe_bytes)
+
         export_summary = manifest.get("export_summary")
         if not isinstance(export_summary, dict):
             _fail("manifest export_summary must be an object")
-        runner_value = export_summary.get("runner_files")
-        if not isinstance(runner_value, list) or any(not isinstance(item, str) for item in runner_value):
-            _fail("manifest export_summary.runner_files must be a list of paths")
-        runner_files = set(runner_value)
-        if not REQUIRED_RUNNERS <= runner_files:
-            _fail(f"required patcher/crash-capture runners are missing: {sorted(REQUIRED_RUNNERS - runner_files)}")
+        runner_files = _verify_runner_members(names, root, export_summary)
         apply_runners = sorted(name for name in runner_files if APPLY_RUNNER_PATTERN.match(name))
         if len(apply_runners) != 1:
             _fail(
