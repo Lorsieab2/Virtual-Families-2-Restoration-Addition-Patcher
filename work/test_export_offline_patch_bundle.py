@@ -3174,6 +3174,20 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             self.assertEqual(lenient["restore_unavailable"], ["Images/bird.png"])
             self.assertNotIn("restore_source_path", again[0])
 
+            # No clean index at all: a release export must refuse rather than
+            # ship every Images/Assets record with no undo; a development
+            # export leaves the records untouched.
+            orphan = [record("Images/Furniture/Other.png", b"other art")]
+            with mock.patch.object(exporter, "clean_base_game_index", return_value={}):
+                with self.assertRaisesRegex(ValueError, "clean-install index"):
+                    exporter.assign_reconfigure_undo_sources(bundle, base, orphan)
+                empty = exporter.assign_reconfigure_undo_sources(bundle, base, orphan, strict=False)
+            self.assertEqual(
+                empty,
+                {"restores_added": 0, "restores_corrected": 0, "removals_added": 0, "restore_unavailable": []},
+            )
+            self.assertNotIn("remove_when_disabled", orphan[0])
+
 
 class CleanBaseGameReferenceTests(unittest.TestCase):
     """The additive diff must never consult the working payload.

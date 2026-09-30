@@ -2767,6 +2767,13 @@ def assign_reconfigure_undo_sources(
     """
     index = {key.casefold(): (key, entry) for key, entry in clean_base_game_index().items()}
     if not index:
+        # Without the clean index no record can be classified, so every
+        # Images/Assets record would ship with no way back. A release must not.
+        if strict:
+            raise ValueError(
+                f"Cannot assign reconfigure undo sources: the clean-install index {CLEAN_BASE_GAME_ASSETS} "
+                "is missing or empty."
+            )
         return {"restores_added": 0, "restores_corrected": 0, "removals_added": 0, "restore_unavailable": []}
     restores_added = restores_corrected = removals_added = 0
     restore_unavailable: list[str] = []

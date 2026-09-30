@@ -2808,6 +2808,44 @@ class OfflineVF2PatcherTests(unittest.TestCase):
             self.assertIn("without an expected_target_sha256 or overwrite_existing=true", result.stdout + result.stderr)
             self.assertEqual(target.read_bytes(), b"player-customized")
 
+    def test_reconfigure_known_hashes_are_per_path_and_removal_rechecks_the_validated_bytes(self):
+        # A hash the manifest writes at ANOTHER path does not authenticate a
+        # file here, and a file that changes between validation and removal
+        # is refused rather than deleted.
+        with tempfile.TemporaryDirectory() as tmp:
+            modded, manifest = self.reconfigure_layer_fixture(
+                Path(tmp),
+                {"core_executable": True, "x": True},
+                [
+                    {"path": "Images/a.png", "bytes": b"art a", "requires": ["x"], "remove": True},
+                    {"path": "Images/b.png", "bytes": b"art b", "requires": ["x"], "remove": True},
+                ],
+            )
+            self.reconfigure(modded, manifest)
+            a = modded / "Images" / "a.png"
+            b = modded / "Images" / "b.png"
+            a.write_bytes(b"art b")
+            result = self.reconfigure(modded, manifest, "--disable", "x", expect=2)
+            self.assertRegex(result.stdout + result.stderr, r"Refusing removal of Images[\\/]a\.png")
+            self.assertEqual((a.read_bytes(), b.read_bytes()), (b"art b", b"art b"))
+
+            a.write_bytes(b"art a")
+            real_backup = patcher_mod.create_backup
+
+            def backup_then_player_edit(*args, **kwargs):
+                manifest_out = real_backup(*args, **kwargs)
+                a.write_bytes(b"edited after validation")
+                return manifest_out
+
+            with mock.patch.object(patcher_mod, "create_backup", side_effect=backup_then_player_edit):
+                with self.assertRaisesRegex(patcher_mod.PatchError, "target SHA-256 changed"):
+                    patcher_mod.apply_manifest(
+                        patcher_mod.build_parser().parse_args(
+                            ["apply", "--output-dir", str(modded), "--manifest", str(manifest), "--disable", "x"]
+                        )
+                    )
+            self.assertEqual(a.read_bytes(), b"edited after validation")
+
     def test_output_only_removes_hash_authenticated_overlay_asset_and_refuses_unknown_hash(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
