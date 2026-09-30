@@ -361,6 +361,22 @@ _SECTION_IN_NOTE = re.compile(r"\((\.vf2[A-Za-z0-9_]+)\)")
 SOUND_ROUTE_REQUIRES = frozenset({"core_executable", "mobile_sound_assets"})
 
 
+def _runtime_flag_sections() -> dict[str, str]:
+    """setting id -> .vf2* section, from the exporter that emits the records.
+
+    Imported rather than restated here, so the gate cannot drift from what
+    the exporter writes.
+    """
+    import sys
+
+    here = str(Path(__file__).resolve().parent)
+    if here not in sys.path:
+        sys.path.insert(0, here)
+    import export_offline_patch_bundle
+
+    return dict(export_offline_patch_bundle.RUNTIME_FLAG_SECTION_BY_SETTING)
+
+
 def _path_key(value: str) -> str:
     return value.replace("\\", "/").strip("/").casefold()
 
@@ -402,6 +418,12 @@ def _verify_post_patch_targets(
     00 -> 00 "enable" is a no-op that leaves the feature off.
     """
     exe_hashes = set(exe_bytes)
+    section_by_setting = _runtime_flag_sections()
+    # Byte ranges already claimed in each executable, across ALL records. The
+    # patcher (verify_post_asset_patches) refuses two post-asset patches whose
+    # ranges overlap in one payload, so a duplicated record, or a second
+    # record for the same section, would pass here and fail at install.
+    claimed: dict[str, list[tuple[int, int, int]]] = {sha: [] for sha in exe_hashes}
     for index, record in enumerate(posts):
         requires = frozenset(_requires(record, f"post-asset record {index}"))
         label = f"post-asset record {index} {sorted(requires)}"
@@ -415,10 +437,22 @@ def _verify_post_patch_targets(
         shas = [str(variant.get("asset_sha256", "")).lower() for variant in variants]
         if len(shas) != len(set(shas)) or set(shas) != exe_hashes:
             _fail(f"{label} variants do not cover exactly the shipped executables")
-        section_names = set(_SECTION_IN_NOTE.findall(str(record.get("note", ""))))
-        if requires != SOUND_ROUTE_REQUIRES and len(section_names) != 1:
-            _fail(f"{label} does not name exactly one .vf2 runtime-flag section")
-        section = next(iter(section_names)) if requires != SOUND_ROUTE_REQUIRES else None
+        section = None
+        if requires != SOUND_ROUTE_REQUIRES:
+            # The section is bound to the SETTING by the exporter's own table,
+            # not taken from the note: swapping the notes and variants of
+            # .vf2mort and .vf2preg left every record self-consistent and
+            # passed, while each setting would have flipped the other's flag.
+            settings = sorted(requires - {"core_executable"})
+            if len(settings) != 1 or settings[0] not in section_by_setting:
+                _fail(f"{label} is not a known runtime-flag setting")
+            section = section_by_setting[settings[0]]
+            section_names = set(_SECTION_IN_NOTE.findall(str(record.get("note", ""))))
+            if section_names != {section}:
+                _fail(
+                    f"{label} does not name exactly one .vf2 runtime-flag section "
+                    f"matching its setting ({section}); note names {sorted(section_names)}"
+                )
         for sha, variant in zip(shas, variants):
             data = exe_bytes[sha]
             try:
@@ -431,6 +465,14 @@ def _verify_post_patch_targets(
                 _fail(f"{label} variant for {sha} has mismatched byte lengths")
             if offset < 0 or data[offset:offset + len(expected)] != expected:
                 _fail(f"{label} expected bytes are not at {variant.get('offset')} in executable {sha}")
+            end = offset + len(expected)
+            for other_start, other_end, other_index in claimed[sha]:
+                if offset < other_end and other_start < end:
+                    _fail(
+                        f"{label} overlaps post-asset record {other_index} at "
+                        f"{offset:#x} in executable {sha}"
+                    )
+            claimed[sha].append((offset, end, index))
             if section is not None:
                 if expected != b"\x00" or replacement != b"\x01":
                     _fail(

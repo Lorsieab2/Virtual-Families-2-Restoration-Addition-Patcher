@@ -508,6 +508,7 @@ class OfflineBundleZipVerifierTests(unittest.TestCase):
 SYNTH_ROOT = "VF2-B999-Release"
 SOUND_ROUTES = ("beaker", "Child3", "Child7", "Child8")
 FLAG_RAW_POINTER = 0x100
+PREG_RAW_POINTER = 0x1C0
 
 
 def _synthetic_exe(marker: int) -> bytes:
@@ -517,14 +518,18 @@ def _synthetic_exe(marker: int) -> bytes:
     data[0x3C:0x40] = (0x40).to_bytes(4, "little")
     data[0x40:0x44] = b"PE\0\0"
     data[0x44:0x46] = (0x14C).to_bytes(2, "little")
-    data[0x46:0x48] = (1).to_bytes(2, "little")  # one section
+    data[0x46:0x48] = (2).to_bytes(2, "little")  # two sections
     # SizeOfOptionalHeader stays 0, so the section table follows at 0x58.
-    section = bytearray(40)
-    section[0:8] = b".vf2mort"
-    section[8:12] = (1).to_bytes(4, "little")  # virtual size
-    section[16:20] = (0x80).to_bytes(4, "little")  # raw size (zero padding after the flag)
-    section[20:24] = FLAG_RAW_POINTER.to_bytes(4, "little")
-    data[0x58:0x58 + 40] = section
+    for slot, (name, raw_pointer, raw_size) in enumerate((
+        (b".vf2mort", FLAG_RAW_POINTER, 0x80),  # zero padding after the flag
+        (b".vf2preg", PREG_RAW_POINTER, 0x20),
+    )):
+        section = bytearray(40)
+        section[0:8] = name
+        section[8:12] = (1).to_bytes(4, "little")  # virtual size
+        section[16:20] = raw_size.to_bytes(4, "little")
+        section[20:24] = raw_pointer.to_bytes(4, "little")
+        data[0x58 + 40 * slot:0x58 + 40 * (slot + 1)] = section
     for index, route in enumerate(SOUND_ROUTES):
         text = (route + ".wav").encode("ascii")
         data[0x200 + 0x20 * index:0x200 + 0x20 * index + len(text)] = text
@@ -625,6 +630,20 @@ def _synthetic_bundle():
             {
                 "asset_sha256": sha,
                 "offset": hex(FLAG_RAW_POINTER),
+                "expected_asset_bytes": "00",
+                "replacement_bytes": "01",
+            }
+            for sha in exe_hashes
+        ],
+    })
+    posts.append({
+        "file_path": "Virtual Families 2 - Modded B999.exe",
+        "requires": ["core_executable", "allow_older_pregnancies"],
+        "note": "Exact-SHA runtime toggle for Allow Older Pregnancies (.vf2preg).",
+        "variants": [
+            {
+                "asset_sha256": sha,
+                "offset": hex(PREG_RAW_POINTER),
                 "expected_asset_bytes": "00",
                 "replacement_bytes": "01",
             }
@@ -806,6 +825,62 @@ class EveryRecordIsVerifiedTests(unittest.TestCase):
                 post["variants"][0]["replacement_bytes"] = replacement
                 with self.assertRaisesRegex(ValueError, "must replace the one-byte 00 default with 01"):
                     verifier.verify_archive(_write_bundle(self.dir, files, manifest))
+
+    def _flag(self, manifest, setting):
+        return next(p for p in manifest["post_asset_patches"] if setting in p["requires"])
+
+    def test_a_duplicated_runtime_flag_record_fails(self):
+        posts = self.manifest["post_asset_patches"]
+        count = len(posts)
+        posts.append(json.loads(json.dumps(self._flag(self.manifest, "older_villager_mortality"))))
+        self.assertEqual(len(posts), count + 1)
+        with self.assertRaisesRegex(ValueError, "overlaps post-asset record"):
+            self.verify()
+
+    def test_a_second_record_for_the_same_bytes_fails(self):
+        # Same section, different (unknown to the gate) wording: still two
+        # writes to one byte, which the patcher refuses at install.
+        second = json.loads(json.dumps(self._flag(self.manifest, "older_villager_mortality")))
+        second["note"] = "Another Older Villager Mortality toggle (.vf2mort)."
+        self.manifest["post_asset_patches"].append(second)
+        with self.assertRaisesRegex(ValueError, "overlaps post-asset record"):
+            self.verify()
+
+    def test_swapped_runtime_flag_notes_and_variants_fail(self):
+        mort = self._flag(self.manifest, "older_villager_mortality")
+        preg = self._flag(self.manifest, "allow_older_pregnancies")
+        for key in ("note", "variants"):
+            mort[key], preg[key] = preg[key], mort[key]
+        self.assertEqual(mort["variants"][0]["offset"], hex(PREG_RAW_POINTER))
+        with self.assertRaisesRegex(ValueError, "matching its setting"):
+            self.verify()
+
+    def test_an_unknown_runtime_flag_setting_fails(self):
+        flag = self._flag(self.manifest, "older_villager_mortality")
+        flag["requires"] = ["core_executable", "some_new_setting"]
+        self.manifest["settings"] = [
+            row for row in self.manifest["settings"] if row["id"] != "older_villager_mortality"
+        ] + [{"id": "some_new_setting"}]
+        with self.assertRaisesRegex(ValueError, "not a known runtime-flag setting"):
+            self.verify()
+
+    def test_the_section_table_is_the_exporters_own(self):
+        import export_offline_patch_bundle as exporter
+
+        self.assertIs(
+            verifier._runtime_flag_sections().__class__, dict
+        )
+        self.assertEqual(verifier._runtime_flag_sections(), exporter.RUNTIME_FLAG_SECTION_BY_SETTING)
+        # And the exporter refuses to emit a section the table does not give.
+        with self.assertRaisesRegex(ValueError, "disagrees with RUNTIME_FLAG_SECTION_BY_SETTING"):
+            exporter.setting_runtime_flag_post_asset_patches(
+                [],
+                output_exe_name="x.exe",
+                runtime_flag={"source_section": ".vf2preg"},
+                section_name=".vf2preg",
+                setting_id="older_villager_mortality",
+                feature_label="Older Villager Mortality Curve",
+            )
 
     def test_the_transparency_log_must_be_named(self):
         del self.manifest["export_summary"]["transparency_log"]
