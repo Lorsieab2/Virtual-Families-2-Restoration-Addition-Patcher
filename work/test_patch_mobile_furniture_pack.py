@@ -1999,10 +1999,24 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                 self.assertIn('"Preparing a picnic"', picnic_helper)
                 self.assertIn('"Having a picnic"', picnic_helper)
                 self.assertIn("VF2PicnicReadyActive()", picnic_helper)
-                self.assertIn("eStringPicnicTooYoung = 0x7E7", helper)
+                # SUPERSEDED, recorded rather than deleted: this pinned
+                # eStringPicnicTooYoung = 0x7E7 and
+                # eStringPicnicWorriedAboutFood = 0xB67, the raw MOBILE ids.
+                # On PC 0x7E7 is eSayPlayPuddles ("Playing in puddles"). The
+                # picnic refusals now use the desktop ids of the same two
+                # mobile strings, like the patio table.
+                self.assertIn("eStringTooYoung = 0x73D", helper)
+                self.assertIn("eStringWorriedAboutFood = 0xA41", helper)
                 self.assertIn(
-                    "eStringPicnicWorriedAboutFood = 0xB67", helper
+                    "VF2ManualPatioRefusal(villager, eStringTooYoung)",
+                    picnic_helper,
                 )
+                # Comments may name the old ids; the code must not use them.
+                helper_code = "\n".join(
+                    line.split("//")[0] for line in helper.split("\n")
+                )
+                self.assertNotIn("0x7E7", helper_code)
+                self.assertNotIn("0xB67", helper_code)
                 self.assertIn(
                     "ldwGameState::GetRandom(7) + 0x0D", picnic_helper
                 )

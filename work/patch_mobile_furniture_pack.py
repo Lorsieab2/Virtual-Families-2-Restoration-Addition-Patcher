@@ -26989,10 +26989,18 @@ enum StringId {
     // drift from the row that actually exists.
     eStringPicnicBadWeather = __VF2_LOUNGER_BAD_WEATHER_STRING_ID__,
     eStringCannotReachFurniture = 0xB7,
+    // The manual Patio AND Picnic refusals. Mobile CHotSpot::PicnicTable
+    // @0x1EEDB0 and CHotSpot::PatioChairs @0x1EEEA0 both say mobile string
+    // 2023 eSayTooYoung "This person is too young!" and 2919 eWorriedFood
+    // "Worried about food". The desktop string table numbers the SAME two
+    // strings 0x73D and 0xA41 (theStringManager.obj CodeView constants).
+    //
+    // SUPERSEDED, recorded rather than deleted: the picnic refusals used the
+    // raw MOBILE ids 0x7E7 / 0xB67 as eStringPicnicTooYoung /
+    // eStringPicnicWorriedAboutFood. On PC 0x7E7 is eSayPlayPuddles,
+    // "Playing in puddles", so a child dropped on the picnic table said that.
     eStringTooYoung = 0x73D,
-    eStringWorriedAboutFood = 0xA41,
-    eStringPicnicTooYoung = 0x7E7,
-    eStringPicnicWorriedAboutFood = 0xB67
+    eStringWorriedAboutFood = 0xA41
 };
 
 class theStringManager {
@@ -27345,30 +27353,72 @@ static unsigned char gVF2PatioDrinksOn = 0;
 static unsigned int gVF2PatioDrinksDeadline = 0;
 static unsigned char gVF2PicnicReadyOn = 0;
 static unsigned int gVF2PicnicReadyDeadline = 0;
-static CVillager *gVF2PatioDrinksPreparer = 0;
-static unsigned int gVF2PatioDrinksPreparerSerial = 0;
-static int gVF2PatioDrinksPreparerBehavior = 0;
-static unsigned int gVF2PatioDrinksPreparerPraise = 0;
-static CVillager *gVF2PicnicPreparer = 0;
-static unsigned int gVF2PicnicPreparerSerial = 0;
-static int gVF2PicnicPreparerBehavior = 0;
-static unsigned int gVF2PicnicPreparerPraise = 0;
+// EVERY villager who is preparing, not only the most recent one.
+//
+// Mobile's autonomous records 0x1B4 (Preparing Picnic) and 0x1B6 (Preparing
+// Drinks) exclude themselves through CVillagerManager::GetVillagerDoing(id)
+// -- CVillager::InitAI stores the id at record +0x84 and
+// CVillagerAI::DecideWhatToDo @0x1CE9C0 rejects the record while ANY villager's
+// current behaviour is that preparation. A single preparer pointer answered a
+// narrower question: the manual drop does not check, so a second preparer
+// overwrote the first, and the first stopped counting while still preparing.
+struct VF2PreparerSlot {
+    CVillager *villager;
+    unsigned int serial;
+    int behavior;
+    unsigned int praise;
+};
+static int const kVF2MaxPreparers = 32;
+static VF2PreparerSlot gVF2PatioDrinksPreparers[kVF2MaxPreparers] = {};
+static VF2PreparerSlot gVF2PicnicPreparers[kVF2MaxPreparers] = {};
 
-// Where to draw each prop, and which way its table faces.
+// WHICH TABLES SHOW THE MEAL OR THE DRINKS: the mobile per-table on-state.
 //
-// Kept HERE rather than in the engine's own per-prop array. That array is
-// CEnvironment + prop*16 with the active byte at +0x7C and x/y at +0x84/+0x88,
-// and prop 0x54 is the last record it holds -- so SetPropPosition(0x55) would
-// write 32 bytes past its end. GetPropPosition failing to answer for these ids
-// is correct behaviour, not an obstacle to route around.
+// Decoded from the shipping mobile build (libVirtualFamilies2.so, x86 ABI,
+// 1.7.16). The prop is NOT tied to the villager who prepared it:
 //
-// Orientation picks between the two meal sprites. Mobile ships mealSE and
-// mealSW as a pair, which is what establishes that the behaviour activates a
-// prop ON the table rather than the table swapping to a different image.
-static int gVF2PicnicPropX = 0;
-static int gVF2PicnicPropY = 0;
-static int gVF2PicnicPropOrientation = 0;
-static bool gVF2PicnicPropPlaced = false;
+//   CEnvironment::SetProp(0x55/0x56)  @0x1EA910  active, deadline now + 240
+//   CEnvironment::Update              @0x1E92A0  while the prop is active:
+//       FindFurniture(0x97/0x98, (0,0), random) and, unless furniture is
+//       being placed, CFurnitureManager::SetOnState(handle, true, 1, 300, -1).
+//       That table switches ON for 300 game seconds and shows its "on"
+//       floating anim -- mealSE / mealSW / patioDrinks, anim ids 64/65/66 from
+//       the item record's per-orientation anim slots (+0x28).
+//   CEnvironment::UpdateProps         @0x1EB480  at the 240 s expiry:
+//       FindFurniture(0x97/0x98, (0,0), random) -> SetOnState(handle, false)
+//   CFurnitureManager::CheckTimers    @0x13D7D0  each table's own 300 s timer
+//       switches it off.
+//
+// So every picnic table shows the meal while a picnic is ready (Update keeps
+// picking random tables until all of them are on), ONE random table is
+// cleared when the 240 s readiness ends, and any other keeps its meal until
+// its own 300 s timer runs out. Selling one table does not take the meal off
+// another, and two villagers preparing at once cannot make it vanish -- both
+// of which the earlier preparer-captured single-table model did.
+//
+// SUPERSEDED, recorded rather than deleted: this block used to say "Mobile
+// ships mealSE and mealSW as a pair, which is what establishes that the
+// behaviour activates a prop ON the table rather than the table swapping to a
+// different image". The mobile code settles it differently: the TABLE is
+// switched on (SetOnState), and its on-state draws the sprite as a floating
+// anim at the table. The pair exists because the item record carries one anim
+// per orientation.
+//
+// PC's CEnvironment prop array ends at 0x54 and PC's SetOnState takes no timer
+// argument, so the on-state is kept here, keyed by the placement HANDLE at
+// record+0x04, which survives CFurnitureManager::RearrangeFurnitureList
+// compacting the array when furniture is moved or sold. At most 20 tables per
+// kind: FindFurniture's own candidate cap on both builds.
+struct VF2TablePropOn {
+    int handle;
+    unsigned int deadline;
+};
+static int const kVF2TablePropOnMax = 20;
+static int const kVF2TablePropOnSeconds = 300;
+static VF2TablePropOn gVF2PicnicOn[kVF2TablePropOnMax] = {};
+static int gVF2PicnicOnCount = 0;
+static VF2TablePropOn gVF2PatioOn[kVF2TablePropOnMax] = {};
+static int gVF2PatioOnCount = 0;
 // How far right the patio drinks sit from the table's placement position.
 //
 // The owner reports the prop renders on top of the table correctly and needs
@@ -27399,17 +27449,99 @@ static int const kVF2PatioDrinksNudgeX = 25;
 static int const kVF2PicnicMealNudgeX = 7;
 static int const kVF2PicnicMealNudgeY = 9;
 
-static int gVF2PatioPropX = 0;
-static int gVF2PatioPropY = 0;
-static bool gVF2PatioPropPlaced = false;
-// The furniture array slot each prop's table occupies. EndScene hands
-// that same index to CFurnitureManager::Draw(int), so the prop can be
-// painted immediately after its own table rather than at an arbitrary
-// point in the sorted list.
-static int gVF2PicnicPropSlot = -1;
-static int gVF2PatioPropSlot = -1;
-static int gVF2PicnicPropHandle = -1;
-static int gVF2PatioPropHandle = -1;
+// Is this item one of the tables that carries the prop? Mobile matches by the
+// EObject in the placed table's content block (FindFurniture 0x97 / 0x98). On
+// PC the only shipped maps carrying those objects are the picnic and patio
+// tables' own, which the invisible variants borrow, so these item ids are the
+// same set -- work/test_patio_picnic_mobile_parity.py re-checks that against
+// every map the patcher ships. The INVISIBLE tables are included on purpose:
+// they are the same furniture without art and must behave identically.
+static bool VF2IsPicnicTableItem(int item)
+{
+    return item == 0x2E8 || item == __VF2_INVISIBLE_PICNIC_TABLE__;
+}
+
+static bool VF2IsPatioTableItem(int item)
+{
+    return item == 0x2E6 || item == __VF2_INVISIBLE_PATIO_TABLE__;
+}
+
+static int VF2TablePropFind(VF2TablePropOn const *list, int count, int handle)
+{
+    for (int i = 0; i < count; ++i) {
+        if (list[i].handle == handle) return i;
+    }
+    return -1;
+}
+
+static void VF2TablePropRemoveAt(VF2TablePropOn *list, int &count, int index)
+{
+    for (int i = index; i + 1 < count; ++i) list[i] = list[i + 1];
+    --count;
+}
+
+// CheckTimers keeps a table on while `now <= deadline`. A deadline further
+// ahead than the 300 s it was given cannot be real -- game time went
+// backwards, which means a different save was loaded -- so it is dropped
+// rather than shown for an arbitrary time.
+static void VF2TablePropExpire(VF2TablePropOn *list, int &count)
+{
+    unsigned int now = GameTime.Seconds();
+    for (int i = count - 1; i >= 0; --i) {
+        int left = static_cast<int>(list[i].deadline - now);
+        if (left < 0 || left > kVF2TablePropOnSeconds) {
+            VF2TablePropRemoveAt(list, count, i);
+        }
+    }
+}
+
+// CEnvironment::Update's switch-on pass, carried to its end state. Mobile
+// rolls one random table per environment tick until every table is on; this
+// reaches that state at once. SetOnState(true) acts only on a table that is
+// not already on, so an existing 300 s deadline is never extended, and no
+// table switches on while the player is placing furniture: mobile checks
+// FindFurniture's copy of that flag (info+0x1C) before SetOnState, and PC
+// FindFurniture copies the same flag from CFurnitureManager+0x9014.
+static void VF2TablePropTurnOnAll(
+    bool (*isTable)(int), VF2TablePropOn *list, int &count)
+{
+    unsigned char *manager = reinterpret_cast<unsigned char *>(&FurnitureManager);
+    if (*(manager + 0x9014) != 0) return;
+    int records = *reinterpret_cast<int *>(manager + 0x1004);
+    if (records < 0 || records > 0x200) return;
+    unsigned int now = GameTime.Seconds();
+    int seen = 0;
+    for (int slot = 0; slot < records && seen < kVF2TablePropOnMax; ++slot) {
+        unsigned char *record = manager + 0x1008 + slot * 0x40;
+        if ((*reinterpret_cast<unsigned int *>(record + 0x0C) & 1) == 0) continue;
+        if (!isTable(*reinterpret_cast<int *>(record))) continue;
+        ++seen;
+        int handle = *reinterpret_cast<int *>(record + 0x04);
+        if (VF2TablePropFind(list, count, handle) >= 0) continue;
+        if (count >= kVF2TablePropOnMax) return;
+        list[count].handle = handle;
+        list[count].deadline = now + kVF2TablePropOnSeconds;
+        ++count;
+    }
+}
+
+// CEnvironment::UpdateProps at the 240 s expiry switches ONE table off, picked
+// exactly as mobile picks it: FindFurniture from (0,0) with the nearest flag
+// clear, which on both builds is a random choice among the first 20 matching
+// placements. The other tables keep their own 300 s timers.
+static void VF2TablePropTurnOffOne(
+    CContentMap::EObject object, VF2TablePropOn *list, int &count)
+{
+    sFurnitureInfo2 info = {};
+    ldwPoint origin;
+    origin.x = 0;
+    origin.y = 0;
+    if (!FurnitureManager.FindFurniture(object, origin, info, false, 0, 0)) {
+        return;
+    }
+    int index = VF2TablePropFind(list, count, info.unknown0);
+    if (index >= 0) VF2TablePropRemoveAt(list, count, index);
+}
 
 static bool VF2FurnitureFacesEast(int orientation)
 {
@@ -27491,28 +27623,78 @@ static void VF2RememberPreparer(
     *praise = *reinterpret_cast<unsigned int *>(data + 0x6B4C);
 }
 
+// Record a villager beginning a preparation, in its own slot: the one it
+// already holds, else the first free or finished one.
+static void VF2AddPreparer(VF2PreparerSlot *slots, CVillager &villager)
+{
+    int chosen = -1;
+    for (int i = 0; i < kVF2MaxPreparers; ++i) {
+        if (slots[i].villager == &villager) {
+            chosen = i;
+            break;
+        }
+    }
+    for (int i = 0; chosen < 0 && i < kVF2MaxPreparers; ++i) {
+        if (slots[i].villager == 0 ||
+            !VF2VillagerStillPreparing(
+                slots[i].villager,
+                &slots[i].serial,
+                slots[i].behavior,
+                &slots[i].praise)) {
+            chosen = i;
+        }
+    }
+    if (chosen < 0) return;
+    slots[chosen].villager = &villager;
+    VF2RememberPreparer(
+        villager,
+        &slots[chosen].serial,
+        &slots[chosen].behavior,
+        &slots[chosen].praise);
+}
+
+// GetVillagerDoing: is ANY recorded preparer still doing it? Finished ones are
+// released as they are found.
+static bool VF2AnyStillPreparing(VF2PreparerSlot *slots)
+{
+    bool any = false;
+    for (int i = 0; i < kVF2MaxPreparers; ++i) {
+        if (slots[i].villager == 0) continue;
+        if (VF2VillagerStillPreparing(
+                slots[i].villager,
+                &slots[i].serial,
+                slots[i].behavior,
+                &slots[i].praise)) {
+            any = true;
+        } else {
+            slots[i].villager = 0;
+        }
+    }
+    return any;
+}
+
 static bool VF2PatioDrinksPreparationActive()
 {
-    if (!VF2VillagerStillPreparing(
-            gVF2PatioDrinksPreparer,
-            &gVF2PatioDrinksPreparerSerial,
-            gVF2PatioDrinksPreparerBehavior,
-            &gVF2PatioDrinksPreparerPraise)) {
-        gVF2PatioDrinksPreparer = 0;
-        return false;
-    }
-    return true;
+    return VF2AnyStillPreparing(gVF2PatioDrinksPreparers);
 }
 
 static bool VF2PatioDrinksActive()
 {
-    if (gVF2MobileFurnitureBehaviors == 0 || gVF2PatioDrinksOn == 0) {
+    if (gVF2MobileFurnitureBehaviors == 0) {
+        VF2ClearPatioDrinks();
+        gVF2PatioOnCount = 0;
+        return false;
+    }
+    if (gVF2PatioDrinksOn == 0) {
         VF2ClearPatioDrinks();
         return false;
     }
     unsigned int now = GameTime.Seconds();
     if (static_cast<int>(now - gVF2PatioDrinksDeadline) < 0) return true;
     VF2ClearPatioDrinks();
+    // CEnvironment::UpdateProps case 'V': one random patio table off.
+    VF2TablePropTurnOffOne(
+        CContentMap::eObjectPatioTable, gVF2PatioOn, gVF2PatioOnCount);
     return false;
 }
 
@@ -27524,107 +27706,36 @@ static void VF2ClearPicnicReady()
 
 static bool VF2PicnicPreparationActive()
 {
-    if (!VF2VillagerStillPreparing(
-            gVF2PicnicPreparer,
-            &gVF2PicnicPreparerSerial,
-            gVF2PicnicPreparerBehavior,
-            &gVF2PicnicPreparerPraise)) {
-        gVF2PicnicPreparer = 0;
-        return false;
-    }
-    return true;
+    return VF2AnyStillPreparing(gVF2PicnicPreparers);
 }
 
 static bool VF2PicnicReadyActive()
 {
-    if (gVF2MobileFurnitureBehaviors == 0 || gVF2PicnicReadyOn == 0) {
+    if (gVF2MobileFurnitureBehaviors == 0) {
+        VF2ClearPicnicReady();
+        gVF2PicnicOnCount = 0;
+        return false;
+    }
+    if (gVF2PicnicReadyOn == 0) {
         VF2ClearPicnicReady();
         return false;
     }
     unsigned int now = GameTime.Seconds();
     if (static_cast<int>(now - gVF2PicnicReadyDeadline) < 0) return true;
     VF2ClearPicnicReady();
+    // CEnvironment::UpdateProps case 'U': one random picnic table off.
+    VF2TablePropTurnOffOne(
+        CContentMap::eObjectPicnicTable, gVF2PicnicOn, gVF2PicnicOnCount);
     return false;
 }
 
-// Record where a prop's table stands, and which way it faces.
-//
-// The engine's own per-prop position array cannot hold these ids: it is
-// CEnvironment + prop*16 and prop 0x54 is its last record, so writing 0x55 or
-// 0x56 there lands 32 bytes past the end. So the position is kept beside the
-// flags this file already keeps.
-//
-// FindFurniture is read-only and nearest-match from a point -- the same
-// question the native behaviours ask. LinkPeepToFurniture would answer "which
-// table COULD this villager use" and reserve a link as a side effect, which is
-// the mistake that once made the ping-pong table report "playing pool".
-//
-// A prop whose table cannot be resolved is left unplaced rather than drawn at
-// a guessed position: a sprite in the wrong place reads as a bug, an absent
-// one reads as the feature not being finished, and the second is honest.
-static void VF2CaptureTableProp(
-    CVillager *preparer,
-    int object,
-    int &outX,
-    int &outY,
-    int *outOrientation,
-    bool &outPlaced,
-    int &outSlot,
-    int &outHandle)
-{
-    outPlaced = false;
-    outSlot = -1;
-    outHandle = -1;
-    if (preparer == 0) return;
-    sFurnitureInfo2 info = {};
-    if (!FurnitureManager.FindFurniture(
-            (CContentMap::EObject)object, preparer->FeetPos(),
-            info, true, 0, 0)) {
-        return;
-    }
-    // info.point is NOT the table. FindFurniture sets it to the placement
-    // position PLUS the furniture map's hotspot offset -- the tile a
-    // villager stands on to USE the item -- so drawing there puts the meal
-    // or the drinks beside the table rather than on it, by however much
-    // that map's hotspot is offset.
-    //
-    // The placement record holds the real world position. info.unknown0 is
-    // the unique placement handle, which is exactly how the added-furniture
-    // probe above identifies a record, so the same lookup applies here and
-    // two copies of the same table stay distinguishable.
-    //
-    // 0x200 is the array's real capacity, from AddToWorld's own
-    // `cmp [edi+0x1004], 0x200 / jge` guard, not a guess.
-    unsigned char *manager = (unsigned char *)&FurnitureManager;
-    int count = *(int *)(manager + 0x1004);
-    if (count < 0 || count > 0x200) return;
-    for (int slot = 0; slot < count; ++slot) {
-        unsigned char *record = manager + 0x1008 + slot * 0x40;
-        if ((*(unsigned int *)(record + 0x0C) & 1) == 0) continue;
-        if (*(int *)(record + 0x04) != info.unknown0) continue;
-        outX = *(int *)(record + 0x14);
-        outY = *(int *)(record + 0x18);
-        if (outOrientation != 0) {
-            *outOrientation = *(int *)(record + 0x10);
-        }
-        // The SLOT is what CFurnitureManager::Draw(int) is given for this
-        // table, so recording it lets the prop paint with its own table's
-        // element rather than at some arbitrary point in the sorted list.
-        outSlot = slot;
-        // The HANDLE is what makes the slot trustworthy later.
-        // CFurnitureManager::RearrangeFurnitureList compacts the placement
-        // array when furniture is moved or sold, so a slot captured now can
-        // refer to a different item by the time the prop paints. The handle
-        // is per-placement and survives compaction, so the paint re-checks it
-        // and draws nothing rather than drawing the wrong thing.
-        outHandle = *(int *)(record + 0x04);
-        outPlaced = true;
-        return;
-    }
-    // No record carried that handle. Leaving outPlaced false is what stops
-    // the draw, which is the right outcome: a prop drawn at a position we
-    // could not resolve would appear somewhere arbitrary.
-}
+// SUPERSEDED, recorded rather than deleted: VF2CaptureTableProp used to
+// resolve ONE table -- the one nearest the preparer when the prop was set --
+// and the prop drew only there. That is not what mobile does (see the on-state
+// block above), and it lost the prop whenever two villagers prepared at once
+// (the second SetProp found the preparer already cleared) or the captured
+// table was sold. It matched the table by the placement handle at record+0x04,
+// which the on-state list above still does.
 
 // Draw the picnic meal and patio drinks.
 //
@@ -27682,29 +27793,6 @@ static void VF2DrawTableProp(
     SceneManager.Draw(grid, at, 0, 1.0f);
 }
 
-// Does the captured slot still hold the table the prop was captured against?
-//
-// CFurnitureManager::RearrangeFurnitureList compacts the placement array when
-// furniture is moved or sold, so a slot recorded when the prop was activated
-// can point at a DIFFERENT item by the time the prop paints. The placement
-// handle at record+0x04 is per-placement and survives compaction, so comparing
-// it is what makes the cached slot safe to use.
-//
-// Returning false paints nothing, which is the right outcome: a prop drawn
-// after whichever furniture inherited the index, at the old table's
-// coordinates, would appear somewhere arbitrary.
-static bool VF2SlotStillHoldsHandle(int slot, int handle)
-{
-    if (slot < 0 || handle < 0) return false;
-    unsigned char *manager = reinterpret_cast<unsigned char *>(&FurnitureManager);
-    int count = *reinterpret_cast<int *>(manager + 0x1004);
-    if (count < 0 || count > 0x200) return false;
-    if (slot >= count) return false;
-    unsigned char *record = manager + 0x1008 + slot * 0x40;
-    if ((*reinterpret_cast<unsigned int *>(record + 0x0C) & 1) == 0) return false;
-    return *reinterpret_cast<int *>(record + 0x04) == handle;
-}
-
 // PAINT EACH PROP WITH ITS OWN TABLE.
 //
 // CSceneManager::EndScene sorts every registered element on
@@ -27714,23 +27802,42 @@ static bool VF2SlotStillHoldsHandle(int slot, int handle)
 //
 // Wrapping it lets the prop paint immediately after the table it belongs to:
 // same phase, same world space, correct depth relative to everything else in
-// the scene. Painting once per element instead would redraw the props dozens
-// of times a frame and would place them before tables that sort later, so the
-// slot recorded by VF2CaptureTableProp is what gates each one.
+// the scene. Each element paints only its OWN table's prop: the record the
+// index names must be a picnic/patio table whose handle is switched on in the
+// on-state list. (Superseded: this used to be gated on the one slot recorded
+// by VF2CaptureTableProp.)
+//
+// Depth, for the record: mobile draws the prop as a floating anim registered
+// at scene priority 5 and sorted by the anim's own y (the table's y plus the
+// record offset), and the tables themselves at their item record's priority
+// (+0x14 = 5). Painting straight after the table here sorts the prop at the
+// table's y instead -- a villager standing a few pixels below the table can
+// cover the prop on PC but not on mobile.
 extern "C" void __fastcall VF2FurniturePaintAndTableProps(
     CFurnitureManager *self, void *, int index)
 {
     self->Draw(index);
     if (gVF2MobileFurnitureBehaviors == 0) return;
     if (index < 0) return;
-    if (gVF2PicnicPropPlaced && index == gVF2PicnicPropSlot &&
-        VF2SlotStillHoldsHandle(index, gVF2PicnicPropHandle) &&
-        VF2PicnicReadyActive()) {
-        // Mobile ships mealSE and mealSW as a pair, which is what establishes
-        // that the behaviour activates a prop ON the table rather than the
-        // table swapping to a different image: the sprite faces the way the
-        // table does.
-        //
+    unsigned char *manager = reinterpret_cast<unsigned char *>(self);
+    int const records = *reinterpret_cast<int *>(manager + 0x1004);
+    if (records < 0 || records > 0x200 || index >= records) return;
+    unsigned char *record = manager + 0x1008 + index * 0x40;
+    if ((*reinterpret_cast<unsigned int *>(record + 0x0C) & 1) == 0) return;
+    int const item = *reinterpret_cast<int *>(record);
+    int const handle = *reinterpret_cast<int *>(record + 0x04);
+    int const orientation = *reinterpret_cast<int *>(record + 0x10);
+    int const tableX = *reinterpret_cast<int *>(record + 0x14);
+    int const tableY = *reinterpret_cast<int *>(record + 0x18);
+    if (VF2IsPicnicTableItem(item)) {
+        if (VF2PicnicReadyActive()) {
+            VF2TablePropTurnOnAll(
+                VF2IsPicnicTableItem, gVF2PicnicOn, gVF2PicnicOnCount);
+        }
+        VF2TablePropExpire(gVF2PicnicOn, gVF2PicnicOnCount);
+        if (VF2TablePropFind(gVF2PicnicOn, gVF2PicnicOnCount, handle) < 0) {
+            return;
+        }
         // THE MEAL MUST FACE THE WAY THE TABLE FACES.
         //
         // Reported in play with a screenshot: the picnic table faced NE and the
@@ -27741,33 +27848,40 @@ extern "C" void __fastcall VF2FurniturePaintAndTableProps(
         // other orientation -- including NE -- the SW sprite.
         //
         // The two sprites are an EAST/WEST pair, so the split is the east half
-        // {SE(0), NE(2)} against the west half {SW(1), NW(3)}.
+        // {SE(0), NE(2)} against the west half {SW(1), NW(3)}. Mobile's item
+        // record gives SE anim 64 (mealSE) and SW anim 65 (mealSW).
         VF2DrawTableProp(
-            (gVF2PicnicPropOrientation == 0 /* SE */ ||
-             gVF2PicnicPropOrientation == 2 /* NE */)
+            VF2FurnitureFacesEast(orientation)
                 ? __VF2_PROP_IMAGE_MEAL_SE__
                 : __VF2_PROP_IMAGE_MEAL_SW__,
-            gVF2PicnicPropX +
-                (VF2FurnitureFacesEast(gVF2PicnicPropOrientation)
+            tableX +
+                (VF2FurnitureFacesEast(orientation)
                     ? kVF2PicnicMealNudgeX
                     : -kVF2PicnicMealNudgeX),
-            gVF2PicnicPropY - kVF2PicnicMealNudgeY);
+            tableY - kVF2PicnicMealNudgeY);
+        return;
     }
-    if (gVF2PatioPropPlaced && index == gVF2PatioPropSlot &&
-        VF2SlotStillHoldsHandle(index, gVF2PatioPropHandle) &&
-        VF2PatioDrinksActive()) {
-        // A single sprite: the drinks stand reads the same from either side.
+    if (VF2IsPatioTableItem(item)) {
+        if (VF2PatioDrinksActive()) {
+            VF2TablePropTurnOnAll(
+                VF2IsPatioTableItem, gVF2PatioOn, gVF2PatioOnCount);
+        }
+        VF2TablePropExpire(gVF2PatioOn, gVF2PatioOnCount);
+        if (VF2TablePropFind(gVF2PatioOn, gVF2PatioOnCount, handle) < 0) {
+            return;
+        }
+        // A single sprite: mobile's item record gives both orientations anim
+        // 66 (patioDrinks) at the same offset.
         //
         // NUDGED RIGHT. Reported in play: "good the patio drinks render on top
         // of the table. they just need a little positioning adjustment to the
         // right." The draw order is confirmed correct by the owner, so only the
         // position moves here. The offset is applied at the draw rather than to
-        // the captured position so the placement record stays untouched and the
-        // slot/handle revalidation keeps comparing the real table coordinates.
+        // the placement record, which stays untouched.
         VF2DrawTableProp(
             __VF2_PROP_IMAGE_PATIO_DRINKS__,
-            gVF2PatioPropX + kVF2PatioDrinksNudgeX,
-            gVF2PatioPropY);
+            tableX + kVF2PatioDrinksNudgeX,
+            tableY);
     }
 }
 
@@ -27828,27 +27942,16 @@ extern "C" void __fastcall VF2PatioSetPropAndTrack(
         else VF2ClearPatioDrinks();
         return;
     }
-    // Resolve the table BEFORE clearing the preparer, because the preparer is
-    // the only thing that knows which table this is. FindFurniture is
-    // read-only and nearest-match from a point, the same question the native
-    // behaviours ask; LinkPeepToFurniture would reserve a link as a side
-    // effect and is the wrong call here.
+    // Mobile CEnvironment::SetProp @0x1EA910, cases 0x55/0x56: the prop is
+    // active with a deadline of now + 240 game seconds, re-armed by every
+    // call. Nothing here chooses a table and nothing clears the preparers --
+    // the tables are switched on by the on-state pass in the paint wrapper,
+    // and a preparer stops counting when its behaviour ends, as
+    // GetVillagerDoing sees it on mobile.
     if (prop == ePropPicnicReady) {
-        VF2CaptureTableProp(
-            gVF2PicnicPreparer, CContentMap::eObjectPicnicTable,
-            gVF2PicnicPropX, gVF2PicnicPropY,
-            &gVF2PicnicPropOrientation, gVF2PicnicPropPlaced,
-            gVF2PicnicPropSlot, gVF2PicnicPropHandle);
-        gVF2PicnicPreparer = 0;
         gVF2PicnicReadyOn = 1;
         gVF2PicnicReadyDeadline = GameTime.Seconds() + 240;
     } else {
-        VF2CaptureTableProp(
-            gVF2PatioDrinksPreparer, CContentMap::eObjectPatioTable,
-            gVF2PatioPropX, gVF2PatioPropY,
-            0, gVF2PatioPropPlaced,
-            gVF2PatioPropSlot, gVF2PatioPropHandle);
-        gVF2PatioDrinksPreparer = 0;
         gVF2PatioDrinksOn = 1;
         gVF2PatioDrinksDeadline = GameTime.Seconds() + 240;
     }
@@ -28372,12 +28475,7 @@ static bool VF2RunMobilePreparingDrinks(CVillager &villager)
         VF2PlanPatioRefusal(plans, villager, eStringBadWeather);
         return true;
     }
-    gVF2PatioDrinksPreparer = &villager;
-    VF2RememberPreparer(
-        villager,
-        &gVF2PatioDrinksPreparerSerial,
-        &gVF2PatioDrinksPreparerBehavior,
-        &gVF2PatioDrinksPreparerPraise);
+    VF2AddPreparer(gVF2PatioDrinksPreparers, villager);
 
     plans->PlanToGo(
         CContentMap::eObjectKitchenDrinkSource,
@@ -28702,12 +28800,7 @@ static bool VF2RunMobilePreparingPicnic(CVillager &villager)
         VF2PlanPatioRefusal(plans, villager, eStringPicnicBadWeather);
         return true;
     }
-    gVF2PicnicPreparer = &villager;
-    VF2RememberPreparer(
-        villager,
-        &gVF2PicnicPreparerSerial,
-        &gVF2PicnicPreparerBehavior,
-        &gVF2PicnicPreparerPraise);
+    VF2AddPreparer(gVF2PicnicPreparers, villager);
 
     plans->PlanToGo(
         CContentMap::eObjectKitchenDrinkSource,
@@ -28839,11 +28932,10 @@ static bool VF2HandleMobilePicnicTable(CVillager &villager)
     int age = *reinterpret_cast<int *>(
         reinterpret_cast<unsigned char *>(&villager) + 0x6A54);
     if (age < 0x118) {
-        return VF2ManualPatioRefusal(villager, eStringPicnicTooYoung);
+        return VF2ManualPatioRefusal(villager, eStringTooYoung);
     }
     if (FoodStore.food < 31) {
-        return VF2ManualPatioRefusal(
-            villager, eStringPicnicWorriedAboutFood);
+        return VF2ManualPatioRefusal(villager, eStringWorriedAboutFood);
     }
     return VF2RunMobilePreparingPicnic(villager);
 }
@@ -32443,8 +32535,10 @@ def patch_mobile_table_prop_paint(manifest):
         "why": (
             "Decals paint at DrawScene+0x3E, before BeginScene opens the "
             "display list, so the decal path can never appear above furniture. "
-            "The prop is gated on the furniture array slot recorded by "
-            "VF2CaptureTableProp so it paints once, with its own table."
+            "Each prop paints with its own table, on every table the mobile "
+            "per-table on-state has switched on (CEnvironment::Update -> "
+            "CFurnitureManager::SetOnState, 300 s per table; one random table "
+            "off at the 240 s readiness expiry)."
         ),
         "engine_prop_array_unavailable": {
             "SetProp_bound": "Environment.obj+0xab33 cmp edi,54h / ja",
@@ -32497,6 +32591,52 @@ def patch_mobile_patio_prop_execution(manifest):
         helper,
         IMAGE_REL_I386_REL32,
     )
+
+    # THE OTHER SetProp CALL. An activate-prop plan is normally STARTED by
+    # CVillagerPlans::StartNewBehavior (NextPlan(start=true) when the previous
+    # plan expires), whose case 0x2A calls CEnvironment::SetProp at +0x395 and
+    # sets the plan's expiry to the current second. ProcessCurrentPlan+0x21A
+    # only runs for that plan if the AI updates again within the same second.
+    # With only the ProcessCurrentPlan call routed here, the stock SetProp
+    # received 0x55/0x56 at +0x395 and dropped them at its `cmp edi,54h / ja`
+    # bound, so a preparation whose prop plan started on the last update of a
+    # second never made the meal or the drinks ready. Mobile calls SetProp
+    # from both places (StartNewBehavior @0x1D6580 case 0x2A and
+    # ProcessCurrentPlan @0x1D6ED0 case 0x2A), so both route to the wrapper.
+    # Every other prop still reaches the stock SetProp through it.
+    start_name = "?StartNewBehavior@CVillagerPlans@@QAEXAAVCVillager@@@Z"
+    start = obj.symbol(start_name)
+    start_sec = obj.section(start.section)
+    start_call = start.value + 0x395
+    start_relocation = start.value + 0x396
+    start_expected = bytes.fromhex(
+        "FF7728"          # push SActionPlan::prop
+        "8D0431"          # lea eax, [ecx+esi]  (the plan's expiry)
+        "B900000000"      # mov ecx, CEnvironment global
+        "894738"          # mov [edi+38h], eax
+        "E800000000"      # call CEnvironment::SetProp
+    )
+    start_raw = start_sec.raw_ptr + start.value + 0x387
+    if bytes(obj.buf[start_raw : start_raw + len(start_expected)]) != start_expected:
+        raise RuntimeError("StartNewBehavior prop execution block drifted")
+    start_target = None
+    for index in range(start_sec.nreloc):
+        vaddr, symbol_index, rtype = struct.unpack_from(
+            "<IIH", obj.buf, start_sec.reloc_ptr + index * 10
+        )
+        if vaddr == start_relocation:
+            start_target = (obj.symbol_by_index[symbol_index].name, rtype)
+            break
+    if start_target != (expected_target, IMAGE_REL_I386_REL32):
+        raise RuntimeError(
+            f"StartNewBehavior SetProp relocation drifted: {start_target}"
+        )
+    obj.retarget_relocation(
+        start_sec.index,
+        start_relocation,
+        helper,
+        IMAGE_REL_I386_REL32,
+    )
     obj.write(obj_path)
     manifest["MobilePatioPropExecution"] = {
         "status": "exact relocation-only wrapper",
@@ -32507,6 +32647,10 @@ def patch_mobile_patio_prop_execution(manifest):
         "replacement": MOBILE_PATIO_PROP_HELPER_SYMBOL,
         "abi": "__fastcall(CEnvironment *, void *, EPropEnum)",
         "stock_prop_fallback_preserved": True,
+        "start_new_behavior_call_offset": hex(start_call - start.value),
+        "start_new_behavior_relocation_offset": hex(
+            start_relocation - start.value
+        ),
         "guarded_mobile_props": ["0x55", "0x56"],
         "pc_environment_array_access_for_patio_prop": False,
         "pc_environment_array_access_for_picnic_prop": False,

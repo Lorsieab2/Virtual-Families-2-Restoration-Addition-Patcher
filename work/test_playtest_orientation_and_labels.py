@@ -228,11 +228,25 @@ class TheOrientationTestsCoverNorthwest(unittest.TestCase):
         self.assertEqual(text.count('"Sit In Chair NW"'), 2)
 
     def test_the_meal_sprite_splits_on_the_east_half(self):
-        """mealSE/mealSW are an EAST/WEST pair, so the split is {SE, NE}."""
+        """mealSE/mealSW are an EAST/WEST pair, so the split is {SE, NE}.
+
+        SUPERSEDED FORM, recorded rather than deleted: this used to pin
+        `gVF2PicnicPropOrientation == 0 /* SE */` / `== 2 /* NE */`, the
+        orientation captured from the preparer's table. The meal now draws on
+        every switched-on table (the mobile per-table on-state), so the
+        orientation is read from each table's own record and split by
+        VF2FurnitureFacesEast, which is the same {SE(0), NE(2)} test.
+        """
         text = source_text()
-        self.assertIn("gVF2PicnicPropOrientation == 0 /* SE */", text)
-        self.assertIn("gVF2PicnicPropOrientation == 2 /* NE */", text)
-        self.assertNotIn("gVF2PicnicPropOrientation == 1", text)
+        self.assertIn(
+            "VF2FurnitureFacesEast(orientation)\n                ? __VF2_PROP_IMAGE_MEAL_SE__",
+            text)
+        match = re.search(
+            r"static bool VF2FurnitureFacesEast\(int orientation\)\s*\{(.*?)\}",
+            text, re.S)
+        self.assertIsNotNone(match)
+        self.assertIn("orientation == 0 /* SE */ || orientation == 2 /* NE */",
+                      match.group(1))
 
     def test_the_hammock_settle_pose_and_sleep_strip_share_one_test(self):
         """Reported in play: the lie-down faced wrong while the sleep was right.
@@ -353,7 +367,10 @@ class ThePositionNudgesAreNamedAndScoped(unittest.TestCase):
     def test_the_patio_nudge_is_applied_at_the_draw_only(self):
         text = source_text()
         self.assertIn("static int const kVF2PatioDrinksNudgeX", text)
-        self.assertIn("gVF2PatioPropX + kVF2PatioDrinksNudgeX", text)
+        # SUPERSEDED FORM: was `gVF2PatioPropX + kVF2PatioDrinksNudgeX`, the
+        # position captured from one table. Each switched-on table now draws
+        # from its own record, with the same nudge.
+        self.assertIn("tableX + kVF2PatioDrinksNudgeX", text)
 
     def test_the_patio_drinks_nudge_carries_the_owners_measured_value(self):
         """Pin the VALUE, not merely the constant's existence.
@@ -433,8 +450,10 @@ class ThePositionNudgesAreNamedAndScoped(unittest.TestCase):
         text = source_text()
         self.assertIn("kVF2PicnicMealNudgeX", text)
         self.assertIn("kVF2PicnicMealNudgeY", text)
-        self.assertIn("VF2FurnitureFacesEast(gVF2PicnicPropOrientation)", text)
-        self.assertIn("gVF2PicnicPropY - kVF2PicnicMealNudgeY", text)
+        # SUPERSEDED FORM: was gVF2PicnicPropOrientation / gVF2PicnicPropY,
+        # captured from one table; each table now draws from its own record.
+        self.assertIn("(VF2FurnitureFacesEast(orientation)\n                    ? kVF2PicnicMealNudgeX", text)
+        self.assertIn("tableY - kVF2PicnicMealNudgeY", text)
 
     def test_yoga_uses_the_orientation_aware_native_workout_route(self):
         text = source_text()
