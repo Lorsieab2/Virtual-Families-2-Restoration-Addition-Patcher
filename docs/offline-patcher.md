@@ -642,7 +642,12 @@ as:
   the restore source, so disabling the setting restores the current icon set;
   disabling Cheat Upgrades still removes its late icon payloads.
 - `ai_generated_bathroom2_renovations` - **2nd Bathroom Mobile-Style
-  Renovations (AI-Generated Art Warning)**. It stages only the
+  Renovations (AI-Generated Art Warning)** and dependent on
+  `mobile_renovations`: the Bathroom 2 rows and renderer exist only in the
+  mobile-renovation executables, so its art records require that setting and
+  are not installed while it is off (through B196 they required only
+  `core_executable`, which installed the art where nothing could draw it). It
+  stages only the
   five tracked AI-generated source variants, normalized to the vanilla north
   Bathroom 2 crop size and the measured native room-apex anchor. The native
   second-bathroom renovation route remains disabled/hiatus; the exact warning
