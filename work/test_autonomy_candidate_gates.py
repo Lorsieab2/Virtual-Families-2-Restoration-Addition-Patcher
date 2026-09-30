@@ -37,12 +37,38 @@ def code_only(body):
         line for line in body.splitlines() if not line.lstrip().startswith("//"))
 
 
+HAMMOCK_ANCHOR = "unsigned char *candidate = data + 0x6BB8 + 0x023 * 0xD0;"
+
+
+def hammock_block():
+    """The hammock refresh block, wherever the refresh code lives.
+
+    Anchored on the hammock candidate itself rather than on the enclosing
+    function, because the per-decision refresh has been restructured (its body
+    moved into a helper the hook calls). The block must still be reached from
+    the per-decision hook, which is checked separately.
+    """
+    assert SOURCE.count(HAMMOCK_ANCHOR) == 1, SOURCE.count(HAMMOCK_ANCHOR)
+    start = SOURCE.index(HAMMOCK_ANCHOR)
+    block = SOURCE[start:SOURCE.index("unsigned char *playhouse", start)]
+    # The name of the function that contains the block.
+    head = SOURCE.rfind("\n{\n", 0, start)
+    signature = SOURCE[SOURCE.rfind("\n", 0, head) + 1:head]
+    name = re.search(r"(\w+)\(", signature).group(1)
+    return code_only(block), name
+
+
 class TheHammockIsOfferedInSunnyAndCloudyWeather(unittest.TestCase):
     def setUp(self):
-        self.body = code_only(function_body(
+        self.hammock, self.owner = hammock_block()
+
+    def test_the_hammock_block_runs_every_decision(self):
+        hook = code_only(function_body(
             'extern "C" void __cdecl VF2RefreshHammockEligibility(void *villager)'))
-        start = self.body.index("0x023 * 0xD0")
-        self.hammock = self.body[start:self.body.index("playhouse", start)]
+        if self.owner != "VF2RefreshHammockEligibility":
+            self.assertRegex(hook, r"\b%s\(" % self.owner,
+                             "the hammock refresh is no longer reached from "
+                             "the per-decision hook")
 
     def test_the_refresh_admits_exactly_sunny_and_cloudy(self):
         self.assertIn(
