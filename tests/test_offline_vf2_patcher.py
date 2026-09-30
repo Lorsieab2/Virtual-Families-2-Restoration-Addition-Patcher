@@ -689,6 +689,7 @@ class OfflineVF2PatcherTests(unittest.TestCase):
             self.assertIn("unknown current SHA-256", result.stdout + result.stderr)
             self.assertEqual((modded / output_name).read_bytes(), bytes(tampered))
 
+    @unittest.skipUnless(sys.platform == "win32", "Windows resource APIs are required")
     def test_executable_off_skips_stock_icon_preservation(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
@@ -710,6 +711,7 @@ class OfflineVF2PatcherTests(unittest.TestCase):
             self.assertEqual((output_dir / output_name).read_bytes(), vanilla)
             self.assertFalse((output_dir / "Virtual Families 2.exe").exists())
 
+    @unittest.skipUnless(sys.platform == "win32", "Windows resource APIs are required")
     def test_icon_preservation_still_fails_when_an_exe_replacement_writes_another_name(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
