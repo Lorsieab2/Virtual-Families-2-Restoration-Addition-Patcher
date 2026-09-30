@@ -3333,10 +3333,29 @@ class TestBundleReadmeWarnsAboutBackupGrowth(unittest.TestCase):
             "Each such rebuild first saves a complete copy of the old modded folder (about 230 MB)",
             "by default in a new timestamped folder under .vf2_patch_backups",
             "if you set the Backup folder field (or --backup-dir), it goes to exactly that folder instead",
+            "which must not exist yet: a run whose Backup folder already exists "
+            "(one picked with Browse, or one an earlier run wrote) stops with an error before changing anything",
             "The patcher never deletes these",
             "delete older ones yourself, from wherever they were written, to reclaim disk space",
         ):
             self.assertIn(phrase, text)
+
+    def test_an_existing_backup_folder_is_refused_as_the_readme_says(self):
+        # The READMEs tell the player a Backup folder that already exists stops
+        # the run.  If that ever changes, both texts must change with it.
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            game = root / "game"
+            game.mkdir()
+            output = root / "VF2-X-Modded"
+            output.mkdir()
+            (output / "kept.txt").write_text("kept", encoding="ascii")
+            existing = root / "chosen-with-browse"
+            existing.mkdir()
+            with self.assertRaises(FileExistsError):
+                patcher.create_backup(game, output, existing, {}, [], [], root / "manifest.json")
+            self.assertEqual(list(existing.iterdir()), [])
+            self.assertEqual((output / "kept.txt").read_text(encoding="ascii"), "kept")
 
 
 class TestBundleChangelogReachesTheWrittenLog(unittest.TestCase):
