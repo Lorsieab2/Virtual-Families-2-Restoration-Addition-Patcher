@@ -38462,25 +38462,11 @@ extern "C" void __cdecl VF2EnableAutonomousCandidates(void *villager)
     // while one is placed. Raising the weight changes HOW OFTEN it is chosen
     // when a table exists, never WHETHER it is offered without one.
     CloneAutonomousCandidateWithWeight(data, 0x099, 0x0B8, 3000, __VF2_PING_PONG_OBJECT__); // Ping-Pong Table
-    // CAREER WORK KEEPS ITS STOCK AGE GATE.
-    //
-    // Stock InitAI already gives 0x047, 0x02C and 0x04B a minimum age of 0x168
-    // (displayed 18) at +0x4C, alongside their career-type gate at +0x50.
-    // These rows used EnableAdultOnlyAutonomousCandidateWithWeight, whose
-    // "adult" is 0x118 (displayed 14, the first non-child age), so the patch
-    // LOWERED the stock gate by four years. The weight-only helper leaves
-    // every native gate -- age, career type, object -- exactly as InitAI
-    // wrote it, which is what "adults only" in the README describes.
-    //
-    // 0x048 has no InitAI case of its own; it takes 0x047's gates by the clone
-    // below, so it must be cloned AFTER 0x047 is configured and not given an
-    // age of its own afterwards (the superseded extra
-    // EnableAdultOnlyAutonomousCandidateWithWeight(data, 0x048, 450) line
-    // overwrote the cloned 0x168 with 0x118).
-    EnableAutonomousCandidateWithWeight(data, 0x047, 450); // WorkKitchenDispatch
+    EnableAdultOnlyAutonomousCandidateWithWeight(data, 0x047, 450); // WorkKitchenDispatch
     CloneAutonomousCandidateWithWeight(data, 0x047, 0x048, 450, 0); // WorkKitchen0, with kitchen career gates
-    EnableAutonomousCandidateWithWeight(data, 0x02C, 450); // OfficeCarreerWork
-    EnableAutonomousCandidateWithWeight(data, 0x04B, 450); // WorkWorkshop
+    EnableAdultOnlyAutonomousCandidateWithWeight(data, 0x048, 450);
+    EnableAdultOnlyAutonomousCandidateWithWeight(data, 0x02C, 450); // OfficeCarreerWork
+    EnableAdultOnlyAutonomousCandidateWithWeight(data, 0x04B, 450); // WorkWorkshop
     VF2RefreshHammockEligibility(data);
     // Home Gym and Yoga are gated per ITEM, not per object: they share
     // object 0x75, so an object prerequisite admits both when only one is

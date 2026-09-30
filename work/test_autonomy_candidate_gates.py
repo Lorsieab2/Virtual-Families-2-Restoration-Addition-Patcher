@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Autonomous-candidate gates the patch must not silently narrow or widen.
+"""The hammock candidate's weather gate must admit Cloudy as documented.
 
 CVillagerAI::DecideWhatToDo filters each 0xD0-byte candidate (base
-CVillager+0x6BB8) on fields stock CVillager::InitAI writes. Two of those were
+CVillager+0x6BB8) on fields stock CVillager::InitAI writes. One of those was
 being defeated by the patch's own enabler:
 
 * Hammock (0x23). Stock InitAI sets +0xA8 = 0, "weather must equal Sunny".
@@ -10,10 +10,13 @@ being defeated by the patch's own enabler:
   Weather.currentType. VF2RefreshHammockEligibility admits Sunny (0) and
   Cloudy (1) but left +0xA8 at 0, so Cloudy was always vetoed.
 
-* Career work (0x047, 0x048, 0x02C, 0x04B). Stock InitAI gives 0x047, 0x02C
-  and 0x04B a minimum age (+0x4C) of 0x168 (displayed 18). The enabler used
-  the "adult only" helper, whose adult bound is 0x118 (displayed 14), and so
-  lowered the stock gate by four years.
+* SUPERSEDED here: this module also pinned a career-row change (0x047,
+  0x048, 0x02C, 0x04B enabled through the weight-only helper so stock's
+  0x168 minimum age survived). That approach still rewrote the rows'
+  weights on every load, erasing the praise training that
+  CVillagerAI::RealtimeWorkDone uses to advance careers; PR #405 instead
+  leaves the career rows exactly as stock InitAI/LoadAI set them, and pins
+  that in work/test_career_rows_match_vanilla.py.
 
 These read the generator source that emits the C++, because that is what
 reaches the build.
@@ -101,43 +104,6 @@ class TheHammockIsOfferedInSunnyAndCloudyWeather(unittest.TestCase):
             if refresh and native:
                 eligible.append(weather)
         self.assertEqual(eligible, [0, 1], "hammock weathers (0 sunny, 1 cloudy)")
-
-
-class CareerWorkKeepsTheStockAdultAgeGate(unittest.TestCase):
-    CAREER = ("0x047", "0x048", "0x02C", "0x04B")
-
-    def setUp(self):
-        self.body = code_only(function_body(
-            'extern "C" void __cdecl VF2EnableAutonomousCandidates(void *villager)'))
-
-    def test_no_career_row_uses_an_age_overriding_helper(self):
-        for behavior in self.CAREER:
-            with self.subTest(behavior=behavior):
-                rows = [line.strip() for line in self.body.splitlines()
-                        if re.search(r"\(data, (0x\w+, )?%s," % behavior, line)]
-                self.assertTrue(rows, "no enabler row for %s" % behavior)
-                for row in rows:
-                    self.assertFalse(
-                        re.match(r"Enable(AdultOnly|ChildOnly|AllAges|NursingMother)", row),
-                        "%s is enabled through a helper that rewrites the stock "
-                        "age gate: %s" % (behavior, row))
-
-    def test_the_kitchen_clone_copies_the_configured_kitchen_row(self):
-        lines = [line.strip() for line in self.body.splitlines()]
-        clone = lines.index(
-            "CloneAutonomousCandidateWithWeight(data, 0x047, 0x048, 450, 0); "
-            "// WorkKitchen0, with kitchen career gates")
-        first = next(i for i, line in enumerate(lines) if "(data, 0x047," in line)
-        self.assertLess(first, clone)
-        later = [line for line in lines[clone + 1:] if "(data, 0x048," in line]
-        self.assertEqual(later, [], "0x048 is re-gated after taking 0x047's gates")
-
-    def test_the_weight_only_helper_touches_no_gate(self):
-        body = code_only(function_body(
-            "static void EnableAutonomousCandidateWithWeight(unsigned char *villager, "
-            "unsigned int behavior, unsigned int weight)"))
-        writes = re.findall(r"candidate(?:\[|\s*\+\s*)(0x[0-9A-Fa-f]+)", body)
-        self.assertEqual(sorted(set(writes)), ["0x0C", "0xCD"])
 
 
 if __name__ == "__main__":
