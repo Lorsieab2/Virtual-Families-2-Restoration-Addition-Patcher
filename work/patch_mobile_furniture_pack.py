@@ -35007,6 +35007,29 @@ static void CloneAutonomousCandidateWithWeight(
     target[0xCD] = 1;
 }
 
+// THE REQUIRED-OBJECT GATE FOR CANDIDATES STOCK NEVER CONFIGURED.
+//
+// Several behaviours this enabler switches on have no case of their own in
+// stock CVillager::InitAI: they fall to the shared default, which leaves the
+// required-object field +0xC4 at 0. CVillagerAI::DecideWhatToDo calls
+// ContentMap.ObjectExists(+0xC4) only when that field is non-zero, so with 0
+// the candidate is offered in a house with none of its furniture. The native
+// behaviour then runs anyway: PlayingFoosball ignores the failed lookup and
+// plays where the villager stands, the fireplace and easel routes continue
+// into their animations, the kids-table and couch routes refuse on the spot,
+// and the arcade routes spend a high-weight decision doing nothing.
+//
+// Each value here is the object that behaviour's OWN FindFurniture /
+// LinkPeepToFurniture call searches, decoded from the stock Behavior.obj, so
+// the offer is made exactly when the behaviour can find something. The same
+// field the clones above set through objectPrerequisite.
+static void RequireAutonomousCandidateObject(
+    unsigned char *villager, unsigned int behavior, unsigned int object)
+{
+    unsigned char *candidate = villager + 0x6BB8 + behavior * 0xD0;
+    *(unsigned int *)(candidate + 0xC4) = object;
+}
+
 class CWeather {
 public:
     int currentType;
@@ -35053,6 +35076,10 @@ public:
     // object perfectly well and then fails to LINK -- a failure the
     // compile suite cannot see, because it stops at the object file.
     const bool FindObject(EObject object, ldwPoint &outPoint);
+    // ?ObjectExists@CContentMap@@QAE?B_NW4EObject@1@@Z -- the same query
+    // DecideWhatToDo makes for a candidate's +0xC4. `const bool` for the same
+    // mangling reason as FindObject above.
+    const bool ObjectExists(EObject object);
 };
 extern CContentMap ContentMap;
 enum ESpeed { eSpeedNormal = 0xC8 };
@@ -35300,6 +35327,22 @@ static void VF2RefreshWorkoutEligibility(unsigned char *data)
     *(unsigned int *)(yoga + 0x0C) = yogaPlaced ? 450 : 0;
 }
 
+// PlayingPinballGames (0xDC) has no single object: the native behaviour
+// searches the pinball machine (0x0C), then the slot machine (0x0A), then the
+// pachinko machine (0x27), and plays whichever it finds. One +0xC4 value
+// cannot say "any of these", so it is gated here, per decision, on the same
+// ContentMap.ObjectExists question DecideWhatToDo asks for +0xC4. Only the
+// enabled flag is touched.
+static void VF2RefreshPinballGamesEligibility(unsigned char *data)
+{
+    unsigned char *candidate = data + 0x6BB8 + 0x0DC * 0xD0;
+    const bool anyMachine =
+        ContentMap.ObjectExists((CContentMap::EObject)0x0C) ||
+        ContentMap.ObjectExists((CContentMap::EObject)0x0A) ||
+        ContentMap.ObjectExists((CContentMap::EObject)0x27);
+    candidate[0xCD] = (unsigned char)(anyMachine ? 1 : 0);
+}
+
 // Despite the hammock-specific name this is the per-decision refresh hook:
 // it is called from CVillagerAI::DecideWhatToDo, and it already re-evaluates
 // three unrelated candidates whose gates change while the household runs.
@@ -35311,6 +35354,7 @@ extern "C" void __cdecl VF2RefreshHammockEligibility(void *villager)
 {
     unsigned char *data = (unsigned char *)villager;
     VF2RefreshWorkoutEligibility(data);
+    VF2RefreshPinballGamesEligibility(data);
     unsigned char *candidate = data + 0x6BB8 + 0x023 * 0xD0;
     const int weatherAllowsHammock = Weather.currentType == 0 || Weather.currentType == 1;
     const int hammockAllowsAction = weatherAllowsHammock && AnyHammockInWorld();
@@ -38370,7 +38414,11 @@ extern "C" void __cdecl VF2EnableAutonomousCandidates(void *villager)
     EnableChildOnlyAutonomousCandidateWithWeight(data, 0x00B, 450); // ChildrenPlayOffice / Driving like a grownup variants
     EnableAutonomousCandidateWithWeight(data, 0x0C0, 450); // TeenHomework, retain stock age/object gates
     EnableAutonomousCandidateWithWeight(data, 0x0C1, 450); // TeenOnlineExam, retain stock age/object gates
-    EnableAutonomousCandidateWithWeight(data, 0x189, 450); // UseCouch / sit-down, native couch+age gates retained
+    // SUPERSEDED comment, recorded rather than deleted (AGENTS.md 11): this
+    // row said "native couch+age gates retained". Stock InitAI has no case for
+    // 0x189, so there was no native couch gate to retain; the couch object is
+    // required below.
+    EnableAutonomousCandidateWithWeight(data, 0x189, 450); // UseCouch / sit-down
     EnableAutonomousCandidateWithWeight(data, 0x083, 350); // NappingCouch / Dreaming variants
     // RestingBody's own resting family (0x17d/0x17e/0x17f) plus the shared
     // sit-down pool. Behavior Patches owns this row so the behavior is
@@ -38453,6 +38501,20 @@ extern "C" void __cdecl VF2EnableAutonomousCandidates(void *villager)
     EnableAdultOnlyAutonomousCandidateWithWeight(data, 0x048, 450);
     EnableAdultOnlyAutonomousCandidateWithWeight(data, 0x02C, 450); // OfficeCarreerWork
     EnableAdultOnlyAutonomousCandidateWithWeight(data, 0x04B, 450); // WorkWorkshop
+    // Required objects for rows whose stock InitAI record is the default
+    // (+0xC4 = 0); see RequireAutonomousCandidateObject. Each object is the
+    // one the native behaviour's own furniture lookup searches.
+    RequireAutonomousCandidateObject(data, 0x095, 0x2B); // WatchingFirePlace: FindFurniture/PlanToGo 0x2B (fireplace)
+    RequireAutonomousCandidateObject(data, 0x096, 0x2D); // PlayingFoosball: FindFurniture/PlanToGo 0x2D (foosball table)
+    RequireAutonomousCandidateObject(data, 0x0DE, 0x0A); // PlayingSlots: FindFurniture 0x0A (slot machine)
+    RequireAutonomousCandidateObject(data, 0x0DF, 0x27); // PlayingPachinko: FindFurniture 0x27 (pachinko)
+    RequireAutonomousCandidateObject(data, 0x130, 0x4E); // ChildrenPlayAtKidsTable: LinkPeepToFurniture 0x4E
+    RequireAutonomousCandidateObject(data, 0x118, 0x56); // DrawingOnEasel: FindFurniture/PlanToGo 0x56 (easel)
+    RequireAutonomousCandidateObject(data, 0x11E, 0x5E); // PlayOnPlayStructure: acts only when its 0x5E lookup hits
+    RequireAutonomousCandidateObject(data, 0x189, 0x5A); // UseCouch: LinkPeepToFurniture 0x5A (couches, sofas, beanbags)
+    // PlayingPinballGames (0xDC) searches 0x0C, 0x0A and 0x27, so it is gated
+    // per decision by VF2RefreshPinballGamesEligibility, called from the
+    // refresh below.
     VF2RefreshHammockEligibility(data);
     // Home Gym and Yoga are gated per ITEM, not per object: they share
     // object 0x75, so an object prerequisite admits both when only one is
