@@ -13665,6 +13665,111 @@ class HolidayOrnamentGateTests(unittest.TestCase):
 
         self.with_temp_patched_objs(["Collectable.obj"], run)
 
+    def test_new_village_does_not_inherit_the_patcher_scratch_record(self):
+        # Stock CAchievement::Reset clears only byte 0 and the +4 dword of
+        # each 12-byte record; theGameState::Init calls it for a new player,
+        # Start Over and before every load. Record 0xA8's other bytes hold
+        # village state (Health Plan entitlement, renovation history, Oldest
+        # Villager at +0x08), so Init's call must go through the wrapper that
+        # clears them.
+        stock = CoffObject(patcher.SRC_OBJS / "Achievement.obj")
+        reset = stock.symbol("?Reset@CAchievement@@QAEXXZ")
+        reset_sec = stock.section(reset.section)
+        body = bytes(stock.buf[reset_sec.raw_ptr + reset.value : reset_sec.raw_ptr + reset.value + 0x27])
+        self.assertEqual(body[0x09:0x0E], b"\xBA\x25\x01\x00\x00")          # 0x125 records
+        self.assertEqual(body[0x10:0x13], b"\xC6\x00\x00")                  # byte 0 only
+        self.assertEqual(body[0x13:0x16], b"\x8D\x40\x0C")                  # stride 12
+        self.assertEqual(body[0x16:0x1D], b"\xC7\x40\xF8\x00\x00\x00\x00")  # +4 dword only
+        self.assertEqual(body[0x1D:0x22], b"\x83\xEA\x01\x75\xEE")         # and nothing else
+
+        def run(temp_root):
+            manifest = {}
+            patcher.patch_new_village_clears_patcher_achievement_state(manifest)
+            obj = CoffObject(temp_root / "theGameState.obj")
+            init = obj.symbol("?Init@theGameState@@QAEXXZ")
+            sec = obj.section(init.section)
+            raw = sec.raw_ptr + init.value
+            self.assertEqual(bytes(obj.buf[raw + 0x25 : raw + 0x2F]), b"\xB9\0\0\0\0\xE8\0\0\0\0")
+            relocations = {}
+            for index in range(sec.nreloc):
+                vaddr, symbol_index, rtype = struct.unpack_from(
+                    "<IIH", obj.buf, sec.reloc_ptr + index * 10
+                )
+                relocations[vaddr] = (obj.symbol_by_index[symbol_index].name, rtype)
+            self.assertEqual(
+                relocations[init.value + 0x26],
+                ("?Achievement@@3VCAchievement@@A", patcher.IMAGE_REL_I386_DIR32),
+            )
+            self.assertEqual(
+                relocations[init.value + 0x2B],
+                (patcher.NEW_VILLAGE_ACHIEVEMENT_RESET_HELPER_SYMBOL, patcher.IMAGE_REL_I386_REL32),
+            )
+            # Every other Achievement.Reset caller in theGameState is untouched.
+            others = [
+                name for vaddr, (name, _t) in relocations.items()
+                if vaddr != init.value + 0x2B and name == patcher.NEW_VILLAGE_ACHIEVEMENT_RESET_HELPER_SYMBOL
+            ]
+            self.assertEqual(others, [])
+            self.assertEqual(manifest["NewVillageClearsPatcherAchievementState"]["status"], "installed")
+
+        self.with_temp_patched_objs(["theGameState.obj"], run)
+
+        # Behaviour: compile the emitted wrapper against a stand-in Reset that
+        # does exactly what the stock bytes above do, and run it.
+        source = Path(patcher.__file__).read_text(encoding="utf-8")
+        signature = 'extern "C" void __fastcall VF2ResetAchievementsForNewVillage('
+        wrapper = signature + source.split(signature, 1)[1].split("\n}\n", 1)[0] + "\n}\n"
+        self.assertEqual(patcher.NEW_VILLAGE_ACHIEVEMENT_RESET_HELPER_SYMBOL,
+                         "@VF2ResetAchievementsForNewVillage@8")
+        # Installed unconditionally by main(), in every executable.
+        main_body = source.split("\ndef main():\n", 1)[1].split("\ndef ", 1)[0]
+        self.assertIn(
+            "\n    patch_new_village_clears_patcher_achievement_state(manifest)\n", main_body
+        )
+        import subprocess
+        import test_generated_cpp_compiles as compiles
+        vcvars = compiles._vcvars()
+        if vcvars is None:
+            self.skipTest("no Visual Studio toolchain on this machine")
+        harness = (
+            "#include <stdio.h>\n"
+            "class CAchievement { public: void Reset(); };\n"
+            "static unsigned char gRecords[0x125 * 12];\n"
+            "void CAchievement::Reset() {\n"
+            "    for (int i = 0; i < 0x125; ++i) {\n"
+            "        gRecords[i * 12] = 0;\n"
+            "        *(unsigned int *)(gRecords + i * 12 + 4) = 0;\n"
+            "    }\n"
+            "}\n"
+            + wrapper +
+            "int main() {\n"
+            "    for (int i = 0; i < (int)sizeof(gRecords); ++i) gRecords[i] = (unsigned char)(i * 7 + 1);\n"
+            "    VF2ResetAchievementsForNewVillage((CAchievement *)gRecords, 0);\n"
+            "    unsigned int a8[3]; for (int k = 0; k < 3; ++k) a8[k] = *(unsigned int *)(gRecords + 0xA8 * 12 + 4 * k);\n"
+            "    int others = 0;\n"
+            "    for (int i = 0; i < 0x125; ++i) {\n"
+            "        if (i == 0xA8) continue;\n"
+            "        for (int b = 0; b < 12; ++b) {\n"
+            "            unsigned char want = (b == 0 || (b >= 4 && b < 8)) ? 0 : (unsigned char)((i * 12 + b) * 7 + 1);\n"
+            "            if (gRecords[i * 12 + b] != want) ++others;\n"
+            "        }\n"
+            "    }\n"
+            "    printf(\"%u %u %u %d\\n\", a8[0], a8[1], a8[2], others);\n"
+            "    return 0;\n"
+            "}\n"
+        )
+        with tempfile.TemporaryDirectory() as work:
+            (Path(work) / "newvillage.cpp").write_text(harness, encoding="ascii")
+            result = subprocess.run(
+                f'"{vcvars}" >nul 2>&1 && cd /d "{work}" && '
+                f'cl /nologo /EHsc newvillage.cpp >nul && .\\newvillage.exe',
+                shell=True, capture_output=True, text=True,
+            )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        # Record 0xA8 is entirely zero; every other record got exactly the
+        # stock Reset (bytes 1-3 and the +8 timestamp untouched).
+        self.assertEqual(result.stdout.split(), ["0", "0", "0", "0"])
+
     def test_ornamentologist_completion_hook_is_idempotent(self):
         def run(temp_root):
             manifest = {}

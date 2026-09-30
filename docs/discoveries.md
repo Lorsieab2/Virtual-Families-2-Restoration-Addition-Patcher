@@ -4433,3 +4433,32 @@ different image-relative addresses, because the builds shifted by 0x430:
 In B180's layout, 0xC8ACE lands in a different function entirely. Any RVA in
 this entry is only valid for the build it was measured on; re-derive it per
 binary rather than carrying it across.
+
+
+## A new village inherited the patcher's scratch achievement record (2026-09-30)
+
+Stock `CAchievement::Reset` clears only byte 0 and the `+0x04` dword of each
+12-byte record (`mov byte ptr [eax],0` / `mov dword ptr [eax+4],0` over 0x125
+records). `theGameState::Init` calls it at `+0x2A`, and Init runs for a new
+player (`theCreateNickNameDlg`/`theChangePlayerDlg`), for Start Over
+(`RestartCurrentGame`, which then calls `SaveCurrentGame`), and at the start of
+every load (`LoadCurrentGame`, `theGameState::Load`).
+
+Record `0xA8` is the patcher's scratch record, and its `+0x08` dword is village
+state that Reset leaves: bit 0 is the Health Plan entitlement, bits 1-15 the
+mobile-renovation ever-purchased history, bits 16-31 the Oldest Villager record.
+Bytes 1-3 of its `+0x00` dword are beside the Bathroom 2 bits. A load is not
+affected, because `CAchievement::LoadState` then copies all 12 bytes of every
+record from the save. A village started in the same session was: it showed the
+previous village's Health Plan as owned (and free) in the store, got Health Plan
+switched on at its next load through `VF2MoneyLoadStateAndReconcile`, and drew
+the previous village's Oldest Villager record; Start Over's own save wrote them
+into the new village. The renovation-history bits have no consumer beyond the
+active-byte backfill, so that part was inert.
+
+Fix: Init's `call CAchievement::Reset` relocation is retargeted to
+`VF2ResetAchievementsForNewVillage` (`__fastcall`, same register ABI as the
+thiscall it replaces), which runs the stock Reset and then zeroes record 0xA8's
+`+0x00` and `+0x08` dwords. No other Reset caller is touched; Reset
+Achievements (cheat 0x124) calls Reset directly and keeps its own save/restore.
+Not yet checked in play.
