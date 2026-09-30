@@ -3602,10 +3602,16 @@ def apply_manifest(args: argparse.Namespace) -> int:
                 ),
                 None,
             )
-            if icon_asset_check is None and any(
-                Path(str(check.get(field) or "")).suffix.lower() == ".exe"
-                for check in asset_checks
-                for field in ("file_path", "output_file_path")
+            # Skipping is only safe for a separate output folder, where
+            # enforce_modded_exe_name renames the carried-over vanilla EXE.
+            # In place it returns early, so no modded EXE would exist.
+            if icon_asset_check is None and (
+                output_dir.resolve() == game_dir.resolve()
+                or any(
+                    Path(str(check.get(field) or "")).suffix.lower() == ".exe"
+                    for check in asset_checks
+                    for field in ("file_path", "output_file_path")
+                )
             ):
                 raise PatchError(
                     "Manifest requests stock EXE icon preservation, but no active executable replacement "

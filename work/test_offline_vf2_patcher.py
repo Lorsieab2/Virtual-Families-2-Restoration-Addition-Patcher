@@ -712,6 +712,38 @@ class OfflineVF2PatcherTests(unittest.TestCase):
             self.assertFalse((output_dir / "Virtual Families 2.exe").exists())
 
     @unittest.skipUnless(sys.platform == "win32", "Windows resource APIs are required")
+    def test_executable_off_in_place_still_fails_icon_preservation(self):
+        # In place (output folder == game folder) nothing renames the EXE, so
+        # skipping preservation would report success with no modded EXE.
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            game_dir, manifest, output_name = self.real_icon_overlay_fixture(tmp_path)
+            art = tmp_path / "payload" / "art.png"
+            art.write_bytes(b"loose art")
+            data = json.loads(manifest.read_text(encoding="utf-8"))
+            data["settings"].append({"id": "loose_art", "label": "Art", "default": True})
+            data["asset_patches"].append(
+                {
+                    "file_path": "Images/art.png",
+                    "source_path": "payload/art.png",
+                    "source_sha256": sha256_bytes(b"loose art"),
+                    "source_size": len(b"loose art"),
+                    "allow_missing_target": True,
+                    "requires": ["loose_art"],
+                }
+            )
+            manifest.write_text(json.dumps(data), encoding="utf-8")
+            vanilla = (game_dir / "Virtual Families 2.exe").read_bytes()
+            result = self.run_patcher(
+                "apply", "--game-dir", str(game_dir), "--output-dir", str(game_dir),
+                "--manifest", str(manifest), "--disable", "core_executable", expect=2,
+            )
+            self.assertIn("no active executable replacement", result.stdout + result.stderr)
+            self.assertEqual((game_dir / "Virtual Families 2.exe").read_bytes(), vanilla)
+            self.assertFalse((game_dir / output_name).exists())
+            self.assertFalse((game_dir / "Images" / "art.png").exists())
+
+    @unittest.skipUnless(sys.platform == "win32", "Windows resource APIs are required")
     def test_icon_preservation_still_fails_when_an_exe_replacement_writes_another_name(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
