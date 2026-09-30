@@ -17453,21 +17453,69 @@ static void VF2CompleteAllCollections() {
     Achievement.SetComplete((EAchievement)0x4D);
 }
 
-static void VF2ClearAchievementNotificationQueueRaw() {
-    int *queue = (int *)((unsigned char *)&Achievement + 0xDBC);
-    for (int index = 0; index < 0x5F; ++index) {
-        queue[index] = -1;
-    }
+// achievementList rows, 0x1C bytes each. Update reads the last field as the
+// coin reward; patch_custom_achievements exports the (stock COFF-static)
+// symbol so this translation unit can read the same rows.
+struct sAchievementListEntry {
+    int id;
+    int target;
+    int icon;
+    int unknown;
+    int titleString;
+    int descriptionString;
+    int coinReward;
+};
+extern sAchievementListEntry achievementList[];
+
+static const int kVF2AchievementNotifyQueueCount = 0x5F;
+
+// EXACTLY what CAchievement::Update pays when a goal's notification reaches
+// the head of the queue: Money.Adjust(reward, false), with 25 when the row's
+// reward is zero. In the built game Update's Adjust call is one of the sites
+// patch_maximum_resource_achievement_callsites routes through
+// VF2MoneyAdjustAndAward, so this pays through the same wrapper and the
+// maximum-money goals see the reward too.
+static void VF2PayAchievementRewardLikeUpdate(int achievement) {
+    int reward = achievementList[achievement].coinReward;
+    VF2MoneyAdjustAndAward(&Money, 0, (float)(reward != 0 ? reward : 25), false);
 }
 
+// PAY EACH GOAL THE CHEAT COMPLETES EXACTLY ONCE, AND LEAVE THE QUEUE AS IT
+// WAS.
+//
+// Stock SetComplete does not pay anything: it appends the goal (and any
+// meta-goal it completes on the way -- 0x5A-0x5C, 0x54, Achiever through the
+// SetComplete epilogue) to the 0x5F-dword notification queue at +0xDBC, and
+// CAchievement::Update pays each entry's reward only when it pops to the
+// head. This used to empty the queue before every completion to keep a bulk
+// completion from overflowing it, which threw away every earlier goal's
+// queued entry -- so "Complete all Achievements" paid only the last one or
+// two rewards, and also discarded the rewards of goals the player had earned
+// just before buying it.
+//
+// Now the player's existing queue is set aside, the goal is completed into
+// an empty queue (so nothing it enqueues can be dropped for lack of room),
+// every entry it enqueued is paid here with Update's own formula, and the
+// original queue is put back untouched. The queue therefore never grows,
+// entries that were already waiting are still paid once by Update, and the
+// cheat's own completions are paid once here and never reach Update.
 static void VF2CompleteAchievementForCheat(int achievement) {
     EAchievement id = (EAchievement)achievement;
-    if (!Achievement.IsComplete(id)) {
-        // A single native completion can enqueue dependent meta-goals too.
-        // Empty the exact 95-dword queue before every bulk-cheat completion,
-        // so expanding the visible schema can never write past +0xF34.
-        VF2ClearAchievementNotificationQueueRaw();
-        Achievement.SetComplete(id);
+    if (Achievement.IsComplete(id)) {
+        return;
+    }
+    int *queue = (int *)((unsigned char *)&Achievement + 0xDBC);
+    int waiting[kVF2AchievementNotifyQueueCount];
+    for (int index = 0; index < kVF2AchievementNotifyQueueCount; ++index) {
+        waiting[index] = queue[index];
+        queue[index] = -1;
+    }
+    Achievement.SetComplete(id);
+    for (int index = 0; index < kVF2AchievementNotifyQueueCount; ++index) {
+        if (queue[index] != -1) {
+            VF2PayAchievementRewardLikeUpdate(queue[index]);
+        }
+        queue[index] = waiting[index];
     }
 }
 
@@ -21702,9 +21750,24 @@ def patch_custom_achievements(manifest):
         (0x45, b"\x8B\x96\x38\x0F\x00\x00", "+0xF38 popup timer"),
         (0x4B, b"\x8B\x8E\x3C\x0F\x00\x00", "+0xF3C popup state"),
         (0x51, b"\x83\xC2\x21\x89\x96\x38\x0F\x00\x00", "+0xF38 timer write"),
+        # The Complete all Achievements cheat pays its completions itself with
+        # this exact formula (VF2PayAchievementRewardLikeUpdate): push false,
+        # reward = achievementList[id] + 0x18, 25 (0x19) when that is zero.
+        (0x85, b"\x6A\x00", "Money.Adjust(reward, false) flag"),
+        (
+            0x90,
+            b"\x8B\x04\x8D\x18\x00\x00\x00\x85\xC0\xB9\x19\x00\x00\x00\x0F\x45\xC8",
+            "achievementList+0x18 coin reward with its 25-coin default",
+        ),
     ):
         if update_data[offset : offset + len(needle)] != needle:
             raise RuntimeError(f"CAchievement::Update no longer owns {label}")
+    # achievementList is COFF-static in the stock object. Export it so the
+    # Complete all Achievements cheat reads the same reward rows Update does.
+    achievement_obj.set_symbol_storage_class(
+        "?achievementList@@3PAUsAchievementListEntry@@A",
+        IMAGE_SYM_CLASS_EXTERNAL,
+    )
     achievement_obj.write(PATCHED / "Achievement.obj")
 
     scene_obj = CoffObject(PATCHED / "AchievementsScene.obj")
