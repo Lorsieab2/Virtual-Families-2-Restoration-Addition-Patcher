@@ -38892,11 +38892,33 @@ extern "C" void __cdecl VF2EnableAutonomousCandidates(void *villager)
     // while one is placed. Raising the weight changes HOW OFTEN it is chosen
     // when a table exists, never WHETHER it is offered without one.
     CloneAutonomousCandidateWithWeight(data, 0x099, 0x0B8, 3000, __VF2_PING_PONG_OBJECT__); // Ping-Pong Table
-    EnableAdultOnlyAutonomousCandidateWithWeight(data, 0x047, 450); // WorkKitchenDispatch
-    CloneAutonomousCandidateWithWeight(data, 0x047, 0x048, 450, 0); // WorkKitchen0, with kitchen career gates
-    EnableAdultOnlyAutonomousCandidateWithWeight(data, 0x048, 450);
-    EnableAdultOnlyAutonomousCandidateWithWeight(data, 0x02C, 450); // OfficeCarreerWork
-    EnableAdultOnlyAutonomousCandidateWithWeight(data, 0x04B, 450); // WorkWorkshop
+    // CAREER WORK IS NOT TOUCHED HERE. Its label variations come entirely
+    // from the retargeted CBehavior macro rows (VF2RandomKitchenCareer*,
+    // VF2RandomOfficeCareerLabel, VF2RandomWorkshopCareerLabel), which run the
+    // native behaviour first and only swap the caption. The candidate rows
+    // 0x047 (kitchen), 0x02C (office) and 0x04B (workshop) must stay exactly
+    // as stock InitAI and LoadAI leave them, because career progress in
+    // vanilla is driven by those rows' WEIGHT:
+    //
+    //   * Stock InitAI already enables all three (+0xCD = 1) with weight 500
+    //     (then +/-20%), min age 0x168, career type 1/2/3 at +0x50, day-only,
+    //     and DecideWhatToDo triples exactly these three ids in daytime.
+    //   * LoadAI restores the SAVED weight, so praise (InvokeReward raises
+    //     +0x0C of the current behaviour towards 45000) persists.
+    //   * CVillagerAI::RealtimeWorkDone -- the catch-up that advances careers
+    //     while the game is closed -- reads the career row's weight
+    //     (+0xA574 / +0x8F84 / +0xA8B4 = rows 0x047/0x02C/0x04B, +0x0C) and
+    //     rolls weight/400 chances of 1 in 6 to call AdvanceCareer.
+    //
+    // SUPERSEDED (AGENTS.md 11): this block used to write a fixed weight 450
+    // and min age 0x118 into all three rows, and clone 0x047 into 0x048, on
+    // every InitAI AND every LoadAI. That erased praise training at each load
+    // (so the catch-up got one roll instead of up to 112), lowered the stock
+    // age gate by four years, and made WorkKitchen0 (0x048, not a stock
+    // candidate) a second kitchen-career row: it doubled kitchen selections
+    // without the daytime boost, and praise during it trained 0x048, which
+    // RealtimeWorkDone never reads. WorkKitchenDispatch always tail-calls
+    // WorkKitchen0, so 0x047 alone already reaches the same native plan.
     // Required objects for rows whose stock InitAI record is the default
     // (+0xC4 = 0); see RequireAutonomousCandidateObject. Each object is the
     // one the native behaviour's own furniture lookup searches.
@@ -39011,6 +39033,12 @@ extern "C" void __cdecl VF2EnableAutonomousCandidates(void *villager)
             "enabled_behavior": "0x23 LieInHammock retargeted to _VF2LieInHammockAnchoredRest",
             "manual_drop_behavior": "0x24 LieInHammockNoLeadIn retargeted to _VF2LieInHammockDropped: the same label, link and long rest as the spontaneous route (shared VF2PlanHammockRest), keeping the native refusal branch when the link fails and not releasing the semaphore the drop route never holds. THE SETTLE IS THE NATIVE DROP'S OWN TABLE, decoded from Behavior.obj: orientation 1 -> PlanToLieDown (body 9) + SleepNW, otherwise PlanToWait(.., 0x17) + SleepNE, 2-argument, no head direction -- the orientation the owner confirmed correct. SUPERSEDED TWICE: this field first read 'remains native' (the native drop settled for GetRandom(10)+10 with no sleep strip, which the owner asked to replace); then probe v17 shared the spontaneous route's body 9 + `orientation == 3` split, which the owner reported as wrong orientation and a flip when the eyes close -- that split was inherited from native LieInHammock, which uses body 9 and SleepNW unconditionally and is a native defect, not a reference.",
             "reason": "The spontaneous route keeps the long rest animation sequence, writes the native eString 0xE9 behavior label, requires either base HammockStd item 0x1E1 or Invisible Hammock item 0x30C in-world, then calls FurnitureManager.LinkPeepToFurniture to use the placed hammock anchor and settle with the native DROP's own table for the linked orientation: orientation 1 -> PlanToLieDown (body 9) + SleepNW; otherwise PlanToWait(.., body 0x17) + SleepNE. SUPERSEDED: this field previously described 'NW hammock -> body 9, head 7, SleepNW; NE hammock -> body 9, head 1, SleepNE' -- body 9 at both orientations with a head split, inherited from native LieInHammock (body 9 + SleepNW unconditionally, a native defect); the owner reported it as wrong orientation plus a flip between lying down and sleeping once the manual drop shared it.",
+        },
+        "career_work": {
+            "candidate_rows": "0x047 kitchen, 0x02C office, 0x04B workshop left exactly as stock InitAI/LoadAI set them (enabled, weight 500 +/-20% then the saved praise-trained weight, min age 0x168, career type gate, day-only); 0x048 WorkKitchen0 stays a non-candidate as in stock",
+            "label_variants": "career caption variants come only from the retargeted macro rows 0x047/0x048/0x02C/0x04B, which run the native behaviour (ChanceOfCareerSuccess -> PlanToAdvanceCareer) before swapping the label",
+            "why": "CVillagerAI::RealtimeWorkDone advances careers during catch-up with weight/400 rolls of the career row, so a fixed weight re-applied at every load erased praise-driven career progress",
+            "superseded": "B196 and earlier wrote weight 450 and min age 0x118 into all three rows and cloned 0x047 into 0x048 at every InitAI and LoadAI",
         },
         "note": "No Bored hook. Behavior Patches enables every registered variation route after stock InitAI and LoadAI, except Petting which is explicitly kept non-spontaneous. Native candidate fields continue to supply age, time, object, weather, and gender eligibility unless B150 documents an intentional override. The hammock candidate is refreshed at each native AI decision and is eligible only when base HammockStd item 0x1E1 or Invisible Hammock item 0x30C is in-world and Weather.currentType is 0 (Sunny) or 1 (Cloudy). Snow play is enabled only for Weather.currentType 5 (Snowing). Playhouse remains child-only and daytime-only. Raw age at CVillager+0x6A54 is displayed as years by dividing by 20.",
     }
@@ -39219,8 +39247,9 @@ def register_added_furniture_behaviors(manifest):
 
     WHY NOT JUST CLONE A CANDIDATE RECORD. CloneAutonomousCandidateWithWeight
     copies a donor's 0xD0-byte record into another slot, and the patcher already
-    uses it -- but every one of its existing targets (0x016, 0x048, 0x077,
-    0x0A5-0x0A8) is an id the constructor ALREADY registers. Cloning into an
+    uses it -- but every one of its existing targets (0x016, 0x077,
+    0x0A5-0x0A8; 0x048 was one until career rows were returned to stock) is
+    an id the constructor ALREADY registers. Cloning into an
     unregistered id would produce a candidate with no handler bound to it. The
     registration is the part that makes an id real.
 

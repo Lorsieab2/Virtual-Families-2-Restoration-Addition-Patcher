@@ -1567,7 +1567,14 @@
 - The non-adult autonomous gate still uses the proven stock boundary
   `CVillager+0x6A54 < 0x118`. Drawing, snow play, sandbox, toy train,
   Playhouse, and Kids Table spontaneous candidates use that range; adult
-  ironing/mending/career candidates use `>= 0x118`.
+  ironing/mending candidates use `>= 0x118`. CORRECTED: this line used to
+  list career candidates with `>= 0x118` too. That was the patch lowering
+  the stock gate: stock InitAI gives kitchen/office/workshop career work
+  (0x047/0x02C/0x04B) min age `0x168`, weight 500 and a career-type gate.
+  Behavior Patches no longer writes those rows at all (nor clones 0x047 into
+  the non-candidate 0x048), because `CVillagerAI::RealtimeWorkDone` advances
+  careers with weight/400 rolls of the career row's weight and the old
+  load-time re-apply of weight 450 erased praise training on every load.
 - Snow-play spontaneity is gated by `Weather.currentType == 5`, inferred from
   native weather event callsites that pass enum values `0`, `3`, `4`, and `5`.
   This needs in-game weather verification.
