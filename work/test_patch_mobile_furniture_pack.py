@@ -4,6 +4,7 @@ import copy
 import hashlib
 import json
 import os
+import re
 import shutil
 import struct
 import tempfile
@@ -8734,7 +8735,7 @@ class MobileSpecialUpgradeContractTests(unittest.TestCase):
             source,
         )
         self.assertIn(
-            "VF2PersistentCheatAndPurchaseMask() = generation;",
+            "VF2PersistentCheatAndPurchaseMask() = generationAndOneShots;",
             source,
         )
         self.assertIn(
@@ -8810,10 +8811,13 @@ class MobileSpecialUpgradeContractTests(unittest.TestCase):
             "VF2PersistentHealthPlanAndRenovationMask() = healthPlanAndRenovations;",
             reset_case,
         )
-        self.assertIn("VF2PersistentCheatAndPurchaseMask() = generation;", reset_case)
+        self.assertIn(
+            "VF2PersistentCheatAndPurchaseMask() = generationAndOneShots;",
+            reset_case,
+        )
         self.assertIn("record + 4", source)
         self.assertIn("VF2PersistentCheatAndPurchaseMask() >> 8", source)
-        self.assertIn("VF2PersistentCheatAndPurchaseMask() & 0xFFFFFF00u", source)
+        self.assertIn("VF2PersistentCheatAndPurchaseMask() & 0xFFFFFFFCu", reset_case)
         health_plan_helper = source.split(
             "static unsigned int &VF2PersistentHealthPlanAndRenovationMask()",
             1,
@@ -8973,7 +8977,10 @@ class OutfitStoreMappingTests(unittest.TestCase):
         self.assertEqual(patcher.SAME_SEX_MARRIAGE_CATALOG_PRICE, 0)
         self.assertEqual(rows[0x11B]["price"], 0)
         self.assertEqual(rows[0x133]["name"], "Max out sock pile")
-        self.assertIn("maximum signed integer", rows[0x133]["description"])
+        self.assertEqual(
+            rows[0x133]["description"],
+            "Sets only the laundry-room sock pile to 1,000,000 socks.",
+        )
         self.assertEqual(rows[0x134]["name"], "No sock pile")
         self.assertIn("without awarding sock-laundering progress", rows[0x134]["description"])
         self.assertEqual(rows[0x135]["name"], "Clean House")
@@ -9215,7 +9222,7 @@ class OutfitStoreMappingTests(unittest.TestCase):
         self.assertIn("static void VF2SetSockPileCount(int count)", source)
         self.assertIn("*(int *)(gameState + 0x148) = count;", source)
         self.assertIn("case 0x133:", source)
-        self.assertIn("static const int kVF2MaximumSockPileCount = 0x7FFFFFFF;", source)
+        self.assertIn("static const int kVF2MaximumSockPileCount = 1000000;", source)
         sock_pile_case = source.split("case 0x133:", 1)[1].split("case 0x134:", 1)[0]
         self.assertNotIn("CollectableItem.SpawnSockInHouse", sock_pile_case)
         self.assertIn("VF2SetSockPileCount(kVF2MaximumSockPileCount);", source)
@@ -10126,6 +10133,52 @@ class OutfitStoreMappingTests(unittest.TestCase):
         self.assertIn("case 0x124:", source)
         self.assertIn("Achievement.Reset();", source)
 
+    def test_reset_achievements_keeps_armed_pregnancy_one_shots(self):
+        # Record 0xA8's dword: bits 0-1 Taters purchase record, bits 2-7 the
+        # armed pregnancy one-shots, bits 8-31 the lifetime generation count.
+        # Reset must keep everything except the Taters goal progress.
+        source = Path(patcher.__file__).read_text(encoding="utf-8")
+        reset_case = source.split("case 0x124:", 1)[1].split("case 0x125:", 1)[0]
+        keep_mask = int(
+            reset_case.split("VF2PersistentCheatAndPurchaseMask() & ", 1)[1]
+            .split("u;", 1)[0],
+            16,
+        )
+        one_shot_bits = 0
+        for bit in re.findall(r"VF2ToggleOneShotUpgrade\((0x[0-9A-Fa-f]+)u,", source):
+            one_shot_bits |= int(bit, 16)
+        self.assertEqual(one_shot_bits, 0xFC)
+        self.assertEqual(keep_mask & one_shot_bits, one_shot_bits)
+        self.assertEqual(keep_mask & 0xFFFFFF00, 0xFFFFFF00)
+        self.assertEqual(keep_mask & 0x3, 0)
+
+    def test_max_sock_pile_cannot_overflow_native_sock_arithmetic(self):
+        # Deposit is `inc [gs+0x148]` and laundering adds the whole pile to
+        # goals 0x3B/0x3C/0x3D with a signed, unclamped IncrementProgress.
+        source = Path(patcher.__file__).read_text(encoding="utf-8")
+        value = int(
+            source.split("static const int kVF2MaximumSockPileCount = ", 1)[1]
+            .split(";", 1)[0],
+            0,
+        )
+        achievement = CoffObject(patcher.SRC_OBJS / "Achievement.obj")
+        table = achievement.symbol("?achievementList@@3PAUsAchievementListEntry@@A")
+        section = achievement.section(table.section)
+        targets = [
+            struct.unpack_from(
+                "<i",
+                achievement.buf,
+                section.raw_ptr + table.value + goal * 0x1C + 4,
+            )[0]
+            for goal in (0x3B, 0x3C, 0x3D)
+        ]
+        self.assertEqual(targets, [10, 50, 100])
+        # One wash completes every laundering goal from zero progress...
+        self.assertGreaterEqual(value, max(targets))
+        # ...and incomplete progress (< target) plus the pile plus a million
+        # more deposits stays a positive signed int.
+        self.assertLess(value + max(targets) + 1000000, 0x7FFFFFFF)
+
     def test_holiday_outfit_item_ids_decode_to_body_values_50_53(self):
         for gender in patcher.OUTFIT_STORE_GENDERS:
             for body_value in patcher.HOLIDAY_BODY_VALUES:
@@ -10965,7 +11018,7 @@ class CustomAchievementAwardDispatchTests(unittest.TestCase):
                     source,
                 )
                 self.assertIn(
-                    "VF2PersistentCheatAndPurchaseMask() & 0xFFFFFF00u",
+                    "VF2PersistentCheatAndPurchaseMask() & 0xFFFFFFFCu",
                     source,
                 )
                 self.assertIn(

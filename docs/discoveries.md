@@ -3021,6 +3021,17 @@
   route; the native 30-record pool bounds physical sock creation while the
   persistent pile counter retains the requested signed-int maximum. The stock
   decal still saturates at its largest frame for every count at or above 30.
+- **Superseded (2026-09-30): `0x7FFFFFFF` was a defect.** The deposit at
+  action `0x4C` is an unclamped `inc dword ptr [gs+0x148]`, so one more sock
+  wrapped the pile to `INT_MIN`; and stock `CAchievement::IncrementProgress`
+  is `add [record+4], amount` then a signed `jl` against the target, so
+  laundering an `INT_MAX` pile on top of any partial progress on goals
+  `0x3B`/`0x3C`/`0x3D` (targets 10/50/100 in `achievementList`) wrapped the
+  progress negative and left those goals unreachable. Max out sock pile now
+  sets 1,000,000: at least the largest laundering target, above the decal's
+  last frame, and more than two billion deposits away from overflow. (The
+  `SpawnSockInHouse` call described above was also already removed; the row
+  writes only the counter.)
 - The full 213-test suite passes with one intentional skip. Compiled helper
   readback confirms both writes and the shared save call. The later combined
   B156 link uses the installed Visual Studio Community x86 ATL library and
