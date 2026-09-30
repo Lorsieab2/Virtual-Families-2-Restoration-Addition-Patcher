@@ -4557,8 +4557,9 @@ Correction (2026-09-30, see "The title menu's Start Over resumed the village"
 below): the Start Over clause above was wrong for the stock desktop game.
 Nothing in the desktop objects or the vanilla executable calls
 `RestartCurrentGame`; the title menu's Start Over button ran the Play/Continue
-handler. The clause is true only once `patch_title_menu_start_over_confirms`
-is installed, which is what makes Start Over reach `RestartCurrentGame`.
+handler. With `patch_title_menu_start_over_confirms` installed, Start Over's
+Yes calls `Init` and then `SaveCurrentGame` directly (not the developer-dead
+`RestartCurrentGame`), so Init's Reset call runs for Start Over as well.
 
 Record `0xA8` is the patcher's scratch record, and its `+0x08` dword is village
 state that Reset leaves: bit 0 is the Health Plan entitlement, bits 1-15 the
@@ -4606,6 +4607,34 @@ Fix (`patch_title_menu_start_over_confirms`, every executable): Start Over's
 plays the click, calls `ShowMessageBox(this, 0x744, 0, true)` (the same yes/no
 box the Settings Evict and throw-out prompts use: Yes returns 0, No -1); No
 returns through the function's own `mov al,1` epilogue at `+0x103` with
-nothing changed; Yes calls `RestartCurrentGame` on `[this+0x0C]` and joins the
-stock path at `+0x128`, which (Init having cleared `GameStats[0]`) starts the
-intro story exactly as Play does for a new village. Not yet checked in play.
+nothing changed; Yes runs the calls the live new-player routes make and joins
+the stock path at `+0x128`, which (Init having cleared `GameStats[0]`) starts
+the intro story exactly as Play does for a new village. Not yet checked in play.
+
+Superseded, recorded rather than deleted: the first version of this fix had
+Yes call `RestartCurrentGame`. That routine is developer-dead (no caller in
+the desktop or mobile menu), so it is not used even though it decodes as
+`SoundTrack.Update(0)` + `Init` + `SaveCurrentGame` around a copy of the player
+name. Yes now repeats, in order, what the live new-player routes do --
+`theChangePlayerDlg::HandleMessage` `+0x31E..+0x4D9` and
+`theCreateNickNameDlg::HandleMessage` `+0x33..+0x80`, both opened from this
+menu: clamp option `+0x25B18` (>= 999 -> 10), `theGameState::Init`, set the
+player name at `+0x25ABC`, `SaveCurrentGame`. The dialogs take the name from
+the text box; Yes keeps the current player's (saved across Init). They also
+write the save slot `+0x25B20`, its name-list entry (`+0x25B30` + 0x15 per
+slot) and in-use flag (`+0x25B99`..); Init touches none of those, so for the
+same player in the same slot they already hold the values the dialogs would
+write. In the built exe the stub's `Init` and `SaveCurrentGame` calls resolve
+to the same addresses both dialogs call, and `RestartCurrentGame` is not
+linked at all.
+
+What the shared reset covers (the live routes and Yes alike):
+`theGameState::Init` resets GameTime, Achievement (through the patcher's
+`VF2ResetAchievementsForNewVillage`), Bird, Bubbles, ContentMap (reload),
+CollectableItem, DailyEmail, Decal, FamilyTree (generation), FloatingAnim,
+FoodStore, FurnitureManager, GameStats, InventoryManager (owned items and
+upgrades/renovations), Money, Smoke, Tech, ToolTray, TutorialTip,
+VillagerManager, PetManager, Weather, Environment (+props), WorldView, and the
+theGameState village fields (garbage, timers, email and life-event queues).
+Kept by both: the options block `+0x25B06..+0x25B18` (apart from the clamp),
+the save-slot block `+0x25B20..+0x25B9D`, and the player name.

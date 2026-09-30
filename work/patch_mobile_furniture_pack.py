@@ -16697,7 +16697,7 @@ static void VF2CheckMaximumResourceAchievements() {
 // A NEW VILLAGE MUST NOT INHERIT THE PATCHER'S SCRATCH RECORD.
 //
 // theGameState::Init runs stock CAchievement::Reset for a new player, for
-// Start Over (RestartCurrentGame, which then saves immediately) and at the
+// Start Over (the title-menu fix's Yes: Init, then an immediate save) and at the
 // start of every load. Reset clears only byte 0 and the +0x04 dword of each
 // 12-byte record. Record 0xA8 is the patcher's scratch record and keeps
 // village state in the bytes Reset leaves: the +0x08 dword holds the
@@ -24727,16 +24727,38 @@ def patch_new_village_clears_patcher_achievement_state(manifest):
 #   otherwise click sound, ShowMessageBox(this, eSayConfirmRestart, 0, true)
 #     No  (-1) -> the function's own "return true" epilogue at +0x103, so the
 #                 menu stays up and nothing is changed;
-#     Yes (0)  -> theGameState::RestartCurrentGame() (Init with the player
-#                 name kept, then SaveCurrentGame), then +0x128, the stock
-#                 path after its click sound. Init has just cleared
-#                 GameStats[0], so that path starts the intro story (scene 9)
-#                 exactly as Play does for a new village.
-# Mobile 1.7.16 shows the intended shape: theMenuScene::HandleDialog calls
-# RestartCurrentGame and then this same story/scene-9 path on result 0.
+#     Yes (0)  -> the calls the LIVE new-player path makes (below), then
+#                 +0x128, the stock path after its click sound. Init has just
+#                 cleared GameStats[0], so that path starts the intro story
+#                 (scene 9) exactly as Play does for a new village.
+#
+# DEVELOPER-DEAD CODE IS NOT USED. theGameState::RestartCurrentGame has no
+# caller in the stock desktop or mobile menu, so it is not called here even
+# though it decodes as SoundTrack.Update(0) + Init + SaveCurrentGame around a
+# copy of the player name. Yes instead repeats, in order, what the stock
+# new-player routes do when a player is created -- theChangePlayerDlg's new
+# player branch (HandleMessage +0x31E..+0x4D9) and theCreateNickNameDlg
+# (HandleMessage +0x33..+0x80), both reached from this same menu:
+#   if (options[+0x25B18] >= 999) options[+0x25B18] = 10;
+#   theGameState::Init();
+#   player name at +0x25ABC = this player's name;   (the dialogs copy the
+#                                                     typed name; here it is
+#                                                     the current player's,
+#                                                     saved before Init)
+#   theGameState::SaveCurrentGame();
+# The save slot (+0x25B20), the slot's name-list entry and in-use flag are
+# left as they are: the dialogs write the values this player already has.
+# Mobile 1.7.16 shows the intended shape: its (also unreached)
+# theMenuScene::HandleDialog runs RestartCurrentGame and then Init and the
+# same story/scene-9 path on result 0.
 START_OVER_MENU_FUNCTION = "?HandleMessage@theMenuScene@@UAE_NHJ@Z"
 START_OVER_SHOW_MESSAGE_BOX_SYMBOL = "?ShowMessageBox@@YAHPAVldwScene@@W4StringId@@H_N@Z"
-START_OVER_RESTART_SYMBOL = "?RestartCurrentGame@theGameState@@QAEXXZ"
+START_OVER_INIT_SYMBOL = "?Init@theGameState@@QAEXXZ"
+START_OVER_SAVE_SYMBOL = "?SaveCurrentGame@theGameState@@QAE_NXZ"
+# Developer-dead in the stock game: named only so tests can assert it is NOT
+# what the stub calls.
+START_OVER_DEAD_RESTART_SYMBOL = "?RestartCurrentGame@theGameState@@QAEXXZ"
+START_OVER_STUB_SIZE = 0xAA
 START_OVER_CONFIRM_STRING_ID = 0x744  # eSayConfirmRestart
 START_OVER_BRANCH_OFFSET = 0x64       # je taken when the id is Start Over's
 START_OVER_SHARED_PATH = 0x119        # stock Play/Start Over handler
@@ -24823,10 +24845,21 @@ def patch_title_menu_start_over_confirms(manifest):
     stub += b"\x83\xC4\x10"                                           # +2B add esp,10h
     stub += b"\x85\xC0"                                               # +2E test eax,eax
     stub += b"\x0F\x85" + branch_disp(0x30, 6, START_OVER_RETURN_TRUE)  # +30 jne return true
-    stub += b"\x8B\x4F\x0C"                                           # +36 mov ecx,[edi+0Ch]
-    stub += b"\xE8\0\0\0\0"                                           # +39 call RestartCurrentGame
-    stub += b"\xE9" + branch_disp(0x3E, 5, START_OVER_AFTER_SOUND)    # +3E jmp +0x128
-    assert len(stub) == 0x43
+    # Yes: the live new-player sequence on the game state [this+0Ch].
+    stub += b"\x8B\x77\x0C"                                           # +36 mov esi,[edi+0Ch]
+    stub += b"\x81\xBE\x18\x5B\x02\x00\xE7\x03\x00\x00"               # +39 cmp [esi+25B18h],3E7h
+    stub += b"\x7C\x0A"                                               # +43 jl +4F
+    stub += b"\xC7\x86\x18\x5B\x02\x00\x0A\x00\x00\x00"               # +45 mov [esi+25B18h],0Ah
+    for field in (0x25AD0, 0x25ACC, 0x25AC8, 0x25AC4, 0x25AC0, 0x25ABC):
+        stub += b"\xFF\xB6" + struct.pack("<I", field)                # +4F.. push name dword
+    stub += b"\x8B\xCE"                                               # +73 mov ecx,esi
+    stub += b"\xE8\0\0\0\0"                                           # +75 call theGameState::Init
+    for field in (0x25ABC, 0x25AC0, 0x25AC4, 0x25AC8, 0x25ACC, 0x25AD0):
+        stub += b"\x8F\x86" + struct.pack("<I", field)                # +7A.. pop name dword
+    stub += b"\x8B\xCE"                                               # +9E mov ecx,esi
+    stub += b"\xE8\0\0\0\0"                                           # +A0 call SaveCurrentGame
+    stub += b"\xE9" + branch_disp(0xA5, 5, START_OVER_AFTER_SOUND)    # +A5 jmp +0x128
+    assert len(stub) == START_OVER_STUB_SIZE
 
     obj.insert_section_bytes(sec.index, stub_off, bytes(stub))
     sec = obj.section(func.section)
@@ -24839,13 +24872,15 @@ def patch_title_menu_start_over_confirms(manifest):
     sound = obj.symbol("?Sound@@3VCSound@@A").index
     play = obj.symbol("?Play@CSound@@QAEXW4ESound@@@Z").index
     show = obj.append_undefined_symbol(START_OVER_SHOW_MESSAGE_BOX_SYMBOL)
-    restart = obj.append_undefined_symbol(START_OVER_RESTART_SYMBOL)
+    init = obj.append_undefined_symbol(START_OVER_INIT_SYMBOL)
+    save = obj.append_undefined_symbol(START_OVER_SAVE_SYMBOL)
     for at, symidx, rtype in (
         (0x02, game_stats, IMAGE_REL_I386_DIR32),
         (0x13, sound, IMAGE_REL_I386_DIR32),
         (0x18, play, IMAGE_REL_I386_REL32),
         (0x27, show, IMAGE_REL_I386_REL32),
-        (0x3A, restart, IMAGE_REL_I386_REL32),
+        (0x76, init, IMAGE_REL_I386_REL32),
+        (0xA1, save, IMAGE_REL_I386_REL32),
     ):
         obj.append_relocation(sec.index, stub_off + at, symidx, rtype)
     obj.write(obj_path)
@@ -24855,7 +24890,11 @@ def patch_title_menu_start_over_confirms(manifest):
         "branch": hex(START_OVER_BRANCH_OFFSET),
         "stub_offset": hex(stub_off),
         "prompt": "eSayConfirmRestart (0x744) via ShowMessageBox(scene, id, 0, true)",
-        "confirm": "theGameState::RestartCurrentGame, then the stock story/scene-9 path at +0x128",
+        "confirm": (
+            "the live new-player sequence (option clamp, theGameState::Init, "
+            "player name kept, SaveCurrentGame), then the stock story/scene-9 "
+            "path at +0x128; developer-dead RestartCurrentGame is not called"
+        ),
         "cancel": "return true at +0x103; the menu stays and nothing changes",
         "no_village": "stock +0x119 path, unchanged (GameStats[0] == 0)",
         "owner_report": "Pressing start over keeps going into the current game instead of bringing the start over prompt.",
