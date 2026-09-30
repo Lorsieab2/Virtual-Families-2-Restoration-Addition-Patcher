@@ -7900,7 +7900,14 @@ class SpontaneousBehaviorContractTests(unittest.TestCase):
                 self.assertIn("class CNight", helper)
                 self.assertIn("extern CNight Night;", helper)
                 self.assertIn("Night.AIIsDayTime()", helper)
-                self.assertIn("playhouse[0xCD] = (unsigned char)daytimeAllowsPlayhouse;", helper)
+                # The playhouse's enabled flag is set through VF2SetGatedCandidate
+                # now, so the per-decision refresh keeps praise/scold-trained
+                # weights. SUPERSEDED form: a direct
+                # `playhouse[0xCD] = (unsigned char)daytimeAllowsPlayhouse;` write
+                # beside a fixed weight write.
+                self.assertIn(
+                    "VF2SetGatedCandidate(playhouse, daytimeAllowsPlayhouse, 3000, resetWeights);",
+                    helper)
                 self.assertIn("EnableAutonomousCandidateWithWeight(data, 0x189, 450); // UseCouch / sit-down, native couch+age gates retained", helper)
                 actions = " ".join(manifest["spontaneous_behaviors"]["actions"])
                 self.assertIn("playing quietly at kids table", actions)
