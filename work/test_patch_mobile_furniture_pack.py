@@ -14593,6 +14593,17 @@ class HolidayOrnamentGateTests(unittest.TestCase):
                 self.assertEqual(manifest[key]["offline_patcher_setting"], "fix_vanilla_game_bugs")
 
         self.with_temp_patched_objs(["theMenuScene.obj", "theOptionsDialog.obj"], run)
+        # The exporter emits a .vf2bugs post-asset record, so every tool that
+        # enumerates runtime flags has to know the section (Codex, PR #412).
+        import export_offline_patch_bundle as exporter
+        import validate_b158_mobile_feature_readback as b158_readback
+        self.assertEqual(exporter.RUNTIME_FLAG_SECTION_BY_SETTING["fix_vanilla_game_bugs"], ".vf2bugs")
+        self.assertEqual(b153_runtime.RUNTIME_FLAG_SECTIONS["fix_vanilla_game_bugs"], ".vf2bugs")
+        self.assertEqual(
+            b153_runtime.POST_ASSET_RECORD_SECTIONS["fix_vanilla_game_bugs"],
+            ("fix_vanilla_game_bugs", ".vf2bugs"),
+        )
+        self.assertEqual(b158_readback.RUNTIME_FLAG_SECTIONS["fix_vanilla_game_bugs"], ".vf2bugs")
         source = Path(patcher.__file__).read_text(encoding="utf-8")
         self.assertIn(
             '#pragma section(".vf2bugs", read, write)\n'
