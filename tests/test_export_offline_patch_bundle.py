@@ -3316,6 +3316,53 @@ class TestSuiteCopiesInSyncTests(unittest.TestCase):
                 )
 
 
+class TestBundleReadmeWarnsAboutBackupGrowth(unittest.TestCase):
+    """Every Enable/Disable rebuild keeps a full ~230 MB copy that is never pruned.
+
+    The player-facing bundle README is where that cost has to be stated, so the
+    written file (not just the exporter source) must carry the warning.
+    """
+
+    def test_written_patcher_readme_states_backup_size_location_and_retention(self):
+        with tempfile.TemporaryDirectory() as td:
+            bundle = Path(td) / "bundle"
+            bundle.mkdir()
+            exporter.write_bundle_runner_files(bundle, "B999")
+            text = " ".join((bundle / "README-B999-PATCHER.txt").read_text(encoding="ascii").split())
+        for phrase in (
+            "Each such rebuild first saves a complete copy of the old modded folder (about 230 MB)",
+            "by default in a new timestamped folder under .vf2_patch_backups",
+            "if you set the Backup folder field (or --backup-dir) to a folder that already exists",
+            "one picked with Browse always does -- each run writes a new timestamped folder inside it",
+            "a path that does not exist yet is created and used as given",
+            "The patcher never deletes these",
+            "delete older ones yourself, from wherever they were written, to reclaim disk space",
+        ):
+            self.assertIn(phrase, text)
+
+    def test_create_backup_itself_never_reuses_a_folder(self):
+        # create_backup still refuses an existing folder, so no run can write
+        # over an earlier backup. apply_manifest is what gives an existing
+        # Backup folder (the only kind Browse returns) a fresh per-run
+        # subfolder -- pinned by test_an_existing_backup_folder_gets_a_fresh_
+        # subfolder_per_run in the patcher suite. Superseded: this test used to
+        # pin "an existing Backup folder stops the run", which made Browse
+        # unusable and is now fixed.
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            game = root / "game"
+            game.mkdir()
+            output = root / "VF2-X-Modded"
+            output.mkdir()
+            (output / "kept.txt").write_text("kept", encoding="ascii")
+            existing = root / "chosen-with-browse"
+            existing.mkdir()
+            with self.assertRaises(FileExistsError):
+                patcher.create_backup(game, output, existing, {}, [], [], root / "manifest.json")
+            self.assertEqual(list(existing.iterdir()), [])
+            self.assertEqual((output / "kept.txt").read_text(encoding="ascii"), "kept")
+
+
 class TestBundleChangelogReachesTheWrittenLog(unittest.TestCase):
     """The changelog blocks must survive into the file, not just the source.
 

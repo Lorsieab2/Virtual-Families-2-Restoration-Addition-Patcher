@@ -879,6 +879,53 @@ class OfflineVF2PatcherTests(unittest.TestCase):
             self.assertEqual(game_file.read_bytes(), original)
             self.assertTrue((backup / "restore_log.json").is_file())
 
+    def test_an_existing_backup_folder_gets_a_fresh_subfolder_per_run(self):
+        """A Backup folder chosen with Browse always exists already.
+
+        create_backup refuses to reuse a folder, so before this every run with
+        a browsed Backup folder failed, and so did a second run into the same
+        new folder. An existing folder now receives a per-run subfolder; a new
+        path is still used exactly as given.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            game_dir = tmp_path / "game"
+            game_dir.mkdir()
+            game_file = game_dir / "Virtual Families 2.exe"
+            original = bytes([1, 2, 3, 4, 5, 6])
+            game_file.write_bytes(original)
+            manifest = tmp_path / "patch.json"
+            self.write_manifest(manifest, game_file, original)
+            chosen = tmp_path / "My Backups"
+            chosen.mkdir()
+
+            self.run_patcher(
+                "apply", "--game-dir", str(game_dir), "--manifest", str(manifest),
+                "--backup-dir", str(chosen),
+            )
+            runs = [p for p in chosen.iterdir() if p.is_dir()]
+            self.assertEqual(len(runs), 1)
+            self.assertTrue((runs[0] / "vf2_patch_backup_manifest.json").is_file())
+            self.assertEqual(game_file.read_bytes(), bytes([1, 2, 0xAA, 0xBB, 5, 6]))
+
+            self.run_patcher("restore", "--backup-dir", str(runs[0]))
+            self.assertEqual(game_file.read_bytes(), original)
+
+            self.run_patcher(
+                "apply", "--game-dir", str(game_dir), "--manifest", str(manifest),
+                "--backup-dir", str(chosen),
+            )
+            self.assertEqual(len([p for p in chosen.iterdir() if p.is_dir()]), 2)
+
+            fresh = tmp_path / "fresh-backup"
+            self.run_patcher("restore", "--backup-dir", str(sorted(
+                p for p in chosen.iterdir() if p.is_dir())[-1]))
+            self.run_patcher(
+                "apply", "--game-dir", str(game_dir), "--manifest", str(manifest),
+                "--backup-dir", str(fresh),
+            )
+            self.assertTrue((fresh / "vf2_patch_backup_manifest.json").is_file())
+
     def test_restore_refuses_tampered_backup_before_mutation(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
