@@ -795,6 +795,43 @@ class TheWideningIsMeasuredOnTheMapItWrites(unittest.TestCase):
             raise
         return gen, holder, assets, seeded, manifest, donors / DONOR.name
 
+    def test_no_map_the_generator_writes_carries_a_mobile_hotspot(self):
+        """Issue #378, checked on the files the production path writes.
+
+        test_borrowed_maps_carry_no_mobile_hotspot exercises the merge helper
+        directly; this runs sync_behavior_assets -> copy_donor_fmap and reads
+        the maps it actually installs, so a later step that bypassed or
+        overwrote the sanitised bytes would fail here.
+        """
+        gen, holder, assets, _seeded, _m, donor = self._run("_gen_hotspots_under_test")
+        try:
+            # The DONOR's own file is excluded: copy_donor_fmap writes the raw
+            # donor under its own name, and a later pass (Mobile Furniture
+            # Behaviors' desktop-safe maps) owns that name. Checked on a full
+            # build of this branch: no installed Assets/*.fmap carries a
+            # hotspot above the stock 0x5C that vanilla PetBowls already uses.
+            written = sorted(
+                path for path in assets.glob("*.fmap") if path.name != donor.name
+            )
+            names = {path.name for path in written}
+            for target in gen.SPA_LOUNGER_WIDENED_FMAPS:
+                self.assertIn(target, names, "the borrower maps were not written")
+            for path in written:
+                data = path.read_bytes()
+                if data[:4] != b"QAMF":
+                    continue
+                width, height = struct.unpack_from("<II", data, 24)
+                cells = struct.unpack_from("<%dI" % (width * height), data, 32)
+                with self.subTest(map=path.name):
+                    self.assertEqual(
+                        [hex(gen.fmap_cell_hotspot(c)) for c in cells
+                         if gen.fmap_cell_hotspot(c) > gen.DESKTOP_MAX_HOTSPOT],
+                        [],
+                        "the generator installed a hotspot id the desktop drop "
+                        "dispatcher cannot hold (issue #378)")
+        finally:
+            holder.cleanup()
+
     def test_it_claims_the_footprint_and_leaves_the_anchor_alone(self):
         gen, holder, assets, seeded, _m, _d = self._run(
             "_gen_bytes_under_test")
@@ -948,12 +985,24 @@ class TheWideningIsMeasuredOnTheMapItWrites(unittest.TestCase):
                 len(record), len(gen.SPA_LOUNGER_WIDENED_FMAPS),
                 "expected one record per widened target, got %s"
                 % [row.get("target") for row in record])
+            # THE OUTCOME IS ASSERTED, NOT THE ROUTE TO IT.
+            #
+            # This used to require claimed_from_footprint > 0, as a proxy for
+            # "not the empty-only shape that shipped at 13". That proxy held
+            # only while the ring was full of mobile hotspot cells
+            # (0x01B00000). Issue #378 showed those cells are exactly what
+            # made a drop call into unrelated memory, and borrowed_fmap_bytes
+            # now clears them -- they carried nothing but the hotspot, not
+            # even the solid bit -- so the ring is genuinely empty and the
+            # widening reaches the same 33 cells without claiming any
+            # footprint. The failure the proxy stood for is a drop target
+            # stuck at 13, so that is what is checked, absolutely.
             for row in record:
                 with self.subTest(target=row["target"]):
-                    self.assertGreater(
-                        row["claimed_from_footprint"], 0,
-                        "no footprint claimed, so this build is the "
-                        "empty-only shape that shipped at 13: %s" % row)
+                    self.assertEqual(
+                        row["widened_to"], 33,
+                        "the drop target did not reach the owner-approved "
+                        "33 cells: %s" % row)
         finally:
             holder.cleanup()
 

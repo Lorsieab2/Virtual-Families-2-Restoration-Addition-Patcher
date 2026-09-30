@@ -108,7 +108,16 @@ MOBILE_CHAISE_PC_SLOT_CELL = (8, 6)
 # describing where the piece blocks movement, with no desktop handler of its
 # own. The peep-slot anchor below is the value that DOES matter to placement
 # and is never overwritten.
-MOBILE_CHAISE_FOOTPRINT_CELL_VALUES = (0x01B00000, 0x01B00001)
+#
+# borrowed_fmap_bytes now clears the mobile hotspot id (0x6C, bits 18-24) from
+# these before they are installed (issue #378), so a borrower carries them as
+# 0x00000010 (the inert occupancy bit, see FMAP_INERT_OCCUPANCY_BIT) and
+# 0x00000001. Both cleared forms are listed, so the spa-lounger drop-target
+# widening still claims exactly the cells it claimed before; no borrower map
+# carried a bare 0x00000001 or 0x00000010 of its own before the clearing
+# (B196 InvisibleSpaLounger/InvisibleLounger: none), so nothing new becomes
+# claimable.
+MOBILE_CHAISE_FOOTPRINT_CELL_VALUES = (0x01B00000, 0x01B00001, 0x00000001, 0x00000010)
 MOBILE_CHAISE_MOBILE_SLOT_CELL_VALUE = 0x01B09800
 MOBILE_CHAISE_PC_CELLS = (
     (7, 8),
@@ -1041,6 +1050,58 @@ def desktop_safe_fmap_source(donor):
     return safe if safe.is_file() else None
 
 
+# A cell's hotspot is (cell >> 18) & 0x7F -- decoded from CContentMap::Read,
+# which stores that field at SContent+0x0C for GetHotSpot to return. The stock
+# theMainScene::HandleDropOnHotSpot dispatches any NON-ZERO hotspot through
+# CHotSpot::Dispatch, which indexes an 8-byte-per-entry handler table with NO
+# upper bound: `mov eax,[ecx+eax*8]; test eax,eax; je; call eax`. The desktop
+# table has handlers for 0x01-0x5B only. Every id the mobile maps use is 0x5C
+# or higher (3,831 cells across the 34 mobile donors, not one below), and
+# those read past the table into unrelated memory. For 0x6B-0x6D that memory
+# is a store-category cache that holds pet item ids once the Pets tab has been
+# drawn, so a drop called 0x240-0x244 as code: the DEP fault in issue #378.
+FMAP_HOTSPOT_SHIFT = 18
+FMAP_HOTSPOT_MASK = 0x7F << FMAP_HOTSPOT_SHIFT
+DESKTOP_MAX_HOTSPOT = 0x5B
+
+
+def fmap_cell_hotspot(cell):
+    """The hotspot id CContentMap::Read decodes from a map cell."""
+    return (cell >> FMAP_HOTSPOT_SHIFT) & 0x7F
+
+
+# A cell whose ONLY content was the mobile hotspot must not become 0.
+#
+# The transparent-drop fallback (VF2TransparentFurnitureSlotAtPoint) takes the
+# item's footprint to be every NONZERO cell of its own map -- ApplyContentBlock's
+# rule -- and on the invisible tables and loungers most of that footprint was
+# hotspot-only cells (0x01B00000 and friends). Zeroing them shrank the drop
+# target: InvisibleLounger 154 -> 43 cells, InvisiblePatioTable 241 -> 157.
+#
+# Bit 4 keeps the cell nonzero and means nothing to the engine. CContentMap::Read
+# decodes bits 0-3 and 11-31 only (blocked, material, object, hotspot, the
+# +0x10 field); bits 4-10 are never read. ApplyContentBlock applies a nonzero
+# block cell by Read-ing it, merging each NONZERO decoded field over the cell
+# already in the map, and re-encoding through CContentMap::Write -- so a cell
+# carrying only bit 4 decodes to all zeros and leaves the live map exactly as
+# it was: no hotspot, no collision, no object. Only the fallback's occupancy
+# test sees it, which is the one consumer that needs it.
+FMAP_INERT_OCCUPANCY_BIT = 0x10
+
+
+def without_mobile_hotspot(cell):
+    """`cell` with its hotspot cleared if the desktop dispatcher cannot hold it.
+
+    Only the hotspot field changes. Collision, object and every other decoded
+    bit is kept, and a cell that held nothing but the hotspot keeps an inert
+    occupancy bit, so the borrower keeps the donor's exact footprint.
+    """
+    if fmap_cell_hotspot(cell) > DESKTOP_MAX_HOTSPOT:
+        cleared = cell & ~FMAP_HOTSPOT_MASK & 0xFFFFFFFF
+        return cleared or FMAP_INERT_OCCUPANCY_BIT
+    return cell
+
+
 def borrowed_fmap_bytes(donor_map, desktop_safe_map):
     """The map a BORROWING item should receive.
 
@@ -1062,6 +1123,13 @@ def borrowed_fmap_bytes(donor_map, desktop_safe_map):
     taken from it, and every other cell is carried across from the donor map
     untouched. That is what the working build shipped for these borrowers,
     plus the anchor translation that the desktop-safe map exists to provide.
+
+    A carried-across cell keeps everything EXCEPT a mobile hotspot id. That is
+    metadata the desktop-safe map deliberately drops, and carrying it across
+    is what made a drop on the Invisible Patio Table, Picnic Table, Lounger or
+    Spa Lounger -- and on the visible Spa Lounger, which ships the invisible
+    one's map -- call into unrelated memory (issue #378). See
+    DESKTOP_MAX_HOTSPOT above for the decoded evidence.
     """
     donor_cells = _fmap_cells(donor_map)
     safe_cells = _fmap_cells(desktop_safe_map)
@@ -1077,7 +1145,7 @@ def borrowed_fmap_bytes(donor_map, desktop_safe_map):
         # an implementation detail of the call site.
         return None
     merged = [
-        safe if safe and safe != donor else donor
+        safe if safe and safe != donor else without_mobile_hotspot(donor)
         for donor, safe in zip(donor_cells, safe_cells)
     ]
     grid_end = 32 + 4 * len(merged)
