@@ -35702,6 +35702,20 @@ extern "C" void __cdecl VF2RefreshHammockEligibility(void *villager)
     *(unsigned int *)(candidate + 0x0C) = hammockAllowsAction ? 3000 : 0;
     *(unsigned int *)(candidate + 0x48) = 0;
     *(unsigned int *)(candidate + 0x4C) = 0;
+    // THE WEATHER GATE ABOVE IS THE ONLY ONE. Stock InitAI gives this
+    // candidate +0xA8 = 0 ("weather must equal Sunny"), and
+    // CVillagerAI::DecideWhatToDo rejects any candidate whose +0xA8 is not -1
+    // and differs from Weather.currentType:
+    //
+    //     mov  eax, [edi+esi+6C60h]      ; 0x6BB8 + 0xA8
+    //     cmp  eax, -1 / je  next
+    //     cmp  [Weather], eax / jne reject
+    //
+    // Left at 0, that stock field vetoed Cloudy (1) even though this refresh
+    // admits it, so the hammock was only ever chosen in Sunny weather while
+    // the README and manifest said Sunny/Cloudy. -1 hands the decision to
+    // weatherAllowsHammock, which this function re-evaluates every decision.
+    *(int *)(candidate + 0xA8) = -1;
 
     unsigned char *playhouse = data + 0x6BB8 + 0x11E * 0xD0;
     const int daytimeAllowsPlayhouse = Night.AIIsDayTime();
