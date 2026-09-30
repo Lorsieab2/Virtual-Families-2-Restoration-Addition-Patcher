@@ -3822,7 +3822,7 @@ def build_parser() -> argparse.ArgumentParser:
     apply_cmd.add_argument("--manifest", required=True, help="Path to the JSON patch manifest.")
     apply_cmd.add_argument("--output-dir", help="Optional modded game output folder. Defaults to the manifest output folder when a vanilla game folder is supplied. If --game-dir is omitted, this must be an existing modded folder to reconfigure.")
     apply_cmd.add_argument("--output-parent-dir", help="Optional parent folder for the manifest-named modded output folder. Ignored when --output-dir is supplied.")
-    apply_cmd.add_argument("--backup-dir", help="Backup output directory. Defaults to a per-run folder under .vf2_patch_backups in the output folder.")
+    apply_cmd.add_argument("--backup-dir", help="Backup output directory. A folder that already exists receives a new per-run subfolder; a new path is used as given. Defaults to a per-run folder under .vf2_patch_backups in the output folder.")
     apply_cmd.add_argument("--log", help="Patch log JSON path. Defaults inside the backup directory.")
     apply_cmd.add_argument("--dry-run", action="store_true", help="Validate only; do not back up or modify files.")
     apply_cmd.add_argument("--enable", action="append", help="Enable a manifest setting. Repeat or comma-separate IDs.")
