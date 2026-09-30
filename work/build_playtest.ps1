@@ -38,6 +38,7 @@ param(
     [bool]$AllowOlderPregnancies = $true,
     [bool]$OlderVillagerMortality = $true,
     [bool]$StoreScrollBar = $true,
+    [bool]$FixVanillaGameBugs = $true,
     # A previous build to inherit runtime art from. 635 Images --
     # mobile furniture art, 448 VillagerBodies frames, 61 upgrade icons --
     # exist in neither the repository nor the vanilla payload, so they
@@ -336,6 +337,7 @@ try {
         ".vf2preg" = @($AllowOlderPregnancies, "Allow Older Pregnancies")
         ".vf2mort" = @($OlderVillagerMortality, "Older Villager Mortality curve")
         ".vf2scrl" = @($StoreScrollBar, "Store Scroll Bar")
+        ".vf2bugs" = @($FixVanillaGameBugs, "Fix Vanilla Game Bugs")
     }
     foreach ($section in $runtimeFlags.Keys) {
         $selected = $runtimeFlags[$section][0]

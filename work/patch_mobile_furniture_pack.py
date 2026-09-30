@@ -439,6 +439,13 @@ DIVORCE_SPOUSE_CATALOG_PRICE = 0
 # offline patcher flips only .vf2mort for the selected exact-SHA payload.
 OLDER_MORTALITY_FLAG_SECTION = ".vf2mort"
 OLDER_MORTALITY_FLAG_SYMBOL = "_gVF2OlderVillagerMortality"
+# "Fix Vanilla Game Bugs" (owner request 2026-09-30, on by default): one
+# dormant byte gating every stock-game menu fix -- Start Over, Settings Pause
+# Yes, the invisible title hotspot, and the stale title screen. Zero runs the
+# untouched stock instructions at every site.
+VANILLA_BUGS_SETTING = "fix_vanilla_game_bugs"
+VANILLA_BUGS_FLAG_SECTION = ".vf2bugs"
+VANILLA_BUGS_FLAG_SYMBOL = "_gVF2FixVanillaGameBugs"
 OLDER_MORTALITY_HELPER_SYMBOL = "_VF2RollOlderVillagerMortality"
 LONGEVITY_AGE_HELPER_SYMBOL = "_VF2AwardLongevityGoals"
 LONGEVITY_LOAD_HELPER_SYMBOL = "@VF2VillagerLoadStateAndReconcileLongevity@12"
@@ -15755,6 +15762,10 @@ volatile unsigned char gVF2AllowOlderPregnancies = 0;
 extern "C" __declspec(allocate(".vf2mort"))
 volatile unsigned char gVF2OlderVillagerMortality = 0;
 
+#pragma section(".vf2bugs", read, write)
+extern "C" __declspec(allocate(".vf2bugs"))
+volatile unsigned char gVF2FixVanillaGameBugs = 0;
+
 __VF2_MORTALITY_HAZARD_ARRAY__
 
 static const bool kVF2IncludeOrnamentologistGoal = __VF2_INCLUDE_ORNAMENT_GOAL__;
@@ -24758,7 +24769,7 @@ START_OVER_SAVE_SYMBOL = "?SaveCurrentGame@theGameState@@QAE_NXZ"
 # Developer-dead in the stock game: named only so tests can assert it is NOT
 # what the stub calls.
 START_OVER_DEAD_RESTART_SYMBOL = "?RestartCurrentGame@theGameState@@QAEXXZ"
-START_OVER_STUB_SIZE = 0xAA
+START_OVER_STUB_SIZE = 0xB7
 START_OVER_CONFIRM_STRING_ID = 0x744  # eSayConfirmRestart
 START_OVER_BRANCH_OFFSET = 0x64       # je taken when the id is Start Over's
 START_OVER_SHARED_PATH = 0x119        # stock Play/Start Over handler
@@ -24832,33 +24843,37 @@ def patch_title_menu_start_over_confirms(manifest):
     stub_off = sec.raw_size
     branch_disp = lambda at, size, target: struct.pack("<i", target - (stub_off + at + size))
     stub = bytearray()
-    stub += b"\x83\x3D\0\0\0\0\x00"                                   # +00 cmp [GameStats],0
+    # Fix Vanilla Game Bugs off (.vf2bugs == 0): the stock +0x119 path, as if
+    # the je had never been re-pointed.
+    stub += b"\x80\x3D\0\0\0\0\x00"                                   # +00 cmp byte [flag],0
     stub += b"\x0F\x84" + branch_disp(0x07, 6, START_OVER_SHARED_PATH)  # +07 je stock path
-    stub += b"\x68\xB9\x00\x00\x00"                                   # +0D push 0B9h
-    stub += b"\xB9\0\0\0\0"                                           # +12 mov ecx,Sound
-    stub += b"\xE8\0\0\0\0"                                           # +17 call CSound::Play
-    stub += b"\x6A\x01"                                               # +1C push 1 (yes/no)
-    stub += b"\x6A\x00"                                               # +1E push 0
-    stub += b"\x68" + struct.pack("<I", START_OVER_CONFIRM_STRING_ID)  # +20 push 744h
-    stub += b"\x57"                                                   # +25 push edi (menu)
-    stub += b"\xE8\0\0\0\0"                                           # +26 call ShowMessageBox
-    stub += b"\x83\xC4\x10"                                           # +2B add esp,10h
-    stub += b"\x85\xC0"                                               # +2E test eax,eax
-    stub += b"\x0F\x85" + branch_disp(0x30, 6, START_OVER_RETURN_TRUE)  # +30 jne return true
+    stub += b"\x83\x3D\0\0\0\0\x00"                                   # +0D cmp [GameStats],0
+    stub += b"\x0F\x84" + branch_disp(0x14, 6, START_OVER_SHARED_PATH)  # +14 je stock path
+    stub += b"\x68\xB9\x00\x00\x00"                                   # +1A push 0B9h
+    stub += b"\xB9\0\0\0\0"                                           # +1F mov ecx,Sound
+    stub += b"\xE8\0\0\0\0"                                           # +24 call CSound::Play
+    stub += b"\x6A\x01"                                               # +29 push 1 (yes/no)
+    stub += b"\x6A\x00"                                               # +2B push 0
+    stub += b"\x68" + struct.pack("<I", START_OVER_CONFIRM_STRING_ID)  # +2D push 744h
+    stub += b"\x57"                                                   # +32 push edi (menu)
+    stub += b"\xE8\0\0\0\0"                                           # +33 call ShowMessageBox
+    stub += b"\x83\xC4\x10"                                           # +38 add esp,10h
+    stub += b"\x85\xC0"                                               # +3B test eax,eax
+    stub += b"\x0F\x85" + branch_disp(0x3D, 6, START_OVER_RETURN_TRUE)  # +3D jne return true
     # Yes: the live new-player sequence on the game state [this+0Ch].
-    stub += b"\x8B\x77\x0C"                                           # +36 mov esi,[edi+0Ch]
-    stub += b"\x81\xBE\x18\x5B\x02\x00\xE7\x03\x00\x00"               # +39 cmp [esi+25B18h],3E7h
-    stub += b"\x7C\x0A"                                               # +43 jl +4F
-    stub += b"\xC7\x86\x18\x5B\x02\x00\x0A\x00\x00\x00"               # +45 mov [esi+25B18h],0Ah
+    stub += b"\x8B\x77\x0C"                                           # +43 mov esi,[edi+0Ch]
+    stub += b"\x81\xBE\x18\x5B\x02\x00\xE7\x03\x00\x00"               # +46 cmp [esi+25B18h],3E7h
+    stub += b"\x7C\x0A"                                               # +50 jl +5C
+    stub += b"\xC7\x86\x18\x5B\x02\x00\x0A\x00\x00\x00"               # +52 mov [esi+25B18h],0Ah
     for field in (0x25AD0, 0x25ACC, 0x25AC8, 0x25AC4, 0x25AC0, 0x25ABC):
-        stub += b"\xFF\xB6" + struct.pack("<I", field)                # +4F.. push name dword
-    stub += b"\x8B\xCE"                                               # +73 mov ecx,esi
-    stub += b"\xE8\0\0\0\0"                                           # +75 call theGameState::Init
+        stub += b"\xFF\xB6" + struct.pack("<I", field)                # +5C.. push name dword
+    stub += b"\x8B\xCE"                                               # +80 mov ecx,esi
+    stub += b"\xE8\0\0\0\0"                                           # +82 call theGameState::Init
     for field in (0x25ABC, 0x25AC0, 0x25AC4, 0x25AC8, 0x25ACC, 0x25AD0):
-        stub += b"\x8F\x86" + struct.pack("<I", field)                # +7A.. pop name dword
-    stub += b"\x8B\xCE"                                               # +9E mov ecx,esi
-    stub += b"\xE8\0\0\0\0"                                           # +A0 call SaveCurrentGame
-    stub += b"\xE9" + branch_disp(0xA5, 5, START_OVER_AFTER_SOUND)    # +A5 jmp +0x128
+        stub += b"\x8F\x86" + struct.pack("<I", field)                # +87.. pop name dword
+    stub += b"\x8B\xCE"                                               # +AB mov ecx,esi
+    stub += b"\xE8\0\0\0\0"                                           # +AD call SaveCurrentGame
+    stub += b"\xE9" + branch_disp(0xB2, 5, START_OVER_AFTER_SOUND)    # +B2 jmp +0x128
     assert len(stub) == START_OVER_STUB_SIZE
 
     obj.insert_section_bytes(sec.index, stub_off, bytes(stub))
@@ -24874,13 +24889,15 @@ def patch_title_menu_start_over_confirms(manifest):
     show = obj.append_undefined_symbol(START_OVER_SHOW_MESSAGE_BOX_SYMBOL)
     init = obj.append_undefined_symbol(START_OVER_INIT_SYMBOL)
     save = obj.append_undefined_symbol(START_OVER_SAVE_SYMBOL)
+    flag = obj.append_undefined_symbol(VANILLA_BUGS_FLAG_SYMBOL)
     for at, symidx, rtype in (
-        (0x02, game_stats, IMAGE_REL_I386_DIR32),
-        (0x13, sound, IMAGE_REL_I386_DIR32),
-        (0x18, play, IMAGE_REL_I386_REL32),
-        (0x27, show, IMAGE_REL_I386_REL32),
-        (0x76, init, IMAGE_REL_I386_REL32),
-        (0xA1, save, IMAGE_REL_I386_REL32),
+        (0x02, flag, IMAGE_REL_I386_DIR32),
+        (0x0F, game_stats, IMAGE_REL_I386_DIR32),
+        (0x20, sound, IMAGE_REL_I386_DIR32),
+        (0x25, play, IMAGE_REL_I386_REL32),
+        (0x34, show, IMAGE_REL_I386_REL32),
+        (0x83, init, IMAGE_REL_I386_REL32),
+        (0xAE, save, IMAGE_REL_I386_REL32),
     ):
         obj.append_relocation(sec.index, stub_off + at, symidx, rtype)
     obj.write(obj_path)
@@ -24897,7 +24914,458 @@ def patch_title_menu_start_over_confirms(manifest):
         ),
         "cancel": "return true at +0x103; the menu stays and nothing changes",
         "no_village": "stock +0x119 path, unchanged (GameStats[0] == 0)",
+        "flag_off": "stock +0x119 path, unchanged (.vf2bugs == 0)",
+        "offline_patcher_setting": VANILLA_BUGS_SETTING,
         "owner_report": "Pressing start over keeps going into the current game instead of bringing the start over prompt.",
+    }
+
+
+# More stock menu-button defects (present in the vanilla executable too),
+# found by the B197 menu audit alongside Start Over; the owner asked for all of
+# them under the one "Fix Vanilla Game Bugs" setting (on by default). Every
+# stub first tests the .vf2bugs byte and, when it is zero, runs exactly the
+# stock instructions it displaced. Stubs are appended to the function's own
+# section, as the Start Over fix does.
+#
+# 1. Settings "Pause Game: Yes" is not idempotent. Paused is stored as
+#    speed + 999 in options[+0x25B18]; the Space key
+#    (theMainScene::HandleKeyCharacter +0x208) tests >= 999 before adding and
+#    subtracts 999 once to resume. theOptionsDialog::HandleMouse +0x27E adds
+#    999 unconditionally, so "Yes" while already paused stored 2008 and the
+#    next Space left the game at speed 1009 -- still paused -- needing a
+#    second Space. Fixed: the add is skipped while the field is >= 999.
+PAUSE_YES_FUNCTION = "?HandleMouse@theOptionsDialog@@UAE_NHUldwPoint@@@Z"
+PAUSE_YES_ADD_OFFSET = 0x27E   # add dword ptr [eax+25B18h], 3E7h
+PAUSE_YES_RESUME_OFFSET = 0x288
+PAUSE_YES_STUB_SIZE = 0x28
+# 2. An invisible Change Player hotspot on the title screen. The Manage Games
+#    button is created at (widescreen+0x146, 0xF9) and then moved to the
+#    centre (y 0x1CC); theMenuScene::HandleMouse still opens Change Player on
+#    a mouse-down in the old rect this+0x9C..0xA8 (and plays a hover sound
+#    there), where nothing is drawn. The button handles its own clicks
+#    (HandleMessage id 2). Fixed: the constructor stores the rect's top as
+#    bottom + 1, an empty rect no point satisfies in either the click test or
+#    the hover PtInRect. The HandleMouse branches are left in place.
+TITLE_HOTSPOT_TOP_STORE_OFFSET = 0x28D  # mov dword ptr [esi+0A0h], 0F9h
+TITLE_HOTSPOT_RESUME_OFFSET = 0x297
+TITLE_HOTSPOT_STOCK_TOP = 0xF9
+TITLE_HOTSPOT_BOTTOM = 0x117
+TITLE_HOTSPOT_STUB_SIZE = 0x22
+# 3. The title screen goes stale. It is built once while loading, and
+#    theMenuScene::Activate only resets the floating animation and the
+#    butterflies, so (a) Play keeps the label the constructor chose ("Play"
+#    0x775, or "Continue" 0x280 when GameStats[0] != 0) after a village is
+#    started or its player deleted, (b) the current player's name (control id
+#    7, this+0xF0) appears only after the Change Player path calls
+#    UpdateShowPlayer, (c) when UpdateShowPlayer finds no player it removes
+#    Manage Games (this+0xE4) with the name but only ever re-adds the name,
+#    so Manage Games is gone for the rest of the session, and (d) cancelling
+#    the new-player name prompt (reached after the only player is deleted in
+#    Manage Games) returns without any refresh, leaving the deleted player's
+#    name and "Continue" on screen (seen live on the B198 test build). Fixed
+#    by making the stock UpdateShowPlayer the one refresh point: on entry it
+#    repeats the constructor's label choice (its own GetString/SetText calls
+#    and the GameStats[0] test HandleMessage uses); when it re-adds the name
+#    it re-adds Manage Games unless the button (id this+0xC4) is already in
+#    the scene; Activate(true) calls it; and the name prompt's cancel branch
+#    calls it as the Change Player path does. RemoveControl only unlinks a
+#    control; it does not free it, so the stored pointer is still the button.
+TITLE_ACTIVATE_FUNCTION = "?Activate@theMenuScene@@MAEX_N@Z"
+TITLE_ACTIVATE_EPILOGUE_OFFSET = 0x1E
+TITLE_ACTIVATE_STUB_SIZE = 0x1B
+TITLE_SHOW_PLAYER_FUNCTION = "?UpdateShowPlayer@theMenuScene@@IAEXXZ"
+TITLE_SHOW_PLAYER_LABEL_STUB_SIZE = 0x53
+TITLE_SHOW_PLAYER_ADD_NAME_OFFSET = 0x7D  # push [ebx+0F0h]; mov ecx,ebx; call AddControl
+TITLE_SHOW_PLAYER_STUB_SIZE = 0x34
+TITLE_NICKNAME_CANCEL_BRANCH_OFFSET = 0x187  # je +0x103 after a cancelled name prompt
+TITLE_NICKNAME_CANCEL_STUB_SIZE = 0x20
+TITLE_PLAY_STRING_ID = 0x775      # "Play"
+TITLE_CONTINUE_STRING_ID = 0x280  # "Continue"
+
+
+def _function_relocations(obj, sec):
+    relocations = {}
+    for index in range(sec.nreloc):
+        vaddr, symbol_index, rtype = struct.unpack_from(
+            "<IIH", obj.buf, sec.reloc_ptr + index * 10
+        )
+        relocations[vaddr] = (obj.symbol_by_index[symbol_index].name, rtype)
+    return relocations
+
+
+def _check_function_layout(obj, name, size, anchors, expected_relocations):
+    func = obj.symbol(name)
+    sec = obj.section(func.section)
+    if func.value != 0 or sec.raw_size != size:
+        raise RuntimeError(
+            f"{name} layout drifted: value {func.value:#x}, section size {sec.raw_size:#x}"
+        )
+    code = bytes(obj.buf[sec.raw_ptr : sec.raw_ptr + sec.raw_size])
+    for offset, expected in anchors.items():
+        if code[offset : offset + len(expected)] != expected:
+            raise RuntimeError(
+                f"{name} +{offset:#x} drifted: "
+                f"{code[offset:offset + len(expected)].hex()} != {expected.hex()}"
+            )
+    relocations = _function_relocations(obj, sec)
+    for vaddr, expected in expected_relocations.items():
+        if relocations.get(vaddr) != expected:
+            raise RuntimeError(
+                f"{name} relocation +{vaddr:#x} drifted: {relocations.get(vaddr)} != {expected}"
+            )
+    return sec
+
+
+def _install_detour(obj, sec_index, at, length, stub_off, stub, relocations):
+    """Append stub to the section, jmp to it from +at, pad with NOPs."""
+    obj.insert_section_bytes(sec_index, stub_off, bytes(stub))
+    sec = obj.section(sec_index)
+    raw = sec.raw_ptr + at
+    obj.buf[raw : raw + length] = (
+        b"\xE9" + struct.pack("<i", stub_off - (at + 5)) + b"\x90" * (length - 5)
+    )
+    for stub_at, name, rtype in relocations:
+        symidx = obj.append_undefined_symbol(name)
+        obj.append_relocation(sec_index, stub_off + stub_at, symidx, rtype)
+
+
+def patch_options_pause_yes_idempotent(manifest):
+    obj_path = PATCHED / "theOptionsDialog.obj"
+    obj = CoffObject(obj_path)
+    sec = _check_function_layout(
+        obj, PAUSE_YES_FUNCTION, 0x473,
+        {
+            # "Yes": SetSpeed(999), then mov eax,[ebx+80h]; add [eax+25B18h],3E7h
+            0x269: bytes.fromhex("68E7030000B900000000E800000000"),
+            0x278: bytes.fromhex("8B8380000000" "8180185B0200E7030000"),
+            # "No": SetSpeed(10), then [eax+25B18h] = 10
+            0x2B9: bytes.fromhex("6A0AB900000000E800000000"),
+            0x2CB: bytes.fromhex("C780185B02000A000000"),
+        },
+        {
+            0x26F: ("?GameTime@@3VCGameTime@@A", IMAGE_REL_I386_DIR32),
+            0x274: ("?SetSpeed@CGameTime@@QAEXH@Z", IMAGE_REL_I386_REL32),
+            0x289: ("?Get@theRealtimeManager@@SAPAV1@XZ", IMAGE_REL_I386_REL32),
+        },
+    )
+    stub_off = sec.raw_size
+    disp = lambda at, size, target: struct.pack("<i", target - (stub_off + at + size))
+    stub = bytearray()
+    stub += b"\x80\x3D\0\0\0\0\x00"                                  # +00 cmp byte [flag],0
+    stub += b"\x74\x10"                                              # +07 je +19 (stock add)
+    stub += b"\x81\xB8\x18\x5B\x02\x00\xE7\x03\x00\x00"              # +09 cmp [eax+25B18h],3E7h
+    stub += b"\x0F\x8D" + disp(0x13, 6, PAUSE_YES_RESUME_OFFSET)     # +13 jge: already paused
+    stub += b"\x81\x80\x18\x5B\x02\x00\xE7\x03\x00\x00"              # +19 add [eax+25B18h],3E7h
+    stub += b"\xE9" + disp(0x23, 5, PAUSE_YES_RESUME_OFFSET)         # +23 jmp back
+    assert len(stub) == PAUSE_YES_STUB_SIZE
+    _install_detour(
+        obj, sec.index, PAUSE_YES_ADD_OFFSET, 10, stub_off, stub,
+        ((0x02, VANILLA_BUGS_FLAG_SYMBOL, IMAGE_REL_I386_DIR32),),
+    )
+    obj.write(obj_path)
+    manifest["SettingsPauseYesIdempotent"] = {
+        "status": "installed",
+        "offline_patcher_setting": VANILLA_BUGS_SETTING,
+        "function": PAUSE_YES_FUNCTION,
+        "branch": hex(PAUSE_YES_ADD_OFFSET),
+        "stub_offset": hex(stub_off),
+        "rule": "options[+0x25B18] += 999 only while it is below 999 (the Space key's own test)",
+        "flag_off": "the stock unconditional add",
+        "stock_defect": "Yes while already paused stored 2008, so one Space left the game at speed 1009 (still paused)",
+    }
+
+
+def patch_title_menu_stale_hotspot(manifest):
+    obj_path = PATCHED / "theMenuScene.obj"
+    obj = CoffObject(obj_path)
+    ctor = "??0theMenuScene@@QAE@XZ"
+    sec = _check_function_layout(
+        obj, ctor, 0x83A,
+        {
+            # rect this+9Ch..A8h = (ws+146h, F9h, ws+146h+BEh, 117h)
+            0x268: bytes.fromhex("8D8146010000" "89869C000000"),
+            0x276: bytes.fromhex("05BE000000"),
+            0x285: bytes.fromhex("8986A4000000"),
+            0x28D: bytes.fromhex("C786A0000000F9000000"),
+            0x297: bytes.fromhex("C786A800000017010000"),
+            # the Manage Games button is created at the same (ws+146h, F9h)...
+            0x4CE: bytes.fromhex("68F9000000"),
+            # ...and moved to y 1CCh once its text is set
+            0x526: bytes.fromhex("68CC010000"),
+        },
+        {},
+    )
+    # The rect's only readers: the mouse-down Change Player branch and the
+    # hover sound, both in HandleMouse.
+    _check_function_layout(
+        obj, "?HandleMouse@theMenuScene@@UAE_NHUldwPoint@@@Z", 0x27B,
+        {
+            0x77: bytes.fromhex("8B450C" "3B869C000000"),
+            0x86: bytes.fromhex("3B86A4000000"),
+            0x92: bytes.fromhex("8B4510" "3B86A0000000"),
+            0xA1: bytes.fromhex("3B86A8000000"),
+            0x20B: bytes.fromhex("8D8E9C000000"),
+        },
+        {0xC5: ("??0theChangePlayerDlg@@QAE@H@Z", IMAGE_REL_I386_REL32)},
+    )
+    stub_off = sec.raw_size
+    stub = bytearray()
+    stub += b"\xC7\x86\xA0\x00\x00\x00" + struct.pack("<I", TITLE_HOTSPOT_STOCK_TOP)   # +00 stock top
+    stub += b"\x80\x3D\0\0\0\0\x00"                                                  # +0A cmp byte [flag],0
+    stub += b"\x74\x0A"                                                              # +11 je +1D
+    stub += b"\xC7\x86\xA0\x00\x00\x00" + struct.pack("<I", TITLE_HOTSPOT_BOTTOM + 1)  # +13 empty rect
+    stub += b"\xE9" + struct.pack("<i", TITLE_HOTSPOT_RESUME_OFFSET - (stub_off + 0x1D + 5))  # +1D jmp back
+    assert len(stub) == TITLE_HOTSPOT_STUB_SIZE
+    _install_detour(
+        obj, sec.index, TITLE_HOTSPOT_TOP_STORE_OFFSET, 10, stub_off, stub,
+        ((0x0C, VANILLA_BUGS_FLAG_SYMBOL, IMAGE_REL_I386_DIR32),),
+    )
+    obj.write(obj_path)
+    manifest["TitleMenuStaleHotspot"] = {
+        "status": "installed",
+        "offline_patcher_setting": VANILLA_BUGS_SETTING,
+        "function": ctor,
+        "branch": hex(TITLE_HOTSPOT_TOP_STORE_OFFSET),
+        "stub_offset": hex(stub_off),
+        "rect": (
+            f"top {TITLE_HOTSPOT_STOCK_TOP:#x} -> {TITLE_HOTSPOT_BOTTOM + 1:#x} "
+            f"(bottom {TITLE_HOTSPOT_BOTTOM:#x}): empty"
+        ),
+        "flag_off": "the stock top 0xF9",
+        "left_in_place": "the HandleMouse click and hover branches (they no longer match)",
+        "stock_defect": "mouse-down on empty space at Manage Games' pre-move position opened Change Player",
+    }
+
+
+def patch_title_menu_refresh_on_activate(manifest):
+    obj_path = PATCHED / "theMenuScene.obj"
+    obj = CoffObject(obj_path)
+    # The constructor's own label choice, which the UpdateShowPlayer stub repeats.
+    ctor = obj.symbol("??0theMenuScene@@QAE@XZ")
+    _check_function_layout(
+        obj, ctor.name, obj.section(ctor.section).raw_size,
+        {
+            0x31C: bytes.fromhex("E800000000" "8B4E14" "50" "A100000000" "505050" "6875070000"),
+            0x332: bytes.fromhex("E800000000" "8B8ED8000000" "50" "E800000000"),
+            0x350: bytes.fromhex("833D0000000000" "742A"),
+            0x36D: bytes.fromhex("6880020000"),
+        },
+        {
+            0x31D: ("?GetLargeFont@theStringManager@@QAEPAVldwFont@@XZ", IMAGE_REL_I386_REL32),
+            0x326: ("?cLdwWhite@@3UldwColor@@B", IMAGE_REL_I386_DIR32),
+            0x333: ("?GetString@theStringManager@@QAEPADW4StringId@@@Z", IMAGE_REL_I386_REL32),
+            0x33F: ("?SetText@ldwButton@@QAEXPBDUldwColor@@11PAVldwFont@@@Z", IMAGE_REL_I386_REL32),
+            0x352: ("?GameStats@@3VCGameStats@@A", IMAGE_REL_I386_DIR32),
+        },
+    )
+
+    # UpdateShowPlayer becomes the one refresh point: on entry it re-applies
+    # the Play/Continue label, and when it re-adds the name it re-adds
+    # Manage Games too.
+    show = _check_function_layout(
+        obj, TITLE_SHOW_PLAYER_FUNCTION, 0xC6,
+        {
+            0x00: bytes.fromhex("558BEC83EC6C" "A100000000"),
+            # player exists and the name control (id this+0D0h) is not in the
+            # scene -> AddControl(name)
+            0x75: bytes.fromhex("837D9400" "5F" "5E" "753A"),
+            0x7D: bytes.fromhex("FFB3F0000000" "8BCB" "E800000000"),
+            # no player and the name is shown -> remove Manage Games and name
+            0x9D: bytes.fromhex("FFB3E4000000" "8BCB" "E800000000"),
+            0xAA: bytes.fromhex("FFB3F0000000" "8BCB" "E800000000"),
+        },
+        {
+            0x07: ("___security_cookie", IMAGE_REL_I386_DIR32),
+            0x1A: ("?GetControl@ldwScene@@IAEPAVldwControl@@H@Z", IMAGE_REL_I386_REL32),
+            0x86: ("?AddControl@ldwScene@@IAEXPAVldwControl@@@Z", IMAGE_REL_I386_REL32),
+            0xA6: ("?RemoveControl@ldwScene@@IAEXPAVldwControl@@@Z", IMAGE_REL_I386_REL32),
+        },
+    )
+    label_off = show.raw_size
+    stub = bytearray()
+    stub += b"\x80\x3D\0\0\0\0\x00"                      # +00 cmp byte [flag],0
+    stub += b"\x74\x3F"                                  # +07 je +48 (flag off)
+    stub += b"\x56"                                      # +09 push esi
+    stub += b"\x8B\xF1"                                  # +0A mov esi,ecx (this)
+    stub += b"\x8B\x4E\x14"                              # +0C mov ecx,[esi+14h]
+    stub += b"\xE8\0\0\0\0"                              # +0F call GetLargeFont
+    stub += b"\x50"                                      # +14 push font
+    stub += b"\xA1\0\0\0\0"                              # +15 mov eax,[cLdwWhite]
+    stub += b"\x50\x50\x50"                              # +1A push colour x3
+    stub += b"\xB8" + struct.pack("<I", TITLE_PLAY_STRING_ID)       # +1D mov eax,775h
+    stub += b"\x83\x3D\0\0\0\0\x00"                      # +22 cmp [GameStats],0
+    stub += b"\x74\x05"                                  # +29 je +30
+    stub += b"\xB8" + struct.pack("<I", TITLE_CONTINUE_STRING_ID)   # +2B mov eax,280h
+    stub += b"\x50"                                      # +30 push string id
+    stub += b"\x8B\x4E\x14"                              # +31 mov ecx,[esi+14h]
+    stub += b"\xE8\0\0\0\0"                              # +34 call GetString
+    stub += b"\x50"                                      # +39 push text
+    stub += b"\x8B\x8E\xD8\x00\x00\x00"                  # +3A mov ecx,[esi+0D8h] (Play)
+    stub += b"\xE8\0\0\0\0"                              # +40 call ldwButton::SetText
+    stub += b"\x8B\xCE"                                  # +45 mov ecx,esi
+    stub += b"\x5E"                                      # +47 pop esi
+    stub += b"\x55\x8B\xEC\x83\xEC\x6C"                  # +48 displaced prologue
+    stub += b"\xE9" + struct.pack("<i", 0x06 - (label_off + 0x4E + 5))  # +4E jmp +06
+    assert len(stub) == TITLE_SHOW_PLAYER_LABEL_STUB_SIZE
+    _install_detour(
+        obj, show.index, 0x00, 6, label_off, stub,
+        (
+            (0x02, VANILLA_BUGS_FLAG_SYMBOL, IMAGE_REL_I386_DIR32),
+            (0x10, "?GetLargeFont@theStringManager@@QAEPAVldwFont@@XZ", IMAGE_REL_I386_REL32),
+            (0x16, "?cLdwWhite@@3UldwColor@@B", IMAGE_REL_I386_DIR32),
+            (0x24, "?GameStats@@3VCGameStats@@A", IMAGE_REL_I386_DIR32),
+            (0x35, "?GetString@theStringManager@@QAEPADW4StringId@@@Z", IMAGE_REL_I386_REL32),
+            (0x41, "?SetText@ldwButton@@QAEXPBDUldwColor@@11PAVldwFont@@@Z", IMAGE_REL_I386_REL32),
+        ),
+    )
+    show = obj.section(show.index)
+    manage_off = show.raw_size
+    call_add = TITLE_SHOW_PLAYER_ADD_NAME_OFFSET + 8
+    stub = bytearray()
+    stub += b"\x80\x3D\0\0\0\0\x00"                      # +00 cmp byte [flag],0
+    stub += b"\x74\x1E"                                  # +07 je +27 (flag off: name only)
+    stub += b"\xFF\xB3\xC4\x00\x00\x00"                  # +09 push [ebx+0C4h] (Manage Games id)
+    stub += b"\x8B\xCB"                                  # +0F mov ecx,ebx
+    stub += b"\xE8\0\0\0\0"                              # +11 call GetControl
+    stub += b"\x85\xC0"                                  # +16 test eax,eax
+    stub += b"\x75\x0D"                                  # +18 jne +27: already shown
+    stub += b"\xFF\xB3\xE4\x00\x00\x00"                  # +1A push [ebx+0E4h] (the button)
+    stub += b"\x8B\xCB"                                  # +20 mov ecx,ebx
+    stub += b"\xE8\0\0\0\0"                              # +22 call AddControl
+    stub += b"\xFF\xB3\xF0\x00\x00\x00"                  # +27 push [ebx+0F0h] (the name)
+    stub += b"\x8B\xCB"                                  # +2D mov ecx,ebx
+    stub += b"\xE9" + struct.pack("<i", call_add - (manage_off + 0x2F + 5))  # +2F jmp stock call
+    assert len(stub) == TITLE_SHOW_PLAYER_STUB_SIZE
+    _install_detour(
+        obj, show.index, TITLE_SHOW_PLAYER_ADD_NAME_OFFSET, 8, manage_off, stub,
+        (
+            (0x02, VANILLA_BUGS_FLAG_SYMBOL, IMAGE_REL_I386_DIR32),
+            (0x12, "?GetControl@ldwScene@@IAEPAVldwControl@@H@Z", IMAGE_REL_I386_REL32),
+            (0x23, "?AddControl@ldwScene@@IAEXPAVldwControl@@@Z", IMAGE_REL_I386_REL32),
+        ),
+    )
+
+    # Activate(true) calls it: the title is refreshed every time it is shown.
+    activate = _check_function_layout(
+        obj, TITLE_ACTIVATE_FUNCTION, 0x23,
+        {
+            0x03: bytes.fromhex("807D0800" "56" "8BF1" "7412"),
+            0x1E: bytes.fromhex("5E5DC20400"),
+        },
+        {0x1A: ("?SpawnButterflies@theButterflyClass@@QAEXXZ", IMAGE_REL_I386_REL32)},
+    )
+    activate_off = activate.raw_size
+    stub = bytearray()
+    stub += b"\x80\x7D\x08\x00"                          # +00 cmp byte [ebp+8],0
+    stub += b"\x74\x10"                                  # +04 je +16 (deactivating)
+    stub += b"\x80\x3D\0\0\0\0\x00"                      # +06 cmp byte [flag],0
+    stub += b"\x74\x07"                                  # +0D je +16 (flag off)
+    stub += b"\x8B\xCE"                                  # +0F mov ecx,esi
+    stub += b"\xE8\0\0\0\0"                              # +11 call UpdateShowPlayer
+    stub += b"\x5E\x5D\xC2\x04\x00"                      # +16 pop esi; pop ebp; ret 4
+    assert len(stub) == TITLE_ACTIVATE_STUB_SIZE
+    _install_detour(
+        obj, activate.index, TITLE_ACTIVATE_EPILOGUE_OFFSET, 5, activate_off, stub,
+        (
+            (0x08, VANILLA_BUGS_FLAG_SYMBOL, IMAGE_REL_I386_DIR32),
+            (0x12, TITLE_SHOW_PLAYER_FUNCTION, IMAGE_REL_I386_REL32),
+        ),
+    )
+
+    # Cancelling the new-player name prompt returns straight to the title's
+    # "return true" at +0x103 without the UpdateShowPlayer the Change Player
+    # path makes at +0xFE, so a player deleted in Manage Games left the old
+    # name, Manage Games and "Continue" on screen. The cancel branch now makes
+    # that same call first.
+    message = obj.symbol(START_OVER_MENU_FUNCTION)
+    message_sec = obj.section(message.section)
+    _check_function_layout(
+        obj, START_OVER_MENU_FUNCTION, message_sec.raw_size,
+        {
+            # DoModal(nickname) result in esi; the dialog is destroyed; -1 ->
+            # return true
+            0x17D: bytes.fromhex("8BF0"),
+            0x184: bytes.fromhex("83FEFF" "0F8476FFFFFF"),
+            0x18D: bytes.fromhex("C745FCFFFFFFFF"),
+            # the Change Player path's own refresh before the same return
+            0xFC: bytes.fromhex("8BCF" "E800000000" "B001"),
+        },
+        {
+            0x180: ("??1theCreateNickNameDlg@@UAE@XZ", IMAGE_REL_I386_REL32),
+            0xFF: (TITLE_SHOW_PLAYER_FUNCTION, IMAGE_REL_I386_REL32),
+        },
+    )
+    cancel_off = message_sec.raw_size
+    stub = bytearray()
+    stub += b"\x80\x3D\0\0\0\0\x00"                      # +00 cmp byte [flag],0
+    stub += b"\x0F\x84" + struct.pack("<i", START_OVER_RETURN_TRUE - (cancel_off + 0x07 + 6))  # +07 je stock
+    stub += b"\xC7\x45\xFC\xFF\xFF\xFF\xFF"              # +0D mov [ebp-4],-1 (dialog is gone)
+    stub += b"\x8B\xCF"                                  # +14 mov ecx,edi
+    stub += b"\xE8\0\0\0\0"                              # +16 call UpdateShowPlayer
+    stub += b"\xE9" + struct.pack("<i", START_OVER_RETURN_TRUE - (cancel_off + 0x1B + 5))  # +1B return true
+    assert len(stub) == TITLE_NICKNAME_CANCEL_STUB_SIZE
+    obj.insert_section_bytes(message_sec.index, cancel_off, bytes(stub))
+    message_sec = obj.section(message_sec.index)
+    struct.pack_into(
+        "<i", obj.buf, message_sec.raw_ptr + TITLE_NICKNAME_CANCEL_BRANCH_OFFSET + 2,
+        cancel_off - (TITLE_NICKNAME_CANCEL_BRANCH_OFFSET + 6),
+    )
+    for stub_at, name, rtype in (
+        (0x02, VANILLA_BUGS_FLAG_SYMBOL, IMAGE_REL_I386_DIR32),
+        (0x17, TITLE_SHOW_PLAYER_FUNCTION, IMAGE_REL_I386_REL32),
+    ):
+        obj.append_relocation(
+            message_sec.index, cancel_off + stub_at, obj.append_undefined_symbol(name), rtype
+        )
+    obj.write(obj_path)
+    manifest["TitleMenuRefresh"] = {
+        "status": "installed",
+        "offline_patcher_setting": VANILLA_BUGS_SETTING,
+        "refresh": TITLE_SHOW_PLAYER_FUNCTION,
+        "label_stub_offset": hex(label_off),
+        "manage_games_stub_offset": hex(manage_off),
+        "label": "GameStats[0] != 0 -> 0x280 Continue, else 0x775 Play (the constructor's choice and HandleMessage's test)",
+        "manage_games": "re-added with the name when a player exists and the button is not already in the scene",
+        "called_from": [
+            "stock: HandleMessage +0xFE and HandleMouse +0x135 after Change Player",
+            f"Activate(true) (stub {activate_off:#x})",
+            f"HandleMessage nickname-cancel branch +{TITLE_NICKNAME_CANCEL_BRANCH_OFFSET:#x} (stub {cancel_off:#x})",
+        ],
+        "flag_off": "stock Activate, UpdateShowPlayer and nickname-cancel behaviour",
+        "stock_defect": (
+            "label chosen once at load; name shown only after a dialog; Manage "
+            "Games removed with no player and never re-added; cancelling the "
+            "name prompt after deleting the player left the old name and label"
+        ),
+    }
+
+
+def patch_fix_vanilla_game_bugs(manifest):
+    """Every stock-game menu fix, behind the one .vf2bugs byte."""
+    patch_title_menu_start_over_confirms(manifest)
+    patch_options_pause_yes_idempotent(manifest)
+    patch_title_menu_stale_hotspot(manifest)
+    patch_title_menu_refresh_on_activate(manifest)
+    manifest["FixVanillaGameBugs"] = {
+        "status": "dormant native hooks installed in every executable",
+        "offline_patcher_setting": VANILLA_BUGS_SETTING,
+        "category": "main",
+        "default": True,
+        "runtime_flag": {
+            "symbol": VANILLA_BUGS_FLAG_SYMBOL,
+            "source_section": VANILLA_BUGS_FLAG_SECTION,
+            "size": 1,
+            "default": "00",
+            "enabled": "01",
+            "linked_location_status": "pending_link_metadata",
+        },
+        "fixes": [
+            "TitleMenuStartOverConfirms",
+            "SettingsPauseYesIdempotent",
+            "TitleMenuStaleHotspot",
+            "TitleMenuRefresh",
+        ],
+        "flag_off": "every site runs the stock instructions it displaced",
     }
 
 
@@ -40873,9 +41341,9 @@ def main():
     # above (a different function of theGameState.obj), so it runs after them
     # and leaves their required adjacency intact.
     patch_new_village_clears_patcher_achievement_state(manifest)
-    # Base-game fix, every executable: the title menu's Start Over asks
-    # before restarting instead of resuming the current village.
-    patch_title_menu_start_over_confirms(manifest)
+    # Fix Vanilla Game Bugs (.vf2bugs, on by default in the patcher): Start
+    # Over, Settings Pause Yes, the title hotspot and the stale title screen.
+    patch_fix_vanilla_game_bugs(manifest)
     patch_event_collectable_slot_replacement(manifest)
     # Always link the dormant B152 hook. The offline patcher's exact-SHA
     # post-asset phase changes .vf2preg from 00 to 01 only when selected, so

@@ -1171,6 +1171,14 @@ exact-SHA post-asset byte toggle in the selected executable rather than a
 separate executable overlay, so it does not expand the Island/Cheat/Holiday/
 Behavior matrix.
 
+fix_vanilla_game_bugs (Fix Vanilla Game Bugs, Main, on by default) uses the
+same exact-SHA byte toggle, through .vf2bugs. Every patched executable carries
+the fixes dormant; the byte turns on the title Start Over confirmation, the
+idempotent Settings "Pause Game: Yes", the emptied leftover Change Player
+hotspot on the title screen, and the title screen's refresh of the player name,
+Manage Games button and Play/Continue label each time it is shown. Unticked,
+every site runs the stock instructions it displaced.
+
 The same post-asset phase controls the independent Holiday Furniture goal
 suffix through .vf2goal. Its record requires core_executable and
 holiday_furniture; disabling Holiday Furniture recopies the pristine

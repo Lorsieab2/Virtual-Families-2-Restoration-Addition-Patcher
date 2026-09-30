@@ -109,15 +109,18 @@ checked against `manifest.json`, the release notes and the owner's confirmed
 play reports; superseded claims are marked rather than deleted.*
 
 The GUI reads its checkboxes from the shipped manifest, so the exact list follows
-the release you downloaded. B196's bundle offers 35 settings, grouped the way
-the GUI groups them, unchanged since B180.
+the release you downloaded. B198's bundle offers 36 settings, grouped the way
+the GUI groups them: the 35 offered unchanged from B180 through B197, plus
+**Fix Vanilla Game Bugs**.
 
 That number is not simply the count of settings the patcher defines, which is
-36. The settings list drops any optional setting that has no packaged source
-assets -- in B196, as in B180, the two named just below -- and the export adds
+37. The settings list drops any optional setting that has no packaged source
+assets -- in B198, as in B180, the two named just below -- and the export adds
 one setting of its own, `core_assets`, which copies the support files and
-generated assets that are not tied to a single feature. So 36 defined, less 2
-without packaged assets, plus 1 generated, is the 35 the GUI shows.
+generated assets that are not tied to a single feature. So 37 defined, less 2
+without packaged assets, plus 1 generated, is the 36 the GUI shows. (Before
+Fix Vanilla Game Bugs existed the same sum was 36 - 2 + 1: the B197
+bundle offers 35 settings.)
 
 **A missing checkbox does not mean a missing feature.** That filter asks only
 whether a setting has files to copy, so a feature built as *code* rather than
@@ -168,6 +171,11 @@ verified against the shipped `manifest.json`.
 - **Add VF3 TV assets and recognition** - VF3 TV furniture, private animation strips, and TV fmap recognition.
 - **Behavior Patches** - the behavior-only executable overlay. See [Behavior Patches in detail](#behavior-patches-in-detail).
 - **Text fixes** - miscellaneous string corrections.
+- **Fix Vanilla Game Bugs** (`.vf2bugs`, on) - fixes bugs in the original game's menus. You can untick it to get the stock behaviour back; it is one byte in the patched executable, not a separate build.
+  - **Start Over** on the title screen asks "Are you sure you want to restart the current game?" before starting a new village, instead of continuing the current one.
+  - **Settings > Pause Game: Yes** while the game is already paused no longer leaves it stuck paused after one Space press. The stock game added the pause offset a second time.
+  - The invisible **Change Player** click spot a little above and left of the title buttons (the Manage Games button's old position) is removed. Manage Games itself still opens Change Player.
+  - The title screen refreshes every time you arrive on it, and again when Manage Games or the new-player name prompt closes. It shows the current player's name, keeps the **Manage Games** button (the stock game dropped it for the rest of the session after the last player was deleted), and labels the first button **Play** or **Continue** according to whether a village exists.
 - **Add visible mobile version purchases** - Brokerage Account, Food Club, Health Plan, and Lucky Rock rows under Special Upgrades.
 
 ### Optional patches
