@@ -54,6 +54,22 @@ class TheDecodedBoundary(unittest.TestCase):
         cell = other_bits | (0x6D << 18)
         self.assertEqual(pack.without_mobile_hotspot(cell), other_bits)
 
+    def test_a_hotspot_only_cell_stays_occupied(self):
+        # The transparent-drop fallback counts nonzero cells as the footprint.
+        for hotspot in (0x6B, 0x6C, 0x6D):
+            with self.subTest(hotspot=hex(hotspot)):
+                self.assertEqual(
+                    pack.without_mobile_hotspot(hotspot << 18),
+                    pack.FMAP_INERT_OCCUPANCY_BIT,
+                )
+
+    def test_the_occupancy_bit_is_one_the_engine_never_decodes(self):
+        # CContentMap::Read: bit0, bits 1-3, bits 11-17, bits 18-24,
+        # bits 25-28, bit 29, bits 30-31. Bits 4-10 are never read.
+        decoded = 0x1 | 0xE | 0x3F800 | (0x7F << 18) | (0xF << 25) | (1 << 29) | (3 << 30)
+        self.assertEqual(pack.FMAP_INERT_OCCUPANCY_BIT & decoded, 0)
+        self.assertNotEqual(pack.FMAP_INERT_OCCUPANCY_BIT, 0)
+
     def test_a_desktop_id_is_kept(self):
         for hotspot in (0x01, 0x2A, 0x5B):
             with self.subTest(hotspot=hex(hotspot)):
@@ -99,10 +115,29 @@ class EveryRealBorrowerMap(unittest.TestCase):
                 for d, s, m in zip(_cells(donor), _cells(safe), _cells(merged)):
                     if s and s != d:
                         self.assertEqual(m, s)
+                    elif d and not (d & ~pack.FMAP_HOTSPOT_MASK):
+                        # hotspot-only: stays occupied through the inert bit
+                        self.assertEqual(m, pack.FMAP_INERT_OCCUPANCY_BIT)
                     else:
                         self.assertEqual(
                             m & ~pack.FMAP_HOTSPOT_MASK, d & ~pack.FMAP_HOTSPOT_MASK
                         )
+
+    def test_the_drop_footprint_is_unchanged(self):
+        """Every cell occupied before the clearing is still occupied.
+
+        VF2TransparentFurnitureSlotAtPoint treats nonzero cells as the item's
+        footprint, and the owner confirmed transparent drops working at B195.
+        """
+        for name, donor, safe in _pairs():
+            merged = pack.borrowed_fmap_bytes(donor, safe)
+            if merged is None:
+                continue
+            with self.subTest(name):
+                before = [s if s and s != d else d for d, s in zip(_cells(donor), _cells(safe))]
+                self.assertEqual(
+                    [bool(c) for c in _cells(merged)], [bool(c) for c in before]
+                )
 
 
 class TheBehaviorMapRestore(unittest.TestCase):

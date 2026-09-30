@@ -111,12 +111,13 @@ MOBILE_CHAISE_PC_SLOT_CELL = (8, 6)
 #
 # borrowed_fmap_bytes now clears the mobile hotspot id (0x6C, bits 18-24) from
 # these before they are installed (issue #378), so a borrower carries them as
-# 0x00000000 and 0x00000001. The cleared solid form is listed too, so the
-# spa-lounger drop-target widening still claims exactly the cells it claimed
-# before; no borrower map carried a bare 0x00000001 of its own before the
-# clearing (B196 InvisibleSpaLounger/InvisibleLounger: none), so nothing new
-# becomes claimable.
-MOBILE_CHAISE_FOOTPRINT_CELL_VALUES = (0x01B00000, 0x01B00001, 0x00000001)
+# 0x00000010 (the inert occupancy bit, see FMAP_INERT_OCCUPANCY_BIT) and
+# 0x00000001. Both cleared forms are listed, so the spa-lounger drop-target
+# widening still claims exactly the cells it claimed before; no borrower map
+# carried a bare 0x00000001 or 0x00000010 of its own before the clearing
+# (B196 InvisibleSpaLounger/InvisibleLounger: none), so nothing new becomes
+# claimable.
+MOBILE_CHAISE_FOOTPRINT_CELL_VALUES = (0x01B00000, 0x01B00001, 0x00000001, 0x00000010)
 MOBILE_CHAISE_MOBILE_SLOT_CELL_VALUE = 0x01B09800
 MOBILE_CHAISE_PC_CELLS = (
     (7, 8),
@@ -1066,14 +1067,35 @@ def fmap_cell_hotspot(cell):
     return (cell >> FMAP_HOTSPOT_SHIFT) & 0x7F
 
 
+# A cell whose ONLY content was the mobile hotspot must not become 0.
+#
+# The transparent-drop fallback (VF2TransparentFurnitureSlotAtPoint) takes the
+# item's footprint to be every NONZERO cell of its own map -- ApplyContentBlock's
+# rule -- and on the invisible tables and loungers most of that footprint was
+# hotspot-only cells (0x01B00000 and friends). Zeroing them shrank the drop
+# target: InvisibleLounger 154 -> 43 cells, InvisiblePatioTable 241 -> 157.
+#
+# Bit 4 keeps the cell nonzero and means nothing to the engine. CContentMap::Read
+# decodes bits 0-3 and 11-31 only (blocked, material, object, hotspot, the
+# +0x10 field); bits 4-10 are never read. ApplyContentBlock applies a nonzero
+# block cell by Read-ing it, merging each NONZERO decoded field over the cell
+# already in the map, and re-encoding through CContentMap::Write -- so a cell
+# carrying only bit 4 decodes to all zeros and leaves the live map exactly as
+# it was: no hotspot, no collision, no object. Only the fallback's occupancy
+# test sees it, which is the one consumer that needs it.
+FMAP_INERT_OCCUPANCY_BIT = 0x10
+
+
 def without_mobile_hotspot(cell):
     """`cell` with its hotspot cleared if the desktop dispatcher cannot hold it.
 
-    Only the hotspot field changes. Collision, object and every other bit is
-    kept, so the borrower keeps the donor's exact footprint.
+    Only the hotspot field changes. Collision, object and every other decoded
+    bit is kept, and a cell that held nothing but the hotspot keeps an inert
+    occupancy bit, so the borrower keeps the donor's exact footprint.
     """
     if fmap_cell_hotspot(cell) > DESKTOP_MAX_HOTSPOT:
-        return cell & ~FMAP_HOTSPOT_MASK & 0xFFFFFFFF
+        cleared = cell & ~FMAP_HOTSPOT_MASK & 0xFFFFFFFF
+        return cleared or FMAP_INERT_OCCUPANCY_BIT
     return cell
 
 
