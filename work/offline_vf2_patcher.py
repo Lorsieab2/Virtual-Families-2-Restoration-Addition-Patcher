@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import ctypes
+import dataclasses
 import datetime as _dt
 import hashlib
 import json
@@ -84,6 +85,9 @@ class AssetPatch:
     requires: tuple[str, ...]
     restore: bool = False
     remove_when_disabled: bool = False
+    # Reconfiguration only: hashes this manifest can itself leave at the
+    # output path (see manifest_known_output_hashes).  Empty on a fresh apply.
+    known_output_sha256: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -1924,30 +1928,80 @@ def validate_asset_target_plan(assets: list[AssetPatch]) -> None:
             )
 
 
-def suppress_active_assets_replaced_by_restore(
-    active_assets: list[AssetPatch],
-    restore_assets: list[AssetPatch],
-) -> list[AssetPatch]:
-    """Prefer a selected restore/remove record for a duplicate output path.
+def manifest_known_output_hashes(manifest: dict[str, Any]) -> dict[str, set[str]]:
+    """Every content hash the manifest itself can leave at each asset output path.
 
-    Optional visual layers can share the same target as their normal feature
-    asset. During output-only reconfiguration, the selected restore must be the
-    sole writer for that path; otherwise the normal active record would make the
-    target plan fail closed before the restore can run.
+    That is each record's source and each record's restore source, whether or
+    not the record is selected now.  A reconfiguration may replace or remove a
+    file holding one of these -- it is something an earlier Enable/Disable run
+    wrote -- but still refuses anything else.
     """
+    raw_assets = manifest.get("asset_patches", manifest.get("assets", []))
+    known: dict[str, set[str]] = {}
+    if not isinstance(raw_assets, list):
+        return known
+    for index, raw in enumerate(raw_assets):
+        if not isinstance(raw, dict):
+            continue
+        target_value = raw.get("output_file_path", raw.get("output_path", raw.get("write_path")))
+        if target_value is None:
+            target_value = raw.get("file_path", raw.get("target_path", raw.get("target", raw.get("path"))))
+        key = canonical_rel_path_key(normalize_rel_path(target_value, f"asset patch #{index} output path"))
+        for field in ("source_sha256", "sha256", "restore_source_sha256"):
+            value = normalize_sha256(raw.get(field), f"asset patch #{index} {field}")
+            if value:
+                known.setdefault(key, set()).add(value)
+    return known
 
-    restore_targets = {
-        canonical_rel_path_key(asset.output_file_path or asset.file_path)
-        for asset in restore_assets
-        if asset.restore or asset.remove_when_disabled
+
+def plan_reconfigure_assets(
+    manifest: dict[str, Any],
+    active_assets: list[AssetPatch],
+    undo_assets: list[AssetPatch],
+) -> tuple[list[AssetPatch], list[AssetPatch]]:
+    """Resolve each output path the way a fresh apply with this selection would.
+
+    A fresh apply writes only the selected records, in manifest order, so:
+
+    - a path with any selected writer keeps exactly those writers, and every
+      restore/remove record for it is dropped (unticking a layer on top of a
+      still-selected feature leaves that feature's file, not the vanilla one);
+    - a path with no selected writer gets one restore, when the unselected
+      records declare one (they must all agree on its bytes), and otherwise one
+      removal.
+
+    Each planned record carries the manifest's known hashes for its path so an
+    earlier run's output can be replaced or removed without accepting unknown
+    content.
+    """
+    known = manifest_known_output_hashes(manifest)
+
+    def with_known(asset: AssetPatch) -> AssetPatch:
+        key = canonical_rel_path_key(asset.output_file_path or asset.file_path)
+        return dataclasses.replace(asset, known_output_sha256=tuple(sorted(known.get(key, ()))))
+
+    active_keys = {
+        canonical_rel_path_key(asset.output_file_path or asset.file_path) for asset in active_assets
     }
-    if not restore_targets:
-        return active_assets
-    return [
-        asset
-        for asset in active_assets
-        if canonical_rel_path_key(asset.output_file_path or asset.file_path) not in restore_targets
-    ]
+    undo_groups: dict[str, list[AssetPatch]] = {}
+    for asset in undo_assets:
+        key = canonical_rel_path_key(asset.output_file_path or asset.file_path)
+        if key in active_keys:
+            continue
+        undo_groups.setdefault(key, []).append(asset)
+    undo_planned: list[AssetPatch] = []
+    for key, group in undo_groups.items():
+        restores = [asset for asset in group if asset.restore]
+        if restores:
+            restore_hashes = sorted({asset.source_sha256 for asset in restores})
+            if len(restore_hashes) > 1:
+                raise PatchError(
+                    f"Conflicting restore sources for {key}: {', '.join(restore_hashes)}."
+                )
+            undo_planned.append(with_known(restores[0]))
+        else:
+            undo_planned.append(with_known(group[0]))
+    return [with_known(asset) for asset in active_assets], undo_planned
 
 
 def verify_reconfigure_executable_identity(
@@ -2520,7 +2574,11 @@ def verify_asset_patches(
                     raise PatchError(
                         f"Asset removal for disabled setting requires output-only reconfiguration: {asset.file_path}"
                     )
-                if target_exists and target_sha != source_sha:
+                if (
+                    target_exists
+                    and target_sha != source_sha
+                    and target_sha not in asset.known_output_sha256
+                ):
                     raise PatchError(
                         f"Refusing removal of {asset.file_path}: target SHA-256 {target_sha} "
                         f"does not match the known enabled asset {source_sha}."
@@ -2557,7 +2615,11 @@ def verify_asset_patches(
                     )
                 if target_sha == source_sha:
                     action = "up_to_date"
-                elif not asset.expected_target_sha256 and not asset.overwrite_existing:
+                elif (
+                    not asset.expected_target_sha256
+                    and not asset.overwrite_existing
+                    and target_sha not in asset.known_output_sha256
+                ):
                     raise PatchError(
                         "Asset target already exists without an expected_target_sha256 or overwrite_existing=true: "
                         f"{asset.file_path}"
@@ -2571,7 +2633,11 @@ def verify_asset_patches(
                 action = "create"
                 if output_exists:
                     action = "up_to_date" if output_sha == source_sha else "replace"
-                    if action == "replace" and not asset.overwrite_existing:
+                    if (
+                        action == "replace"
+                        and not asset.overwrite_existing
+                        and output_sha not in asset.known_output_sha256
+                    ):
                         raise PatchError(
                             "Asset output already exists without overwrite_existing=true: "
                             f"{output_file_path}"
@@ -2826,10 +2892,14 @@ def apply_asset_patches(
                 if not target.is_file():
                     raise PatchError(f"Removal target disappeared before apply: {output_file_path}")
                 actual_sha = sha256_file(target)
-                if actual_sha != str(check["source_sha256"]):
+                # Validation authenticated the bytes it saw (the record's own
+                # source or another hash this manifest writes to the path);
+                # refuse only if they changed since.
+                validated_sha = str(check.get("target_sha256") or check["source_sha256"])
+                if actual_sha != validated_sha:
                     raise PatchError(
                         f"Refusing removal of {output_file_path}: target SHA-256 changed "
-                        f"from {check['source_sha256']} to {actual_sha}."
+                        f"from {validated_sha} to {actual_sha}."
                     )
                 target.unlink()
             except OSError as exc:
@@ -3367,7 +3437,7 @@ def apply_manifest(args: argparse.Namespace) -> int:
         post_asset_patches = manifest_post_asset_patches(manifest, settings, enabled_settings)
         restore_assets = manifest_asset_patches(manifest, settings, enabled_settings, restore_inactive=True) if reconfigure_output else []
         if reconfigure_output:
-            assets = suppress_active_assets_replaced_by_restore(assets, restore_assets)
+            assets, restore_assets = plan_reconfigure_assets(manifest, assets, restore_assets)
         all_assets = [
             *(asset for asset in [*assets, *restore_assets] if not asset.remove_when_disabled),
             *(asset for asset in [*assets, *restore_assets] if asset.remove_when_disabled),

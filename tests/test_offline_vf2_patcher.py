@@ -2641,6 +2641,173 @@ class OfflineVF2PatcherTests(unittest.TestCase):
             )
             self.assertFalse(target.exists())
 
+    def reconfigure_layer_fixture(self, tmp_path, settings, records):
+        """A modded folder plus a manifest whose records share output paths.
+
+        records: dicts with "path", "bytes", "requires" and optional
+        "restore" (bytes), "restore_requires", "remove", "overwrite".
+        """
+        modded = tmp_path / "VF2-BUnit-Modded"
+        (modded / ".vf2_patch_backups").mkdir(parents=True)
+        (modded / "Virtual Families 2 - Modded BUnit.exe").write_bytes(b"modded exe")
+        rows = []
+        for index, spec in enumerate(records):
+            source = tmp_path / "payload" / f"source{index}.bin"
+            source.parent.mkdir(exist_ok=True)
+            source.write_bytes(spec["bytes"])
+            row = {
+                "file_path": spec["path"],
+                "source_path": f"payload/{source.name}",
+                "source_sha256": sha256_bytes(spec["bytes"]),
+                "source_size": len(spec["bytes"]),
+                "requires": spec["requires"],
+            }
+            if spec.get("overwrite"):
+                row["overwrite_existing"] = True
+            if spec.get("remove"):
+                row["remove_when_disabled"] = True
+            if "restore" in spec:
+                restore = tmp_path / "payload" / f"restore{index}.bin"
+                restore.write_bytes(spec["restore"])
+                row["restore_source_path"] = f"payload/{restore.name}"
+                row["restore_source_sha256"] = sha256_bytes(spec["restore"])
+                row["restore_source_size"] = len(spec["restore"])
+            if "restore_requires" in spec:
+                row["restore_requires"] = spec["restore_requires"]
+            rows.append(row)
+        manifest = tmp_path / "manifest.json"
+        manifest.write_text(
+            json.dumps(
+                {
+                    "manifest_version": 1,
+                    "output": {
+                        "default_folder_name": modded.name,
+                        "default_exe_name": "Virtual Families 2 - Modded BUnit.exe",
+                    },
+                    "settings": [{"id": key, "default": value} for key, value in settings.items()],
+                    "asset_patches": rows,
+                },
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        return modded, manifest
+
+    def reconfigure(self, modded, manifest, *selection, expect=0):
+        return self.run_patcher(
+            "apply", "--output-dir", str(modded), "--manifest", str(manifest), *selection, expect=expect
+        )
+
+    def test_reconfigure_keeps_a_selected_writer_over_another_records_restore(self):
+        # Shipped shape of Images/collectables_small.png: Holiday Ornaments
+        # writes it (and was marked remove-when-disabled although the base game
+        # has the file); Glowing Collectibles also writes it and restores the
+        # vanilla image.  Every combination must match what a fresh apply with
+        # that selection writes, and none may fail as a "duplicate".
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            path = "Images/collectables_small.png"
+            modded, manifest = self.reconfigure_layer_fixture(
+                tmp_path,
+                {"holiday_ornaments_collection": False, "glowing_collectibles": False},
+                [
+                    {"path": path, "bytes": b"ornaments", "requires": ["holiday_ornaments_collection"],
+                     "overwrite": True, "remove": True},
+                    {"path": path, "bytes": b"glowing", "requires": ["glowing_collectibles"],
+                     "overwrite": True, "restore": b"vanilla"},
+                ],
+            )
+            target = modded / "Images" / "collectables_small.png"
+            target.parent.mkdir(parents=True)
+            target.write_bytes(b"vanilla")
+
+            self.reconfigure(modded, manifest, "--enable", "holiday_ornaments_collection,glowing_collectibles")
+            self.assertEqual(target.read_bytes(), b"glowing")
+            self.reconfigure(modded, manifest, "--enable", "holiday_ornaments_collection")
+            self.assertEqual(target.read_bytes(), b"ornaments")
+            self.reconfigure(modded, manifest)
+            self.assertEqual(target.read_bytes(), b"vanilla")
+            self.reconfigure(modded, manifest, "--enable", "glowing_collectibles")
+            self.assertEqual(target.read_bytes(), b"glowing")
+            self.reconfigure(modded, manifest, "--enable", "holiday_ornaments_collection")
+            self.assertEqual(target.read_bytes(), b"ornaments")
+
+    def test_reconfigure_agreeing_restores_apply_once_and_disagreeing_ones_fail_closed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            path = "Images/Upgrades/superFridge_NW.png"
+            modded, manifest = self.reconfigure_layer_fixture(
+                tmp_path,
+                {"invisible_upgrades_graphics": True, "misc_graphics_fixes": True},
+                [
+                    {"path": path, "bytes": b"invisible", "requires": ["invisible_upgrades_graphics"],
+                     "overwrite": True, "restore": b"vanilla"},
+                    {"path": path, "bytes": b"fixed", "requires": ["misc_graphics_fixes"],
+                     "overwrite": True, "restore": b"vanilla"},
+                ],
+            )
+            target = modded / "Images" / "Upgrades" / "superFridge_NW.png"
+            target.parent.mkdir(parents=True)
+            target.write_bytes(b"fixed")
+            self.reconfigure(modded, manifest, "--disable", "invisible_upgrades_graphics")
+            self.assertEqual(target.read_bytes(), b"fixed")
+            self.reconfigure(modded, manifest, "--disable", "invisible_upgrades_graphics,misc_graphics_fixes")
+            self.assertEqual(target.read_bytes(), b"vanilla")
+
+            data = json.loads(manifest.read_text(encoding="utf-8"))
+            other = tmp_path / "payload" / "other.bin"
+            other.write_bytes(b"not vanilla")
+            data["asset_patches"][1]["restore_source_path"] = "payload/other.bin"
+            data["asset_patches"][1]["restore_source_sha256"] = sha256_bytes(b"not vanilla")
+            data["asset_patches"][1]["restore_source_size"] = len(b"not vanilla")
+            manifest.write_text(json.dumps(data), encoding="utf-8")
+            result = self.reconfigure(
+                modded, manifest, "--disable", "invisible_upgrades_graphics,misc_graphics_fixes", expect=2
+            )
+            self.assertIn("Conflicting restore sources", result.stdout + result.stderr)
+            self.assertEqual(target.read_bytes(), b"vanilla")
+
+    def test_reconfigure_reruns_and_unticks_cheat_icons_in_the_shipped_shape(self):
+        # The shipped Cheat Upgrades icon records carry no overwrite_existing,
+        # unlike the older fixture above, and the No AI layer sits on top.
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            path = "Images/cheat_clean_garden.png"
+            modded, manifest = self.reconfigure_layer_fixture(
+                tmp_path,
+                {"core_executable": True, "cheat_upgrades": True, "no_ai_icons": True},
+                [
+                    {"path": path, "bytes": b"cheat icon", "requires": ["core_executable", "cheat_upgrades"],
+                     "remove": True},
+                    {"path": path, "bytes": b"no ai icon",
+                     "requires": ["core_executable", "cheat_upgrades", "no_ai_icons"], "overwrite": True,
+                     "restore": b"cheat icon", "restore_requires": ["core_executable", "cheat_upgrades"]},
+                ],
+            )
+            target = modded / "Images" / "cheat_clean_garden.png"
+            self.reconfigure(modded, manifest)
+            self.assertEqual(target.read_bytes(), b"no ai icon")
+            self.reconfigure(modded, manifest)
+            self.assertEqual(target.read_bytes(), b"no ai icon")
+            self.reconfigure(modded, manifest, "--disable", "no_ai_icons")
+            self.assertEqual(target.read_bytes(), b"cheat icon")
+            self.reconfigure(modded, manifest)
+            self.assertEqual(target.read_bytes(), b"no ai icon")
+            # Cheat Upgrades off while the No AI layer is showing.
+            self.reconfigure(modded, manifest, "--disable", "cheat_upgrades")
+            self.assertFalse(target.exists())
+            self.reconfigure(modded, manifest)
+            self.assertEqual(target.read_bytes(), b"no ai icon")
+
+            # Content no record wrote is still refused, both ways.
+            target.write_bytes(b"player-customized")
+            result = self.reconfigure(modded, manifest, "--disable", "cheat_upgrades", expect=2)
+            self.assertIn("Refusing removal", result.stdout + result.stderr)
+            self.assertEqual(target.read_bytes(), b"player-customized")
+            result = self.reconfigure(modded, manifest, "--disable", "no_ai_icons", expect=2)
+            self.assertIn("without an expected_target_sha256 or overwrite_existing=true", result.stdout + result.stderr)
+            self.assertEqual(target.read_bytes(), b"player-customized")
+
     def test_output_only_removes_hash_authenticated_overlay_asset_and_refuses_unknown_hash(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)

@@ -2730,6 +2730,87 @@ def no_ai_icon_asset_patches(
     return records
 
 
+CLEAN_INSTALL_RESTORE_DIR = Path("payload") / "Original Virtual Families 2 Assets" / "Clean Install"
+
+
+def assign_reconfigure_undo_sources(
+    bundle_dir: Path,
+    base_payload: Path,
+    asset_patches: list[dict[str, Any]],
+    *,
+    strict: bool = True,
+) -> dict[str, Any]:
+    """Give every Images/Assets record a way back to what a fresh apply leaves.
+
+    An Enable/Disable run on an existing modded folder has no vanilla folder to
+    copy from, so unticking a setting can only undo files whose records say
+    how. A fresh apply with the setting off leaves the clean-install bytes at a
+    path the base game has, and nothing at a path it does not. So:
+
+    - a record writing over a clean-install file restores that file, shipped
+      in the bundle from the base payload after checking it against the clean
+      index (a record whose bytes ARE the clean file needs nothing);
+    - a record writing a file the clean install does not have is removed.
+
+    Records that already declare a restore are left alone: a restore_requires
+    gate is a deliberate layer (No AI Icons over Cheat Upgrades) and the
+    Mobile Furniture Behaviors maps choose their own. The one exception is a
+    removal declared on a clean-install file (Holiday Ornaments'
+    collectables_small.png), which would delete a base-game image; it becomes
+    a restore instead. Paths outside Images/ and Assets/ are not in the clean
+    index and are not touched.
+
+    A release bundle (strict) refuses to export when the base payload cannot
+    supply a clean original; a development export lists those paths in the
+    summary instead, and a reconfigure then leaves them as they are.
+    """
+    index = {key.casefold(): (key, entry) for key, entry in clean_base_game_index().items()}
+    if not index:
+        return {"restores_added": 0, "removals_added": 0, "restore_unavailable": []}
+    restores_added = removals_added = 0
+    restore_unavailable: list[str] = []
+    for record in asset_patches:
+        target = str(record.get("output_file_path") or record.get("file_path") or "").replace("\\", "/")
+        if target.lower().endswith(".exe") or not target.casefold().startswith(("images/", "assets/")):
+            continue
+        if record.get("restore_source_path") or record.get("restore_requires"):
+            continue
+        clean = index.get(target.casefold())
+        if clean is None:
+            if not record.get("remove_when_disabled"):
+                record["remove_when_disabled"] = True
+                removals_added += 1
+            continue
+        clean_rel, clean_entry = clean
+        record["remove_when_disabled"] = False
+        clean_sha = str(clean_entry["sha256"]).lower()
+        if str(record.get("source_sha256", "")).lower() == clean_sha:
+            continue
+        original = base_payload / clean_rel
+        if not original.is_file() or sha256_file(original) != clean_sha:
+            if strict:
+                raise ValueError(
+                    f"Cannot ship the clean-install original of {clean_rel} as a restore source: "
+                    f"{original} is missing or does not match the clean index."
+                )
+            restore_unavailable.append(clean_rel)
+            continue
+        restore_rel = CLEAN_INSTALL_RESTORE_DIR / clean_rel
+        restore_target = bundle_dir / restore_rel
+        if not restore_target.is_file():
+            restore_target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(original, restore_target)
+        record["restore_source_path"] = relative_posix(restore_rel)
+        record["restore_source_sha256"] = clean_sha
+        record["restore_source_size"] = int(clean_entry["size"])
+        restores_added += 1
+    return {
+        "restores_added": restores_added,
+        "removals_added": removals_added,
+        "restore_unavailable": sorted(restore_unavailable),
+    }
+
+
 def validate_bundle_asset_sources(bundle_dir: Path, asset_patches: list[dict[str, Any]]) -> None:
     bundle_root = bundle_dir.resolve()
     for index, record in enumerate(asset_patches):
@@ -4470,6 +4551,12 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
                 & (EXECUTABLE_OVERLAY_OPTIONAL_SETTINGS - overlay_settings)
             )
         ]
+    reconfigure_undo_sources = assign_reconfigure_undo_sources(
+        bundle_dir,
+        base_payload,
+        asset_patches,
+        strict=bool(getattr(args, "release_bundle", False)),
+    )
     payload_deduplication = deduplicate_payload_files(bundle_dir, asset_patches)
     validate_bundle_asset_sources(bundle_dir, asset_patches)
     payload_pruning = prune_unreferenced_payload_files(bundle_dir, asset_patches)
@@ -4608,6 +4695,7 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
             "payload_file_count": count_files(bundle_dir / "payload"),
             "payload_pruning": payload_pruning,
             "payload_deduplication": payload_deduplication,
+            "reconfigure_undo_sources": reconfigure_undo_sources,
             "base_payload": base_payload.name,
             "asset_mode": args.asset_mode,
             "exe_replacement": exe_replacement_record is not None,
