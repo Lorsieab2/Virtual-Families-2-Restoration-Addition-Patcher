@@ -9765,7 +9765,9 @@ class OutfitStoreMappingTests(unittest.TestCase):
                 self.assertEqual(helper.count(setter_declaration), 1)
                 self.assertLess(
                     helper.index(setter_declaration),
-                    helper.index("VF2SetInventoryItemInfoLocksUnlocked(false);"),
+                    # The purchase no longer calls it with a literal
+                    # true/false; the one apply routine passes the saved flag.
+                    helper.index("VF2SetInventoryItemInfoLocksUnlocked(unlocked);"),
                 )
         finally:
             patcher.PATCHED = old_patched
