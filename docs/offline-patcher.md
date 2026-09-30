@@ -318,9 +318,22 @@ vanilla-folder selection guidance, and save-copy guidance.
 certifies the current canonical B158 archive. It fails closed on unsafe or
 duplicate ZIP paths, CRC errors, a root-name mismatch, target-fingerprint
 drift, executable-variant drift, unreachable settings, or malformed manifest
-record types. Its canonical contract also checks four executable variants,
-15 mobile-renovation PNGs, 67 mobile sounds (63 restores and four removals),
-and all four WAV-to-OGG route records. This is static package evidence only;
+record types. Its contract checks every executable variant the release's
+identities name, the 35 mobile-renovation PNGs, 67 mobile sounds (63 restores
+and four removals) and all four WAV-to-OGG route records, and in addition:
+every asset record's source and restore source is present and matches its
+manifest SHA-256 and size; every payload file is referenced by some record;
+every post-asset record covers exactly the shipped executables, with its
+expected bytes at its offset, and every one-byte runtime flag points at the raw
+pointer of the `.vf2*` section it names; every advertised runtime-flag setting
+whose section the executables carry has its toggle record; and every `runner_files` entry and the
+transparency log are members of the archive. (Superseded, recorded as wrong:
+this paragraph used to say the contract checks "four executable variants" and
+"15 mobile-renovation PNGs", and implied that was the whole contract. Through
+B196 the verifier checked only the executables, renovation PNGs, No AI Icons
+and sounds, so a deleted holiday fmap, a moved `.vf2mort` offset or a missing
+`offline_vf2_patcher_gui.py` still printed RELEASE GATE PASSED.) This is
+static package evidence only;
 it does not establish FMOD decoding, audible parity, gameplay behavior, or
 runtime crash-freedom.
 

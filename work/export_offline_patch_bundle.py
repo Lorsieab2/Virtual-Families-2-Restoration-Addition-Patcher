@@ -951,6 +951,21 @@ def _is_persisted_byte_flag(runtime_flag: dict[str, Any]) -> bool:
     )
 
 
+# The one-byte runtime-flag PE section each setting's post-asset toggle flips.
+# The single source of truth: the emitters below look their section up here,
+# and work/verify_offline_bundle_zip.py imports this table to bind each
+# shipped record to its section, so a record carrying another setting's
+# section (swapped notes and variants) cannot pass the release gate.
+RUNTIME_FLAG_SECTION_BY_SETTING = {
+    "allow_older_pregnancies": ".vf2preg",
+    "older_villager_mortality": ".vf2mort",
+    "same_sex_marriage": ".vf2same",
+    "holiday_furniture": ".vf2goal",
+    "mobile_furniture_behaviors": ".vf2beh",
+    "store_scroll_bar": ".vf2scrl",
+}
+
+
 def setting_runtime_flag_post_asset_patches(
     executable_sources: list[Path],
     *,
@@ -961,6 +976,11 @@ def setting_runtime_flag_post_asset_patches(
     feature_label: str,
 ) -> list[dict[str, Any]]:
     """Emit one exact-SHA setting gate covering every linked matrix payload."""
+    if RUNTIME_FLAG_SECTION_BY_SETTING.get(setting_id) != section_name:
+        raise ValueError(
+            f"{setting_id} runtime flag section {section_name} disagrees with "
+            "RUNTIME_FLAG_SECTION_BY_SETTING."
+        )
     if runtime_flag.get("source_section") != section_name:
         raise ValueError(
             f"Build manifest has an invalid {feature_label} runtime flag contract."
@@ -1015,7 +1035,7 @@ def older_pregnancy_post_asset_patches(
         executable_sources,
         output_exe_name=output_exe_name,
         runtime_flag=runtime_flag,
-        section_name=".vf2preg",
+        section_name=RUNTIME_FLAG_SECTION_BY_SETTING["allow_older_pregnancies"],
         setting_id="allow_older_pregnancies",
         feature_label="Allow Older Pregnancies",
     )
@@ -1039,7 +1059,7 @@ def older_mortality_post_asset_patches(
         executable_sources,
         output_exe_name=output_exe_name,
         runtime_flag=runtime_flag,
-        section_name=".vf2mort",
+        section_name=RUNTIME_FLAG_SECTION_BY_SETTING["older_villager_mortality"],
         setting_id="older_villager_mortality",
         feature_label="Older Villager Mortality Curve",
     )
@@ -1091,7 +1111,7 @@ def same_sex_marriage_post_asset_patches(
         executable_sources,
         output_exe_name=output_exe_name,
         runtime_flag=runtime_flag,
-        section_name=".vf2same",
+        section_name=RUNTIME_FLAG_SECTION_BY_SETTING["same_sex_marriage"],
         setting_id="same_sex_marriage",
         feature_label="Same-Sex Marriage",
     )
@@ -1115,7 +1135,7 @@ def holiday_furniture_goal_post_asset_patches(
         executable_sources,
         output_exe_name=output_exe_name,
         runtime_flag=runtime_flag,
-        section_name=".vf2goal",
+        section_name=RUNTIME_FLAG_SECTION_BY_SETTING["holiday_furniture"],
         setting_id="holiday_furniture",
         feature_label="Holiday Furniture goals",
     )
@@ -1139,7 +1159,7 @@ def mobile_furniture_behavior_post_asset_patches(
         executable_sources,
         output_exe_name=output_exe_name,
         runtime_flag=runtime_flag,
-        section_name=".vf2beh",
+        section_name=RUNTIME_FLAG_SECTION_BY_SETTING["mobile_furniture_behaviors"],
         setting_id="mobile_furniture_behaviors",
         feature_label="Mobile Furniture Behaviors",
     )
@@ -1293,7 +1313,7 @@ def store_scroll_bar_post_asset_patches(
         executable_sources,
         output_exe_name=output_exe_name,
         runtime_flag=runtime_flag,
-        section_name=".vf2scrl",
+        section_name=RUNTIME_FLAG_SECTION_BY_SETTING["store_scroll_bar"],
         setting_id="store_scroll_bar",
         feature_label="Store Scroll Bar",
     )
