@@ -3246,6 +3246,106 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             self.assertFalse(second.exists())
             exporter.validate_bundle_asset_sources(bundle, records)
 
+    def test_every_asset_record_can_be_undone_like_a_fresh_apply(self):
+        # A reconfigure has no vanilla folder: unticking a setting must restore
+        # a clean-install file the record overwrote, and remove a file the
+        # clean install does not have, or the folder no longer matches a fresh
+        # apply with that selection.
+        from unittest import mock
+
+        def sha(data):
+            return hashlib.sha256(data).hexdigest()
+
+        clean = {
+            "Images/bird.png": {"sha256": sha(b"vanilla bird"), "size": len(b"vanilla bird")},
+            "Images/collectables_small.png": {"sha256": sha(b"vanilla sheet"), "size": len(b"vanilla sheet")},
+            "Images/unchanged.png": {"sha256": sha(b"same"), "size": len(b"same")},
+            "Images/cheat_x.png": {"sha256": sha(b"cheat base"), "size": len(b"cheat base")},
+            "Images/Upgrades/Blender_NW.png": {"sha256": sha(b"clean blender"), "size": len(b"clean blender")},
+            "Images/Upgrades/toolwall.png": {"sha256": sha(b"clean wall"), "size": len(b"clean wall")},
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = Path(tmp) / "bundle"
+            base = Path(tmp) / "base"
+            for rel, data in (
+                ("Images/bird.png", b"vanilla bird"),
+                ("Images/collectables_small.png", b"vanilla sheet"),
+                ("Images/Upgrades/Blender_NW.png", b"clean blender"),
+            ):
+                (base / rel).parent.mkdir(parents=True, exist_ok=True)
+                (base / rel).write_bytes(data)
+
+            def record(path, data, **extra):
+                return {"file_path": path, "source_sha256": sha(data), "source_size": len(data),
+                        "requires": ["x"], **extra}
+
+            records = [
+                record("Images/bird.png", b"white bird"),
+                record("images/COLLECTABLES_SMALL.png", b"ornaments", remove_when_disabled=True),
+                record("Images/unchanged.png", b"same"),
+                record("Images/Furniture/New.png", b"new art"),
+                record("Images/cheat_x.png", b"no ai", restore_source_path="payload/x.png",
+                       restore_requires=["core_executable", "cheat_upgrades"]),
+                record("Assets/Behaviour.png.fmap", b"map", restore_source_path="payload/b.fmap"),
+                record("Sounds/menu.ogg", b"song"),
+                record("Virtual Families 2.exe", b"exe", output_file_path="Modded.exe"),
+                record("Images/Upgrades/Blender_NW.png", b"invisible", restore_source_path="payload/o.png",
+                       restore_source_sha256=sha(b"not the clean blender"), restore_source_size=21),
+                record("Images/Upgrades/toolwall.png", b"invisible", restore_source_path="payload/w.png",
+                       restore_source_sha256=sha(b"clean wall"), restore_source_size=10),
+            ]
+            with mock.patch.object(exporter, "clean_base_game_index", return_value=clean):
+                summary = exporter.assign_reconfigure_undo_sources(bundle, base, records)
+
+            bird, sheet, unchanged, new, layer, behaviour, sound, exe, blender, wall = records
+            self.assertEqual(
+                summary,
+                {"restores_added": 2, "restores_corrected": 1, "removals_added": 1, "restore_unavailable": []},
+            )
+            self.assertEqual((bundle / blender["restore_source_path"]).read_bytes(), b"clean blender")
+            self.assertEqual(blender["restore_source_sha256"], sha(b"clean blender"))
+            self.assertEqual(wall["restore_source_path"], "payload/w.png")
+            for row, data in ((bird, b"vanilla bird"), (sheet, b"vanilla sheet")):
+                self.assertFalse(row["remove_when_disabled"])
+                shipped = bundle / row["restore_source_path"]
+                self.assertEqual(shipped.read_bytes(), data)
+                self.assertEqual(row["restore_source_sha256"], sha(data))
+                self.assertEqual(row["restore_source_size"], len(data))
+            self.assertTrue(bird["restore_source_path"].startswith(
+                "payload/Original Virtual Families 2 Assets/Clean Install/Images/"))
+            self.assertNotIn("restore_source_path", unchanged)
+            self.assertFalse(unchanged["remove_when_disabled"])
+            self.assertTrue(new["remove_when_disabled"])
+            self.assertNotIn("remove_when_disabled", layer)
+            self.assertEqual(layer["restore_source_path"], "payload/x.png")
+            self.assertEqual(behaviour["restore_source_path"], "payload/b.fmap")
+            self.assertNotIn("remove_when_disabled", sound)
+            self.assertNotIn("remove_when_disabled", exe)
+            self.assertNotIn("restore_source_path", exe)
+
+            (base / "Images" / "bird.png").write_bytes(b"polluted payload copy")
+            again = [record("Images/bird.png", b"white bird")]
+            with mock.patch.object(exporter, "clean_base_game_index", return_value=clean):
+                with self.assertRaisesRegex(ValueError, "clean-install original of Images/bird.png"):
+                    exporter.assign_reconfigure_undo_sources(bundle, base, again)
+                lenient = exporter.assign_reconfigure_undo_sources(bundle, base, again, strict=False)
+            self.assertEqual(lenient["restore_unavailable"], ["Images/bird.png"])
+            self.assertNotIn("restore_source_path", again[0])
+
+            # No clean index at all: a release export must refuse rather than
+            # ship every Images/Assets record with no undo; a development
+            # export leaves the records untouched.
+            orphan = [record("Images/Furniture/Other.png", b"other art")]
+            with mock.patch.object(exporter, "clean_base_game_index", return_value={}):
+                with self.assertRaisesRegex(ValueError, "clean-install index"):
+                    exporter.assign_reconfigure_undo_sources(bundle, base, orphan)
+                empty = exporter.assign_reconfigure_undo_sources(bundle, base, orphan, strict=False)
+            self.assertEqual(
+                empty,
+                {"restores_added": 0, "restores_corrected": 0, "removals_added": 0, "restore_unavailable": []},
+            )
+            self.assertNotIn("remove_when_disabled", orphan[0])
+
 
 class CleanBaseGameReferenceTests(unittest.TestCase):
     """The additive diff must never consult the working payload.
