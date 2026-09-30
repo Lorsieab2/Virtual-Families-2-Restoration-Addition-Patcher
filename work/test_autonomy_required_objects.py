@@ -184,10 +184,19 @@ class EveryEnabledCandidateRequiresItsFurniture(unittest.TestCase):
             self.assertIn("ContentMap.ObjectExists((CContentMap::EObject)0x%02X)" % obj, body)
         self.assertIn("candidate[0xCD] = (unsigned char)(anyMachine ? 1 : 0);", body)
         self.assertNotIn("+ 0x0C)", body, "the refresh must not touch the weight")
+        # Per decision: in the hook itself, or in a helper the hook calls (the
+        # refresh body may be factored into one, as the trained-weights change
+        # does with VF2RefreshVolatileCandidates).
         hook = code_only(function_body(
             'extern "C" void __cdecl VF2RefreshHammockEligibility(void *villager)'))
-        self.assertIn("VF2RefreshPinballGamesEligibility(data);", hook,
-                      "the any-of gate is not re-evaluated per decision")
+        reached = [hook]
+        for callee in set(re.findall(r"\b(VF2\w+)\(", hook)):
+            m = re.search(r"\nstatic void %s\([^)]*\)\n\{" % callee, SOURCE)
+            if m:
+                reached.append(code_only(SOURCE[m.start():SOURCE.index("\n}\n", m.start())]))
+        self.assertTrue(
+            any("VF2RefreshPinballGamesEligibility(data);" in body for body in reached),
+            "the any-of gate is not re-evaluated per decision")
 
     def test_the_emitted_helper_writes_the_required_object_field(self):
         """Run the helper: it must write +0xC4 of exactly that candidate."""
