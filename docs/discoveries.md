@@ -3021,6 +3021,29 @@
   route; the native 30-record pool bounds physical sock creation while the
   persistent pile counter retains the requested signed-int maximum. The stock
   decal still saturates at its largest frame for every count at or above 30.
+- **Superseded (2026-09-30): `0x7FFFFFFF` was a defect.** The deposit at
+  action `0x4C` is an unclamped `inc dword ptr [gs+0x148]`, so one more sock
+  wrapped the pile to `INT_MIN`; and stock `CAchievement::IncrementProgress`
+  is `add [record+4], amount` then a signed `jl` against the target, so
+  laundering an `INT_MAX` pile on top of any partial progress on goals
+  `0x3B`/`0x3C`/`0x3D` (targets 10/50/100 in `achievementList`) wrapped the
+  progress negative and left those goals unreachable. Max out sock pile now
+  sets 1,000,000: at least the largest laundering target, above the decal's
+  last frame, and more than two billion deposits away from overflow. (The
+  `SpawnSockInHouse` call described above was also already removed; the row
+  writes only the counter.)
+- **Load-time repair (2026-09-30), in every executable.** Saves already
+  damaged by the old maximum are repaired when they load:
+  `VF2AchievementLoadStateAndReconcile` calls `VF2RepairSockLaunderingOverflow`
+  right after the native `LoadState` (stock `theGameState::Load` has already
+  memcpy'd the save into theGameState, so `+0x148` is the saved pile).
+  Negative progress on goals `0x3B`/`0x3C`/`0x3D` only is set to 0 -- those
+  goals only ever receive the pile, which normal play keeps at zero or above,
+  so a negative value can only be the wrap, and 0 is safe even for a complete
+  goal because `IncrementProgress` skips complete goals and `SetComplete`
+  never writes progress. A pile below 0 or above 1,000,000 (an unlaundered
+  old `INT_MAX` pile, or one wrapped to `INT_MIN`) is set to 1,000,000.
+  Saves with progress >= 0 and a pile of 0..1,000,000 are left untouched.
 - The full 213-test suite passes with one intentional skip. Compiled helper
   readback confirms both writes and the shared save call. The later combined
   B156 link uses the installed Visual Studio Community x86 ATL library and

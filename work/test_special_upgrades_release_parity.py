@@ -566,7 +566,7 @@ class SpecialUpgradesReleaseParityTests(unittest.TestCase):
             max_sock,
         )
         self.assertIn("VF2SetSockPileCount(kVF2MaximumSockPileCount);", max_sock)
-        self.assertIn("static const int kVF2MaximumSockPileCount = 0x7FFFFFFF;", self.helper)
+        self.assertIn("static const int kVF2MaximumSockPileCount = 1000000;", self.helper)
 
         availability = self._function_block(
             self.helper,

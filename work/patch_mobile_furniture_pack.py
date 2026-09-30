@@ -2228,7 +2228,7 @@ CHEAT_UPGRADE_ITEMS = [
     {
         "item_id": 0x133,
         "name": "Max out sock pile",
-        "description": "Sets only the laundry-room sock pile to the maximum signed integer value.",
+        "description": "Sets only the laundry-room sock pile to 1,000,000 socks.",
         "price": 0,
     },
     {
@@ -16554,6 +16554,8 @@ extern "C" void __fastcall VF2MaybeCompleteAchiever(
     achievement->SetComplete(achiever);
 }
 
+static void VF2RepairSockLaunderingOverflow(CAchievement *achievement);
+
 static void VF2MaybeCompleteDisciplineProps(CAchievement *achievement) {
     if (!kVF2IncludeBehaviorGoals ||
         achievement->IsComplete((EAchievement)0xA5) ||
@@ -16576,6 +16578,9 @@ extern "C" bool __fastcall VF2AchievementLoadStateAndReconcile(
 ) {
     bool loaded = achievement->LoadState(state);
     if (loaded) {
+        // theGameState::Load memcpy's the save into theGameState before it
+        // calls this, so the sock pile at +0x148 is already the saved one.
+        VF2RepairSockLaunderingOverflow(achievement);
         VF2MaybeCompleteDisciplineProps(achievement);
         VF2MaybeCompleteAchiever(achievement, 0);
     }
@@ -17495,11 +17500,53 @@ static void VF2CompleteAllAchievements() {
     VF2MaybeCompleteAchiever(&Achievement, 0);
 }
 
-static const int kVF2MaximumSockPileCount = 0x7FFFFFFF;
+// ONE MILLION, NOT INT_MAX. Both native readers of this count do unclamped
+// signed arithmetic on it: depositing a sock (CVillagerPlans action 0x4C)
+// is `inc dword ptr [gs+0x148]`, and laundering (action 0x4D) passes the
+// whole count to CAchievement::IncrementProgress for goals 0x3B/0x3C/0x3D,
+// which is `add [record+4], amount` followed by a signed `jl` against the
+// target. At 0x7FFFFFFF one more deposit wrapped the pile to INT_MIN, and
+// laundering it on top of any partial progress wrapped the goal negative,
+// leaving the laundering goals unreachable. The largest laundering target is
+// 100 and incomplete progress is always below it, so 1,000,000 completes
+// every laundering goal in one wash, still saturates the stock pile decal
+// (its last frame is at 30), and would need over two billion further
+// deposits to overflow.
+static const int kVF2MaximumSockPileCount = 1000000;
 
 static void VF2SetSockPileCount(int count) {
     unsigned char *gameState = (unsigned char *)theGameState::Get();
     *(int *)(gameState + 0x148) = count;
+}
+
+// REPAIR SAVES THE OLD 0x7FFFFFFF PILE ALREADY DAMAGED. Runs once per load.
+//
+// Laundering goals 0x3B/0x3C/0x3D only ever receive the sock pile, which
+// stock play keeps at zero or above, so negative progress on exactly those
+// three can only be the old INT_MAX pile wrapped by IncrementProgress's
+// unclamped add. Left alone it needs about 2,148 maxed washes to climb back
+// past zero. It is reset to 0 whether or not the goal is complete:
+// IncrementProgress returns before touching progress once the complete byte
+// is set, and SetComplete itself never writes progress, so a complete goal's
+// progress is never read by the completion path and 0 is a value a stock
+// SetComplete-completed goal can already hold.
+//
+// The pile itself is repaired too: stock play adds one sock per deposit, so
+// a pile above the cheat's million is an unlaundered old INT_MAX pile
+// (laundering it would wrap the goals again), and a negative pile is that
+// pile wrapped by one more deposit. Both become the current maximum.
+// Healthy saves (progress >= 0, pile 0..maximum) are left untouched.
+static void VF2RepairSockLaunderingOverflow(CAchievement *achievement) {
+    for (int goal = 0x3B; goal <= 0x3D; ++goal) {
+        int *progress = (int *)((unsigned char *)achievement + goal * 12 + 4);
+        if (*progress < 0) *progress = 0;
+    }
+    unsigned char *gameState = (unsigned char *)theGameState::Get();
+    if (!gameState) return;
+    int *pile = (int *)(gameState + 0x148);
+    if (*pile < 0 || *pile > kVF2MaximumSockPileCount) {
+        *pile = kVF2MaximumSockPileCount;
+    }
 }
 
 static void VF2CleanHouse() {
@@ -17770,8 +17817,16 @@ extern "C" void __cdecl VF2ApplyVisibleSpecialUpgrade(int itemId) {
         break;
     case 0x124:
         {
-        unsigned int generation =
-            VF2PersistentCheatAndPurchaseMask() & 0xFFFFFF00u;
+        // Bits 8-31 are the lifetime generation count and bits 2-7 are the
+        // armed pregnancy one-shots (Force Successful Pregnancy, next babies
+        // male/female, singleton/twins/triplets). Neither is goal progress,
+        // so both survive the reset; masking with 0xFFFFFF00 used to disarm
+        // any armed one-shot and clear its store checkmark. Only bits 0-1,
+        // the Taters and Gravy purchase record, are goal progress: clearing
+        // them lets goal 0x74 be earned again by buying both items, the same
+        // as every other purchase goal after a reset.
+        unsigned int generationAndOneShots =
+            VF2PersistentCheatAndPurchaseMask() & 0xFFFFFFFCu;
         unsigned int healthPlanAndRenovations =
             VF2PersistentHealthPlanAndRenovationMask();
         // Achievement.Reset() wipes the whole record array, including the
@@ -17780,7 +17835,7 @@ extern "C" void __cdecl VF2ApplyVisibleSpecialUpgrade(int itemId) {
         // achievements would silently un-purchase them.
         unsigned int aiBathroom2 = VF2PersistentAIBathroom2Mask();
         Achievement.Reset();
-        VF2PersistentCheatAndPurchaseMask() = generation;
+        VF2PersistentCheatAndPurchaseMask() = generationAndOneShots;
         VF2PersistentHealthPlanAndRenovationMask() = healthPlanAndRenovations;
         VF2PersistentAIBathroom2Mask() = aiBathroom2;
         // The upgrades are still owned; give the career-room goals back now

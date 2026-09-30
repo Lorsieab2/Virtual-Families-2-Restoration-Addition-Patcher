@@ -4,6 +4,7 @@ import copy
 import hashlib
 import json
 import os
+import re
 import shutil
 import struct
 import tempfile
@@ -8756,7 +8757,7 @@ class MobileSpecialUpgradeContractTests(unittest.TestCase):
             source,
         )
         self.assertIn(
-            "VF2PersistentCheatAndPurchaseMask() = generation;",
+            "VF2PersistentCheatAndPurchaseMask() = generationAndOneShots;",
             source,
         )
         self.assertIn(
@@ -8832,10 +8833,13 @@ class MobileSpecialUpgradeContractTests(unittest.TestCase):
             "VF2PersistentHealthPlanAndRenovationMask() = healthPlanAndRenovations;",
             reset_case,
         )
-        self.assertIn("VF2PersistentCheatAndPurchaseMask() = generation;", reset_case)
+        self.assertIn(
+            "VF2PersistentCheatAndPurchaseMask() = generationAndOneShots;",
+            reset_case,
+        )
         self.assertIn("record + 4", source)
         self.assertIn("VF2PersistentCheatAndPurchaseMask() >> 8", source)
-        self.assertIn("VF2PersistentCheatAndPurchaseMask() & 0xFFFFFF00u", source)
+        self.assertIn("VF2PersistentCheatAndPurchaseMask() & 0xFFFFFFFCu", reset_case)
         health_plan_helper = source.split(
             "static unsigned int &VF2PersistentHealthPlanAndRenovationMask()",
             1,
@@ -8995,7 +8999,10 @@ class OutfitStoreMappingTests(unittest.TestCase):
         self.assertEqual(patcher.SAME_SEX_MARRIAGE_CATALOG_PRICE, 0)
         self.assertEqual(rows[0x11B]["price"], 0)
         self.assertEqual(rows[0x133]["name"], "Max out sock pile")
-        self.assertIn("maximum signed integer", rows[0x133]["description"])
+        self.assertEqual(
+            rows[0x133]["description"],
+            "Sets only the laundry-room sock pile to 1,000,000 socks.",
+        )
         self.assertEqual(rows[0x134]["name"], "No sock pile")
         self.assertIn("without awarding sock-laundering progress", rows[0x134]["description"])
         self.assertEqual(rows[0x135]["name"], "Clean House")
@@ -9237,7 +9244,7 @@ class OutfitStoreMappingTests(unittest.TestCase):
         self.assertIn("static void VF2SetSockPileCount(int count)", source)
         self.assertIn("*(int *)(gameState + 0x148) = count;", source)
         self.assertIn("case 0x133:", source)
-        self.assertIn("static const int kVF2MaximumSockPileCount = 0x7FFFFFFF;", source)
+        self.assertIn("static const int kVF2MaximumSockPileCount = 1000000;", source)
         sock_pile_case = source.split("case 0x133:", 1)[1].split("case 0x134:", 1)[0]
         self.assertNotIn("CollectableItem.SpawnSockInHouse", sock_pile_case)
         self.assertIn("VF2SetSockPileCount(kVF2MaximumSockPileCount);", source)
@@ -10148,6 +10155,127 @@ class OutfitStoreMappingTests(unittest.TestCase):
         self.assertIn("case 0x124:", source)
         self.assertIn("Achievement.Reset();", source)
 
+    def test_reset_achievements_keeps_armed_pregnancy_one_shots(self):
+        # Record 0xA8's dword: bits 0-1 Taters purchase record, bits 2-7 the
+        # armed pregnancy one-shots, bits 8-31 the lifetime generation count.
+        # Reset must keep everything except the Taters goal progress.
+        source = Path(patcher.__file__).read_text(encoding="utf-8")
+        reset_case = source.split("case 0x124:", 1)[1].split("case 0x125:", 1)[0]
+        keep_mask = int(
+            reset_case.split("VF2PersistentCheatAndPurchaseMask() & ", 1)[1]
+            .split("u;", 1)[0],
+            16,
+        )
+        one_shot_bits = 0
+        for bit in re.findall(r"VF2ToggleOneShotUpgrade\((0x[0-9A-Fa-f]+)u,", source):
+            one_shot_bits |= int(bit, 16)
+        self.assertEqual(one_shot_bits, 0xFC)
+        self.assertEqual(keep_mask & one_shot_bits, one_shot_bits)
+        self.assertEqual(keep_mask & 0xFFFFFF00, 0xFFFFFF00)
+        self.assertEqual(keep_mask & 0x3, 0)
+
+    def test_max_sock_pile_cannot_overflow_native_sock_arithmetic(self):
+        # Deposit is `inc [gs+0x148]` and laundering adds the whole pile to
+        # goals 0x3B/0x3C/0x3D with a signed, unclamped IncrementProgress.
+        source = Path(patcher.__file__).read_text(encoding="utf-8")
+        value = int(
+            source.split("static const int kVF2MaximumSockPileCount = ", 1)[1]
+            .split(";", 1)[0],
+            0,
+        )
+        achievement = CoffObject(patcher.SRC_OBJS / "Achievement.obj")
+        table = achievement.symbol("?achievementList@@3PAUsAchievementListEntry@@A")
+        section = achievement.section(table.section)
+        targets = [
+            struct.unpack_from(
+                "<i",
+                achievement.buf,
+                section.raw_ptr + table.value + goal * 0x1C + 4,
+            )[0]
+            for goal in (0x3B, 0x3C, 0x3D)
+        ]
+        self.assertEqual(targets, [10, 50, 100])
+        # One wash completes every laundering goal from zero progress...
+        self.assertGreaterEqual(value, max(targets))
+        # ...and incomplete progress (< target) plus the pile plus a million
+        # more deposits stays a positive signed int.
+        self.assertLess(value + max(targets) + 1000000, 0x7FFFFFFF)
+
+    def test_load_repairs_saves_damaged_by_the_old_sock_pile_maximum(self):
+        # Saves that laundered the old INT_MAX pile hold wrapped-negative
+        # progress on goals 0x3B-0x3D (and may still hold the INT_MAX pile,
+        # or INT_MIN after one more deposit). The load reconciler repairs
+        # exactly that and nothing else. The emitted function is compiled and
+        # run against a damaged and a healthy state.
+        source = Path(patcher.__file__).read_text(encoding="utf-8")
+        load = source.split(
+            'extern "C" bool __fastcall VF2AchievementLoadStateAndReconcile(', 1
+        )[1].split("\n}\n", 1)[0]
+        self.assertLess(
+            load.index("bool loaded = achievement->LoadState(state);"),
+            load.index("VF2RepairSockLaunderingOverflow(achievement);"),
+        )
+        signature = "static void VF2RepairSockLaunderingOverflow(CAchievement *achievement) {"
+        body = signature + source.split(signature, 1)[1].split("\n}\n", 1)[0] + "\n}\n"
+        self.assertIn("for (int goal = 0x3B; goal <= 0x3D; ++goal) {", body)
+
+        import subprocess
+        import test_generated_cpp_compiles as compiles
+        vcvars = compiles._vcvars()
+        if vcvars is None:
+            self.skipTest("no Visual Studio toolchain on this machine")
+        harness = (
+            "#include <stdio.h>\n"
+            "#include <string.h>\n"
+            "class CAchievement {};\n"
+            "class theGameState { public: static theGameState *Get(); };\n"
+            "static int gState[0x100];\n"
+            "theGameState *theGameState::Get() { return (theGameState *)gState; }\n"
+            "static const int kVF2MaximumSockPileCount = 1000000;\n"
+            + body +
+            "static int gRecords[0x125 * 3];\n"
+            "static void run(int pile, int p3a, int p3b, int p3c, int p3d, int p3e, int complete3c) {\n"
+            "    memset(gRecords, 0, sizeof(gRecords));\n"
+            "    gRecords[0x3A * 3 + 1] = p3a; gRecords[0x3B * 3 + 1] = p3b;\n"
+            "    gRecords[0x3C * 3 + 1] = p3c; gRecords[0x3D * 3 + 1] = p3d;\n"
+            "    gRecords[0x3E * 3 + 1] = p3e;\n"
+            "    ((unsigned char *)&gRecords[0x3C * 3])[0] = (unsigned char)complete3c;\n"
+            "    gState[0x148 / 4] = pile;\n"
+            "    VF2RepairSockLaunderingOverflow((CAchievement *)gRecords);\n"
+            "    printf(\"%d %d %d %d %d %d %d\\n\", gState[0x148 / 4], gRecords[0x3A * 3 + 1],\n"
+            "        gRecords[0x3B * 3 + 1], gRecords[0x3C * 3 + 1], gRecords[0x3D * 3 + 1],\n"
+            "        gRecords[0x3E * 3 + 1], ((unsigned char *)&gRecords[0x3C * 3])[0]);\n"
+            "}\n"
+            "int main() {\n"
+            "    run(0x7FFFFFFF, -5, -2147483643, -2147483600, -7, -9, 1);\n"
+            "    run((int)0x80000000u, 3, -1, 4, 5, 6, 0);\n"
+            "    run(29, 3, 9, 49, 99, 7, 0);\n"
+            "    run(1000000, 0, 0, 12, 0, 0, 1);\n"
+            "    return 0;\n"
+            "}\n"
+        )
+        with tempfile.TemporaryDirectory() as work:
+            (Path(work) / "repair.cpp").write_text(harness, encoding="ascii")
+            result = subprocess.run(
+                f'"{vcvars}" >nul 2>&1 && cd /d "{work}" && '
+                f'cl /nologo /EHsc repair.cpp >nul && .\\repair.exe',
+                shell=True, capture_output=True, text=True,
+            )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(
+            result.stdout.split(),
+            [
+                # Damaged: INT_MAX pile -> maximum; 0x3B-0x3D negatives -> 0,
+                # including a complete one; neighbours 0x3A/0x3E untouched.
+                "1000000", "-5", "0", "0", "0", "-9", "1",
+                # A pile wrapped to INT_MIN by one more deposit.
+                "1000000", "3", "0", "4", "5", "6", "0",
+                # Healthy saves are byte-for-byte unchanged.
+                "29", "3", "9", "49", "99", "7", "0",
+                "1000000", "0", "0", "12", "0", "0", "1",
+            ],
+        )
+
     def test_holiday_outfit_item_ids_decode_to_body_values_50_53(self):
         for gender in patcher.OUTFIT_STORE_GENDERS:
             for body_value in patcher.HOLIDAY_BODY_VALUES:
@@ -10987,7 +11115,7 @@ class CustomAchievementAwardDispatchTests(unittest.TestCase):
                     source,
                 )
                 self.assertIn(
-                    "VF2PersistentCheatAndPurchaseMask() & 0xFFFFFF00u",
+                    "VF2PersistentCheatAndPurchaseMask() & 0xFFFFFFFCu",
                     source,
                 )
                 self.assertIn(
