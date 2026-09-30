@@ -9107,14 +9107,18 @@ class OutfitStoreMappingTests(unittest.TestCase):
         self.assertIn("Achievement.IsComplete((EAchievement)sellingGoal)", source)
         self.assertIn("Achievement.IncrementProgress((EAchievement)0x54, completedSellingGoals)", source)
         self.assertIn("static void VF2CompleteAchievementForCheat(int achievement)", source)
-        self.assertIn("if (!Achievement.IsComplete(id))", source)
-        self.assertIn("static void VF2ClearAchievementNotificationQueueRaw()", source)
-        self.assertIn("(unsigned char *)&Achievement + 0xDBC", source)
-        self.assertIn("for (int index = 0; index < 0x5F; ++index)", source)
-        self.assertLess(
-            source.index("VF2ClearAchievementNotificationQueueRaw();"),
-            source.index("Achievement.SetComplete(id);"),
+        # Already-complete goals are skipped, so nothing is paid twice.
+        self.assertIn(
+            "if (Achievement.IsComplete(id)) {\n        return;\n    }", source
         )
+        # SUPERSEDED, recorded rather than deleted: this used to require
+        # VF2ClearAchievementNotificationQueueRaw() before every SetComplete.
+        # Emptying the queue discarded every earlier completion's entry, and
+        # stock Update pays a reward only when an entry pops, so the cheat
+        # paid one or two rewards in total. The per-completion behaviour is
+        # pinned by test_complete_all_achievements_pays_each_goal_once.
+        self.assertNotIn("VF2ClearAchievementNotificationQueueRaw", source)
+        self.assertIn("(unsigned char *)&Achievement + 0xDBC", source)
         self.assertIn("static void VF2CompleteAllAchievements()", source)
         # THE CHEAT DERIVES ITS LIST FROM THE VISIBLE ORDER ARRAY.
         #
@@ -13768,6 +13772,80 @@ class HolidayOrnamentGateTests(unittest.TestCase):
                 ),
                 relocs,
             )
+
+        self.with_temp_patched_objs(["Achievement.obj", "AchievementsScene.obj"], run)
+
+    def test_complete_all_achievements_pays_each_goal_once(self):
+        source = Path(patcher.__file__).read_text(encoding="utf-8")
+        helper = source.split(
+            "static void VF2CompleteAchievementForCheat(int achievement) {", 1
+        )[1].split("\n}\n", 1)[0]
+        set_complete = helper.index("Achievement.SetComplete(id);")
+        # The player's waiting queue is set aside and emptied BEFORE the
+        # completion, so nothing the completion enqueues can be dropped...
+        before = helper[:set_complete]
+        self.assertIn("waiting[index] = queue[index];", before)
+        self.assertIn("queue[index] = -1;", before)
+        # ...every entry the completion enqueued is paid once, here...
+        after = helper[set_complete:]
+        pay = after.index("VF2PayAchievementRewardLikeUpdate(queue[index]);")
+        restore = after.index("queue[index] = waiting[index];")
+        self.assertLess(pay, restore)
+        # ...and the original queue is put back, so the cheat's entries never
+        # reach Update (which would pay them a second time).
+        self.assertNotIn("VF2PayAchievementRewardLikeUpdate(waiting", after)
+        self.assertIn("kVF2AchievementNotifyQueueCount = 0x5F;", source)
+        self.assertEqual(patcher.CUSTOM_ACHIEVEMENT_NOTIFICATION_QUEUE_COUNT, 0x5F)
+        # The reward formula is Update's own: row +0x18, 25 when zero, false.
+        pay_helper = source.split(
+            "static void VF2PayAchievementRewardLikeUpdate(int achievement) {", 1
+        )[1].split("\n}\n", 1)[0]
+        self.assertIn("achievementList[achievement].coinReward", pay_helper)
+        self.assertIn("reward != 0 ? reward : 25", pay_helper)
+        # Update's own Adjust call is rerouted through the resource-goal
+        # observer in the built game; the cheat must pay through it too.
+        self.assertIn("VF2MoneyAdjustAndAward(&Money, 0,", pay_helper)
+        self.assertIn(", false);", pay_helper)
+        self.assertNotIn("Money.Adjust(", pay_helper)
+        self.assertIn(
+            '"?Adjust@CMoney@@QAEXM_N@Z": "@VF2MoneyAdjustAndAward@16"', source
+        )
+        struct_block = source.split("struct sAchievementListEntry {", 1)[1].split("};", 1)[0]
+        fields = [line.strip() for line in struct_block.strip().splitlines()]
+        self.assertEqual(len(fields), patcher.ACHIEVEMENT_ROW_SIZE // 4)
+        self.assertEqual(fields[0x18 // 4], "int coinReward;")
+
+        stock = CoffObject(patcher.SRC_OBJS / "Achievement.obj")
+        update = stock.symbol("?Update@CAchievement@@QAEXXZ")
+        update_sec = stock.section(update.section)
+        update_data = bytes(
+            stock.buf[update_sec.raw_ptr + update.value : update_sec.raw_ptr + update_sec.raw_size]
+        )
+        self.assertEqual(update_data[0x85:0x87], b"\x6A\x00")
+        self.assertEqual(
+            update_data[0x90:0xA1],
+            b"\x8B\x04\x8D\x18\x00\x00\x00\x85\xC0\xB9\x19\x00\x00\x00\x0F\x45\xC8",
+        )
+
+        def run(temp_root):
+            manifest = {}
+            patcher.patch_custom_achievements(manifest)
+            obj = CoffObject(temp_root / "Achievement.obj")
+            listing = obj.symbol("?achievementList@@3PAUsAchievementListEntry@@A")
+            storage_class = struct.unpack_from("<B", obj.buf, listing.off + 16)[0]
+            self.assertEqual(storage_class, patcher.IMAGE_SYM_CLASS_EXTERNAL)
+            self.assertGreater(listing.section, 0)
+            list_sec = obj.section(listing.section)
+            for achievement_id, reward in patcher.CUSTOM_ACHIEVEMENT_COIN_REWARDS.items():
+                self.assertEqual(
+                    struct.unpack_from(
+                        "<i",
+                        obj.buf,
+                        list_sec.raw_ptr + listing.value
+                        + achievement_id * patcher.ACHIEVEMENT_ROW_SIZE + 0x18,
+                    )[0],
+                    reward,
+                )
 
         self.with_temp_patched_objs(["Achievement.obj", "AchievementsScene.obj"], run)
 
