@@ -444,6 +444,9 @@ APPEARANCE_LOAD_HELPER_SYMBOL = (
 )
 ACHIEVER_COMPLETION_HELPER_SYMBOL = "@VF2MaybeCompleteAchiever@8"
 ACHIEVER_LOAD_HELPER_SYMBOL = "@VF2AchievementLoadStateAndReconcile@12"
+# theGameState::Init's Achievement.Reset() call is retargeted here: see
+# patch_new_village_clears_patcher_achievement_state.
+NEW_VILLAGE_ACHIEVEMENT_RESET_HELPER_SYMBOL = "@VF2ResetAchievementsForNewVillage@8"
 CAREER_ROOM_GOALS_LOAD_HELPER_SYMBOL = "@VF2TechLoadStateAndReconcile@12"
 # Every EVENT that spawns a collectable routes through this __thiscall-shaped
 # thunk instead of CCollectableItem::Add, so a busy pair of event slots no
@@ -16623,6 +16626,40 @@ static void VF2CheckMaximumResourceAchievements() {
     }
 }
 
+// A NEW VILLAGE MUST NOT INHERIT THE PATCHER'S SCRATCH RECORD.
+//
+// theGameState::Init runs stock CAchievement::Reset for a new player, for
+// Start Over (RestartCurrentGame, which then saves immediately) and at the
+// start of every load. Reset clears only byte 0 and the +0x04 dword of each
+// 12-byte record. Record 0xA8 is the patcher's scratch record and keeps
+// village state in the bytes Reset leaves: the +0x08 dword holds the
+// Health Plan entitlement (bit 0), the mobile-renovation ever-purchased
+// bits (1-15) and the Oldest Villager record (16-31), and bytes 1-3 of the
+// +0x00 dword sit beside the Bathroom 2 bits. Without this, a village
+// started in the same session inherited the previous one's Health Plan
+// (the store showed it owned, and the next load switched it on through
+// VF2MoneyLoadStateAndReconcile) and its Oldest Villager record, and
+// Start Over's own save wrote them into the new village.
+//
+// Only Init's call is routed here. A load goes on to LoadState, which
+// copies all 12 bytes of every record from the save, so a loaded village
+// still gets exactly its own values; Reset Achievements calls Reset
+// directly and keeps its own save/restore of these dwords.
+extern "C" void __fastcall VF2ResetAchievementsForNewVillage(
+    CAchievement *achievement,
+    void *
+) {
+    achievement->Reset();
+    unsigned char *record = (unsigned char *)achievement + 0xA8 * 12;
+    *(unsigned int *)(record + 0x00) = 0;
+    *(unsigned int *)(record + 0x08) = 0;
+    // Unlock Everything's saved bit lives in record 0xA8's byte 0, just
+    // cleared, but the store's in-memory locks follow it only lazily (a store
+    // query or a load). Re-sync now so a new village starts with the store
+    // locked instead of keeping the previous village's unlock until then.
+    VF2SyncUnlockEverythingInStore();
+}
+
 static const unsigned int kVF2OldestPersonAgeUnitsPerDisplayedYear = 20u;
 static const unsigned int kVF2OldestPersonMaxInternalAge = 0xFFFFu;
 
@@ -24558,6 +24595,48 @@ def patch_career_room_goal_reconciliation(manifest):
         },
         "reset_cheat_hook": "VF2ReconcileCareerRoomGoals() after Achievement.Reset() in the 0x124 handler",
         "owner_report": "Office of the Future did not autocomplete with all career upgrades",
+    }
+
+
+def patch_new_village_clears_patcher_achievement_state(manifest):
+    """Route theGameState::Init's Achievement.Reset() through a wrapper that
+    also clears the patcher-owned bytes of record 0xA8 that stock Reset
+    leaves (see VF2ResetAchievementsForNewVillage)."""
+    obj_path = PATCHED / "theGameState.obj"
+    obj = CoffObject(obj_path)
+    init = obj.symbol("?Init@theGameState@@QAEXXZ")
+    sec = obj.section(init.section)
+    raw = sec.raw_ptr + init.value
+    # mov ecx, offset Achievement ; call CAchievement::Reset
+    if bytes(obj.buf[raw + 0x25 : raw + 0x2F]) != b"\xB9\0\0\0\0\xE8\0\0\0\0":
+        raise RuntimeError("theGameState::Init Achievement.Reset callsite drifted")
+    relocations = {}
+    for index in range(sec.nreloc):
+        vaddr, symbol_index, rtype = struct.unpack_from(
+            "<IIH", obj.buf, sec.reloc_ptr + index * 10
+        )
+        relocations[vaddr] = (obj.symbol_by_index[symbol_index].name, rtype)
+    if relocations.get(init.value + 0x26) != (
+        "?Achievement@@3VCAchievement@@A", IMAGE_REL_I386_DIR32
+    ):
+        raise RuntimeError("theGameState::Init no longer passes Achievement to Reset")
+    if relocations.get(init.value + 0x2B) != (
+        "?Reset@CAchievement@@QAEXXZ", IMAGE_REL_I386_REL32
+    ):
+        raise RuntimeError("theGameState::Init Achievement.Reset relocation drifted")
+    helper = obj.append_undefined_symbol(NEW_VILLAGE_ACHIEVEMENT_RESET_HELPER_SYMBOL)
+    obj.retarget_relocation(sec.index, init.value + 0x2B, helper, IMAGE_REL_I386_REL32)
+    obj.write(obj_path)
+    manifest["NewVillageClearsPatcherAchievementState"] = {
+        "status": "installed",
+        "callsite": "?Init@theGameState@@QAEXXZ + 0x2A",
+        "helper": NEW_VILLAGE_ACHIEVEMENT_RESET_HELPER_SYMBOL,
+        "clears": "record 0xA8 +0x00 and +0x08 dwords after the stock Reset",
+        "reason": (
+            "stock Reset clears only byte 0 and +0x04 of each record, so the "
+            "Health Plan entitlement, mobile-renovation history and Oldest "
+            "Villager record carried into a new village in the same session"
+        ),
     }
 
 
@@ -40528,6 +40607,7 @@ def main():
     # executable; optional settings only filter order and completion routes.
     patch_custom_achievements(manifest)
     patch_achiever_load_reconciliation(manifest)
+    patch_new_village_clears_patcher_achievement_state(manifest)
     patch_career_room_goal_reconciliation(manifest)
     patch_event_collectable_slot_replacement(manifest)
     # Always link the dormant B152 hook. The offline patcher's exact-SHA
