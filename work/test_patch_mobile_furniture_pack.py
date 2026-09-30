@@ -4,6 +4,7 @@ import copy
 import hashlib
 import json
 import os
+import re
 import shutil
 import struct
 import tempfile
@@ -1999,10 +2000,24 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                 self.assertIn('"Preparing a picnic"', picnic_helper)
                 self.assertIn('"Having a picnic"', picnic_helper)
                 self.assertIn("VF2PicnicReadyActive()", picnic_helper)
-                self.assertIn("eStringPicnicTooYoung = 0x7E7", helper)
+                # SUPERSEDED, recorded rather than deleted: this pinned
+                # eStringPicnicTooYoung = 0x7E7 and
+                # eStringPicnicWorriedAboutFood = 0xB67, the raw MOBILE ids.
+                # On PC 0x7E7 is eSayPlayPuddles ("Playing in puddles"). The
+                # picnic refusals now use the desktop ids of the same two
+                # mobile strings, like the patio table.
+                self.assertIn("eStringTooYoung = 0x73D", helper)
+                self.assertIn("eStringWorriedAboutFood = 0xA41", helper)
                 self.assertIn(
-                    "eStringPicnicWorriedAboutFood = 0xB67", helper
+                    "VF2ManualPatioRefusal(villager, eStringTooYoung)",
+                    picnic_helper,
                 )
+                # Comments may name the old ids; the code must not use them.
+                helper_code = "\n".join(
+                    line.split("//")[0] for line in helper.split("\n")
+                )
+                self.assertNotIn("0x7E7", helper_code)
+                self.assertNotIn("0xB67", helper_code)
                 self.assertIn(
                     "ldwGameState::GetRandom(7) + 0x0D", picnic_helper
                 )
@@ -2204,10 +2219,18 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                 self.assertIn("behavior == 0x05A", helper)
                 self.assertIn("ldwGameState::GetRandom(2) != 0", helper)
                 self.assertIn("eBehaviorPlayingVideoGame", helper)
+                # The EXACT line, not a substring: "+ 0x6A54" (age) also
+                # appears in unrelated age checks in this unit, so the old
+                # substring assertion passed with the flip reading age.
+                block = helper[
+                    helper.index("bool handled = HandleDropOnHotSpot(villager);"):
+                ]
+                block = block[: block.index("return true;")]
                 self.assertIn(
-                    "reinterpret_cast<unsigned char *>(&villager) + 0x6A54",
-                    helper,
+                    "reinterpret_cast<unsigned char *>(&villager) + 0x1BBA0);",
+                    block,
                 )
+                self.assertNotIn("(&villager) + 0x6A54", block)
                 self.assertNotIn("0x114 * 0xD0", helper)
                 self.assertEqual(
                     manifest["ComputerDropVideoGame"],
@@ -7731,7 +7754,7 @@ class SpontaneousBehaviorContractTests(unittest.TestCase):
                     helper,
                 )
                 self.assertIn(
-                    "EnableAutonomousCandidateWithWeight(data, 0x189, 450); // UseCouch / sit-down, native couch+age gates retained",
+                    "EnableAutonomousCandidateWithWeight(data, 0x189, 450); // UseCouch / sit-down",
                     helper,
                 )
                 # RestingBody is autonomous under Behavior Patches alone, so
@@ -7900,8 +7923,19 @@ class SpontaneousBehaviorContractTests(unittest.TestCase):
                 self.assertIn("class CNight", helper)
                 self.assertIn("extern CNight Night;", helper)
                 self.assertIn("Night.AIIsDayTime()", helper)
-                self.assertIn("playhouse[0xCD] = (unsigned char)daytimeAllowsPlayhouse;", helper)
-                self.assertIn("EnableAutonomousCandidateWithWeight(data, 0x189, 450); // UseCouch / sit-down, native couch+age gates retained", helper)
+                # The playhouse's enabled flag is set through VF2SetGatedCandidate
+                # now, so the per-decision refresh keeps praise/scold-trained
+                # weights. SUPERSEDED form: a direct
+                # `playhouse[0xCD] = (unsigned char)daytimeAllowsPlayhouse;` write
+                # beside a fixed weight write.
+                self.assertIn(
+                    "VF2SetGatedCandidate(playhouse, daytimeAllowsPlayhouse, 3000, resetWeights);",
+                    helper)
+                self.assertIn("EnableAutonomousCandidateWithWeight(data, 0x189, 450); // UseCouch / sit-down", helper)
+                # SUPERSEDED: the row claimed "native couch+age gates retained";
+                # stock InitAI has no case for 0x189, so the couch object is
+                # required explicitly (test_autonomy_required_objects.py).
+                self.assertIn("RequireAutonomousCandidateObject(data, 0x189, 0x5A);", helper)
                 actions = " ".join(manifest["spontaneous_behaviors"]["actions"])
                 self.assertIn("playing quietly at kids table", actions)
                 self.assertIn("non-adults", actions)
@@ -8734,7 +8768,7 @@ class MobileSpecialUpgradeContractTests(unittest.TestCase):
             source,
         )
         self.assertIn(
-            "VF2PersistentCheatAndPurchaseMask() = generation;",
+            "VF2PersistentCheatAndPurchaseMask() = generationAndOneShots;",
             source,
         )
         self.assertIn(
@@ -8810,10 +8844,13 @@ class MobileSpecialUpgradeContractTests(unittest.TestCase):
             "VF2PersistentHealthPlanAndRenovationMask() = healthPlanAndRenovations;",
             reset_case,
         )
-        self.assertIn("VF2PersistentCheatAndPurchaseMask() = generation;", reset_case)
+        self.assertIn(
+            "VF2PersistentCheatAndPurchaseMask() = generationAndOneShots;",
+            reset_case,
+        )
         self.assertIn("record + 4", source)
         self.assertIn("VF2PersistentCheatAndPurchaseMask() >> 8", source)
-        self.assertIn("VF2PersistentCheatAndPurchaseMask() & 0xFFFFFF00u", source)
+        self.assertIn("VF2PersistentCheatAndPurchaseMask() & 0xFFFFFFFCu", reset_case)
         health_plan_helper = source.split(
             "static unsigned int &VF2PersistentHealthPlanAndRenovationMask()",
             1,
@@ -8973,7 +9010,10 @@ class OutfitStoreMappingTests(unittest.TestCase):
         self.assertEqual(patcher.SAME_SEX_MARRIAGE_CATALOG_PRICE, 0)
         self.assertEqual(rows[0x11B]["price"], 0)
         self.assertEqual(rows[0x133]["name"], "Max out sock pile")
-        self.assertIn("maximum signed integer", rows[0x133]["description"])
+        self.assertEqual(
+            rows[0x133]["description"],
+            "Sets only the laundry-room sock pile to 1,000,000 socks.",
+        )
         self.assertEqual(rows[0x134]["name"], "No sock pile")
         self.assertIn("without awarding sock-laundering progress", rows[0x134]["description"])
         self.assertEqual(rows[0x135]["name"], "Clean House")
@@ -9012,10 +9052,14 @@ class OutfitStoreMappingTests(unittest.TestCase):
         self.assertIn('"name": "Unlock everything in the store"', source)
         self.assertIn("static volatile unsigned char gVF2UnlockEverythingInStore = 0;", source)
         self.assertIn("if (gVF2UnlockEverythingInStore != 0) return 0;", source)
-        self.assertIn("gVF2UnlockEverythingInStore = 1;", source)
-        self.assertIn("gVF2UnlockEverythingInStore = 0;", source)
-        self.assertIn("VF2SetInventoryItemInfoLocksUnlocked(true);", source)
-        self.assertIn("VF2SetInventoryItemInfoLocksUnlocked(false);", source)
+        # SUPERSEDED, recorded rather than deleted: the purchase used to
+        # write gVF2UnlockEverythingInStore = 1/0 and call
+        # VF2SetInventoryItemInfoLocksUnlocked(true/false) directly, all
+        # session-only state, so a relaunch re-locked the store. The one
+        # apply routine now follows the saved flag; see
+        # test_unlock_everything_in_store_is_saved_and_reapplied_on_load.
+        self.assertIn("gVF2UnlockEverythingInStore = unlocked ? 1 : 0;", source)
+        self.assertIn("VF2SetInventoryItemInfoLocksUnlocked(unlocked);", source)
         self.assertIn("return VF2AllStoreLocksUnlocked() ? 0 : -1;", source)
         self.assertIn("INVENTORY_ITEMINFO_RECORD_SIZE = 0x24", source)
         self.assertIn("INVENTORY_ITEMINFO_LOCK_OFFSET = 0x10", source)
@@ -9107,14 +9151,18 @@ class OutfitStoreMappingTests(unittest.TestCase):
         self.assertIn("Achievement.IsComplete((EAchievement)sellingGoal)", source)
         self.assertIn("Achievement.IncrementProgress((EAchievement)0x54, completedSellingGoals)", source)
         self.assertIn("static void VF2CompleteAchievementForCheat(int achievement)", source)
-        self.assertIn("if (!Achievement.IsComplete(id))", source)
-        self.assertIn("static void VF2ClearAchievementNotificationQueueRaw()", source)
-        self.assertIn("(unsigned char *)&Achievement + 0xDBC", source)
-        self.assertIn("for (int index = 0; index < 0x5F; ++index)", source)
-        self.assertLess(
-            source.index("VF2ClearAchievementNotificationQueueRaw();"),
-            source.index("Achievement.SetComplete(id);"),
+        # Already-complete goals are skipped, so nothing is paid twice.
+        self.assertIn(
+            "if (Achievement.IsComplete(id)) {\n        return;\n    }", source
         )
+        # SUPERSEDED, recorded rather than deleted: this used to require
+        # VF2ClearAchievementNotificationQueueRaw() before every SetComplete.
+        # Emptying the queue discarded every earlier completion's entry, and
+        # stock Update pays a reward only when an entry pops, so the cheat
+        # paid one or two rewards in total. The per-completion behaviour is
+        # pinned by test_complete_all_achievements_pays_each_goal_once.
+        self.assertNotIn("VF2ClearAchievementNotificationQueueRaw", source)
+        self.assertIn("(unsigned char *)&Achievement + 0xDBC", source)
         self.assertIn("static void VF2CompleteAllAchievements()", source)
         # THE CHEAT DERIVES ITS LIST FROM THE VISIBLE ORDER ARRAY.
         #
@@ -9215,7 +9263,7 @@ class OutfitStoreMappingTests(unittest.TestCase):
         self.assertIn("static void VF2SetSockPileCount(int count)", source)
         self.assertIn("*(int *)(gameState + 0x148) = count;", source)
         self.assertIn("case 0x133:", source)
-        self.assertIn("static const int kVF2MaximumSockPileCount = 0x7FFFFFFF;", source)
+        self.assertIn("static const int kVF2MaximumSockPileCount = 1000000;", source)
         sock_pile_case = source.split("case 0x133:", 1)[1].split("case 0x134:", 1)[0]
         self.assertNotIn("CollectableItem.SpawnSockInHouse", sock_pile_case)
         self.assertIn("VF2SetSockPileCount(kVF2MaximumSockPileCount);", source)
@@ -9760,7 +9808,9 @@ class OutfitStoreMappingTests(unittest.TestCase):
                 self.assertEqual(helper.count(setter_declaration), 1)
                 self.assertLess(
                     helper.index(setter_declaration),
-                    helper.index("VF2SetInventoryItemInfoLocksUnlocked(false);"),
+                    # The purchase no longer calls it with a literal
+                    # true/false; the one apply routine passes the saved flag.
+                    helper.index("VF2SetInventoryItemInfoLocksUnlocked(unlocked);"),
                 )
         finally:
             patcher.PATCHED = old_patched
@@ -10125,6 +10175,127 @@ class OutfitStoreMappingTests(unittest.TestCase):
         self.assertIn("extern CAchievement Achievement;", source)
         self.assertIn("case 0x124:", source)
         self.assertIn("Achievement.Reset();", source)
+
+    def test_reset_achievements_keeps_armed_pregnancy_one_shots(self):
+        # Record 0xA8's dword: bits 0-1 Taters purchase record, bits 2-7 the
+        # armed pregnancy one-shots, bits 8-31 the lifetime generation count.
+        # Reset must keep everything except the Taters goal progress.
+        source = Path(patcher.__file__).read_text(encoding="utf-8")
+        reset_case = source.split("case 0x124:", 1)[1].split("case 0x125:", 1)[0]
+        keep_mask = int(
+            reset_case.split("VF2PersistentCheatAndPurchaseMask() & ", 1)[1]
+            .split("u;", 1)[0],
+            16,
+        )
+        one_shot_bits = 0
+        for bit in re.findall(r"VF2ToggleOneShotUpgrade\((0x[0-9A-Fa-f]+)u,", source):
+            one_shot_bits |= int(bit, 16)
+        self.assertEqual(one_shot_bits, 0xFC)
+        self.assertEqual(keep_mask & one_shot_bits, one_shot_bits)
+        self.assertEqual(keep_mask & 0xFFFFFF00, 0xFFFFFF00)
+        self.assertEqual(keep_mask & 0x3, 0)
+
+    def test_max_sock_pile_cannot_overflow_native_sock_arithmetic(self):
+        # Deposit is `inc [gs+0x148]` and laundering adds the whole pile to
+        # goals 0x3B/0x3C/0x3D with a signed, unclamped IncrementProgress.
+        source = Path(patcher.__file__).read_text(encoding="utf-8")
+        value = int(
+            source.split("static const int kVF2MaximumSockPileCount = ", 1)[1]
+            .split(";", 1)[0],
+            0,
+        )
+        achievement = CoffObject(patcher.SRC_OBJS / "Achievement.obj")
+        table = achievement.symbol("?achievementList@@3PAUsAchievementListEntry@@A")
+        section = achievement.section(table.section)
+        targets = [
+            struct.unpack_from(
+                "<i",
+                achievement.buf,
+                section.raw_ptr + table.value + goal * 0x1C + 4,
+            )[0]
+            for goal in (0x3B, 0x3C, 0x3D)
+        ]
+        self.assertEqual(targets, [10, 50, 100])
+        # One wash completes every laundering goal from zero progress...
+        self.assertGreaterEqual(value, max(targets))
+        # ...and incomplete progress (< target) plus the pile plus a million
+        # more deposits stays a positive signed int.
+        self.assertLess(value + max(targets) + 1000000, 0x7FFFFFFF)
+
+    def test_load_repairs_saves_damaged_by_the_old_sock_pile_maximum(self):
+        # Saves that laundered the old INT_MAX pile hold wrapped-negative
+        # progress on goals 0x3B-0x3D (and may still hold the INT_MAX pile,
+        # or INT_MIN after one more deposit). The load reconciler repairs
+        # exactly that and nothing else. The emitted function is compiled and
+        # run against a damaged and a healthy state.
+        source = Path(patcher.__file__).read_text(encoding="utf-8")
+        load = source.split(
+            'extern "C" bool __fastcall VF2AchievementLoadStateAndReconcile(', 1
+        )[1].split("\n}\n", 1)[0]
+        self.assertLess(
+            load.index("bool loaded = achievement->LoadState(state);"),
+            load.index("VF2RepairSockLaunderingOverflow(achievement);"),
+        )
+        signature = "static void VF2RepairSockLaunderingOverflow(CAchievement *achievement) {"
+        body = signature + source.split(signature, 1)[1].split("\n}\n", 1)[0] + "\n}\n"
+        self.assertIn("for (int goal = 0x3B; goal <= 0x3D; ++goal) {", body)
+
+        import subprocess
+        import test_generated_cpp_compiles as compiles
+        vcvars = compiles._vcvars()
+        if vcvars is None:
+            self.skipTest("no Visual Studio toolchain on this machine")
+        harness = (
+            "#include <stdio.h>\n"
+            "#include <string.h>\n"
+            "class CAchievement {};\n"
+            "class theGameState { public: static theGameState *Get(); };\n"
+            "static int gState[0x100];\n"
+            "theGameState *theGameState::Get() { return (theGameState *)gState; }\n"
+            "static const int kVF2MaximumSockPileCount = 1000000;\n"
+            + body +
+            "static int gRecords[0x125 * 3];\n"
+            "static void run(int pile, int p3a, int p3b, int p3c, int p3d, int p3e, int complete3c) {\n"
+            "    memset(gRecords, 0, sizeof(gRecords));\n"
+            "    gRecords[0x3A * 3 + 1] = p3a; gRecords[0x3B * 3 + 1] = p3b;\n"
+            "    gRecords[0x3C * 3 + 1] = p3c; gRecords[0x3D * 3 + 1] = p3d;\n"
+            "    gRecords[0x3E * 3 + 1] = p3e;\n"
+            "    ((unsigned char *)&gRecords[0x3C * 3])[0] = (unsigned char)complete3c;\n"
+            "    gState[0x148 / 4] = pile;\n"
+            "    VF2RepairSockLaunderingOverflow((CAchievement *)gRecords);\n"
+            "    printf(\"%d %d %d %d %d %d %d\\n\", gState[0x148 / 4], gRecords[0x3A * 3 + 1],\n"
+            "        gRecords[0x3B * 3 + 1], gRecords[0x3C * 3 + 1], gRecords[0x3D * 3 + 1],\n"
+            "        gRecords[0x3E * 3 + 1], ((unsigned char *)&gRecords[0x3C * 3])[0]);\n"
+            "}\n"
+            "int main() {\n"
+            "    run(0x7FFFFFFF, -5, -2147483643, -2147483600, -7, -9, 1);\n"
+            "    run((int)0x80000000u, 3, -1, 4, 5, 6, 0);\n"
+            "    run(29, 3, 9, 49, 99, 7, 0);\n"
+            "    run(1000000, 0, 0, 12, 0, 0, 1);\n"
+            "    return 0;\n"
+            "}\n"
+        )
+        with tempfile.TemporaryDirectory() as work:
+            (Path(work) / "repair.cpp").write_text(harness, encoding="ascii")
+            result = subprocess.run(
+                f'"{vcvars}" >nul 2>&1 && cd /d "{work}" && '
+                f'cl /nologo /EHsc repair.cpp >nul && .\\repair.exe',
+                shell=True, capture_output=True, text=True,
+            )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(
+            result.stdout.split(),
+            [
+                # Damaged: INT_MAX pile -> maximum; 0x3B-0x3D negatives -> 0,
+                # including a complete one; neighbours 0x3A/0x3E untouched.
+                "1000000", "-5", "0", "0", "0", "-9", "1",
+                # A pile wrapped to INT_MIN by one more deposit.
+                "1000000", "3", "0", "4", "5", "6", "0",
+                # Healthy saves are byte-for-byte unchanged.
+                "29", "3", "9", "49", "99", "7", "0",
+                "1000000", "0", "0", "12", "0", "0", "1",
+            ],
+        )
 
     def test_holiday_outfit_item_ids_decode_to_body_values_50_53(self):
         for gender in patcher.OUTFIT_STORE_GENDERS:
@@ -10965,7 +11136,7 @@ class CustomAchievementAwardDispatchTests(unittest.TestCase):
                     source,
                 )
                 self.assertIn(
-                    "VF2PersistentCheatAndPurchaseMask() & 0xFFFFFF00u",
+                    "VF2PersistentCheatAndPurchaseMask() & 0xFFFFFFFCu",
                     source,
                 )
                 self.assertIn(
@@ -11762,7 +11933,8 @@ class OlderPregnancyPatchTests(unittest.TestCase):
             source,
         )
         self.assertIn("bool succeeded = villager->Impregnate(", source)
-        self.assertIn("if (succeeded) {", source)
+        # Spent only by a cheat build; elsewhere the armed bits stay saved.
+        self.assertIn("if (succeeded && kVF2CheatUpgradesBuilt) {", source)
         self.assertIn("VF2PersistentCheatAndPurchaseMask() &= ~0xFCu;", source)
         self.assertIn("storedMask = (storedMask & ~0x3u) | newMask;", source)
         self.assertNotIn("VF2PersistentCheatAndPurchaseMask() = 0;", source)
@@ -12438,6 +12610,174 @@ class MarriageCandidateRerollContractTests(unittest.TestCase):
                 self.assertIn("no longer touched", contract["accept"])
         finally:
             patcher.PATCHED = old_patched
+
+    def _generated_function_body(self, source, signature):
+        return source.split(signature, 1)[1].split("\n}", 1)[0]
+
+    def test_non_cheat_builds_neutralise_the_saved_marriage_toggle_hooks(self):
+        # The Same-Sex and Reroll bytes are saved with the village. A build
+        # without Cheat Upgrades has no row to turn them off, so its two
+        # trampolines must never take the flag path.
+        old_patched = patcher.PATCHED
+        old_cheats = patcher.ENABLE_CHEAT_UPGRADES
+        try:
+            for cheats in (True, False):
+                with self.subTest(cheats=cheats), tempfile.TemporaryDirectory() as tmp:
+                    temp_root = Path(tmp)
+                    for filename in ("DatingScene.obj", "VillagerManager.obj", "theMainScene.obj"):
+                        shutil.copy2(patcher.SRC_OBJS / filename, temp_root / filename)
+                    patcher.PATCHED = temp_root
+                    patcher.ENABLE_CHEAT_UPGRADES = cheats
+                    manifest = {}
+                    patcher.patch_marriage_candidate_reroll(manifest)
+                    patcher.patch_same_sex_marriage(manifest)
+                    dating = CoffObject(temp_root / "DatingScene.obj")
+
+                    def cave(symbol_name, hook):
+                        sym = dating.symbol(symbol_name)
+                        sec = dating.section(sym.section)
+                        raw_hook = sec.raw_ptr + sym.value + hook
+                        self.assertEqual(dating.buf[raw_hook], 0xE9)
+                        rel = struct.unpack_from("<i", dating.buf, raw_hook + 1)[0]
+                        start = sec.raw_ptr + sym.value + hook + 5 + rel
+                        return bytes(dating.buf[start:start + 9])
+
+                    reroll = cave("?HandleMessage@CDatingScene@@UAE_NHJ@Z", 0x85)
+                    gender = cave("?GeneratePeepCandidate@CDatingScene@@AAEXXZ", 0x7D)
+                    # Both still read the saved byte first.
+                    self.assertEqual(reroll[:2], b"\x80\x3D")
+                    self.assertEqual(gender[:2], b"\x80\x3D")
+                    if cheats:
+                        self.assertEqual(reroll[7], 0x74)             # je inactive
+                        self.assertEqual(gender[7:9], b"\x75\x0B")    # jne enabled
+                    else:
+                        self.assertEqual(reroll[7:9], b"\xEB\x36")    # jmp inactive
+                        self.assertEqual(gender[7:9], b"\x90\x90")    # stock path only
+        finally:
+            patcher.PATCHED = old_patched
+            patcher.ENABLE_CHEAT_UPGRADES = old_cheats
+
+    def test_pregnancy_one_shots_only_act_in_a_cheat_build(self):
+        source = Path(patcher.__file__).read_text(encoding="utf-8")
+        self.assertIn(
+            "static const bool kVF2CheatUpgradesBuilt = __VF2_CHEAT_UPGRADES_BUILT__;",
+            source,
+        )
+        self.assertIn(
+            '"__VF2_CHEAT_UPGRADES_BUILT__",\n'
+            '        "true" if ENABLE_CHEAT_UPGRADES else "false",',
+            source,
+        )
+        for signature, gate in (
+            ('extern "C" bool __cdecl VF2ForceSuccessfulPregnancyArmed() {', "kVF2CheatUpgradesBuilt"),
+            ('extern "C" bool __fastcall VF2ChanceOfPregnancyForced(', "kVF2CheatUpgradesBuilt"),
+            ('extern "C" void __cdecl VF2ApplyForcedBirthCount(', "!kVF2CheatUpgradesBuilt"),
+            ('extern "C" bool __fastcall VF2ImpregnateAndClearForce(', "succeeded && kVF2CheatUpgradesBuilt"),
+            ('extern "C" int __fastcall VF2SpawnBirthPeepWithForcedGender(', "kVF2EnableB150CheatUpgrades"),
+        ):
+            with self.subTest(signature=signature):
+                body = self._generated_function_body(source, signature)
+                self.assertIn(gate, body)
+                self.assertIn("VF2PersistentCheatAndPurchaseMask()", body)
+
+    def test_same_sex_predicate_keeps_existing_marriages_in_every_build(self):
+        # Deliberate: this predicate only supports marriages that already
+        # exist; gating it on the build would un-marry a same-sex couple.
+        source = Path(patcher.__file__).read_text(encoding="utf-8")
+        body = self._generated_function_body(
+            source, 'extern "C" bool __cdecl VF2SameSexMarriageToggleActive() {{'
+        )
+        self.assertNotIn("kVF2EnableB150CheatUpgrades", body)
+        self.assertIn("VF2CheatToggleActiveByte({SAME_SEX_MARRIAGE_ITEM_ID:#x}) != 0", body)
+
+    def test_unlock_everything_in_store_is_saved_and_reapplied_on_load(self):
+        source = Path(patcher.__file__).read_text(encoding="utf-8")
+        bit = int(
+            source.split("static const unsigned int kVF2UnlockEverythingPersistentBit = ", 1)[1]
+            .split("u;", 1)[0],
+            16,
+        )
+        # Record 0xA8 +0x00: bits 0-4 are the Bathroom 2 remodels, so the
+        # store flag must avoid them.
+        bathroom2_bits = (1 << len(patcher.AI_BATHROOM2_PC_ITEM_IDS)) - 1
+        self.assertEqual(bit & bathroom2_bits, 0)
+        self.assertEqual(bit & (bit - 1), 0, "one bit")
+        # It is per-village state, so it must be cleared when a new village
+        # starts. theGameState::Init (new player, new village, Start Over)
+        # calls stock CAchievement::Reset, whose per-record loop clears ONLY
+        # byte 0 and the +4 progress dword; bytes 1-3 of the first dword
+        # survive, so a flag there leaked into the next village and was saved
+        # with it. Read the loop from the stock object rather than trusting
+        # a description of it.
+        achievement = CoffObject(patcher.SRC_OBJS / "Achievement.obj")
+        reset = achievement.symbol("?Reset@CAchievement@@QAEXXZ")
+        reset_raw = achievement.section(reset.section).raw_ptr + reset.value
+        self.assertEqual(
+            bytes(achievement.buf[reset_raw + 0x09 : reset_raw + 0x22]),
+            b"\xBA\x25\x01\x00\x00"          # mov edx, 0x125
+            b"\x66\x90"                      # nop
+            b"\xC6\x00\x00"                  # mov byte ptr [eax], 0
+            b"\x8D\x40\x0C"                  # lea eax, [eax+0xC]
+            b"\xC7\x40\xF8\x00\x00\x00\x00"  # mov dword ptr [eax-8], 0 (+4)
+            b"\x83\xEA\x01"                  # sub edx, 1
+            b"\x75\xEE",                     # jne loop
+        )
+        cleared_by_reset_in_first_dword = 0xFF
+        self.assertEqual(bit & ~cleared_by_reset_in_first_dword, 0)
+        theGameState = CoffObject(patcher.SRC_OBJS / "theGameState.obj")
+        init = theGameState.symbol("?Init@theGameState@@QAEXXZ")
+        init_section = theGameState.section(init.section)
+        reset_calls = []
+        for index in range(init_section.nreloc):
+            vaddr, symbol_index, _ = struct.unpack_from(
+                "<IIH", theGameState.buf, init_section.reloc_ptr + index * 10
+            )
+            if (
+                init.value <= vaddr < init.value + 0x40
+                and theGameState.symbol_by_index[symbol_index].name
+                == "?Reset@CAchievement@@QAEXXZ"
+            ):
+                reset_calls.append(vaddr - init.value)
+        self.assertEqual(reset_calls, [0x2B])
+        self.assertIn("static const int kVF2AIBathroom2PersistentMaskOffset = 0x00;", source)
+        accessor = self._generated_function_body(
+            source, "static unsigned int &VF2PersistentRecordA8FirstDword() {"
+        )
+        self.assertIn("(unsigned char *)&Achievement + 0xA8 * 12;", accessor)
+        self.assertIn("return *(unsigned int *)record;", accessor)
+        # Below the reserved records LoadState's legacy clear still wipes.
+        self.assertLess(0xA8, patcher.CUSTOM_ACHIEVEMENT_RESERVED_FIRST_ID)
+        # Not the native owned-items array that broke Bathroom 2.
+        saved = self._generated_function_body(
+            source, "static bool VF2UnlockEverythingInStoreSaved() {"
+        )
+        self.assertNotIn("0x2A3", saved)
+        self.assertIn("kVF2CheatUpgradesBuilt", saved)
+        # The purchase writes the saved bit and the common save persists it.
+        case = source.split("    case 0x123:\n        {", 1)[1].split("    case 0x124:", 1)[0]
+        self.assertIn("firstDword | kVF2UnlockEverythingPersistentBit", case)
+        self.assertIn("firstDword & ~kVF2UnlockEverythingPersistentBit", case)
+        self.assertIn("VF2ApplyUnlockEverythingInStore(unlock);", case)
+        # Loading a save re-applies it...
+        load = self._generated_function_body(
+            source, 'extern "C" bool __fastcall VF2AchievementLoadStateAndReconcile('
+        )
+        self.assertIn("VF2SyncUnlockEverythingInStore();", load)
+        # ...and the checkmark/price query resyncs too.
+        locks = self._generated_function_body(source, "static bool VF2AllStoreLocksUnlocked() {")
+        self.assertLess(
+            locks.index("VF2SyncUnlockEverythingInStore();"),
+            locks.index("if (gVF2UnlockEverythingInStore != 0) return true;"),
+        )
+        # Reset Achievements keeps the whole dword the flag lives in.
+        reset = source.split("case 0x124:", 1)[1].split("case 0x125:", 1)[0]
+        self.assertIn("unsigned int aiBathroom2 = VF2PersistentAIBathroom2Mask();", reset)
+        self.assertIn("VF2PersistentAIBathroom2Mask() = aiBathroom2;", reset)
+        # And nothing else toggles the in-memory state behind the saved flag.
+        self.assertEqual(
+            len(re.findall(r"^\s+gVF2UnlockEverythingInStore = ", source, re.M)), 1
+        )
+        self.assertIn("    gVF2UnlockEverythingInStore = unlocked ? 1 : 0;", source)
 
     def test_reroll_and_same_sex_accept_guards_coexist_in_main_order(self):
         old_patched = patcher.PATCHED
@@ -13735,6 +14075,10 @@ class HolidayOrnamentGateTests(unittest.TestCase):
             "#include <stdio.h>\n"
             "class CAchievement { public: void Reset(); };\n"
             "static unsigned char gRecords[0x125 * 12];\n"
+            "static int gSyncCalls = 0; static unsigned int gSyncSawA8 = 0xFFFFFFFFu;\n"
+            "static void VF2SyncUnlockEverythingInStore() {\n"
+            "    ++gSyncCalls; gSyncSawA8 = *(unsigned int *)(gRecords + 0xA8 * 12);\n"
+            "}\n"
             "void CAchievement::Reset() {\n"
             "    for (int i = 0; i < 0x125; ++i) {\n"
             "        gRecords[i * 12] = 0;\n"
@@ -13754,7 +14098,7 @@ class HolidayOrnamentGateTests(unittest.TestCase):
             "            if (gRecords[i * 12 + b] != want) ++others;\n"
             "        }\n"
             "    }\n"
-            "    printf(\"%u %u %u %d\\n\", a8[0], a8[1], a8[2], others);\n"
+            "    printf(\"%u %u %u %d %d %u\\n\", a8[0], a8[1], a8[2], others, gSyncCalls, gSyncSawA8);\n"
             "    return 0;\n"
             "}\n"
         )
@@ -13768,7 +14112,9 @@ class HolidayOrnamentGateTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         # Record 0xA8 is entirely zero; every other record got exactly the
         # stock Reset (bytes 1-3 and the +8 timestamp untouched).
-        self.assertEqual(result.stdout.split(), ["0", "0", "0", "0"])
+        # ...and the store's in-memory unlock is re-synced exactly once, AFTER
+        # the record was cleared (it saw 0), so a new village starts locked.
+        self.assertEqual(result.stdout.split(), ["0", "0", "0", "0", "1", "0"])
 
     def test_ornamentologist_completion_hook_is_idempotent(self):
         def run(temp_root):
@@ -13873,6 +14219,80 @@ class HolidayOrnamentGateTests(unittest.TestCase):
                 ),
                 relocs,
             )
+
+        self.with_temp_patched_objs(["Achievement.obj", "AchievementsScene.obj"], run)
+
+    def test_complete_all_achievements_pays_each_goal_once(self):
+        source = Path(patcher.__file__).read_text(encoding="utf-8")
+        helper = source.split(
+            "static void VF2CompleteAchievementForCheat(int achievement) {", 1
+        )[1].split("\n}\n", 1)[0]
+        set_complete = helper.index("Achievement.SetComplete(id);")
+        # The player's waiting queue is set aside and emptied BEFORE the
+        # completion, so nothing the completion enqueues can be dropped...
+        before = helper[:set_complete]
+        self.assertIn("waiting[index] = queue[index];", before)
+        self.assertIn("queue[index] = -1;", before)
+        # ...every entry the completion enqueued is paid once, here...
+        after = helper[set_complete:]
+        pay = after.index("VF2PayAchievementRewardLikeUpdate(queue[index]);")
+        restore = after.index("queue[index] = waiting[index];")
+        self.assertLess(pay, restore)
+        # ...and the original queue is put back, so the cheat's entries never
+        # reach Update (which would pay them a second time).
+        self.assertNotIn("VF2PayAchievementRewardLikeUpdate(waiting", after)
+        self.assertIn("kVF2AchievementNotifyQueueCount = 0x5F;", source)
+        self.assertEqual(patcher.CUSTOM_ACHIEVEMENT_NOTIFICATION_QUEUE_COUNT, 0x5F)
+        # The reward formula is Update's own: row +0x18, 25 when zero, false.
+        pay_helper = source.split(
+            "static void VF2PayAchievementRewardLikeUpdate(int achievement) {", 1
+        )[1].split("\n}\n", 1)[0]
+        self.assertIn("achievementList[achievement].coinReward", pay_helper)
+        self.assertIn("reward != 0 ? reward : 25", pay_helper)
+        # Update's own Adjust call is rerouted through the resource-goal
+        # observer in the built game; the cheat must pay through it too.
+        self.assertIn("VF2MoneyAdjustAndAward(&Money, 0,", pay_helper)
+        self.assertIn(", false);", pay_helper)
+        self.assertNotIn("Money.Adjust(", pay_helper)
+        self.assertIn(
+            '"?Adjust@CMoney@@QAEXM_N@Z": "@VF2MoneyAdjustAndAward@16"', source
+        )
+        struct_block = source.split("struct sAchievementListEntry {", 1)[1].split("};", 1)[0]
+        fields = [line.strip() for line in struct_block.strip().splitlines()]
+        self.assertEqual(len(fields), patcher.ACHIEVEMENT_ROW_SIZE // 4)
+        self.assertEqual(fields[0x18 // 4], "int coinReward;")
+
+        stock = CoffObject(patcher.SRC_OBJS / "Achievement.obj")
+        update = stock.symbol("?Update@CAchievement@@QAEXXZ")
+        update_sec = stock.section(update.section)
+        update_data = bytes(
+            stock.buf[update_sec.raw_ptr + update.value : update_sec.raw_ptr + update_sec.raw_size]
+        )
+        self.assertEqual(update_data[0x85:0x87], b"\x6A\x00")
+        self.assertEqual(
+            update_data[0x90:0xA1],
+            b"\x8B\x04\x8D\x18\x00\x00\x00\x85\xC0\xB9\x19\x00\x00\x00\x0F\x45\xC8",
+        )
+
+        def run(temp_root):
+            manifest = {}
+            patcher.patch_custom_achievements(manifest)
+            obj = CoffObject(temp_root / "Achievement.obj")
+            listing = obj.symbol("?achievementList@@3PAUsAchievementListEntry@@A")
+            storage_class = struct.unpack_from("<B", obj.buf, listing.off + 16)[0]
+            self.assertEqual(storage_class, patcher.IMAGE_SYM_CLASS_EXTERNAL)
+            self.assertGreater(listing.section, 0)
+            list_sec = obj.section(listing.section)
+            for achievement_id, reward in patcher.CUSTOM_ACHIEVEMENT_COIN_REWARDS.items():
+                self.assertEqual(
+                    struct.unpack_from(
+                        "<i",
+                        obj.buf,
+                        list_sec.raw_ptr + listing.value
+                        + achievement_id * patcher.ACHIEVEMENT_ROW_SIZE + 0x18,
+                    )[0],
+                    reward,
+                )
 
         self.with_temp_patched_objs(["Achievement.obj", "AchievementsScene.obj"], run)
 

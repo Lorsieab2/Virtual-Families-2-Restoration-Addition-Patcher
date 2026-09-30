@@ -650,7 +650,9 @@ class TestOnlyReceivingIsAutonomous(unittest.TestCase):
 
         # Item-gated: Home Gym and Yoga share object 0x75, so the object
         # prerequisite CANNOT separate them.
-        helper_start = src.index("static void VF2RefreshWorkoutEligibility(")
+        # The gates live in the Ex form; VF2RefreshWorkoutEligibility(data)
+        # is now the load-time wrapper that calls it with resetWeights=true.
+        helper_start = src.index("static void VF2RefreshWorkoutEligibilityEx(")
         helper = src[helper_start:src.index(chr(10) + "}" + chr(10), helper_start)]
 
         with self.subTest(item="Home Gym System"):
@@ -702,11 +704,22 @@ class TestOnlyReceivingIsAutonomous(unittest.TestCase):
             self.assertIn("VF2RefreshWorkoutEligibility(data);", src)
 
         with self.subTest(item="refresh runs per decision"):
+            # The per-decision hook now delegates to
+            # VF2RefreshVolatileCandidates(..., false), which keeps trained
+            # weights; the workout gates are re-evaluated through its
+            # VF2RefreshWorkoutEligibilityEx call. SUPERSEDED form (AGENTS.md
+            # 11): the hook called VF2RefreshWorkoutEligibility(data) directly,
+            # which also reset the weights every decision.
             hook_start = src.index(
                 'extern "C" void __cdecl VF2RefreshHammockEligibility(')
             hook = src[hook_start:src.index(chr(10) + "}" + chr(10), hook_start)]
             self.assertIn(
-                "VF2RefreshWorkoutEligibility(data);", hook,
+                "VF2RefreshVolatileCandidates((unsigned char *)villager, false);", hook)
+            volatile_start = src.index(
+                "static void VF2RefreshVolatileCandidates(unsigned char *data, bool resetWeights)")
+            hook = src[volatile_start:src.index(chr(10) + "}" + chr(10), volatile_start)]
+            self.assertIn(
+                "VF2RefreshWorkoutEligibilityEx(data, resetWeights);", hook,
                 "the workout gates are refreshed only at family load. "
                 "Furniture bought after load leaves the candidate disabled "
                 "until a reload, and furniture sold after load leaves it "
