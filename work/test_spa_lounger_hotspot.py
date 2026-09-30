@@ -948,12 +948,24 @@ class TheWideningIsMeasuredOnTheMapItWrites(unittest.TestCase):
                 len(record), len(gen.SPA_LOUNGER_WIDENED_FMAPS),
                 "expected one record per widened target, got %s"
                 % [row.get("target") for row in record])
+            # THE OUTCOME IS ASSERTED, NOT THE ROUTE TO IT.
+            #
+            # This used to require claimed_from_footprint > 0, as a proxy for
+            # "not the empty-only shape that shipped at 13". That proxy held
+            # only while the ring was full of mobile hotspot cells
+            # (0x01B00000). Issue #378 showed those cells are exactly what
+            # made a drop call into unrelated memory, and borrowed_fmap_bytes
+            # now clears them -- they carried nothing but the hotspot, not
+            # even the solid bit -- so the ring is genuinely empty and the
+            # widening reaches the same 33 cells without claiming any
+            # footprint. The failure the proxy stood for is a drop target
+            # stuck at 13, so that is what is checked, absolutely.
             for row in record:
                 with self.subTest(target=row["target"]):
-                    self.assertGreater(
-                        row["claimed_from_footprint"], 0,
-                        "no footprint claimed, so this build is the "
-                        "empty-only shape that shipped at 13: %s" % row)
+                    self.assertEqual(
+                        row["widened_to"], 33,
+                        "the drop target did not reach the owner-approved "
+                        "33 cells: %s" % row)
         finally:
             holder.cleanup()
 

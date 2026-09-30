@@ -2369,7 +2369,30 @@ def mobile_sound_asset_patches(
 def mobile_furniture_behavior_asset_patches(
     bundle_dir: Path,
     base_payload: Path,
+    installed_records: list[dict[str, Any]] = (),
 ) -> list[dict[str, Any]]:
+    """The 34 behaviour maps, each restoring the map it replaced when disabled.
+
+    The map a player has with this setting OFF is the one another setting
+    already installs at the same path -- Mobile Furniture's sanitised map --
+    so that is the restore source whenever such a record exists. The base
+    payload is only the fallback. Restoring from the base payload
+    unconditionally put the RAW mobile map back on an Enable/Disable run
+    (work/vanilla_runtime_payload carries the raw file; a real vanilla install
+    has none), with hotspot ids the desktop drop dispatcher cannot hold: the
+    same fault as issue #378, reached by unticking this setting. A fresh apply
+    with the setting off installed the sanitised map, so the two disagreed.
+    """
+    installed_sources: dict[str, Path] = {}
+    for record in installed_records:
+        if "mobile_furniture_behaviors" in record.get("requires", ()):
+            continue
+        source_path = record.get("source_path")
+        file_path = record.get("file_path")
+        if source_path and file_path:
+            installed_sources[str(file_path).replace("\\", "/").lower()] = (
+                bundle_dir / Path(str(source_path))
+            )
     if not MOBILE_FURNITURE_BEHAVIOR_PC_FMAP_DIR.is_dir():
         return []
     base_maps = [
@@ -2395,7 +2418,9 @@ def mobile_furniture_behavior_asset_patches(
         if not source.is_file():
             raise ValueError(f"Missing mobile furniture behavior map: {source}")
         target_rel = Path("Assets") / filename
-        original = base_payload / target_rel
+        original = installed_sources.get(relative_posix(target_rel).lower())
+        if original is None or not original.is_file():
+            original = base_payload / target_rel
         if not original.is_file():
             raise ValueError(
                 f"Base payload is missing sanitized mobile furniture map: {original}"
@@ -4158,7 +4183,7 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
     ):
         asset_patches.extend(mobile_sound_asset_patches(bundle_dir, base_payload, mobile_sound_source))
     asset_patches.extend(
-        mobile_furniture_behavior_asset_patches(bundle_dir, base_payload)
+        mobile_furniture_behavior_asset_patches(bundle_dir, base_payload, asset_patches)
     )
     invisible_upgrades_source = Path(args.invisible_upgrades_dir).resolve() if args.invisible_upgrades_dir else None
     original_upgrades_source = Path(args.original_upgrades_dir).resolve() if args.original_upgrades_dir else None
