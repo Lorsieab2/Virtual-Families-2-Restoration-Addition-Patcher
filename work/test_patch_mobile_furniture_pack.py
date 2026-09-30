@@ -2204,10 +2204,18 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                 self.assertIn("behavior == 0x05A", helper)
                 self.assertIn("ldwGameState::GetRandom(2) != 0", helper)
                 self.assertIn("eBehaviorPlayingVideoGame", helper)
+                # The EXACT line, not a substring: "+ 0x6A54" (age) also
+                # appears in unrelated age checks in this unit, so the old
+                # substring assertion passed with the flip reading age.
+                block = helper[
+                    helper.index("bool handled = HandleDropOnHotSpot(villager);"):
+                ]
+                block = block[: block.index("return true;")]
                 self.assertIn(
-                    "reinterpret_cast<unsigned char *>(&villager) + 0x6A54",
-                    helper,
+                    "reinterpret_cast<unsigned char *>(&villager) + 0x1BBA0);",
+                    block,
                 )
+                self.assertNotIn("(&villager) + 0x6A54", block)
                 self.assertNotIn("0x114 * 0xD0", helper)
                 self.assertEqual(
                     manifest["ComputerDropVideoGame"],

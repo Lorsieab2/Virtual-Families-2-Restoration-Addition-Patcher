@@ -26807,8 +26807,14 @@ extern "C" void __cdecl VF2ApplySitDownLabelVariants(CVillager &);
         // and sickness routes before choosing ordinary BrowsingWeb (0x5A).
         // Replace only that ordinary manual-drop result; autonomous candidate
         // weights and every exceptional computer route remain untouched.
+        //
+        // +0x1BBA0 is the current behaviour id: CVillager::NewBehavior stores
+        // it there (`mov [edi+1BBA0h],esi`), and the label cache reads the
+        // same field. This used to read +0x6A54, which is the villager's AGE,
+        // so the flip almost never fired on a computer and instead fired on
+        // ANY hotspot drop of a villager whose raw age happened to be 90.
         int behavior = *reinterpret_cast<int *>(
-            reinterpret_cast<unsigned char *>(&villager) + 0x6A54);
+            reinterpret_cast<unsigned char *>(&villager) + 0x1BBA0);
         if (behavior == 0x05A && ldwGameState::GetRandom(2) != 0) {
             unsigned char behaviorData = 0;
             villager.NewBehavior(
