@@ -494,7 +494,7 @@ above that was not the whole story.
 
 **Made autonomously selectable**
 
-- Hammock anchored rest (Sunny/Cloudy weather only), warming hands by and watching the fireplace, pinball / slots / pachinko / pool table / foosball, and random radio or MP3 dancing/listening — all ages.
+- Hammock anchored rest (Sunny/Cloudy daytime only, and -- the base game's own rule, kept deliberately -- only when the villager is tired: energy 65 or lower; a manual drop has no such limit), warming hands by and watching the fireplace, pinball / slots / pachinko / pool table / foosball, and random radio or MP3 dancing/listening — all ages.
 - Playhouse and playground (daytime only), playing quietly at the kids table, drawing at the easel, the sandbox, the toy train table, and "driving like a grownup" — children only.
 - Mending a button and ironing clothes — from displayed age 14.
 - Kitchen, office, and workshop career work are *not* on this list: the stock game already chooses them on its own, and Behavior Patches leaves their selection weights, praise training and age/career gates exactly as vanilla, so career progress works as in the unpatched game. Only their captions vary. (Up to B196 the patch reset these weights at every load, which erased the praise that drives career progress.)
