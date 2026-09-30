@@ -17416,18 +17416,28 @@ static bool VF2AllFurnitureLocksUnlocked() {
 // cleared the row's checkmark (the same defect the Same-Sex Marriage and
 // Reroll toggles had before they were persisted).
 //
-// The flag is bit 8 of record 0xA8's first dword. That record is the
+// The flag is bit 5 of record 0xA8's first dword. That record is the
 // patcher's scratch record: CAchievement::SaveState/LoadState copy all
 // twelve bytes of every record verbatim, LoadState's legacy clear is
 // narrowed to the reserved records above 0xAB, and no native code names
 // id 0xA8. Bits 0-4 of the same dword are the Bathroom 2 remodel flags
 // (VF2PersistentAIBathroom2Mask), and Reset Achievements already keeps the
-// whole dword. Bit 8 sits in byte 1, clear of byte 0, which is also the
-// record's native "complete" byte. It is deliberately NOT the
-// InventoryManager + itemId + 0x2A3 owned-items array the two marriage
-// toggles use: native code reads that array, which is what broke the
-// Bathroom 2 fixtures (docs/bathroom2-and-same-sex-findings.md).
-static const unsigned int kVF2UnlockEverythingPersistentBit = 0x100u;
+// whole dword. It is deliberately NOT the InventoryManager + itemId + 0x2A3
+// owned-items array the two marriage toggles use: native code reads that
+// array, which is what broke the Bathroom 2 fixtures
+// (docs/bathroom2-and-same-sex-findings.md).
+//
+// IT MUST BE IN BYTE 0. Stock CAchievement::Reset, which theGameState::Init
+// runs for a new player, a new village and Start Over, clears only byte 0
+// and the +4 progress dword of each record (`mov byte ptr [eax],0` and
+// `mov dword ptr [eax+4],0`); bytes 1-3 survive it. The superseded choice,
+// bit 8 (byte 1), therefore carried one village's unlock into the next
+// village started in the same session and saved it there. Byte 0 is the
+// record's native "complete" byte, but nothing completes or counts 0xA8,
+// and the Bathroom 2 bits already share it, so the flag now has exactly
+// their lifetime: saved per village, cleared for a new one, and kept by
+// Reset Achievements.
+static const unsigned int kVF2UnlockEverythingPersistentBit = 0x20u;
 
 static unsigned int &VF2PersistentRecordA8FirstDword() {
     unsigned char *record =
@@ -17464,7 +17474,7 @@ static void VF2SyncUnlockEverythingInStore() {
 static bool VF2AllStoreLocksUnlocked() {
     // The store asks this for the row's checkmark and price; syncing here
     // also catches a new village started in the same session, whose
-    // Achievement.Reset cleared the saved flag.
+    // Achievement.Reset (theGameState::Init) cleared the saved flag's byte.
     VF2SyncUnlockEverythingInStore();
     if (gVF2UnlockEverythingInStore != 0) return true;
     return VF2AllFurnitureLocksUnlocked() &&

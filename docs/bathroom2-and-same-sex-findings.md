@@ -90,15 +90,23 @@ should move; the others must keep working and need re-verification after.
 
 **Later (2026-09-30), for the next reader of record `0xA8`:** the open
 decision was settled by moving the five Bathroom 2 flags to bits 0-4 of
-record `0xA8` offset `0x00` (`kVF2AIBathroom2PersistentMaskOffset`). Bit 8 of
-that same dword now holds **Unlock everything in the store**
+record `0xA8` offset `0x00` (`kVF2AIBathroom2PersistentMaskOffset`). Bit 5
+(`0x20`) of that same dword now holds **Unlock everything in the store**
 (`kVF2UnlockEverythingPersistentBit`), which used to be session-only. It was
 put there, and not in this owned-items array, precisely because of the
 fixture breakage above. `SaveState`/`LoadState` copy all 12 bytes of every
 record, LoadState's legacy clear only touches the reserved records above
-`0xAB`, Reset Achievements keeps the whole dword, and byte 0 (the record's
-native complete byte) is left to the Bathroom 2 bits. Bits 5-7 and 9-31 of
-that dword are still free.
+`0xAB`, and Reset Achievements keeps the whole dword. Bits 6-31 of that dword
+are still free, but only bits 6-7 share the per-village lifetime (see below).
+
+**Superseded, recorded as wrong:** the flag was first put in bit 8, "in byte
+1, clear of byte 0, the record's native complete byte". Stock
+`CAchievement::Reset` -- which `theGameState::Init` calls for a new player, a
+new village and Start Over -- clears only byte 0 and the `+4` progress dword of
+each record; bytes 1-3 and `+8` survive it. Bit 8 therefore carried one
+village's store unlock into the next village started in the same session and
+was saved there. A per-village flag in this dword must sit in byte 0, which is
+exactly where the Bathroom 2 bits already live.
 
 ---
 

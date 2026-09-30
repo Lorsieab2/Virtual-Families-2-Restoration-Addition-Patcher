@@ -12533,11 +12533,48 @@ class MarriageCandidateRerollContractTests(unittest.TestCase):
             .split("u;", 1)[0],
             16,
         )
-        # Record 0xA8 +0x00: bits 0-4 are the Bathroom 2 remodels, byte 0 is
-        # the record's native complete byte. The store flag must avoid both.
+        # Record 0xA8 +0x00: bits 0-4 are the Bathroom 2 remodels, so the
+        # store flag must avoid them.
         bathroom2_bits = (1 << len(patcher.AI_BATHROOM2_PC_ITEM_IDS)) - 1
         self.assertEqual(bit & bathroom2_bits, 0)
-        self.assertEqual(bit & 0xFF, 0)
+        self.assertEqual(bit & (bit - 1), 0, "one bit")
+        # It is per-village state, so it must be cleared when a new village
+        # starts. theGameState::Init (new player, new village, Start Over)
+        # calls stock CAchievement::Reset, whose per-record loop clears ONLY
+        # byte 0 and the +4 progress dword; bytes 1-3 of the first dword
+        # survive, so a flag there leaked into the next village and was saved
+        # with it. Read the loop from the stock object rather than trusting
+        # a description of it.
+        achievement = CoffObject(patcher.SRC_OBJS / "Achievement.obj")
+        reset = achievement.symbol("?Reset@CAchievement@@QAEXXZ")
+        reset_raw = achievement.section(reset.section).raw_ptr + reset.value
+        self.assertEqual(
+            bytes(achievement.buf[reset_raw + 0x09 : reset_raw + 0x22]),
+            b"\xBA\x25\x01\x00\x00"          # mov edx, 0x125
+            b"\x66\x90"                      # nop
+            b"\xC6\x00\x00"                  # mov byte ptr [eax], 0
+            b"\x8D\x40\x0C"                  # lea eax, [eax+0xC]
+            b"\xC7\x40\xF8\x00\x00\x00\x00"  # mov dword ptr [eax-8], 0 (+4)
+            b"\x83\xEA\x01"                  # sub edx, 1
+            b"\x75\xEE",                     # jne loop
+        )
+        cleared_by_reset_in_first_dword = 0xFF
+        self.assertEqual(bit & ~cleared_by_reset_in_first_dword, 0)
+        theGameState = CoffObject(patcher.SRC_OBJS / "theGameState.obj")
+        init = theGameState.symbol("?Init@theGameState@@QAEXXZ")
+        init_section = theGameState.section(init.section)
+        reset_calls = []
+        for index in range(init_section.nreloc):
+            vaddr, symbol_index, _ = struct.unpack_from(
+                "<IIH", theGameState.buf, init_section.reloc_ptr + index * 10
+            )
+            if (
+                init.value <= vaddr < init.value + 0x40
+                and theGameState.symbol_by_index[symbol_index].name
+                == "?Reset@CAchievement@@QAEXXZ"
+            ):
+                reset_calls.append(vaddr - init.value)
+        self.assertEqual(reset_calls, [0x2B])
         self.assertIn("static const int kVF2AIBathroom2PersistentMaskOffset = 0x00;", source)
         accessor = self._generated_function_body(
             source, "static unsigned int &VF2PersistentRecordA8FirstDword() {"
