@@ -10,12 +10,14 @@ from __future__ import annotations
 
 import argparse
 import ctypes
+import dataclasses
 import datetime as _dt
 import hashlib
 import json
 import os
 import re
 import shutil
+import stat
 import struct
 import sys
 import tempfile
@@ -84,6 +86,9 @@ class AssetPatch:
     requires: tuple[str, ...]
     restore: bool = False
     remove_when_disabled: bool = False
+    # Reconfiguration only: hashes this manifest can itself leave at the
+    # output path (see manifest_known_output_hashes).  Empty on a fresh apply.
+    known_output_sha256: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -1270,10 +1275,157 @@ def resolve_enabled_settings(manifest: dict[str, Any], args: argparse.Namespace)
     return settings, enabled
 
 
-def settings_log(settings: dict[str, PatchSetting], enabled: set[str]) -> dict[str, Any]:
+def manifest_change_record_requirements(manifest: dict[str, Any]) -> list[tuple[str, ...]]:
+    """The ``requires`` of every record that changes a file: byte, asset and post-asset patches."""
+    rows: list[tuple[str, ...]] = []
+    for field, raw_list in (
+        ("patch", manifest.get("patches", [])),
+        ("asset patch", manifest.get("asset_patches", manifest.get("assets", []))),
+        ("post-asset patch", manifest.get("post_asset_patches", [])),
+    ):
+        if not isinstance(raw_list, list):
+            continue
+        for index, raw in enumerate(raw_list):
+            if isinstance(raw, dict):
+                rows.append(record_requires(raw, f"{field} #{index}"))
+    return rows
+
+
+def informational_settings(
+    manifest: dict[str, Any],
+    settings: dict[str, PatchSetting],
+) -> dict[str, frozenset[str]]:
+    """Settings that gate no record, mapped to the settings they depend on.
+
+    Such a setting cannot be switched off: nothing in the manifest changes
+    with it. The exporter marks them ``"informational": true``; older
+    manifests (B196 and earlier) do not, so a setting that no byte, asset or
+    post-asset record requires is treated the same way. Settings the exporter
+    lists in ``export_summary.native_core_settings`` are compiled into every
+    patched executable, so they are present exactly when core_executable is.
+    A manifest with no records at all describes no build, and yields nothing.
+    """
+    requirements = manifest_change_record_requirements(manifest)
+    if not requirements:
+        return {}
+    required = {setting_id for row in requirements for setting_id in row}
+    raw_settings = manifest.get("settings", [])
+    explicit = {
+        str(raw.get("id")).strip()
+        for raw in raw_settings
+        if isinstance(raw, dict) and raw.get("informational") is True
+    } if isinstance(raw_settings, list) else set()
+    summary = manifest.get("export_summary")
+    native = summary.get("native_core_settings", []) if isinstance(summary, dict) else []
+    native_ids = {str(value) for value in native} if isinstance(native, list) else set()
+    result: dict[str, frozenset[str]] = {}
+    for setting_id, setting in settings.items():
+        if setting.blocked:
+            continue
+        if setting_id in required and setting_id not in explicit:
+            continue
+        prerequisites: set[str] = set()
+        if setting_id in native_ids and setting_id != "core_executable" and "core_executable" in settings:
+            prerequisites.add("core_executable")
+        result[setting_id] = frozenset(prerequisites)
+    return result
+
+
+def setting_dependencies(
+    manifest: dict[str, Any],
+    settings: dict[str, PatchSetting],
+) -> dict[str, frozenset[str]]:
+    """Map each setting to the settings it cannot work without.
+
+    Derived from the records, not a hardcoded list: B is a prerequisite of A
+    when every record that requires A also requires B (No AI Icons ->
+    Cheat Upgrades + Patch game executable). A setting with at least one
+    record that works without B (Holiday Ornaments' images without the
+    executable) does not depend on B. Informational settings depend on what
+    informational_settings() says.
+    """
+    requirements = manifest_change_record_requirements(manifest)
+    informational = informational_settings(manifest, settings)
+    dependencies: dict[str, frozenset[str]] = {}
+    for setting_id in settings:
+        if setting_id in informational:
+            dependencies[setting_id] = informational[setting_id]
+            continue
+        rows = [set(row) for row in requirements if setting_id in row]
+        common = set.intersection(*rows) - {setting_id} if rows else set()
+        dependencies[setting_id] = frozenset(other for other in common if other in settings)
+    return dependencies
+
+
+def effective_settings_report(
+    manifest: dict[str, Any],
+    settings: dict[str, PatchSetting],
+    selected: set[str],
+) -> dict[str, Any]:
+    """What the selection actually does, as opposed to what was ticked.
+
+    A selected setting is enabled only when at least one of its records is
+    active. Unticking Cheat Upgrades leaves every No AI Icons record inactive,
+    so No AI Icons is "selected but inactive", not enabled. Informational
+    settings are enabled exactly when their prerequisites are.
+    """
+    requirements = manifest_change_record_requirements(manifest)
+    informational = informational_settings(manifest, settings)
+    enabled: set[str] = set()
+    inactive: dict[str, str] = {}
+    for setting_id in settings:
+        if setting_id in informational:
+            missing = sorted(informational[setting_id] - selected)
+            if not missing:
+                enabled.add(setting_id)
+            elif setting_id in selected:
+                inactive[setting_id] = "selected but inactive: requires " + ", ".join(missing)
+            continue
+        if setting_id not in selected:
+            continue
+        rows = [set(row) for row in requirements if setting_id in row]
+        if any(row <= selected for row in rows):
+            enabled.add(setting_id)
+            continue
+        if rows:
+            missing = sorted(set.intersection(*rows) - selected) or sorted(set().union(*rows) - selected)
+            inactive[setting_id] = "selected but inactive: requires " + ", ".join(missing)
+        else:
+            inactive[setting_id] = "selected but inactive: no patch record uses this setting"
     return {
-        "enabled": sorted(enabled),
-        "disabled": sorted(set(settings) - enabled),
+        "enabled": enabled,
+        "inactive": inactive,
+        "informational": {
+            setting_id: (
+                "built into the patched executable; present when "
+                + ", ".join(sorted(prerequisites))
+                + " is enabled"
+                if prerequisites
+                else "always on; no patch record is gated by this setting"
+            )
+            for setting_id, prerequisites in informational.items()
+        },
+    }
+
+
+def settings_log(
+    settings: dict[str, PatchSetting],
+    enabled: set[str],
+    report: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Settings section of a patch log.
+
+    Without ``report`` this records the selection as given. With one (from
+    effective_settings_report) "enabled" lists only settings that actually
+    took effect, and selected-but-inactive settings are listed with the
+    prerequisite they are missing.
+    """
+    effective = set(enabled) if report is None else set(report["enabled"])
+    inactive: dict[str, str] = {} if report is None else dict(report["inactive"])
+    informational: dict[str, str] = {} if report is None else dict(report["informational"])
+    log: dict[str, Any] = {
+        "enabled": sorted(effective),
+        "disabled": sorted(set(settings) - effective - set(inactive)),
         "blocked": {
             setting.id: setting.readiness_reason
             for setting in settings.values()
@@ -1285,16 +1437,24 @@ def settings_log(settings: dict[str, PatchSetting], enabled: set[str]) -> dict[s
                 "label": setting.label,
                 "description": setting.description,
                 "default": setting.default,
-                "enabled": setting.id in enabled,
+                "enabled": setting.id in effective,
                 "category": setting.category,
                 "readiness_status": setting.readiness_status,
                 "readiness_reason": setting.readiness_reason,
                 "selection_policy": setting.selection_policy,
-                "selectable": not setting.blocked,
+                "selectable": not setting.blocked and setting.id not in informational,
+                **({"selected": setting.id in enabled} if report is not None else {}),
+                **({"inactive_reason": inactive[setting.id]} if setting.id in inactive else {}),
+                **({"informational": informational[setting.id]} if setting.id in informational else {}),
             }
             for setting in settings.values()
         ],
     }
+    if report is not None:
+        log["selected"] = sorted(enabled)
+        log["selected_but_inactive"] = dict(sorted(inactive.items()))
+        log["informational"] = dict(sorted(informational.items()))
+    return log
 
 
 def manifest_output_folder_name(manifest: dict[str, Any]) -> str | None:
@@ -1376,12 +1536,51 @@ def resolve_apply_output_dir(
     return game_dir
 
 
-def prepare_output_dir(
-    game_dir: Path,
-    output_dir: Path,
-    skip_rel_paths: set[str],
-    args: argparse.Namespace,
-) -> None:
+def make_writable(path: Path) -> None:
+    """Clear the read-only attribute of a file or folder the patcher is about to replace or delete.
+
+    Windows refuses to delete, rename over or overwrite a read-only file, and
+    shutil.copy2 carries the attribute from the vanilla install into the output
+    folder. Symlinks are left alone so the chmod cannot reach outside the tree.
+    """
+    try:
+        info = os.lstat(path)
+    except FileNotFoundError:
+        return
+    if stat.S_ISLNK(info.st_mode):
+        return
+    if not info.st_mode & stat.S_IWRITE:
+        os.chmod(path, stat.S_IMODE(info.st_mode) | stat.S_IWRITE)
+
+
+def _retry_after_clearing_read_only(func: Callable[..., Any], path: str, exc: Any) -> None:
+    error = exc if isinstance(exc, BaseException) else exc[1]
+    if not isinstance(error, PermissionError) or os.path.islink(path):
+        raise error
+    make_writable(Path(path))
+    func(path)
+
+
+def remove_output_entry(path: Path) -> None:
+    """Delete one top-level entry of a modded output folder, including read-only files."""
+    if path.is_dir():
+        if sys.version_info >= (3, 12):
+            shutil.rmtree(path, onexc=_retry_after_clearing_read_only)
+        else:
+            shutil.rmtree(path, onerror=_retry_after_clearing_read_only)
+    else:
+        make_writable(path)
+        path.unlink()
+
+
+def check_output_dir_refresh_allowed(game_dir: Path, output_dir: Path) -> None:
+    """Refuse an output folder the refresh must not touch.
+
+    Must run BEFORE anything is written to the output folder: the default
+    backup location is <output>/.vf2_patch_backups, and once create_backup has
+    made it, any folder "looks like" a modded output folder and the refresh
+    would move the user's own files into a backup and delete them.
+    """
     source_root = game_dir.resolve()
     output_root = output_dir.resolve()
     if output_root == source_root:
@@ -1398,14 +1597,25 @@ def prepare_output_dir(
                 "Output directory already exists and is not recognized as a VF2 modded output folder: "
                 f"{output_root}"
             )
+
+
+def prepare_output_dir(
+    game_dir: Path,
+    output_dir: Path,
+    skip_rel_paths: set[str],
+    args: argparse.Namespace,
+) -> None:
+    source_root = game_dir.resolve()
+    output_root = output_dir.resolve()
+    if output_root == source_root:
+        return
+    check_output_dir_refresh_allowed(game_dir, output_dir)
+    if output_root.exists() and any(output_root.iterdir()):
         emit_progress(args, f"Refreshing modded output folder from vanilla install: {output_root}")
         for child in output_root.iterdir():
             if child.name == DEFAULT_BACKUP_ROOT:
                 continue
-            if child.is_dir():
-                shutil.rmtree(child)
-            else:
-                child.unlink()
+            remove_output_entry(child)
     elif output_root.exists():
         emit_progress(args, f"Refreshing empty modded output folder from vanilla install: {output_root}")
     else:
@@ -1427,6 +1637,9 @@ def prepare_output_dir(
         elif source.is_file():
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source, target)
+            # copy2 carries a read-only attribute over from the vanilla file,
+            # and the next refresh or reconfigure could then not replace it.
+            make_writable(target)
 
 
 def is_recognized_modded_output_dir(path: Path) -> bool:
@@ -1476,6 +1689,7 @@ def enforce_modded_exe_name(
     modded_exe = output_dir / desired_name
     if modded_exe.exists():
         if vanilla_exe.exists() and vanilla_exe.resolve() != modded_exe.resolve():
+            make_writable(vanilla_exe)
             vanilla_exe.unlink()
             log_process_event(
                 process_log,
@@ -1924,30 +2138,240 @@ def validate_asset_target_plan(assets: list[AssetPatch]) -> None:
             )
 
 
-def suppress_active_assets_replaced_by_restore(
-    active_assets: list[AssetPatch],
-    restore_assets: list[AssetPatch],
-) -> list[AssetPatch]:
-    """Prefer a selected restore/remove record for a duplicate output path.
+def manifest_known_output_hashes(manifest: dict[str, Any]) -> dict[str, set[str]]:
+    """Every content hash the manifest itself can leave at each asset output path.
 
-    Optional visual layers can share the same target as their normal feature
-    asset. During output-only reconfiguration, the selected restore must be the
-    sole writer for that path; otherwise the normal active record would make the
-    target plan fail closed before the restore can run.
+    That is each record's source and each record's restore source, whether or
+    not the record is selected now.  A reconfiguration may replace or remove a
+    file holding one of these -- it is something an earlier Enable/Disable run
+    wrote -- but still refuses anything else.
     """
+    raw_assets = manifest.get("asset_patches", manifest.get("assets", []))
+    known: dict[str, set[str]] = {}
+    if not isinstance(raw_assets, list):
+        return known
+    for index, raw in enumerate(raw_assets):
+        if not isinstance(raw, dict):
+            continue
+        target_value = raw.get("output_file_path", raw.get("output_path", raw.get("write_path")))
+        if target_value is None:
+            target_value = raw.get("file_path", raw.get("target_path", raw.get("target", raw.get("path"))))
+        key = canonical_rel_path_key(normalize_rel_path(target_value, f"asset patch #{index} output path"))
+        for field in ("source_sha256", "sha256", "restore_source_sha256"):
+            value = normalize_sha256(raw.get(field), f"asset patch #{index} {field}")
+            if value:
+                known.setdefault(key, set()).add(value)
+    return known
 
-    restore_targets = {
-        canonical_rel_path_key(asset.output_file_path or asset.file_path)
-        for asset in restore_assets
-        if asset.restore or asset.remove_when_disabled
+
+def plan_reconfigure_assets(
+    manifest: dict[str, Any],
+    active_assets: list[AssetPatch],
+    undo_assets: list[AssetPatch],
+) -> tuple[list[AssetPatch], list[AssetPatch]]:
+    """Resolve each output path the way a fresh apply with this selection would.
+
+    A fresh apply writes only the selected records, in manifest order, so:
+
+    - a path with any selected writer keeps exactly those writers, and every
+      restore/remove record for it is dropped (unticking a layer on top of a
+      still-selected feature leaves that feature's file, not the vanilla one);
+    - a path with no selected writer gets one restore, when the unselected
+      records declare one (they must all agree on its bytes), and otherwise one
+      removal.
+
+    Each planned record carries the manifest's known hashes for its path so an
+    earlier run's output can be replaced or removed without accepting unknown
+    content.
+    """
+    known = manifest_known_output_hashes(manifest)
+
+    def with_known(asset: AssetPatch) -> AssetPatch:
+        key = canonical_rel_path_key(asset.output_file_path or asset.file_path)
+        return dataclasses.replace(asset, known_output_sha256=tuple(sorted(known.get(key, ()))))
+
+    active_keys = {
+        canonical_rel_path_key(asset.output_file_path or asset.file_path) for asset in active_assets
     }
-    if not restore_targets:
-        return active_assets
-    return [
-        asset
-        for asset in active_assets
-        if canonical_rel_path_key(asset.output_file_path or asset.file_path) not in restore_targets
-    ]
+    undo_groups: dict[str, list[AssetPatch]] = {}
+    for asset in undo_assets:
+        key = canonical_rel_path_key(asset.output_file_path or asset.file_path)
+        if key in active_keys:
+            continue
+        undo_groups.setdefault(key, []).append(asset)
+    undo_planned: list[AssetPatch] = []
+    for key, group in undo_groups.items():
+        restores = [asset for asset in group if asset.restore]
+        if restores:
+            restore_hashes = sorted({asset.source_sha256 for asset in restores})
+            if len(restore_hashes) > 1:
+                raise PatchError(
+                    f"Conflicting restore sources for {key}: {', '.join(restore_hashes)}."
+                )
+            undo_planned.append(with_known(restores[0]))
+        else:
+            undo_planned.append(with_known(group[0]))
+    return [with_known(asset) for asset in active_assets], undo_planned
+
+
+def _pe_raw_sections(data: bytes | bytearray) -> dict[str, tuple[int, int]] | None:
+    """Return {section name: (raw pointer, raw size)}, or None if not a plain PE32."""
+    try:
+        if len(data) < 0x40 or data[:2] != b"MZ":
+            return None
+        pe_off = struct.unpack_from("<I", data, 0x3C)[0]
+        if pe_off + 0x18 > len(data) or data[pe_off:pe_off + 4] != b"PE\0\0":
+            return None
+        section_count = struct.unpack_from("<H", data, pe_off + 6)[0]
+        opt_size = struct.unpack_from("<H", data, pe_off + 20)[0]
+        section_table = pe_off + 24 + opt_size
+        if section_table + section_count * 40 > len(data):
+            return None
+        sections: dict[str, tuple[int, int]] = {}
+        for index in range(section_count):
+            off = section_table + index * 40
+            name = bytes(data[off:off + 8]).split(b"\0", 1)[0].decode("ascii", "replace")
+            raw_size, raw_ptr = struct.unpack_from("<II", data, off + 16)
+            if name in sections or raw_ptr + raw_size > len(data):
+                return None
+            sections[name] = (raw_ptr, raw_size)
+        return sections
+    except struct.error:
+        return None
+
+
+def _post_asset_ranges_for_payload(
+    raw_post_patches: list[Any],
+    output_key: str,
+    base_sha: str,
+) -> list[tuple[int, bytes, bytes]] | None:
+    """Collect the post-asset toggle ranges a payload's own variants declare."""
+    ranges: list[tuple[int, bytes, bytes]] = []
+    for post_index, raw in enumerate(raw_post_patches):
+        if not isinstance(raw, dict):
+            continue
+        file_value = raw.get("file_path", raw.get("file", raw.get("path")))
+        if not isinstance(file_value, str) or canonical_rel_path_key(normalize_rel_path(
+            file_value, f"post-asset patch #{post_index} file path"
+        )) != output_key:
+            continue
+        for variant_index, variant in enumerate(raw.get("variants", [])):
+            if not isinstance(variant, dict):
+                continue
+            variant_sha = normalize_sha256(
+                variant.get("asset_sha256", variant.get("expected_asset_sha256", variant.get("source_sha256"))),
+                f"post-asset patch #{post_index} variant #{variant_index} asset_sha256",
+                required=True,
+            )
+            if variant_sha != base_sha:
+                continue
+            expected = parse_hex_bytes(
+                variant.get("expected_asset_bytes", variant.get("expected_bytes", variant.get("expected"))),
+                f"post-asset patch #{post_index} variant #{variant_index} expected bytes",
+            )
+            replacement = parse_hex_bytes(
+                variant.get("replacement_bytes", variant.get("replacement", variant.get("new"))),
+                f"post-asset patch #{post_index} variant #{variant_index} replacement bytes",
+            )
+            offset = parse_int(
+                variant.get("offset"),
+                f"post-asset patch #{post_index} variant #{variant_index} offset",
+            )
+            if not expected or len(expected) != len(replacement) or offset < 0:
+                return None
+            ranges.append((offset, expected, replacement))
+            break
+    return ranges
+
+
+def _normalize_rebased_post_ranges(
+    current: bytes,
+    source_sections: dict[str, tuple[int, int]],
+    current_sections: dict[str, tuple[int, int]],
+    ranges: list[tuple[int, bytes, bytes]],
+) -> bytearray | None:
+    """Reset each toggle range to its expected bytes, section-relative.
+
+    Mirrors rebase_post_asset_checks_to_output: ranges are authored against the
+    payload EXE and keep their offset within the same-named section of the
+    icon-rewritten output.  Any range holding neither its expected nor its
+    replacement bytes rejects the file.
+    """
+    normalized = bytearray(current)
+    for offset, expected, replacement in ranges:
+        rebased = None
+        for name, (raw_ptr, raw_size) in source_sections.items():
+            if raw_ptr <= offset and offset + len(expected) <= raw_ptr + raw_size:
+                if name not in current_sections:
+                    return None
+                target_ptr, target_size = current_sections[name]
+                rebased = target_ptr + (offset - raw_ptr)
+                if rebased + len(expected) > target_ptr + target_size:
+                    return None
+                break
+        if rebased is None:
+            return None
+        if bytes(normalized[rebased:rebased + len(expected)]) not in (expected, replacement):
+            return None
+        normalized[rebased:rebased + len(expected)] = expected
+    return normalized
+
+
+def icon_preserved_payload_matches(
+    target: Path,
+    current_data: bytes,
+    base_sources: dict[str, Path],
+    raw_post_patches: list[Any],
+    output_key: str,
+) -> bool:
+    """True only if the output EXE is a bundled payload after the apply-time icon rewrite.
+
+    For each bundled payload, the output's non-resource sections must equal the
+    payload's once the manifest's post-asset toggle ranges are reset; the
+    surviving payload is then run through the same stock-icon rewrite apply
+    uses (with the icons the output already carries) and the whole file must
+    match byte for byte.  Anything else -- a hand-edited EXE, a foreign build,
+    or an unreadable icon set -- is rejected.
+    """
+    current_sections = _pe_raw_sections(current_data)
+    if current_sections is None:
+        return False
+    try:
+        icons = read_executable_icon_resources(target)
+    except (PatchError, OSError, AttributeError):
+        return False
+    with tempfile.TemporaryDirectory(prefix="vf2-reconfigure-exe-") as temp_dir:
+        for base_sha, source in sorted(base_sources.items()):
+            ranges = _post_asset_ranges_for_payload(raw_post_patches, output_key, base_sha)
+            if ranges is None:
+                continue
+            source_data = source.read_bytes()
+            source_sections = _pe_raw_sections(source_data)
+            if source_sections is None:
+                continue
+            normalized = _normalize_rebased_post_ranges(current_data, source_sections, current_sections, ranges)
+            if normalized is None:
+                continue
+            # Cheap filter before the resource rewrite: every section the
+            # payload already has, except its resources, must be unchanged.
+            if any(
+                name not in current_sections
+                or current_sections[name][1] != raw_size
+                or bytes(normalized[current_sections[name][0]:current_sections[name][0] + raw_size])
+                != source_data[raw_ptr:raw_ptr + raw_size]
+                for name, (raw_ptr, raw_size) in source_sections.items()
+                if name != ".rsrc"
+            ):
+                continue
+            candidate = Path(temp_dir) / f"{base_sha}.exe"
+            shutil.copyfile(source, candidate)
+            try:
+                write_executable_icon_resources_atomic(candidate, icons)
+            except (PatchError, OSError, AttributeError):
+                continue
+            if candidate.read_bytes() == bytes(normalized):
+                return True
+    return False
 
 
 def verify_reconfigure_executable_identity(
@@ -1976,6 +2400,7 @@ def verify_reconfigure_executable_identity(
         return
     candidates: dict[str, set[str]] = {}
     base_candidates: dict[str, set[str]] = {}
+    base_sources: dict[str, dict[str, Path]] = {}
     for index, raw in enumerate(raw_assets):
         if not isinstance(raw, dict):
             continue
@@ -2004,6 +2429,7 @@ def verify_reconfigure_executable_identity(
         output_key = canonical_rel_path_key(output_path)
         candidates.setdefault(output_key, set()).add(actual_source_sha)
         base_candidates.setdefault(output_key, set()).add(actual_source_sha)
+        base_sources.setdefault(output_key, {})[actual_source_sha] = source
 
     raw_post_patches = manifest.get("post_asset_patches", [])
     if isinstance(raw_post_patches, list):
@@ -2108,6 +2534,23 @@ def verify_reconfigure_executable_identity(
                 ):
                     composed_toggle_match = True
                     break
+        if (
+            current_sha not in allowed_hashes
+            and not composed_toggle_match
+            and manifest_preserve_stock_exe_icon(manifest)
+        ):
+            # A normal apply rewrites the payload's icon resources (adding or
+            # rebuilding .rsrc) before the post-asset toggles, so the produced
+            # EXE is never a raw payload hash.  Accept it only when it is
+            # byte-identical to a bundled payload re-run through that same
+            # icon rewrite, modulo the manifest's own post-asset toggle ranges.
+            composed_toggle_match = icon_preserved_payload_matches(
+                target,
+                current_data,
+                base_sources.get(output_key, {}),
+                raw_post_patches if isinstance(raw_post_patches, list) else [],
+                output_key,
+            )
         if current_sha not in allowed_hashes and not composed_toggle_match:
             raise PatchError(
                 f"Refusing output-only executable replacement for {output_path}: "
@@ -2520,7 +2963,11 @@ def verify_asset_patches(
                     raise PatchError(
                         f"Asset removal for disabled setting requires output-only reconfiguration: {asset.file_path}"
                     )
-                if target_exists and target_sha != source_sha:
+                if (
+                    target_exists
+                    and target_sha != source_sha
+                    and target_sha not in asset.known_output_sha256
+                ):
                     raise PatchError(
                         f"Refusing removal of {asset.file_path}: target SHA-256 {target_sha} "
                         f"does not match the known enabled asset {source_sha}."
@@ -2557,7 +3004,11 @@ def verify_asset_patches(
                     )
                 if target_sha == source_sha:
                     action = "up_to_date"
-                elif not asset.expected_target_sha256 and not asset.overwrite_existing:
+                elif (
+                    not asset.expected_target_sha256
+                    and not asset.overwrite_existing
+                    and target_sha not in asset.known_output_sha256
+                ):
                     raise PatchError(
                         "Asset target already exists without an expected_target_sha256 or overwrite_existing=true: "
                         f"{asset.file_path}"
@@ -2571,7 +3022,11 @@ def verify_asset_patches(
                 action = "create"
                 if output_exists:
                     action = "up_to_date" if output_sha == source_sha else "replace"
-                    if action == "replace" and not asset.overwrite_existing:
+                    if (
+                        action == "replace"
+                        and not asset.overwrite_existing
+                        and output_sha not in asset.known_output_sha256
+                    ):
                         raise PatchError(
                             "Asset output already exists without overwrite_existing=true: "
                             f"{output_file_path}"
@@ -2826,11 +3281,16 @@ def apply_asset_patches(
                 if not target.is_file():
                     raise PatchError(f"Removal target disappeared before apply: {output_file_path}")
                 actual_sha = sha256_file(target)
-                if actual_sha != str(check["source_sha256"]):
+                # Validation authenticated the bytes it saw (the record's own
+                # source or another hash this manifest writes to the path);
+                # refuse only if they changed since.
+                validated_sha = str(check.get("target_sha256") or check["source_sha256"])
+                if actual_sha != validated_sha:
                     raise PatchError(
                         f"Refusing removal of {output_file_path}: target SHA-256 changed "
-                        f"from {check['source_sha256']} to {actual_sha}."
+                        f"from {validated_sha} to {actual_sha}."
                     )
+                make_writable(target)
                 target.unlink()
             except OSError as exc:
                 raise PatchError(f"Could not remove disabled asset {output_file_path}: {exc}") from exc
@@ -2903,6 +3363,8 @@ def apply_asset_patches(
             if temp.is_symlink():
                 raise PatchError(f"Temporary patch path must not be a symlink: {temp}")
             shutil.copy2(source, temp)
+            make_writable(temp)
+            make_writable(target)
             temp.replace(target)
         except OSError as exc:
             log_process_event(
@@ -3216,6 +3678,9 @@ def create_backup(
             destination = resolve_under_backup_dir(backup_dir, str(backup_rel))
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source, destination)
+            # A read-only source would otherwise leave a read-only backup copy
+            # that a second row for the same file cannot overwrite.
+            make_writable(destination)
             backup_sha = sha256_file(destination)
             source_sha = sha256_file(source)
             if backup_sha != source_sha:
@@ -3254,6 +3719,7 @@ def atomic_write(path: Path, data: bytes) -> None:
     if temp.is_symlink():
         raise PatchError(f"Temporary patch path must not be a symlink: {temp}")
     temp.write_bytes(data)
+    make_writable(path)
     temp.replace(path)
 
 
@@ -3367,7 +3833,7 @@ def apply_manifest(args: argparse.Namespace) -> int:
         post_asset_patches = manifest_post_asset_patches(manifest, settings, enabled_settings)
         restore_assets = manifest_asset_patches(manifest, settings, enabled_settings, restore_inactive=True) if reconfigure_output else []
         if reconfigure_output:
-            assets = suppress_active_assets_replaced_by_restore(assets, restore_assets)
+            assets, restore_assets = plan_reconfigure_assets(manifest, assets, restore_assets)
         all_assets = [
             *(asset for asset in [*assets, *restore_assets] if not asset.remove_when_disabled),
             *(asset for asset in [*assets, *restore_assets] if asset.remove_when_disabled),
@@ -3406,6 +3872,7 @@ def apply_manifest(args: argparse.Namespace) -> int:
         preserve_stock_exe_icon = manifest_preserve_stock_exe_icon(manifest)
         captured_icon_resources: tuple[IconResource, ...] = ()
         icon_source: Path | None = None
+        icon_asset_check: dict[str, Any] | None = None
         if preserve_stock_exe_icon:
             desired_exe_name = manifest_output_exe_name(manifest)
             if not desired_exe_name:
@@ -3422,11 +3889,35 @@ def apply_manifest(args: argparse.Namespace) -> int:
                 ),
                 None,
             )
-            if icon_asset_check is None:
+            # Skipping is only safe for a separate output folder, where
+            # enforce_modded_exe_name renames the carried-over vanilla EXE.
+            # In place it returns early, so no modded EXE would exist.
+            if icon_asset_check is None and (
+                output_dir.resolve() == game_dir.resolve()
+                or any(
+                    Path(str(check.get(field) or "")).suffix.lower() == ".exe"
+                    for check in asset_checks
+                    for field in ("file_path", "output_file_path")
+                )
+            ):
                 raise PatchError(
                     "Manifest requests stock EXE icon preservation, but no active executable replacement "
                     f"writes {desired_exe_name}."
                 )
+            if icon_asset_check is None:
+                # No executable replacement is selected (core_executable off),
+                # so the output keeps the vanilla EXE, which already carries
+                # the stock icon.  There is nothing to preserve.
+                preserve_stock_exe_icon = False
+                log_process_event(
+                    process_log,
+                    phase="validate",
+                    kind="exe_icon_resources",
+                    status="skipped",
+                    output_file_path=desired_exe_name,
+                    note="No executable replacement is active; the vanilla EXE keeps its own icon.",
+                )
+        if preserve_stock_exe_icon and icon_asset_check is not None:
             icon_source = resolve_under_game_dir(game_dir, str(icon_asset_check["target_file_path"]))
             emit_progress(args, f"Validating stock executable icon resources: {icon_source}")
             try:
@@ -3457,14 +3948,43 @@ def apply_manifest(args: argparse.Namespace) -> int:
                 ),
             )
 
+        if not reconfigure_output:
+            # Before create_backup: with the default backup location the backup
+            # itself would make an unrelated folder pass this check.
+            check_output_dir_refresh_allowed(game_dir, output_dir)
         if not args.dry_run:
             skip_copy_paths = {
                 str(check.get("target_file_path") or check["file_path"])
                 for check in asset_checks
                 if str(check.get("output_file_path") or check["file_path"]) != str(check["file_path"])
             }
+            desired_output_exe = manifest_output_exe_name(manifest)
+            if desired_output_exe:
+                # A vanilla folder that once had an in-place apply also holds a
+                # modded EXE under the output name.  The output's modded EXE is
+                # always written by the executable asset or renamed from the
+                # vanilla EXE, so never carry that stale build over: with the
+                # executable off, enforce_modded_exe_name would keep it and
+                # delete the vanilla EXE.
+                skip_copy_paths.update(
+                    child.name
+                    for child in game_dir.iterdir()
+                    if child.is_file() and child.name.lower() == desired_output_exe.lower()
+                )
             if args.backup_dir:
-                backup_dir = Path(args.backup_dir).resolve()
+                # A folder that already exists gets a fresh per-run subfolder,
+                # exactly as the default location does. The GUI's Browse dialog
+                # can only return an existing folder, and create_backup refuses
+                # to reuse one (mkdir exist_ok=False) so that no run overwrites
+                # an earlier backup -- so a browsed Backup folder used to fail
+                # every time, and a second run into the same new folder failed
+                # too. A path that does not exist yet is still used as given.
+                chosen_backup = Path(args.backup_dir).resolve()
+                backup_dir = (
+                    chosen_backup / backup_slug(manifest_path)
+                    if chosen_backup.is_dir()
+                    else chosen_backup
+                )
             else:
                 backup_dir = output_dir / DEFAULT_BACKUP_ROOT / backup_slug(manifest_path)
             emit_progress(args, f"Creating backup: {backup_dir}")
@@ -3605,6 +4125,9 @@ def apply_manifest(args: argparse.Namespace) -> int:
         )
         save_folder_name = manifest_output_save_folder_name(manifest, modded_exe_name)
         save_dir = Path.home() / "Documents" / "LDW" / save_folder_name
+        # Report what took effect, not what was ticked: a setting whose every
+        # record needs an unticked prerequisite changed nothing.
+        settings_report = effective_settings_report(manifest, settings, enabled_settings)
         log = {
             "action": "apply",
             "dry_run": bool(args.dry_run),
@@ -3618,7 +4141,7 @@ def apply_manifest(args: argparse.Namespace) -> int:
             "modded_save_dir": str(save_dir),
             "manifest": str(manifest_path),
             "manifest_name": manifest.get("name"),
-            "settings": settings_log(settings, enabled_settings),
+            "settings": settings_log(settings, enabled_settings, settings_report),
             "target_checks": target_checks,
             "runtime_checks": runtime_checks,
             "backup_dir": None if backup_dir is None else str(backup_dir),
@@ -3650,7 +4173,7 @@ def apply_manifest(args: argparse.Namespace) -> int:
                 "modded_save_folder_name": save_folder_name,
                 "modded_save_dir": str(save_dir),
                 "enabled_settings": sorted(enabled_settings),
-                "settings": settings_log(settings, enabled_settings),
+                "settings": settings_log(settings, enabled_settings, settings_report),
                 "patched_files": patched_files,
                 "asset_files": asset_files,
                 "dry_run": bool(args.dry_run),
@@ -3658,9 +4181,22 @@ def apply_manifest(args: argparse.Namespace) -> int:
         )
 
         if settings:
-            print("Enabled settings: " + (", ".join(sorted(enabled_settings)) if enabled_settings else "(none)"))
-            disabled_settings = sorted(set(settings) - enabled_settings)
+            effective = settings_report["enabled"]
+            inactive = settings_report["inactive"]
+            print("Enabled settings: " + (", ".join(sorted(effective)) if effective else "(none)"))
+            disabled_settings = sorted(set(settings) - effective - set(inactive))
             print("Disabled settings: " + (", ".join(disabled_settings) if disabled_settings else "(none)"))
+            informational = settings_report["informational"]
+            if informational:
+                print(
+                    "Always-on settings (cannot be switched off separately): "
+                    + ", ".join(sorted(informational))
+                )
+            if inactive:
+                print(
+                    "Selected but inactive settings: "
+                    + "; ".join(f"{setting_id} ({reason})" for setting_id, reason in sorted(inactive.items()))
+                )
         print(
             f"Validated {len(patches)} active byte patch record(s) across {len(grouped)} file(s) "
             f"and {len(all_assets)} active/restore asset patch record(s)."
@@ -3676,13 +4212,17 @@ def apply_manifest(args: argparse.Namespace) -> int:
             print(f"Backup: {backup_dir}")
             print(f"Patch log: {log_path}")
         return 0
-    except PatchError as exc:
+    except (PatchError, OSError) as exc:
+        # An OSError (read-only or locked file, full disk, missing permission)
+        # is as much a failed apply as a PatchError: it must leave a failure
+        # log and reach the CLI and GUI as a clean error, not a traceback.
         if args.log:
             failure_log_path = Path(args.log).resolve()
         elif backup_dir:
             failure_log_path = backup_dir / "patch_error_log.json"
         else:
             failure_log_path = manifest_path.with_name("patch_error_log.json")
+        error_text = str(exc) if isinstance(exc, PatchError) else f"File operation failed: {exc}"
         failure_log = {
             "action": "apply",
             "dry_run": bool(args.dry_run),
@@ -3692,16 +4232,21 @@ def apply_manifest(args: argparse.Namespace) -> int:
             "manifest": str(manifest_path),
             "backup_dir": None if backup_dir is None else str(backup_dir),
             "settings": settings_log(settings, enabled_settings) if settings else None,
-            "error": str(exc),
+            "error": error_text,
             "process_log": process_log,
         }
-        write_json(failure_log_path, failure_log)
-        emit_progress(args, f"Patch failed. Failure log: {failure_log_path}")
+        try:
+            write_json(failure_log_path, failure_log)
+            emit_progress(args, f"Patch failed. Failure log: {failure_log_path}")
+        except OSError as log_exc:
+            emit_progress(args, f"Patch failed. Could not write failure log {failure_log_path}: {log_exc}")
         if settings:
             disabled_settings = sorted(set(settings) - enabled_settings)
             emit_progress(args, "Enabled settings: " + (", ".join(sorted(enabled_settings)) if enabled_settings else "(none)"))
             emit_progress(args, "Disabled settings: " + (", ".join(disabled_settings) if disabled_settings else "(none)"))
-        raise
+        if isinstance(exc, PatchError):
+            raise
+        raise PatchError(error_text) from exc
 
 
 def list_manifest_settings(args: argparse.Namespace) -> int:
@@ -3742,7 +4287,29 @@ def restore_backup(args: argparse.Namespace) -> int:
     if not backup_manifest_path.is_file():
         raise PatchError(f"Backup manifest not found: {backup_manifest_path}")
     backup_manifest = read_json(backup_manifest_path)
-    game_dir = Path(args.game_dir).resolve() if args.game_dir else Path(str(backup_manifest["game_dir"])).resolve()
+    recorded = backup_manifest.get("game_dir")
+    recorded_dir = Path(str(recorded)).resolve() if recorded else None
+    if args.game_dir:
+        game_dir = Path(args.game_dir).resolve()
+        # A backup holds the files of the folder it was taken from, and its
+        # "existed": false rows mean "delete this path". Restoring it anywhere
+        # else writes that folder's files over the destination and deletes
+        # destination files it never recorded -- e.g. a modded-output backup
+        # restored into the vanilla install. Only an explicit force allows it.
+        if (
+            recorded_dir is not None
+            and os.path.normcase(str(game_dir)) != os.path.normcase(str(recorded_dir))
+            and not getattr(args, "force_game_dir", False)
+        ):
+            raise PatchError(
+                "This backup was taken from a different folder and would overwrite or delete files "
+                f"in {game_dir}. It belongs to: {recorded_dir}. Omit the destination to restore it there, "
+                "or pass --force-game-dir to restore it elsewhere anyway."
+            )
+    elif recorded_dir is not None:
+        game_dir = recorded_dir
+    else:
+        raise PatchError("Backup manifest does not record the folder it was taken from; pass --game-dir.")
     if not game_dir.is_dir():
         raise PatchError(f"Game directory does not exist: {game_dir}")
 
@@ -3793,6 +4360,7 @@ def restore_backup(args: argparse.Namespace) -> int:
         else:
             removed = False
             if target.exists():
+                make_writable(target)
                 target.unlink()
                 removed = True
             restored.append({"file_path": rel_path, "removed": removed, "existed": False})
@@ -3822,7 +4390,7 @@ def build_parser() -> argparse.ArgumentParser:
     apply_cmd.add_argument("--manifest", required=True, help="Path to the JSON patch manifest.")
     apply_cmd.add_argument("--output-dir", help="Optional modded game output folder. Defaults to the manifest output folder when a vanilla game folder is supplied. If --game-dir is omitted, this must be an existing modded folder to reconfigure.")
     apply_cmd.add_argument("--output-parent-dir", help="Optional parent folder for the manifest-named modded output folder. Ignored when --output-dir is supplied.")
-    apply_cmd.add_argument("--backup-dir", help="Backup output directory. Defaults under the game directory.")
+    apply_cmd.add_argument("--backup-dir", help="Backup output directory. A folder that already exists receives a new per-run subfolder; a new path is used as given. Defaults to a per-run folder under .vf2_patch_backups in the output folder.")
     apply_cmd.add_argument("--log", help="Patch log JSON path. Defaults inside the backup directory.")
     apply_cmd.add_argument("--dry-run", action="store_true", help="Validate only; do not back up or modify files.")
     apply_cmd.add_argument("--enable", action="append", help="Enable a manifest setting. Repeat or comma-separate IDs.")
@@ -3846,7 +4414,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     restore_cmd = sub.add_parser("restore", help="Restore files from a patcher backup directory.")
     restore_cmd.add_argument("--backup-dir", required=True, help="Backup directory created by apply.")
-    restore_cmd.add_argument("--game-dir", help="Override restore destination. Defaults to original game_dir in backup.")
+    restore_cmd.add_argument("--game-dir", help="Restore destination. Defaults to the folder recorded in the backup; a different folder is refused unless --force-game-dir is given.")
+    restore_cmd.add_argument(
+        "--force-game-dir",
+        action="store_true",
+        help="Allow --game-dir to differ from the folder the backup was taken from. Files the backup did not record as existing are deleted there.",
+    )
     restore_cmd.add_argument("--log", help="Restore log JSON path. Defaults inside the backup directory.")
     restore_cmd.set_defaults(func=restore_backup)
     return parser

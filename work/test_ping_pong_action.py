@@ -318,7 +318,10 @@ class TheCaptionFollowsTheTableTheVillagerIsAt(unittest.TestCase):
         start = source.index(
             'extern "C" void __cdecl VF2RandomPooltableLabel(CVillager &villager)'
             + NL + '{')
-        return source[start:source.index(NL + 'extern "C"', start)]
+        # Up to the function's own closing brace. Ending at the NEXT extern
+        # "C" swept in the comment block above the treadmill wrappers, which
+        # deliberately names the superseded probes (AGENTS.md 11).
+        return source[start:source.index(NL + '}' + NL, start)]
 
     def test_the_wrapper_no_longer_classifies_at_all(self):
         """The wrapper must not decide anything now that the objects differ.

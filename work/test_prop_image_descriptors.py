@@ -190,11 +190,17 @@ class PropPositionComesFromTheRecord(unittest.TestCase):
     """
 
     def test_the_capture_reads_the_record_not_info_point(self):
+        """SUPERSEDED SITE, same rule. VF2CaptureTableProp is gone: the props
+        now draw on every table the mobile per-table on-state has switched on
+        (see test_patio_picnic_mobile_parity.py), and the paint wrapper reads
+        each table's OWN placement record. The rule this class pins -- the
+        record's +0x14/+0x18, never info.point, and the table identified by
+        the handle at +0x04 -- is checked there instead."""
         source = SOURCE.read_text(encoding="utf-8")
-        start = source.index("static void VF2CaptureTableProp(")
+        start = source.index("VF2FurniturePaintAndTableProps(\n")
         body = source[start:source.index("\n}\n", start)]
         self.assertNotIn(
-            "outX = info.point.x", body,
+            "info.point", body,
             "the capture is back on info.point, which is the walk-to anchor -- "
             "the prop will draw beside the table, not on it",
         )
@@ -216,11 +222,11 @@ class PropPositionComesFromTheRecord(unittest.TestCase):
         )
         self.assertIn(
             "record + 0x04", code,
-            "the record is not compared against the placement handle, so "
-            "the first active record wins and the wrong table's position "
-            "is used when two are placed",
+            "the table is not identified by its placement handle, so a table "
+            "that inherits a compacted slot would show another table's prop",
         )
-        self.assertIn("info.unknown0", code)
+        self.assertIn(
+            "VF2TablePropFind(gVF2PicnicOn, gVF2PicnicOnCount, handle)", code)
 
 
 class PropDrawRespectsTheDecalBound(unittest.TestCase):

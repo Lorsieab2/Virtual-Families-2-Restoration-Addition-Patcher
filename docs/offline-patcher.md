@@ -50,7 +50,15 @@ folder to a separate modded sibling folder and writes changed files there:
 
 Use `--output-dir` to choose the exact modded output folder. Alternatively,
 use `--output-parent-dir` to choose where the manifest-named folder is created;
-`--output-dir` takes precedence when both are supplied. B156 uses the stable
+`--output-dir` takes precedence when both are supplied. An existing non-empty
+output folder is refreshed (its contents replaced from the vanilla install)
+only when it is recognized as a modded output folder -- it already holds a
+`.vf2_patch_backups` folder or is named `VF2-*-Modded`; any other non-empty
+folder, or one inside the vanilla folder, is refused before anything is
+written, including the backup (B196 and earlier created the backup first, which
+made every folder pass the check). Read-only files in the vanilla install are
+copied as writable, and a file error during apply is reported as a normal
+failure with `patch_error_log.json`. B156 uses the stable
 folder and executable names `Virtual Families 2 - Modded` and
 `Virtual Families 2 - Modded.exe`. Its save folder is exactly
 `Documents/LDW/Virtual Families 2 - Modded`.
@@ -310,9 +318,22 @@ vanilla-folder selection guidance, and save-copy guidance.
 certifies the current canonical B158 archive. It fails closed on unsafe or
 duplicate ZIP paths, CRC errors, a root-name mismatch, target-fingerprint
 drift, executable-variant drift, unreachable settings, or malformed manifest
-record types. Its canonical contract also checks four executable variants,
-15 mobile-renovation PNGs, 67 mobile sounds (63 restores and four removals),
-and all four WAV-to-OGG route records. This is static package evidence only;
+record types. Its contract checks every executable variant the release's
+identities name, the 35 mobile-renovation PNGs, 67 mobile sounds (63 restores
+and four removals) and all four WAV-to-OGG route records, and in addition:
+every asset record's source and restore source is present and matches its
+manifest SHA-256 and size; every payload file is referenced by some record;
+every post-asset record covers exactly the shipped executables, with its
+expected bytes at its offset, and every one-byte runtime flag points at the raw
+pointer of the `.vf2*` section it names; every advertised runtime-flag setting
+whose section the executables carry has its toggle record; and every `runner_files` entry and the
+transparency log are members of the archive. (Superseded, recorded as wrong:
+this paragraph used to say the contract checks "four executable variants" and
+"15 mobile-renovation PNGs", and implied that was the whole contract. Through
+B196 the verifier checked only the executables, renovation PNGs, No AI Icons
+and sounds, so a deleted holiday fmap, a moved `.vf2mort` offset or a missing
+`offline_vf2_patcher_gui.py` still printed RELEASE GATE PASSED.) This is
+static package evidence only;
 it does not establish FMOD decoding, audible parity, gameplay behavior, or
 runtime crash-freedom.
 
@@ -342,12 +363,25 @@ relative, so their `scope` is `object_relative` and their `apply_status` is
 
 ```powershell
 & "C:\Path\To\Python\python.exe" work\offline_vf2_patcher.py restore `
-  --backup-dir "C:\Games\Virtual Families 2\.vf2_patch_backups\20260702_example"
+  --backup-dir "C:\Games\Virtual Families 2 - Modded\.vf2_patch_backups\20260702_example"
 ```
 
 The restore command reads `vf2_patch_backup_manifest.json` from the backup
 folder, copies original files back, and removes files that the patcher created
-when the original target did not exist.
+when the original target did not exist. It restores into the folder recorded in
+the backup (`game_dir`), which for an output-folder manifest is the modded
+output folder, not the vanilla install. `--game-dir` may only name that same
+folder; a different destination is refused unless `--force-game-dir` is also
+given, because the backup's "did not exist" rows delete those paths wherever
+the restore runs. The GUI's Restore Backup button always restores into the
+recorded folder and never uses the vanilla game folder field.
+
+Superseded (wrong, B196 and earlier): the example above previously showed a
+backup under the vanilla folder (`C:\Games\Virtual Families 2\.vf2_patch_backups`),
+and `--game-dir` was described as a free "override". The GUI passed the vanilla
+game folder field as that override, so Restore Backup wrote a modded-output
+backup into the vanilla install and deleted vanilla files it had recorded as
+absent.
 
 ## Manifest Contract
 
@@ -608,7 +642,12 @@ as:
   the restore source, so disabling the setting restores the current icon set;
   disabling Cheat Upgrades still removes its late icon payloads.
 - `ai_generated_bathroom2_renovations` - **2nd Bathroom Mobile-Style
-  Renovations (AI-Generated Art Warning)**. It stages only the
+  Renovations (AI-Generated Art Warning)** and dependent on
+  `mobile_renovations`: the Bathroom 2 rows and renderer exist only in the
+  mobile-renovation executables, so its art records require that setting and
+  are not installed while it is off (through B196 they required only
+  `core_executable`, which installed the art where nothing could draw it). It
+  stages only the
   five tracked AI-generated source variants, normalized to the vanilla north
   Bathroom 2 crop size and the measured native room-apex anchor. The native
   second-bathroom renovation route remains disabled/hiatus; the exact warning
@@ -662,6 +701,27 @@ would make the furniture invisible before it could be placed.
 Patch records, asset records, and target-file checks can include `requires`,
 `settings`, or `setting`. A record is active only when all required settings
 are enabled. If a record has no setting requirement, it is always active.
+
+Setting dependencies are derived from those records, not from a separate list:
+setting B is a prerequisite of setting A when every record that requires A also
+requires B (No AI Icons needs Cheat Upgrades and Patch game executable; with
+the Bathroom 2 gating, 2nd Bathroom renovations also need Mobile room
+renovations). The GUI closes them in both directions: unticking a prerequisite
+unticks its dependents, and ticking a dependent ticks its prerequisites. The
+patch log and the success window list a setting as enabled only when at least
+one of its records took effect; a ticked setting whose records all need an
+unticked prerequisite is reported as `selected but inactive: requires <id>`
+(`settings.selected_but_inactive` in the log).
+
+A setting that no byte, asset or post-asset record requires is
+*informational*: the exporter marks it `"informational": true`, and the patcher
+treats an unmarked zero-record setting the same way for older manifests. It is
+shown ticked and cannot be unticked. Settings listed in
+`export_summary.native_core_settings` (Text fixes, Add unused pets, Add visible
+mobile version purchases) are compiled into every patched executable, so they
+are present exactly when Patch game executable is. Superseded (wrong, B196 and
+earlier): these rows were ordinary checkboxes, and unticking one was reported
+as "disabled/restored to vanilla" although nothing changed.
 
 Unchecked settings must not leave their feature files in the fresh modded output
 folder. The exporter therefore assigns optional visual source folders,
