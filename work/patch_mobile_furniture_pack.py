@@ -3130,7 +3130,11 @@ BEHAVIOR_LABEL_GROUPS = [
             ("eString_PlanningCareerPath", "Planning career path"),
             ("eString_LookingForSchools", "Looking for schools to apply to"),
             ("eString_ExploringCareerOpportunities", "Exploring future career opportunities"),
-            ("eString_ExploringVolunteerOpportunities", "Exploring future volunteer opportunities"),
+            # Shortened from "Exploring future volunteer opportunities" (40
+            # bytes): the villager label slot holds 0x27 (39) characters, so
+            # the old text was displayed as "...opportunitie". Kept to the
+            # same meaning; test_behavior_label_fits_slot pins the limit.
+            ("eString_ExploringVolunteerOpportunities", "Exploring volunteer opportunities"),
         ],
     ),
     (
@@ -37592,115 +37596,56 @@ extern "C" void __cdecl VF2RandomPooltableLabel(CVillager &villager)
     VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::PlayingPooltable);
 }
 
-// The Exercise Bike borrows the Treadmill's two behaviours, so its users were
-// labelled "walking on the treadmill" and "running on the treadmill". Both
-// machines answer to the same object, so the label is chosen by which one the
-// villager actually walked to -- resolved exactly the way the native behaviour
-// resolves it, with FindFurniture from the villager's feet.
+// The Exercise Bike borrows the Treadmill's two behaviours for its ANIMATIONS,
+// but no longer for its CAPTIONS. These two wrappers used to relabel the stock
+// treadmill actions when the villager stood on the bike; they now leave the
+// stock behaviour and its stock label exactly as the base game does.
 //
-// A stock Treadmill keeps its stock labels, and the plan itself is untouched:
-// same walk, same animations, same duration. Only the words change, which is
-// what was asked for.
+// THESE WRAPPERS NO LONGER CLASSIFY ANYTHING, AND MUST NOT -- the same
+// correction already made to VF2RandomPooltableLabel, for the same reason.
+//
+// Owner requirement, after a playtest found bike captions on the Treadmill: "I
+// want ONLY the exercise bike to have the behaviors 'doing high-intensity
+// cycling' and 'using the exercise bike'."
+//
+// The bike now declares its OWN content-map object (0x99; the shipped
+// ExerciseBikeStd.png.fmap declares 0x99 and nothing else), while the stock
+// WorkoutTreadmill and RunningOnTreadmill search object 0x04. A villager who
+// reaches either stock behaviour can therefore only ever be routed to a
+// genuine Treadmill, and the stock caption is already correct. The bike's
+// captions come solely from VF2ExerciseBikeWalk / VF2ExerciseBikeRun
+// (behaviours 0x0B1 / 0x0B2), which run the treadmill donors DIRECTLY rather
+// than through these retargeted table entries.
+//
+// SUPERSEDED FORMS, recorded rather than deleted (AGENTS.md 11), because each
+// looked right and each put the bike's caption on a treadmill:
+//
+//   1. gVF2RoutedItemId, recorded by intercepting PlanToGo and asking
+//      CContentMap::FindObject which placement the route picked. FindObject is
+//        ?FindObject@CContentMap@@QAE?B_NW4EObject@1@AAUldwPoint@@@Z
+//      -- an object enum and an out-point, with NO villager and NO position.
+//      A global query returning the SAME placement for every villager.
+//   2. VF2LinkedFurnitureItemIs, FeetPos(); FindFurniture(0x04, feet, ...)
+//      -- the donor's own NEAREST MATCH. With the bike standing near the
+//      treadmill the bike won, and the caption landed on a treadmill action.
+//   3. VF2VillagerIsStandingOnItem(villager, bike), sampled BEFORE the native
+//      behaviour. That reads where the villager stands NOW, not where the stock
+//      behaviour sends them. A villager still standing on the bike (after a
+//      bike session, or dropped there) who then autonomously chose the stock
+//      WorkoutTreadmill walked to the Treadmill wearing "Using the exercise
+//      bike". After the object separation, a stock treadmill behaviour can
+//      never route to the bike, so this check could only ever mislabel.
+//
+// The wrappers are kept rather than removed because the label-retarget table
+// still resolves the two treadmill label callsites to them.
 extern "C" void __cdecl VF2RandomTreadmillWalkLabel(CVillager &villager)
 {
-    int remembered = VF2CurrentLabelInGroup(
-        villager, kVF2BehaviorLabels_exercise_bike_walk,
-        VF2_LABEL_COUNT(kVF2BehaviorLabels_exercise_bike_walk));
-    // ONLY THE EXERCISE BIKE MAY WEAR THESE CAPTIONS.
-    //
-    // Owner requirement, after a playtest found them on the Treadmill: "I want
-    // ONLY the exercise bike to have the behaviors 'doing high-intensity
-    // cycling' and 'using the exercise bike'."
-    //
-    // This used to ask VF2LinkedFurnitureItemIs, which is
-    // FindFurniture(0x04, feet) -- a NEAREST MATCH. It identifies its winner by
-    // placement handle, so it never mixes two records up, but "nearest to the
-    // villager's feet" is not "the machine this villager is on": a bike
-    // standing near the treadmill can win, and the caption then lands on a
-    // treadmill action.
-    //
-    // VF2VillagerIsStandingOnItem reads the item id from the placement record
-    // under the villager, so a treadmill user keeps the stock treadmill labels
-    // and only a villager on the bike is relabelled.
-    bool bike = VF2VillagerIsStandingOnItem(
-        villager, __VF2_EXERCISE_BIKE_ITEM_ID__);
-    if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::WorkoutTreadmill)) return;
-    // TWO SUPERSEDED APPROACHES, recorded rather than deleted (AGENTS.md 11),
-    // because each looked right and each put the bike's caption on a treadmill.
-    //
-    // FIRST: gVF2RoutedItemId, recorded by intercepting PlanToGo and asking
-    // CContentMap::FindObject which placement the route picked. FindObject is
-    //   ?FindObject@CContentMap@@QAE?B_NW4EObject@1@AAUldwPoint@@@Z
-    // -- an object enum and an out-point, with NO villager and NO position. It
-    // is a global query returning the SAME placement for every villager, so
-    // with a treadmill and a bike both answering EObject 0x04 it classified
-    // every user of either machine identically.
-    //
-    // SECOND: VF2LinkedFurnitureItemIs, which is
-    //   FeetPos(); FindFurniture(0x04, feet, info, true, 0, 0)
-    // -- the identical call the donor itself makes, at the identical moment
-    // (decoded from Behavior.obj: ?WorkoutTreadmill@ section 824 and
-    // ?RunningOnTreadmill@ section 556 each carry exactly ONE furniture
-    // relocation and reference neither LinkPeepToFurniture nor FindObject).
-    // That reproduces the DONOR's choice faithfully, which is why it was
-    // adopted -- but the donor's choice is a NEAREST MATCH, and nearest-to-feet
-    // is not "the machine this villager is on". With the bike standing near the
-    // treadmill the bike wins, and the caption lands on a treadmill action.
-    // Reported in play exactly that way.
-    //
-    // NOW: the item id under the villager's own feet. Not a proximity query at
-    // all, and the same test the drop dispatcher already trusts to tell these
-    // shared-object items apart.
-    bool const onBike = bike;
-    if (!onBike) return;
-    VF2ApplyVenueLabel(
-        villager, kVF2BehaviorLabels_exercise_bike_walk,
-        VF2_LABEL_COUNT(kVF2BehaviorLabels_exercise_bike_walk), remembered);
+    VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::WorkoutTreadmill);
 }
 
 extern "C" void __cdecl VF2RandomTreadmillRunLabel(CVillager &villager)
 {
-    int remembered = VF2CurrentLabelInGroup(
-        villager, kVF2BehaviorLabels_exercise_bike_run,
-        VF2_LABEL_COUNT(kVF2BehaviorLabels_exercise_bike_run));
-    // 0x04 is the object both treadmill behaviours search -- NOT 0x36.
-    // Same correction as the walking wrapper above: the caption belongs to the
-    // bike alone, so the test is "standing on the bike", not "a bike is the
-    // nearest 0x04 placement".
-    bool bike = VF2VillagerIsStandingOnItem(
-        villager, __VF2_EXERCISE_BIKE_ITEM_ID__);
-    if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::RunningOnTreadmill)) return;
-    // TWO SUPERSEDED APPROACHES, recorded rather than deleted (AGENTS.md 11),
-    // because each looked right and each put the bike's caption on a treadmill.
-    //
-    // FIRST: gVF2RoutedItemId, recorded by intercepting PlanToGo and asking
-    // CContentMap::FindObject which placement the route picked. FindObject is
-    //   ?FindObject@CContentMap@@QAE?B_NW4EObject@1@AAUldwPoint@@@Z
-    // -- an object enum and an out-point, with NO villager and NO position. It
-    // is a global query returning the SAME placement for every villager, so
-    // with a treadmill and a bike both answering EObject 0x04 it classified
-    // every user of either machine identically.
-    //
-    // SECOND: VF2LinkedFurnitureItemIs, which is
-    //   FeetPos(); FindFurniture(0x04, feet, info, true, 0, 0)
-    // -- the identical call the donor itself makes, at the identical moment
-    // (decoded from Behavior.obj: ?WorkoutTreadmill@ section 824 and
-    // ?RunningOnTreadmill@ section 556 each carry exactly ONE furniture
-    // relocation and reference neither LinkPeepToFurniture nor FindObject).
-    // That reproduces the DONOR's choice faithfully, which is why it was
-    // adopted -- but the donor's choice is a NEAREST MATCH, and nearest-to-feet
-    // is not "the machine this villager is on". With the bike standing near the
-    // treadmill the bike wins, and the caption lands on a treadmill action.
-    // Reported in play exactly that way.
-    //
-    // NOW: the item id under the villager's own feet. Not a proximity query at
-    // all, and the same test the drop dispatcher already trusts to tell these
-    // shared-object items apart.
-    bool const onBike = bike;
-    if (!onBike) return;
-    VF2ApplyVenueLabel(
-        villager, kVF2BehaviorLabels_exercise_bike_run,
-        VF2_LABEL_COUNT(kVF2BehaviorLabels_exercise_bike_run), remembered);
+    VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::RunningOnTreadmill);
 }
 
 extern "C" void __cdecl VF2RandomDrinkLabel(CVillager &villager)
