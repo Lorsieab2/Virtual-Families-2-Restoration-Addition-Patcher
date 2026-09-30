@@ -70,7 +70,21 @@ FINAL_PLAYTEST_NATIVE_REQUIRES = [
 # reads. .xcf is a GIMP project file; SDL_image cannot decode one, and nothing
 # in the engine's asset tables names one. B176 shipped 30 of them: 49,028,504
 # uncompressed bytes, 43,823,872 compressed -- 24.7% of that entire download.
-NON_RUNTIME_SOURCE_SUFFIXES = {".bak", ".xcf"}
+#
+# .jbf is a Paint Shop Pro browser thumbnail cache (B196 installed a 568,926-byte
+# Images/pspbrwse.jbf into every game folder). .pngORIGINAL is the generator's
+# build-side transparent backup of each Invisible* furniture image: the
+# generator reads it from the BUILD to make the "Invisible Furniture -
+# Transparent" set (sync_invisible_furniture_reference_sets), and that set is
+# what the patcher installs; B196 also copied all 33 into Images/Furniture of
+# the game, where nothing loads them. None of the three names appears in any
+# of B196's 32 executables. Compared case-insensitively.
+NON_RUNTIME_SOURCE_SUFFIXES = {".bak", ".xcf", ".jbf", ".pngoriginal"}
+
+# Individual files a build leaves behind that are not game data. PkgInfo is a
+# macOS application-bundle marker ("APPL????", 8 bytes); the Windows game has
+# none, and B196 installed it as Assets/PkgInfo.
+NON_RUNTIME_SOURCE_NAMES = {"pkginfo"}
 
 # Working folders a build leaves inside Images/ that the game never reads. The
 # engine loads Images/Upgrades/<name>.png; these two subfolders are the swap
@@ -89,6 +103,8 @@ NON_RUNTIME_SOURCE_DIRS = {
 def is_non_runtime_source_path(rel) -> bool:
     """True when a build-relative path is an editing source, not runtime art."""
     if rel.suffix.lower() in NON_RUNTIME_SOURCE_SUFFIXES:
+        return True
+    if rel.name.lower() in NON_RUNTIME_SOURCE_NAMES:
         return True
     parts = tuple(rel.parts)
     return any(parts[: len(prefix)] == prefix for prefix in NON_RUNTIME_SOURCE_DIRS)
@@ -422,7 +438,9 @@ SETTINGS = [
         "description": ""
         "Warning: These Bathroom 2 renovation images are AI-generated based on the Bathroom 1's mobile renovations art, "
         "but manually edited by me. (Sorry, I'm too lazy to hand-make the art myself. I'm busy with other stuff, but feel "
-        "free to make some yourself and open an Issue on the Github if you want to change it- Lorsieab2)",
+        "free to make some yourself and open an Issue on the Github if you want to change it- Lorsieab2) "
+        "Requires Add mobile room renovations: the Bathroom 2 renovations exist only in that executable, so this "
+        "art is not installed while it is unticked.",
         "default": True,
         "category": "optional",
     },
@@ -1797,6 +1815,15 @@ def setting_for_asset(rel_path: Path) -> str:
         return "vf3_tv_assets_recognition"
     if text.startswith("Images/GenerationLocks/") or text == "Images/locked.png":
         return "core_executable"
+    # The 100 hairstyle store rows and their icon descriptors are generated
+    # into EVERY executable unconditionally (patch_mobile_furniture_pack.py:
+    # "the hairstyle icons are always generated"; all 32 B196 executables
+    # carry 100 "HairstyleIcons/" paths). No setting turns the rows off, so
+    # their icons belong to the executable. They used to fall through to the
+    # mobile_furniture fallback, so unticking that setting left the icons out
+    # while the rows stayed in the store.
+    if text.startswith("Images/HairstyleIcons/"):
+        return "core_executable"
     if (
         text.startswith("Images/CollectionOrnaments/")
         or "CollectionOrnament" in stem
@@ -1856,6 +1883,13 @@ def asset_requires_for_setting(setting: str) -> list[str]:
     }:
         if setting == "no_ai_icons":
             return ["core_executable", "cheat_upgrades", "no_ai_icons"]
+        if setting == "ai_generated_bathroom2_renovations":
+            # The Bathroom 2 renderer, rows and descriptors exist only in the
+            # mobile_renovations executables: build-matrix-toggles.json pairs
+            # the two in every variant, and B196's 16 non-renovation
+            # executables contain no "AIGeneratedBathroom2/" path at all. Art
+            # installed without Mobile Renovations is unreachable.
+            return ["core_executable", "mobile_renovations", setting]
         return ["core_executable", setting]
     return [setting]
 
@@ -4162,9 +4196,17 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
     )
     invisible_upgrades_source = Path(args.invisible_upgrades_dir).resolve() if args.invisible_upgrades_dir else None
     original_upgrades_source = Path(args.original_upgrades_dir).resolve() if args.original_upgrades_dir else None
-    asset_patches.extend(invisible_upgrades_asset_patches(bundle_dir, invisible_upgrades_source, original_upgrades_source))
     asset_patches.extend(optional_visual_asset_patches(bundle_dir))
     asset_patches.extend(optional_patch_asset_patches(bundle_dir))
+    # Invisible Workspace Upgrades is emitted AFTER the misc/optional visual
+    # records on purpose. Records that share a target with distinct requires
+    # are a layered override and the patcher applies them in manifest order,
+    # so the LAST active record is what the player sees. Misc Graphics Fixes
+    # also writes Images/Upgrades/superFridge_NW.png (the ice-maker fix);
+    # emitted after the invisible set, as it was through B196, it won whenever
+    # both default-on settings were ticked and left the Super Fridge visible
+    # under Invisible Workspace Upgrades.
+    asset_patches.extend(invisible_upgrades_asset_patches(bundle_dir, invisible_upgrades_source, original_upgrades_source))
     if args.include_exe_replacement and cheat_upgrades_exe is not None:
         icon_defaults_available = all(
             (

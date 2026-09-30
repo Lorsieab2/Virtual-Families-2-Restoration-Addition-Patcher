@@ -519,11 +519,49 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
         )
         self.assertEqual(
             exporter.asset_requires_for_setting("ai_generated_bathroom2_renovations"),
-            ["core_executable", "ai_generated_bathroom2_renovations"],
+            ["core_executable", "mobile_renovations", "ai_generated_bathroom2_renovations"],
         )
         self.assertIn(
             "ai_generated_bathroom2_renovations",
             exporter.OUTPUT_ONLY_REMOVABLE_ASSET_SETTINGS,
+        )
+
+    def test_ai_bathroom2_art_is_inactive_without_mobile_renovations(self):
+        """Bathroom 2 code exists only in the mobile_renovations executables.
+
+        build-matrix-toggles.json pairs the two in every variant, and B196's 16
+        non-renovation executables contain no "AIGeneratedBathroom2/" path.
+        The art used to require only core_executable plus its own setting, so
+        with renovations off it was installed where nothing could draw it.
+        """
+        requires = tuple(exporter.asset_requires_for_setting("ai_generated_bathroom2_renovations"))
+        base = {"core_executable", "ai_generated_bathroom2_renovations"}
+        self.assertFalse(patcher.record_is_active(requires, base))
+        self.assertTrue(patcher.record_is_active(requires, base | {"mobile_renovations"}))
+        by_id = {row["id"]: row for row in exporter.SETTINGS}
+        description = by_id["ai_generated_bathroom2_renovations"]["description"]
+        self.assertIn("Requires Add mobile room renovations", description)
+        # The owner's own warning text is kept verbatim.
+        self.assertTrue(description.startswith("Warning: These Bathroom 2 renovation images are AI-generated"))
+        self.assertIn("change it- Lorsieab2)", description)
+        self.assertEqual(by_id["mobile_renovations"]["label"], "Add mobile room renovations")
+
+    def test_hairstyle_icons_belong_to_the_executable(self):
+        """The 100 hairstyle rows are generated into every executable.
+
+        They fell through to the mobile_furniture fallback, so unticking that
+        setting left the icons out while the rows stayed in the store.
+        """
+        for name in ("Female_Head_00.png", "Male_Head_49.png"):
+            rel = Path("Images") / "HairstyleIcons" / name
+            with self.subTest(name=name):
+                setting = exporter.setting_for_asset(rel)
+                self.assertEqual(setting, "core_executable")
+                self.assertEqual(exporter.asset_requires_for_setting(setting), ["core_executable"])
+        # Neighbouring art keeps its owner.
+        self.assertEqual(
+            exporter.setting_for_asset(Path("Images") / "OutfitIcons" / "female_00.png"),
+            "outfit_store_expansion",
         )
 
     def test_ai_bathroom2_asset_source_option_is_exported_separately_from_exe_matrix(self):
@@ -1521,7 +1559,15 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             self.assertEqual(asset_by_path["Images/VillagerDetailBodies/Female/Body_50/Frame00.png"]["requires"], ["holiday_outfits"])
             self.assertEqual(asset_by_path["Assets/VF3LargeFlatScreenTV.png.fmap"]["requires"], ["core_executable", "vf3_tv_assets_recognition"])
             self.assertEqual(asset_by_path["Assets/LDWPoster1Std.fmap"]["requires"], ["custom_couches_ldw_posters"])
-            self.assertEqual(asset_by_path["Images/Upgrades/superFridge_NW.png"]["requires"], ["misc_graphics_fixes"])
+            # asset_by_path keeps the LAST record per path. The Super Fridge
+            # has two layered writers, and Invisible Workspace Upgrades is now
+            # deliberately last, so check the Misc Graphics Fixes record exists
+            # among them rather than that it is the final one.
+            self.assertIn(
+                ["misc_graphics_fixes"],
+                [row["requires"] for row in manifest["asset_patches"]
+                 if row["file_path"] == "Images/Upgrades/superFridge_NW.png"],
+            )
             self.assertEqual(asset_by_path["Images/collectables_small.png"]["requires"], ["glowing_collectibles"])
             self.assertEqual(manifest["export_summary"]["asset_counts_by_setting"]["holiday_furniture"], 1)
             self.assertEqual(manifest["export_summary"]["asset_counts_by_setting"]["holiday_outfits"], 1)
@@ -2890,6 +2936,67 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             # Default ON, per the owner's standing rule.
             self.assertTrue(settings_by_id["invisible_upgrades_graphics"]["default"])
 
+    def test_invisible_upgrades_win_over_misc_graphics_fixes_for_the_super_fridge(self):
+        """Both default-on settings write Images/Upgrades/superFridge_NW.png.
+
+        Records sharing a target with distinct requires are a layered override
+        applied in manifest order, so the last active record is what the
+        player sees. B196 emitted the Misc Graphics Fixes record (7561) after
+        the Invisible Workspace Upgrades one (7497), so a default install kept
+        the Super Fridge visible under Invisible Workspace Upgrades. Resolved
+        through the patcher's own record selection, not by reading the list.
+        """
+        bundled_fix = exporter.OPTIONAL_PATCH_ASSET_DIR / "misc_graphics_fixes" / "superFridge_NW.png"
+        self.assertTrue(bundled_fix.is_file(), bundled_fix)
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            base = tmp_path / "base"
+            build = tmp_path / "build"
+            out = tmp_path / "bundle"
+            invisible = tmp_path / "invisible_upgrades"
+            original = tmp_path / "original_upgrades"
+            for folder in (build, invisible, original):
+                folder.mkdir()
+            (build / "Virtual Families 2 - Additive Mobile Furniture Pack.exe").write_bytes(b"patched")
+            (build / "patch-manifest.json").write_text("{}", encoding="ascii")
+            (invisible / "superFridge_NW.png").write_bytes(b"invisible fridge")
+            (original / "superFridge_NW.png").write_bytes(b"original fridge")
+
+            self.run_exporter(
+                "--build-dir", str(build),
+                "--base-payload", str(base),
+                "--out-dir", str(out),
+                "--invisible-upgrades-dir", str(invisible),
+                "--original-upgrades-dir", str(original),
+            )
+            manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+
+        target = "Images/Upgrades/superFridge_NW.png"
+        writers = [row for row in manifest["asset_patches"] if row["file_path"] == target]
+        self.assertEqual(
+            sorted(tuple(row["requires"]) for row in writers),
+            [("invisible_upgrades_graphics",), ("misc_graphics_fixes",)],
+        )
+        settings = patcher.manifest_settings(manifest)
+
+        def final_writer(enabled):
+            active = [
+                asset for asset in patcher.manifest_asset_patches(manifest, settings, enabled)
+                if patcher.canonical_rel_path_key(asset.file_path) == patcher.canonical_rel_path_key(target)
+            ]
+            patcher.validate_asset_target_plan(active)
+            return active[-1].requires if active else None
+
+        defaults = {row["id"] for row in manifest["settings"] if row.get("default")}
+        self.assertTrue({"invisible_upgrades_graphics", "misc_graphics_fixes"} <= defaults)
+        self.assertEqual(final_writer(defaults), ("invisible_upgrades_graphics",))
+        self.assertEqual(
+            final_writer(defaults - {"invisible_upgrades_graphics"}), ("misc_graphics_fixes",)
+        )
+        self.assertEqual(
+            final_writer(defaults - {"misc_graphics_fixes"}), ("invisible_upgrades_graphics",)
+        )
+
     def test_disable_all_refreshes_existing_modded_output_to_vanilla(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
@@ -3187,8 +3294,31 @@ class NonRuntimeSourceExclusionTests(unittest.TestCase):
 
     def test_xcf_and_bak_are_both_excluded(self):
         self.assertEqual(
-            exporter.NON_RUNTIME_SOURCE_SUFFIXES, {".bak", ".xcf"}
+            exporter.NON_RUNTIME_SOURCE_SUFFIXES,
+            {".bak", ".xcf", ".jbf", ".pngoriginal"},
         )
+
+    def test_build_leftovers_b196_installed_are_excluded(self):
+        """B196 installed 35 files into the game folder that nothing reads.
+
+        Images/pspbrwse.jbf (a 568,926-byte Paint Shop Pro thumbnail cache),
+        Assets/PkgInfo (a macOS bundle marker) and 33
+        Images/Furniture/Invisible*.pngORIGINAL build-side backups. None of the
+        three names appears in any of B196's 32 executables; the generator
+        reads .pngORIGINAL from the BUILD to make the Transparent set, which is
+        what the patcher installs.
+        """
+        for rel, expected in (
+            (Path("Images/pspbrwse.jbf"), True),
+            (Path("Images/Furniture/pspbrwse.JBF"), True),
+            (Path("Assets/PkgInfo"), True),
+            (Path("Images/Furniture/InvisibleHammock.pngORIGINAL"), True),
+            (Path("Images/Furniture/InvisibleHammock.png"), False),
+            (Path("Assets/InvisibleHammock.png.fmap"), False),
+            (Path("OptionalVisualMods/Invisible Furniture - Transparent/InvisibleHammock.png"), False),
+        ):
+            with self.subTest(path=str(rel)):
+                self.assertEqual(exporter.is_non_runtime_source_path(rel), expected)
 
     def test_nested_upgrade_source_folders_are_excluded(self):
         """The two working folders inside Images/Upgrades are not runtime art.
@@ -3224,7 +3354,10 @@ class NonRuntimeSourceExclusionTests(unittest.TestCase):
             drop_a = build / "Images" / "Upgrades" / "invisible images" / "toolwall.png"
             drop_b = build / "Images" / "Upgrades" / "original images" / "toolwall.png"
             drop_c = build / "Images" / "Furniture" / "BlackBookshelf.xcf"
-            for path in (keep, drop_a, drop_b, drop_c):
+            drop_d = build / "Images" / "pspbrwse.jbf"
+            drop_e = build / "Assets" / "PkgInfo"
+            drop_f = build / "Images" / "Furniture" / "InvisibleHammock.pngORIGINAL"
+            for path in (keep, drop_a, drop_b, drop_c, drop_d, drop_e, drop_f):
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_bytes(b"x")
             found = {
@@ -3236,6 +3369,9 @@ class NonRuntimeSourceExclusionTests(unittest.TestCase):
             "Images/Upgrades/invisible images/toolwall.png",
             "Images/Upgrades/original images/toolwall.png",
             "Images/Furniture/BlackBookshelf.xcf",
+            "Images/pspbrwse.jbf",
+            "Assets/PkgInfo",
+            "Images/Furniture/InvisibleHammock.pngORIGINAL",
         ):
             self.assertNotIn(excluded, found)
 
