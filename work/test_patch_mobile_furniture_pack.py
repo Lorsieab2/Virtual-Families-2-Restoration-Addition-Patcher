@@ -7754,7 +7754,7 @@ class SpontaneousBehaviorContractTests(unittest.TestCase):
                     helper,
                 )
                 self.assertIn(
-                    "EnableAutonomousCandidateWithWeight(data, 0x189, 450); // UseCouch / sit-down, native couch+age gates retained",
+                    "EnableAutonomousCandidateWithWeight(data, 0x189, 450); // UseCouch / sit-down",
                     helper,
                 )
                 # RestingBody is autonomous under Behavior Patches alone, so
@@ -7931,7 +7931,11 @@ class SpontaneousBehaviorContractTests(unittest.TestCase):
                 self.assertIn(
                     "VF2SetGatedCandidate(playhouse, daytimeAllowsPlayhouse, 3000, resetWeights);",
                     helper)
-                self.assertIn("EnableAutonomousCandidateWithWeight(data, 0x189, 450); // UseCouch / sit-down, native couch+age gates retained", helper)
+                self.assertIn("EnableAutonomousCandidateWithWeight(data, 0x189, 450); // UseCouch / sit-down", helper)
+                # SUPERSEDED: the row claimed "native couch+age gates retained";
+                # stock InitAI has no case for 0x189, so the couch object is
+                # required explicitly (test_autonomy_required_objects.py).
+                self.assertIn("RequireAutonomousCandidateObject(data, 0x189, 0x5A);", helper)
                 actions = " ".join(manifest["spontaneous_behaviors"]["actions"])
                 self.assertIn("playing quietly at kids table", actions)
                 self.assertIn("non-adults", actions)
