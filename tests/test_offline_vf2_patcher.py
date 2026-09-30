@@ -556,6 +556,229 @@ class OfflineVF2PatcherTests(unittest.TestCase):
             write_icon_resources.assert_called_once()
             self.assertEqual(existing_exe.read_bytes(), b"FLAG\x01DATA|stock-icons")
 
+    def real_icon_overlay_fixture(self, tmp_path):
+        """Vanilla EXE with a real icon, two overlay payloads, and a toggle in .reloc.
+
+        Unlike stock_icon_manifest_fixture nothing is mocked: apply runs the
+        real Windows resource rewrite, which inserts .rsrc ahead of .reloc
+        exactly as it does on the shipped payloads, so the produced EXE is
+        never a raw payload hash and the .reloc toggle moves.
+        """
+
+        def two_section_pe(marker):
+            data = bytearray(resource_capable_pe_bytes())
+            coff = 0x84
+            struct.pack_into("<H", data, coff + 2, 2)
+            opt = coff + 20
+            struct.pack_into("<I", data, opt + 56, 0x3000)
+            reloc = opt + 0xE0 + 40
+            data[reloc:reloc + 8] = b".reloc\0\0"
+            struct.pack_into("<IIII", data, reloc + 8, 0x10, 0x2000, 0x200, 0x400)
+            struct.pack_into("<I", data, reloc + 36, 0x42000040)
+            data += bytes(0x200)
+            data[0x201] = marker
+            return bytes(data)
+
+        game_dir = tmp_path / "game"
+        game_dir.mkdir()
+        vanilla = game_dir / "Virtual Families 2.exe"
+        vanilla.write_bytes(two_section_pe(0))
+        patcher_mod._update_executable_icon_resources(vanilla, real_shell_icon_resources())
+        vanilla_data = vanilla.read_bytes()
+        output_name = "Virtual Families 2 - Modded BIcon.exe"
+        payloads = {
+            ("core_executable",): two_section_pe(1),
+            ("core_executable", "cheat_upgrades"): two_section_pe(2),
+        }
+        records = []
+        variants = []
+        for index, (requires, data) in enumerate(payloads.items()):
+            source = tmp_path / "payload" / f"payload{index}.exe"
+            source.parent.mkdir(exist_ok=True)
+            source.write_bytes(data)
+            records.append(
+                {
+                    "file_path": vanilla.name,
+                    "output_file_path": output_name,
+                    "source_path": f"payload/{source.name}",
+                    "source_sha256": sha256_bytes(data),
+                    "source_size": len(data),
+                    "expected_target_sha256": sha256_bytes(vanilla_data),
+                    "expected_target_size": len(vanilla_data),
+                    "overwrite_existing": True,
+                    "requires": list(requires),
+                }
+            )
+            variants.append(
+                {
+                    "asset_sha256": sha256_bytes(data),
+                    "offset": "0x405",
+                    "expected_asset_bytes": "00",
+                    "replacement_bytes": "01",
+                }
+            )
+        manifest_data = {
+            "manifest_version": 1,
+            "name": "real icon overlay reconfigure test",
+            "output": {
+                "default_folder_name": "VF2-BIcon-Modded",
+                "default_exe_name": output_name,
+                "preserve_stock_exe_icon": True,
+            },
+            "settings": [
+                {"id": "core_executable", "label": "Core", "default": True},
+                {"id": "cheat_upgrades", "label": "Cheat", "default": False, "category": "optional"},
+                {"id": "reloc_toggle", "label": "Toggle", "default": False, "category": "optional"},
+            ],
+            "target_files": [
+                {"path": vanilla.name, "sha256": sha256_bytes(vanilla_data), "size": len(vanilla_data)}
+            ],
+            "asset_patches": records,
+            "post_asset_patches": [
+                {
+                    "file_path": output_name,
+                    "requires": ["core_executable", "reloc_toggle"],
+                    "note": "Toggle a byte in the section the icon rewrite moves.",
+                    "variants": variants,
+                }
+            ],
+        }
+        manifest = tmp_path / "manifest.json"
+        manifest.write_text(json.dumps(manifest_data, indent=2), encoding="utf-8")
+        return game_dir, manifest, output_name
+
+    @unittest.skipUnless(sys.platform == "win32", "Windows resource APIs are required")
+    def test_reconfigure_accepts_real_icon_preserved_output_and_matches_fresh_apply(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            game_dir, manifest, output_name = self.real_icon_overlay_fixture(tmp_path)
+
+            def fresh(folder, *selection):
+                self.run_patcher(
+                    "apply", "--game-dir", str(game_dir), "--output-dir", str(tmp_path / folder),
+                    "--manifest", str(manifest), *selection,
+                )
+                return (tmp_path / folder / output_name).read_bytes()
+
+            modded = tmp_path / "VF2-BIcon-Modded"
+            first = fresh(modded.name, "--enable", "reloc_toggle")
+            payload_hashes = {
+                patcher_mod.sha256_file(path) for path in (tmp_path / "payload").glob("*.exe")
+            }
+            # The icon rewrite really did change the file, so only the
+            # icon-aware identity check can accept it.
+            self.assertNotIn(sha256_bytes(first), payload_hashes)
+            self.assertGreater(len(first), len((tmp_path / "payload" / "payload0.exe").read_bytes()))
+
+            for selection in (
+                ("--enable", "cheat_upgrades", "--enable", "reloc_toggle"),
+                ("--enable", "cheat_upgrades"),
+                (),
+                ("--enable", "reloc_toggle"),
+            ):
+                self.run_patcher("apply", "--output-dir", str(modded), "--manifest", str(manifest), *selection)
+                expected = fresh(f"fresh-{len(list(tmp_path.iterdir()))}", *selection)
+                self.assertEqual((modded / output_name).read_bytes(), expected, selection)
+
+            tampered = bytearray((modded / output_name).read_bytes())
+            tampered[0x201] ^= 0xFF
+            (modded / output_name).write_bytes(bytes(tampered))
+            result = self.run_patcher(
+                "apply", "--output-dir", str(modded), "--manifest", str(manifest), expect=2,
+            )
+            self.assertIn("unknown current SHA-256", result.stdout + result.stderr)
+            self.assertEqual((modded / output_name).read_bytes(), bytes(tampered))
+
+    @unittest.skipUnless(sys.platform == "win32", "Windows resource APIs are required")
+    def test_executable_off_skips_stock_icon_preservation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            game_dir, manifest, output_name = self.real_icon_overlay_fixture(tmp_path)
+            vanilla = (game_dir / "Virtual Families 2.exe").read_bytes()
+            output_dir = tmp_path / "VF2-BIcon-Modded"
+            with mock.patch.object(patcher_mod, "read_executable_icon_resources") as read_icons:
+                args = patcher_mod.build_parser().parse_args(
+                    [
+                        "apply", "--game-dir", str(game_dir), "--output-dir", str(output_dir),
+                        "--manifest", str(manifest), "--disable-all",
+                    ]
+                )
+                args.progress_callback = lambda _message: None
+                patcher_mod.apply_manifest(args)
+            read_icons.assert_not_called()
+            # The vanilla EXE is carried over untouched under the modded name,
+            # so it keeps its own stock icon.
+            self.assertEqual((output_dir / output_name).read_bytes(), vanilla)
+            self.assertFalse((output_dir / "Virtual Families 2.exe").exists())
+
+    @unittest.skipUnless(sys.platform == "win32", "Windows resource APIs are required")
+    def test_executable_off_never_carries_a_stale_modded_exe_from_the_game_folder(self):
+        # An earlier in-place apply leaves a modded EXE under the output name
+        # beside the vanilla one.  With the executable off the output must be
+        # the vanilla EXE renamed, never that stale build.
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            game_dir, manifest, output_name = self.real_icon_overlay_fixture(tmp_path)
+            vanilla = (game_dir / "Virtual Families 2.exe").read_bytes()
+            (game_dir / output_name.lower()).write_bytes(b"stale modded build")
+            output_dir = tmp_path / "VF2-BIcon-Modded"
+            self.run_patcher(
+                "apply", "--game-dir", str(game_dir), "--output-dir", str(output_dir),
+                "--manifest", str(manifest), "--disable-all",
+            )
+            exes = sorted(path.name.lower() for path in output_dir.glob("*.exe"))
+            self.assertEqual(exes, [output_name.lower()])
+            self.assertEqual((output_dir / output_name).read_bytes(), vanilla)
+            self.assertEqual((game_dir / output_name).read_bytes(), b"stale modded build")
+
+    @unittest.skipUnless(sys.platform == "win32", "Windows resource APIs are required")
+    def test_executable_off_in_place_still_fails_icon_preservation(self):
+        # In place (output folder == game folder) nothing renames the EXE, so
+        # skipping preservation would report success with no modded EXE.
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            game_dir, manifest, output_name = self.real_icon_overlay_fixture(tmp_path)
+            art = tmp_path / "payload" / "art.png"
+            art.write_bytes(b"loose art")
+            data = json.loads(manifest.read_text(encoding="utf-8"))
+            data["settings"].append({"id": "loose_art", "label": "Art", "default": True})
+            data["asset_patches"].append(
+                {
+                    "file_path": "Images/art.png",
+                    "source_path": "payload/art.png",
+                    "source_sha256": sha256_bytes(b"loose art"),
+                    "source_size": len(b"loose art"),
+                    "allow_missing_target": True,
+                    "requires": ["loose_art"],
+                }
+            )
+            manifest.write_text(json.dumps(data), encoding="utf-8")
+            vanilla = (game_dir / "Virtual Families 2.exe").read_bytes()
+            result = self.run_patcher(
+                "apply", "--game-dir", str(game_dir), "--output-dir", str(game_dir),
+                "--manifest", str(manifest), "--disable", "core_executable", expect=2,
+            )
+            self.assertIn("no active executable replacement", result.stdout + result.stderr)
+            self.assertEqual((game_dir / "Virtual Families 2.exe").read_bytes(), vanilla)
+            self.assertFalse((game_dir / output_name).exists())
+            self.assertFalse((game_dir / "Images" / "art.png").exists())
+
+    @unittest.skipUnless(sys.platform == "win32", "Windows resource APIs are required")
+    def test_icon_preservation_still_fails_when_an_exe_replacement_writes_another_name(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            game_dir, manifest, _output_name = self.real_icon_overlay_fixture(tmp_path)
+            data = json.loads(manifest.read_text(encoding="utf-8"))
+            for record in data["asset_patches"]:
+                record["output_file_path"] = "Some Other Name.exe"
+            data["post_asset_patches"] = []
+            manifest.write_text(json.dumps(data), encoding="utf-8")
+            result = self.run_patcher(
+                "apply", "--game-dir", str(game_dir), "--output-dir", str(tmp_path / "VF2-BIcon-Modded"),
+                "--manifest", str(manifest), "--dry-run", expect=2,
+            )
+            self.assertIn("no active executable replacement", result.stdout + result.stderr)
+
     def assert_post_asset_validation_failure(self, variants_factory, expected_error):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
@@ -655,6 +878,53 @@ class OfflineVF2PatcherTests(unittest.TestCase):
             self.run_patcher("restore", "--backup-dir", str(backup))
             self.assertEqual(game_file.read_bytes(), original)
             self.assertTrue((backup / "restore_log.json").is_file())
+
+    def test_an_existing_backup_folder_gets_a_fresh_subfolder_per_run(self):
+        """A Backup folder chosen with Browse always exists already.
+
+        create_backup refuses to reuse a folder, so before this every run with
+        a browsed Backup folder failed, and so did a second run into the same
+        new folder. An existing folder now receives a per-run subfolder; a new
+        path is still used exactly as given.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            game_dir = tmp_path / "game"
+            game_dir.mkdir()
+            game_file = game_dir / "Virtual Families 2.exe"
+            original = bytes([1, 2, 3, 4, 5, 6])
+            game_file.write_bytes(original)
+            manifest = tmp_path / "patch.json"
+            self.write_manifest(manifest, game_file, original)
+            chosen = tmp_path / "My Backups"
+            chosen.mkdir()
+
+            self.run_patcher(
+                "apply", "--game-dir", str(game_dir), "--manifest", str(manifest),
+                "--backup-dir", str(chosen),
+            )
+            runs = [p for p in chosen.iterdir() if p.is_dir()]
+            self.assertEqual(len(runs), 1)
+            self.assertTrue((runs[0] / "vf2_patch_backup_manifest.json").is_file())
+            self.assertEqual(game_file.read_bytes(), bytes([1, 2, 0xAA, 0xBB, 5, 6]))
+
+            self.run_patcher("restore", "--backup-dir", str(runs[0]))
+            self.assertEqual(game_file.read_bytes(), original)
+
+            self.run_patcher(
+                "apply", "--game-dir", str(game_dir), "--manifest", str(manifest),
+                "--backup-dir", str(chosen),
+            )
+            self.assertEqual(len([p for p in chosen.iterdir() if p.is_dir()]), 2)
+
+            fresh = tmp_path / "fresh-backup"
+            self.run_patcher("restore", "--backup-dir", str(sorted(
+                p for p in chosen.iterdir() if p.is_dir())[-1]))
+            self.run_patcher(
+                "apply", "--game-dir", str(game_dir), "--manifest", str(manifest),
+                "--backup-dir", str(fresh),
+            )
+            self.assertTrue((fresh / "vf2_patch_backup_manifest.json").is_file())
 
     def test_restore_refuses_tampered_backup_before_mutation(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -2641,6 +2911,211 @@ class OfflineVF2PatcherTests(unittest.TestCase):
             )
             self.assertFalse(target.exists())
 
+    def reconfigure_layer_fixture(self, tmp_path, settings, records):
+        """A modded folder plus a manifest whose records share output paths.
+
+        records: dicts with "path", "bytes", "requires" and optional
+        "restore" (bytes), "restore_requires", "remove", "overwrite".
+        """
+        modded = tmp_path / "VF2-BUnit-Modded"
+        (modded / ".vf2_patch_backups").mkdir(parents=True)
+        (modded / "Virtual Families 2 - Modded BUnit.exe").write_bytes(b"modded exe")
+        rows = []
+        for index, spec in enumerate(records):
+            source = tmp_path / "payload" / f"source{index}.bin"
+            source.parent.mkdir(exist_ok=True)
+            source.write_bytes(spec["bytes"])
+            row = {
+                "file_path": spec["path"],
+                "source_path": f"payload/{source.name}",
+                "source_sha256": sha256_bytes(spec["bytes"]),
+                "source_size": len(spec["bytes"]),
+                "requires": spec["requires"],
+            }
+            if spec.get("overwrite"):
+                row["overwrite_existing"] = True
+            if spec.get("remove"):
+                row["remove_when_disabled"] = True
+            if "restore" in spec:
+                restore = tmp_path / "payload" / f"restore{index}.bin"
+                restore.write_bytes(spec["restore"])
+                row["restore_source_path"] = f"payload/{restore.name}"
+                row["restore_source_sha256"] = sha256_bytes(spec["restore"])
+                row["restore_source_size"] = len(spec["restore"])
+            if "restore_requires" in spec:
+                row["restore_requires"] = spec["restore_requires"]
+            rows.append(row)
+        manifest = tmp_path / "manifest.json"
+        manifest.write_text(
+            json.dumps(
+                {
+                    "manifest_version": 1,
+                    "output": {
+                        "default_folder_name": modded.name,
+                        "default_exe_name": "Virtual Families 2 - Modded BUnit.exe",
+                    },
+                    "settings": [{"id": key, "default": value} for key, value in settings.items()],
+                    "asset_patches": rows,
+                },
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        return modded, manifest
+
+    def reconfigure(self, modded, manifest, *selection, expect=0):
+        return self.run_patcher(
+            "apply", "--output-dir", str(modded), "--manifest", str(manifest), *selection, expect=expect
+        )
+
+    def test_reconfigure_keeps_a_selected_writer_over_another_records_restore(self):
+        # Shipped shape of Images/collectables_small.png: Holiday Ornaments
+        # writes it (and was marked remove-when-disabled although the base game
+        # has the file); Glowing Collectibles also writes it and restores the
+        # vanilla image.  Every combination must match what a fresh apply with
+        # that selection writes, and none may fail as a "duplicate".
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            path = "Images/collectables_small.png"
+            modded, manifest = self.reconfigure_layer_fixture(
+                tmp_path,
+                {"holiday_ornaments_collection": False, "glowing_collectibles": False},
+                [
+                    {"path": path, "bytes": b"ornaments", "requires": ["holiday_ornaments_collection"],
+                     "overwrite": True, "remove": True},
+                    {"path": path, "bytes": b"glowing", "requires": ["glowing_collectibles"],
+                     "overwrite": True, "restore": b"vanilla"},
+                ],
+            )
+            target = modded / "Images" / "collectables_small.png"
+            target.parent.mkdir(parents=True)
+            target.write_bytes(b"vanilla")
+
+            self.reconfigure(modded, manifest, "--enable", "holiday_ornaments_collection,glowing_collectibles")
+            self.assertEqual(target.read_bytes(), b"glowing")
+            self.reconfigure(modded, manifest, "--enable", "holiday_ornaments_collection")
+            self.assertEqual(target.read_bytes(), b"ornaments")
+            self.reconfigure(modded, manifest)
+            self.assertEqual(target.read_bytes(), b"vanilla")
+            self.reconfigure(modded, manifest, "--enable", "glowing_collectibles")
+            self.assertEqual(target.read_bytes(), b"glowing")
+            self.reconfigure(modded, manifest, "--enable", "holiday_ornaments_collection")
+            self.assertEqual(target.read_bytes(), b"ornaments")
+
+    def test_reconfigure_agreeing_restores_apply_once_and_disagreeing_ones_fail_closed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            path = "Images/Upgrades/superFridge_NW.png"
+            modded, manifest = self.reconfigure_layer_fixture(
+                tmp_path,
+                {"invisible_upgrades_graphics": True, "misc_graphics_fixes": True},
+                [
+                    {"path": path, "bytes": b"invisible", "requires": ["invisible_upgrades_graphics"],
+                     "overwrite": True, "restore": b"vanilla"},
+                    {"path": path, "bytes": b"fixed", "requires": ["misc_graphics_fixes"],
+                     "overwrite": True, "restore": b"vanilla"},
+                ],
+            )
+            target = modded / "Images" / "Upgrades" / "superFridge_NW.png"
+            target.parent.mkdir(parents=True)
+            target.write_bytes(b"fixed")
+            self.reconfigure(modded, manifest, "--disable", "invisible_upgrades_graphics")
+            self.assertEqual(target.read_bytes(), b"fixed")
+            self.reconfigure(modded, manifest, "--disable", "invisible_upgrades_graphics,misc_graphics_fixes")
+            self.assertEqual(target.read_bytes(), b"vanilla")
+
+            data = json.loads(manifest.read_text(encoding="utf-8"))
+            other = tmp_path / "payload" / "other.bin"
+            other.write_bytes(b"not vanilla")
+            data["asset_patches"][1]["restore_source_path"] = "payload/other.bin"
+            data["asset_patches"][1]["restore_source_sha256"] = sha256_bytes(b"not vanilla")
+            data["asset_patches"][1]["restore_source_size"] = len(b"not vanilla")
+            manifest.write_text(json.dumps(data), encoding="utf-8")
+            result = self.reconfigure(
+                modded, manifest, "--disable", "invisible_upgrades_graphics,misc_graphics_fixes", expect=2
+            )
+            self.assertIn("Conflicting restore sources", result.stdout + result.stderr)
+            self.assertEqual(target.read_bytes(), b"vanilla")
+
+    def test_reconfigure_reruns_and_unticks_cheat_icons_in_the_shipped_shape(self):
+        # The shipped Cheat Upgrades icon records carry no overwrite_existing,
+        # unlike the older fixture above, and the No AI layer sits on top.
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            path = "Images/cheat_clean_garden.png"
+            modded, manifest = self.reconfigure_layer_fixture(
+                tmp_path,
+                {"core_executable": True, "cheat_upgrades": True, "no_ai_icons": True},
+                [
+                    {"path": path, "bytes": b"cheat icon", "requires": ["core_executable", "cheat_upgrades"],
+                     "remove": True},
+                    {"path": path, "bytes": b"no ai icon",
+                     "requires": ["core_executable", "cheat_upgrades", "no_ai_icons"], "overwrite": True,
+                     "restore": b"cheat icon", "restore_requires": ["core_executable", "cheat_upgrades"]},
+                ],
+            )
+            target = modded / "Images" / "cheat_clean_garden.png"
+            self.reconfigure(modded, manifest)
+            self.assertEqual(target.read_bytes(), b"no ai icon")
+            self.reconfigure(modded, manifest)
+            self.assertEqual(target.read_bytes(), b"no ai icon")
+            self.reconfigure(modded, manifest, "--disable", "no_ai_icons")
+            self.assertEqual(target.read_bytes(), b"cheat icon")
+            self.reconfigure(modded, manifest)
+            self.assertEqual(target.read_bytes(), b"no ai icon")
+            # Cheat Upgrades off while the No AI layer is showing.
+            self.reconfigure(modded, manifest, "--disable", "cheat_upgrades")
+            self.assertFalse(target.exists())
+            self.reconfigure(modded, manifest)
+            self.assertEqual(target.read_bytes(), b"no ai icon")
+
+            # Content no record wrote is still refused, both ways.
+            target.write_bytes(b"player-customized")
+            result = self.reconfigure(modded, manifest, "--disable", "cheat_upgrades", expect=2)
+            self.assertIn("Refusing removal", result.stdout + result.stderr)
+            self.assertEqual(target.read_bytes(), b"player-customized")
+            result = self.reconfigure(modded, manifest, "--disable", "no_ai_icons", expect=2)
+            self.assertIn("without an expected_target_sha256 or overwrite_existing=true", result.stdout + result.stderr)
+            self.assertEqual(target.read_bytes(), b"player-customized")
+
+    def test_reconfigure_known_hashes_are_per_path_and_removal_rechecks_the_validated_bytes(self):
+        # A hash the manifest writes at ANOTHER path does not authenticate a
+        # file here, and a file that changes between validation and removal
+        # is refused rather than deleted.
+        with tempfile.TemporaryDirectory() as tmp:
+            modded, manifest = self.reconfigure_layer_fixture(
+                Path(tmp),
+                {"core_executable": True, "x": True},
+                [
+                    {"path": "Images/a.png", "bytes": b"art a", "requires": ["x"], "remove": True},
+                    {"path": "Images/b.png", "bytes": b"art b", "requires": ["x"], "remove": True},
+                ],
+            )
+            self.reconfigure(modded, manifest)
+            a = modded / "Images" / "a.png"
+            b = modded / "Images" / "b.png"
+            a.write_bytes(b"art b")
+            result = self.reconfigure(modded, manifest, "--disable", "x", expect=2)
+            self.assertRegex(result.stdout + result.stderr, r"Refusing removal of Images[\\/]a\.png")
+            self.assertEqual((a.read_bytes(), b.read_bytes()), (b"art b", b"art b"))
+
+            a.write_bytes(b"art a")
+            real_backup = patcher_mod.create_backup
+
+            def backup_then_player_edit(*args, **kwargs):
+                manifest_out = real_backup(*args, **kwargs)
+                a.write_bytes(b"edited after validation")
+                return manifest_out
+
+            with mock.patch.object(patcher_mod, "create_backup", side_effect=backup_then_player_edit):
+                with self.assertRaisesRegex(patcher_mod.PatchError, "target SHA-256 changed"):
+                    patcher_mod.apply_manifest(
+                        patcher_mod.build_parser().parse_args(
+                            ["apply", "--output-dir", str(modded), "--manifest", str(manifest), "--disable", "x"]
+                        )
+                    )
+            self.assertEqual(a.read_bytes(), b"edited after validation")
+
     def test_output_only_removes_hash_authenticated_overlay_asset_and_refuses_unknown_hash(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
@@ -3468,6 +3943,168 @@ class OfflineVF2PatcherTests(unittest.TestCase):
             self.assertEqual(game_file.read_bytes(), bytes([1, 0x99, 3, 4]))
 
 
+def dependency_manifest():
+    """The B196 record shape in miniature, plus the #390 Bathroom 2 gating.
+
+    Settings, and which of them each record requires, are copied from the
+    shipped B196 manifest: No AI Icons records also require Cheat Upgrades and
+    the executable; Holiday Ornaments has executable variants AND an image that
+    needs nothing else; Text fixes and the core-assets row gate no record.
+    """
+    def asset(path, *requires):
+        return {"file_path": path, "source_path": "payload/x", "source_sha256": "0" * 64, "requires": list(requires)}
+
+    ids = [
+        "core_executable", "cheat_upgrades", "no_ai_icons", "holiday_ornaments_collection",
+        "mobile_renovations", "ai_generated_bathroom2_renovations", "text_fixes", "core_assets",
+        "invisible_furniture_visible_graphics", "invisible_furniture_transparent_graphics",
+    ]
+    return {
+        "manifest_version": 1,
+        "settings": [{"id": setting_id, "label": setting_id.replace("_", " ").title(), "default": True} for setting_id in ids],
+        "asset_patches": [
+            asset("Virtual Families 2.exe", "core_executable"),
+            asset("Virtual Families 2.exe", "core_executable", "cheat_upgrades"),
+            asset("Virtual Families 2.exe", "core_executable", "holiday_ornaments_collection"),
+            asset("Virtual Families 2.exe", "core_executable", "mobile_renovations"),
+            asset("Images/cheat_fill.png", "core_executable", "cheat_upgrades"),
+            asset("Images/cheat_fill_no_ai.png", "core_executable", "cheat_upgrades", "no_ai_icons"),
+            asset("Images/collectables_small.png", "holiday_ornaments_collection"),
+            asset("Images/AIGeneratedBathroom2/a.png", "core_executable", "ai_generated_bathroom2_renovations", "mobile_renovations"),
+            asset("Images/Furniture/InvisibleChair.png", "invisible_furniture_visible_graphics"),
+            asset("Images/Furniture/InvisibleChair.png", "invisible_furniture_visible_graphics", "invisible_furniture_transparent_graphics"),
+        ],
+        "export_summary": {"native_core_settings": ["text_fixes"]},
+    }
+
+
+class SettingDependencyTests(unittest.TestCase):
+    """Dependencies come from the records, and the log reports what took effect.
+
+    Measured on B196: with Cheat Upgrades unticked every No AI Icons record is
+    inactive, yet the log and the GUI's success popup listed No AI Icons as
+    enabled. Same for every setting needing the executable when it is off.
+    """
+
+    def setUp(self):
+        self.manifest = dependency_manifest()
+        self.settings = patcher_mod.manifest_settings(self.manifest)
+
+    def test_prerequisites_are_derived_from_the_records(self):
+        deps = patcher_mod.setting_dependencies(self.manifest, self.settings)
+        self.assertEqual(deps["no_ai_icons"], frozenset({"core_executable", "cheat_upgrades"}))
+        self.assertEqual(deps["cheat_upgrades"], frozenset({"core_executable"}))
+        self.assertEqual(
+            deps["ai_generated_bathroom2_renovations"], frozenset({"core_executable", "mobile_renovations"})
+        )
+        self.assertEqual(
+            deps["invisible_furniture_transparent_graphics"], frozenset({"invisible_furniture_visible_graphics"})
+        )
+        # One ornament record needs nothing else, so the executable is not a prerequisite.
+        self.assertEqual(deps["holiday_ornaments_collection"], frozenset())
+        self.assertEqual(deps["core_executable"], frozenset())
+        self.assertEqual(deps["text_fixes"], frozenset({"core_executable"}))
+        self.assertEqual(deps["core_assets"], frozenset())
+
+    def test_zero_record_settings_are_informational(self):
+        self.assertEqual(
+            patcher_mod.informational_settings(self.manifest, self.settings),
+            {"text_fixes": frozenset({"core_executable"}), "core_assets": frozenset()},
+        )
+        empty = {"settings": self.manifest["settings"]}
+        self.assertEqual(patcher_mod.informational_settings(empty, patcher_mod.manifest_settings(empty)), {})
+
+    def test_report_lists_a_setting_as_enabled_only_when_a_record_took_effect(self):
+        selected = set(self.settings) - {"cheat_upgrades"}
+        report = patcher_mod.effective_settings_report(self.manifest, self.settings, selected)
+        self.assertNotIn("no_ai_icons", report["enabled"])
+        self.assertEqual(report["inactive"]["no_ai_icons"], "selected but inactive: requires cheat_upgrades")
+        self.assertIn("holiday_ornaments_collection", report["enabled"])
+        self.assertIn("text_fixes", report["enabled"])
+
+        selected = set(self.settings) - {"core_executable"}
+        report = patcher_mod.effective_settings_report(self.manifest, self.settings, selected)
+        for setting_id in ("cheat_upgrades", "no_ai_icons", "ai_generated_bathroom2_renovations", "text_fixes"):
+            with self.subTest(setting=setting_id):
+                self.assertNotIn(setting_id, report["enabled"])
+                self.assertIn("requires core_executable", report["inactive"][setting_id])
+        self.assertIn("holiday_ornaments_collection", report["enabled"])
+        self.assertIn("core_assets", report["enabled"])
+
+        selected = set(self.settings) - {"mobile_renovations"}
+        report = patcher_mod.effective_settings_report(self.manifest, self.settings, selected)
+        self.assertEqual(
+            report["inactive"]["ai_generated_bathroom2_renovations"],
+            "selected but inactive: requires mobile_renovations",
+        )
+
+        log = patcher_mod.settings_log(self.settings, selected, report)
+        self.assertNotIn("ai_generated_bathroom2_renovations", log["enabled"])
+        self.assertNotIn("ai_generated_bathroom2_renovations", log["disabled"])
+        self.assertIn("ai_generated_bathroom2_renovations", log["selected_but_inactive"])
+        row = next(r for r in log["available"] if r["id"] == "ai_generated_bathroom2_renovations")
+        self.assertFalse(row["enabled"])
+        self.assertTrue(row["selected"])
+        row = next(r for r in log["available"] if r["id"] == "text_fixes")
+        self.assertFalse(row["selectable"])
+        self.assertIn("built into the patched executable", row["informational"])
+
+    def test_settings_log_without_a_report_is_unchanged(self):
+        log = patcher_mod.settings_log(self.settings, {"cheat_upgrades"})
+        self.assertEqual(log["enabled"], ["cheat_upgrades"])
+        self.assertNotIn("selected_but_inactive", log)
+
+    def test_dry_run_log_and_output_report_inactive_settings(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            game = tmp_path / "game"
+            game.mkdir()
+            exe = game / "Virtual Families 2.exe"
+            exe.write_bytes(b"vanilla exe")
+            payload = tmp_path / "payload"
+            payload.mkdir()
+            (payload / "icon.png").write_bytes(b"icon")
+            (payload / "noai.png").write_bytes(b"noai")
+            icon_sha = sha256_bytes(b"icon")
+            manifest = {
+                "manifest_version": 1,
+                "settings": [
+                    {"id": "cheat_upgrades", "label": "Cheat Upgrades", "default": True},
+                    {"id": "no_ai_icons", "label": "No AI Icons", "default": True},
+                    {"id": "text_fixes", "label": "Text fixes", "default": True},
+                    {"id": "holiday_furniture", "label": "Holiday furniture", "default": True},
+                ],
+                "target_files": [{"path": exe.name, "sha256": sha256_bytes(b"vanilla exe"), "size": 11}],
+                "asset_patches": [
+                    {"file_path": "Images/candy.png", "source_path": "payload/icon.png", "source_sha256": icon_sha,
+                     "allow_missing_target": True, "requires": ["holiday_furniture"]},
+                    {"file_path": "Images/cheat.png", "source_path": "payload/icon.png", "source_sha256": icon_sha,
+                     "allow_missing_target": True, "requires": ["cheat_upgrades"]},
+                    {"file_path": "Images/cheat_noai.png", "source_path": "payload/noai.png",
+                     "source_sha256": sha256_bytes(b"noai"), "allow_missing_target": True,
+                     "requires": ["cheat_upgrades", "no_ai_icons"]},
+                ],
+            }
+            manifest_path = tmp_path / "manifest.json"
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            log_path = tmp_path / "dry.json"
+            result = OfflineVF2PatcherTests.run_patcher(
+                self, "apply", "--game-dir", str(game), "--manifest", str(manifest_path),
+                "--dry-run", "--disable", "cheat_upgrades", "--disable", "text_fixes", "--log", str(log_path),
+            )
+            log = json.loads(log_path.read_text(encoding="utf-8"))["settings"]
+        self.assertNotIn("no_ai_icons", log["enabled"])
+        self.assertEqual(log["selected_but_inactive"], {"no_ai_icons": "selected but inactive: requires cheat_upgrades"})
+        self.assertIn("text_fixes", log["enabled"], "an informational setting cannot be switched off")
+        self.assertIn("Selected but inactive settings: no_ai_icons (selected but inactive: requires cheat_upgrades)", result.stdout)
+        self.assertIn("Always-on settings (cannot be switched off separately): text_fixes", result.stdout)
+        enabled_line = next(line for line in result.stdout.splitlines() if line.startswith("Enabled settings:"))
+        self.assertNotIn("no_ai_icons", enabled_line)
+
+    def run_patcher(self, *args, expect=0):
+        return OfflineVF2PatcherTests.run_patcher(self, *args, expect=expect)
+
+
 class ShippedRunnerPythonFloorTests(unittest.TestCase):
     """The shipped runners must run on the Python the README advertises.
 
@@ -3543,6 +4180,286 @@ class ShippedRunnerPythonFloorTests(unittest.TestCase):
                     [n for n in ast.walk(tree) if n.__class__.__name__ == "Match"],
                     f"{path} uses a match statement, which needs Python 3.10",
                 )
+
+
+class OutputAndRestoreSafetyTests(unittest.TestCase):
+    """The apply and restore paths must never write outside the modded output folder.
+
+    Measured on the shipped B196 engine: GUI Restore Backup restored a modded-output
+    backup into the vanilla install (overwriting it and deleting vanilla files the
+    backup recorded as absent); --output-dir pointed at a folder of personal files
+    moved them into a backup and repopulated it as a game, because the default
+    backup folder was created before the "recognized output folder" guard ran;
+    and a read-only vanilla file made the next refresh die with a traceback after
+    part of the output was already deleted, with no failure log.
+    """
+
+    EXE_NAME = "Virtual Families 2 - Modded Safety.exe"
+
+    def make_install(self, tmp_path):
+        game = tmp_path / "Virtual Families 2"
+        (game / "Images").mkdir(parents=True)
+        exe = game / "Virtual Families 2.exe"
+        exe.write_bytes(b"vanilla exe")
+        (game / "Images" / "a.png").write_bytes(b"vanilla a")
+        (game / "Images" / "b.png").write_bytes(b"vanilla b")
+        payload = tmp_path / "payload"
+        payload.mkdir()
+        (payload / "mod.exe").write_bytes(b"modded exe")
+        (payload / "a.png").write_bytes(b"modded a")
+        (payload / "c.png").write_bytes(b"new c")
+        manifest = {
+            "manifest_version": 1,
+            "name": "output safety",
+            "output": {"default_folder_name": "VF2-BSafety-Modded", "default_exe_name": self.EXE_NAME},
+            "settings": [{"id": "core_executable", "default": True}, {"id": "art", "default": True}],
+            "target_files": [{"path": exe.name, "sha256": sha256_bytes(b"vanilla exe"), "size": 11}],
+            "asset_patches": [
+                {
+                    "file_path": exe.name,
+                    "output_file_path": self.EXE_NAME,
+                    "source_path": "payload/mod.exe",
+                    "source_sha256": sha256_bytes(b"modded exe"),
+                    "expected_target_sha256": sha256_bytes(b"vanilla exe"),
+                    "overwrite_existing": True,
+                    "requires": ["core_executable"],
+                },
+                {
+                    "file_path": "Images/a.png",
+                    "source_path": "payload/a.png",
+                    "source_sha256": sha256_bytes(b"modded a"),
+                    "overwrite_existing": True,
+                    "requires": ["art"],
+                },
+                {
+                    "file_path": "Images/c.png",
+                    "source_path": "payload/c.png",
+                    "source_sha256": sha256_bytes(b"new c"),
+                    "allow_missing_target": True,
+                    "requires": ["art"],
+                },
+            ],
+        }
+        manifest_path = tmp_path / "manifest.json"
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+        return game, exe, manifest_path, tmp_path / "VF2-BSafety-Modded"
+
+    def apply(self, *extra, expect=0):
+        return OfflineVF2PatcherTests.run_patcher(self, "apply", *extra, expect=expect)
+
+    def run_patcher(self, *args, expect=0):
+        return OfflineVF2PatcherTests.run_patcher(self, *args, expect=expect)
+
+    @staticmethod
+    def snapshot(root):
+        return {
+            path.relative_to(root).as_posix(): path.read_bytes()
+            for path in sorted(root.rglob("*"))
+            if path.is_file()
+        }
+
+    @staticmethod
+    def unlock(root):
+        import os
+        import stat
+
+        for path in root.rglob("*"):
+            try:
+                os.chmod(path, stat.S_IWRITE | stat.S_IREAD)
+            except OSError:
+                pass
+
+    # --- D2: output folder guard runs before anything is written -------------
+
+    def test_unrecognized_output_dir_is_refused_before_the_backup_is_written(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            game, exe, manifest, _ = self.make_install(Path(tmp))
+            personal = Path(tmp) / "My Documents Stuff"
+            (personal / "photos").mkdir(parents=True)
+            (personal / "thesis.docx").write_bytes(b"precious")
+            (personal / "photos" / "p1.jpg").write_bytes(b"jpg")
+            before = self.snapshot(personal)
+
+            for dry in ((), ("--dry-run",)):
+                with self.subTest(dry_run=bool(dry)):
+                    result = self.apply(
+                        "--exe", str(exe), "--manifest", str(manifest), "--output-dir", str(personal), *dry,
+                        expect=2,
+                    )
+                    self.assertIn("not recognized as a VF2 modded output folder", result.stderr)
+                    self.assertEqual(self.snapshot(personal), before)
+                    self.assertEqual(sorted(p.name for p in personal.iterdir()), ["photos", "thesis.docx"])
+
+    def test_output_dir_inside_vanilla_folder_is_refused_before_anything_is_created(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            game, exe, manifest, _ = self.make_install(Path(tmp))
+            vanilla_before = self.snapshot(game)
+            inside = game / "modded_here"
+            result = self.apply(
+                "--exe", str(exe), "--manifest", str(manifest), "--output-dir", str(inside), expect=2
+            )
+            self.assertIn("not inside the vanilla game folder", result.stderr)
+            self.assertFalse(inside.exists())
+            self.assertEqual(self.snapshot(game), vanilla_before)
+
+    def test_recognized_and_empty_output_folders_still_refresh(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            game, exe, manifest, default_out = self.make_install(Path(tmp))
+            self.apply("--exe", str(exe), "--manifest", str(manifest))
+            (default_out / "stale.txt").write_bytes(b"left by an older build")
+            self.apply("--exe", str(exe), "--manifest", str(manifest))
+            self.assertFalse((default_out / "stale.txt").exists())
+            self.assertEqual((default_out / "Images" / "a.png").read_bytes(), b"modded a")
+
+            empty = Path(tmp) / "Chosen Empty Folder"
+            empty.mkdir()
+            self.apply("--exe", str(exe), "--manifest", str(manifest), "--output-dir", str(empty))
+            # Second run: the folder is now recognized by its own backup folder.
+            self.apply("--exe", str(exe), "--manifest", str(manifest), "--output-dir", str(empty))
+            self.assertEqual((empty / self.EXE_NAME).read_bytes(), b"modded exe")
+
+    # --- D3: read-only files and file errors ---------------------------------
+
+    def test_read_only_vanilla_file_does_not_break_the_next_refresh(self):
+        import os
+        import stat
+
+        with tempfile.TemporaryDirectory() as tmp:
+            game, exe, manifest, out = self.make_install(Path(tmp))
+            read_only = game / "Images" / "b.png"
+            os.chmod(read_only, stat.S_IREAD)
+            try:
+                self.apply("--exe", str(exe), "--manifest", str(manifest))
+                self.assertTrue(os.access(out / "Images" / "b.png", os.W_OK), "copy kept the read-only attribute")
+                self.apply("--exe", str(exe), "--manifest", str(manifest))
+                self.assertEqual((out / "Images" / "b.png").read_bytes(), b"vanilla b")
+                self.assertEqual((out / "Images" / "a.png").read_bytes(), b"modded a")
+                self.assertFalse(os.access(read_only, os.W_OK), "the vanilla file itself must be left alone")
+            finally:
+                os.chmod(read_only, stat.S_IWRITE | stat.S_IREAD)
+                self.unlock(out)
+
+    def test_read_only_files_already_in_the_output_are_replaced(self):
+        # An output folder built by B196 or earlier already carries read-only
+        # copies; the refresh must delete them and the backup must copy them.
+        import os
+        import stat
+
+        with tempfile.TemporaryDirectory() as tmp:
+            game, exe, manifest, out = self.make_install(Path(tmp))
+            self.apply("--exe", str(exe), "--manifest", str(manifest))
+            os.chmod(out / "Images" / "a.png", stat.S_IREAD)
+            os.chmod(out / "Images" / "b.png", stat.S_IREAD)
+            os.chmod(out / "Images", stat.S_IREAD)
+            try:
+                self.apply("--exe", str(exe), "--manifest", str(manifest))
+                self.assertEqual((out / "Images" / "a.png").read_bytes(), b"modded a")
+                self.assertTrue(os.access(out / "Images" / "b.png", os.W_OK))
+            finally:
+                self.unlock(out)
+
+    def test_remove_output_entry_deletes_read_only_tree(self):
+        import os
+        import stat
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tree = Path(tmp) / "Images"
+            (tree / "deep").mkdir(parents=True)
+            (tree / "deep" / "x.png").write_bytes(b"x")
+            (tree / "y.png").write_bytes(b"y")
+            single = Path(tmp) / "single.txt"
+            single.write_bytes(b"s")
+            for path in (tree / "deep" / "x.png", tree / "y.png", tree / "deep", single):
+                os.chmod(path, stat.S_IREAD)
+            try:
+                patcher_mod.remove_output_entry(tree)
+                patcher_mod.remove_output_entry(single)
+            finally:
+                self.unlock(Path(tmp))
+            self.assertFalse(tree.exists())
+            self.assertFalse(single.exists())
+
+    def test_os_error_during_apply_writes_failure_log_and_raises_patch_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            game, exe, manifest, out = self.make_install(Path(tmp))
+            args = patcher_mod.build_parser().parse_args(
+                ["apply", "--exe", str(exe), "--manifest", str(manifest)]
+            )
+            with mock.patch.object(
+                patcher_mod, "apply_asset_patches", side_effect=PermissionError(13, "Access is denied", "x.png")
+            ), mock.patch("sys.stdout"):
+                with self.assertRaises(patcher_mod.PatchError) as caught:
+                    patcher_mod.apply_manifest(args)
+            self.assertIn("Access is denied", str(caught.exception))
+            self.assertIsInstance(caught.exception.__cause__, PermissionError)
+            logs = list((out / patcher_mod.DEFAULT_BACKUP_ROOT).glob("*/patch_error_log.json"))
+            self.assertEqual(len(logs), 1)
+            failure = json.loads(logs[0].read_text(encoding="utf-8"))
+            self.assertEqual(failure["status"], "failure")
+            self.assertIn("Access is denied", failure["error"])
+
+    def test_os_error_before_backup_reaches_cli_as_clean_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            game, exe, manifest, out = self.make_install(Path(tmp))
+            with mock.patch.object(
+                patcher_mod, "verify_asset_patches", side_effect=PermissionError(13, "Access is denied", "a.png")
+            ), mock.patch("sys.stdout"), mock.patch("sys.stderr"):
+                code = patcher_mod.main(["apply", "--exe", str(exe), "--manifest", str(manifest)])
+            self.assertEqual(code, 2)
+            self.assertTrue((Path(tmp) / "patch_error_log.json").is_file())
+
+    # --- D1: restore goes back where the backup came from --------------------
+
+    def make_two_backups(self, tmp_path):
+        game, exe, manifest, out = self.make_install(tmp_path)
+        self.apply("--exe", str(exe), "--manifest", str(manifest))
+        (out / "Images" / "c.png").write_bytes(b"player tweak")
+        self.apply("--exe", str(exe), "--manifest", str(manifest))
+        backups = sorted((out / patcher_mod.DEFAULT_BACKUP_ROOT).iterdir())
+        self.assertEqual(len(backups), 2)
+        return game, out, backups
+
+    def test_restore_refuses_a_destination_the_backup_was_not_taken_from(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            game, out, backups = self.make_two_backups(Path(tmp))
+            vanilla_before = self.snapshot(game)
+            for backup in backups:
+                with self.subTest(backup=backup.name):
+                    result = self.run_patcher(
+                        "restore", "--backup-dir", str(backup), "--game-dir", str(game), expect=2
+                    )
+                    self.assertIn("taken from a different folder", result.stderr)
+                    self.assertEqual(self.snapshot(game), vanilla_before)
+                    with self.assertRaises(patcher_mod.PatchError):
+                        patcher_mod.restore_backup(
+                            patcher_mod.argparse.Namespace(backup_dir=str(backup), game_dir=str(game), log=None)
+                        )
+                    self.assertEqual(self.snapshot(game), vanilla_before)
+
+    def test_restore_defaults_to_and_accepts_the_recorded_folder(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            game, out, backups = self.make_two_backups(Path(tmp))
+            vanilla_before = self.snapshot(game)
+            self.run_patcher("restore", "--backup-dir", str(backups[1]))
+            self.assertEqual((out / "Images" / "c.png").read_bytes(), b"player tweak")
+            (out / "Images" / "c.png").write_bytes(b"changed again")
+            # Same folder spelled in a different case is the same folder on Windows.
+            self.run_patcher(
+                "restore", "--backup-dir", str(backups[1]), "--game-dir", str(out).upper()
+                if sys.platform == "win32" else str(out)
+            )
+            self.assertEqual((out / "Images" / "c.png").read_bytes(), b"player tweak")
+            self.assertEqual(self.snapshot(game), vanilla_before)
+
+    def test_restore_force_game_dir_allows_an_explicit_other_destination(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            game, out, backups = self.make_two_backups(Path(tmp))
+            elsewhere = Path(tmp) / "Copy Of Output"
+            elsewhere.mkdir()
+            self.run_patcher(
+                "restore", "--backup-dir", str(backups[1]), "--game-dir", str(elsewhere), "--force-game-dir"
+            )
+            self.assertEqual((elsewhere / "Images" / "c.png").read_bytes(), b"player tweak")
 
 
 if __name__ == "__main__":

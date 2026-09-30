@@ -66,7 +66,12 @@ class TestTheSettingsCountIsTheRealOne(unittest.TestCase):
         window = self._window()
         offered = int(re.search(r"(\d+) settings", window).group(1))
         defined = int(re.search(r"defines, which is\s*(\d+)", window).group(1))
-        unavailable = int(re.search(r"less (\d+) unavailable", window).group(1))
+        # "without packaged assets" since #382, which stopped calling a
+        # code-only feature (Same-Sex Marriage) "unavailable"; the older
+        # wording is still accepted so the sum stays checked either way.
+        unavailable = int(re.search(
+            r"less (\d+)\s+(?:unavailable|without packaged assets)", window
+        ).group(1))
         generated = int(re.search(r"plus (\d+) generated", window).group(1))
         self.assertEqual(
             defined - unavailable + generated,

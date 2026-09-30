@@ -190,48 +190,55 @@ class TheCaptionFollowsTheMachineTheVillagerIsAt(unittest.TestCase):
             'extern "C" void __cdecl %s(CVillager &villager)\n{' % name)
         return SOURCE[start:SOURCE.index('\nextern "C"', start)]
 
-    def test_both_treadmill_wrappers_use_their_own_probe(self):
-        """The probe decides, with nothing layered over it."""
-        for name in ("VF2RandomTreadmillWalkLabel", "VF2RandomTreadmillRunLabel"):
-            with self.subTest(wrapper=name):
-                body = self.wrapper_body(name)
-                # SUPERSEDED, recorded rather than deleted (AGENTS.md 11): this
-                # asserted VF2LinkedFurnitureItemIs, which is
-                # FindFurniture(0x04, feet) -- the same call the native
-                # behaviour makes. Faithful to the DONOR's choice, which is why
-                # it was adopted, but the donor's choice is a NEAREST MATCH, and
-                # nearest-to-feet is not "the machine this villager is on". The
-                # owner played that build, found "Using the exercise bike" on
-                # the Treadmill, and asked that ONLY the exercise bike carry
-                # those captions. The check now reads the item id from the
-                # placement record under the villager.
-                self.assertIn(
-                    "VF2VillagerIsStandingOnItem(\n        villager, "
-                    "__VF2_EXERCISE_BIKE_ITEM_ID__)", body,
-                    "%s no longer requires the villager to be ON the bike, so "
-                    "the bike's caption can land on a treadmill" % name)
-                self.assertIn("bool const onBike = bike;", body)
-                self.assertIn("if (!onBike) return;", body)
+    def test_both_treadmill_wrappers_are_pass_through(self):
+        """The stock treadmill behaviours keep their stock captions, always.
 
-    def test_the_probe_runs_before_the_native_behaviour(self):
-        """Timing is the whole point.
-
-        The native code samples FeetPos and commits the caption BEFORE
-        PlanToGo, so a probe taken after the behaviour returns would sample a
-        different moment. It must come first.
+        SUPERSEDED, recorded rather than deleted (AGENTS.md 11): this class
+        pinned VF2VillagerIsStandingOnItem(villager, bike), sampled BEFORE the
+        native behaviour, as the test for relabelling a stock treadmill action
+        with a bike caption. That reads where the villager stands NOW, not
+        where the stock behaviour sends them: a villager still on the bike who
+        then chose the stock WorkoutTreadmill walked to the Treadmill wearing
+        "Using the exercise bike". Once the bike had its own object (0x99) the
+        stock treadmill behaviours (object 0x04) could never route to it, so
+        any relabelling there could only mislabel -- the same conclusion that
+        made VF2RandomPooltableLabel pass-through.
         """
-        for name in ("VF2RandomTreadmillWalkLabel", "VF2RandomTreadmillRunLabel"):
+        for name, donor in (("VF2RandomTreadmillWalkLabel", "WorkoutTreadmill"),
+                            ("VF2RandomTreadmillRunLabel", "RunningOnTreadmill")):
             with self.subTest(wrapper=name):
                 body = self.wrapper_body(name)
-                # The timing property this guards is unchanged: the check must
-                # be taken BEFORE the native behaviour runs. Only the question
-                # changed -- from "which 0x04 placement is nearest" to "which
-                # item is this villager standing on".
-                self.assertLess(
-                    body.index("VF2VillagerIsStandingOnItem"),
-                    body.index("VF2RunNativeBehaviorAndChangedLabel"),
-                    "the check must be taken before the native behaviour runs, "
-                    "which is when the native code makes its own choice")
+                code = NL.join(
+                    line for line in body.splitlines()
+                    if not line.lstrip().startswith("//"))
+                self.assertIn(
+                    "VF2RunNativeBehaviorAndChangedLabel(villager, "
+                    "CBehavior::%s);" % donor, code,
+                    "%s no longer runs its stock donor" % name)
+                for forbidden in ("VF2ApplyVenueLabel", "exercise_bike",
+                                  "VF2VillagerIsStandingOnItem",
+                                  "VF2LinkedFurnitureItemIs",
+                                  "VF2CurrentLabelInGroup"):
+                    self.assertNotIn(
+                        forbidden, code,
+                        "%s relabels a stock treadmill action again (%s); a "
+                        "stock treadmill behaviour can only reach a Treadmill, "
+                        "so a bike caption there is always wrong"
+                        % (name, forbidden))
+
+    def test_bike_captions_come_only_from_the_bike_handlers(self):
+        """The only code that applies a bike caption is the bike's own."""
+        for group in ("kVF2BehaviorLabels_exercise_bike_walk",
+                      "kVF2BehaviorLabels_exercise_bike_run"):
+            with self.subTest(group=group):
+                users = [
+                    name for name in ("VF2ExerciseBikeWalk", "VF2ExerciseBikeRun",
+                                      "VF2RandomTreadmillWalkLabel",
+                                      "VF2RandomTreadmillRunLabel")
+                    if group + "," in self.wrapper_body(name)
+                    or group + ")" in self.wrapper_body(name)]
+                self.assertEqual(len(users), 1, users)
+                self.assertTrue(users[0].startswith("VF2ExerciseBike"), users)
 
     def test_the_position_blind_route_machinery_is_gone(self):
         """None of it may come back: it cannot answer a per-villager question.

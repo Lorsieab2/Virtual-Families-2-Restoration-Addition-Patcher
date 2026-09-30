@@ -257,6 +257,9 @@ class TestTheLedgerStatusMatchesReality(unittest.TestCase):
         "no work remains",
     )
 
+    def _confirmed(self):
+        return "confirmed in play" in self._row()[1].lower()
+
     def test_the_row_never_claims_the_outstanding_work_is_done(self):
         """A pending phrase elsewhere must not excuse a completion claim.
 
@@ -264,7 +267,14 @@ class TestTheLedgerStatusMatchesReality(unittest.TestCase):
         It cannot answer "does another clause contradict that", and a row
         carrying both is worse than one carrying neither -- it reads as
         finished to a person and as pending to the check.
+
+        Once the STATUS says the work is confirmed in play (the owner
+        confirmed both props on 2026-09-24), a completion claim is the truth
+        rather than a contradiction, and the contradiction to rule out runs
+        the other way: see test_a_confirmed_row_no_longer_reads_as_pending.
         """
+        if self._confirmed():
+            self.skipTest("the status records the play confirmation")
         text = (self._row()[1] + " " + self._row()[2]).lower()
         for claim in self._CONTRADICTORY_CLAIMS:
             self.assertNotIn(
@@ -284,12 +294,32 @@ class TestTheLedgerStatusMatchesReality(unittest.TestCase):
         read as finished while something is outstanding -- but a bare topic
         word cannot express it.
         """
+        if self._confirmed():
+            self.skipTest("the status records the play confirmation")
         text = _joined_row_text(self._row()[1], self._row()[2])
         self.assertTrue(
             _reads_as_pending(text),
             "the row does not say what is still outstanding, so a reader "
             "cannot tell whether the props are known to work",
         )
+
+    def test_a_confirmed_row_no_longer_reads_as_pending(self):
+        """The mirror of the two checks above, for a confirmed row.
+
+        #381 set this row's status to CONFIRMED IN PLAY while its evidence
+        still ended "nobody has seen a prop on a table in play" -- finished
+        to one reader, outstanding to another. A confirmed row must not also
+        state live outstanding work, and must say what confirmed it.
+        """
+        if not self._confirmed():
+            self.skipTest("the row is not marked confirmed")
+        text = _joined_row_text(self._row()[1], self._row()[2])
+        self.assertFalse(
+            _reads_as_pending(text),
+            "the status says confirmed in play but the evidence still states "
+            "outstanding work",
+        )
+        self.assertIn("confirmed", self._row()[2].lower())
 
     def test_reads_as_pending_handles_the_wordings_these_rows_use(self):
         """Pin the two ways this helper misread real ledger prose.
