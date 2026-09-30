@@ -3667,6 +3667,19 @@ def apply_manifest(args: argparse.Namespace) -> int:
                 for check in asset_checks
                 if str(check.get("output_file_path") or check["file_path"]) != str(check["file_path"])
             }
+            desired_output_exe = manifest_output_exe_name(manifest)
+            if desired_output_exe:
+                # A vanilla folder that once had an in-place apply also holds a
+                # modded EXE under the output name.  The output's modded EXE is
+                # always written by the executable asset or renamed from the
+                # vanilla EXE, so never carry that stale build over: with the
+                # executable off, enforce_modded_exe_name would keep it and
+                # delete the vanilla EXE.
+                skip_copy_paths.update(
+                    child.name
+                    for child in game_dir.iterdir()
+                    if child.is_file() and child.name.lower() == desired_output_exe.lower()
+                )
             if args.backup_dir:
                 backup_dir = Path(args.backup_dir).resolve()
             else:

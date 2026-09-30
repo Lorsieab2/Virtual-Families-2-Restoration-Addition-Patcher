@@ -712,6 +712,26 @@ class OfflineVF2PatcherTests(unittest.TestCase):
             self.assertFalse((output_dir / "Virtual Families 2.exe").exists())
 
     @unittest.skipUnless(sys.platform == "win32", "Windows resource APIs are required")
+    def test_executable_off_never_carries_a_stale_modded_exe_from_the_game_folder(self):
+        # An earlier in-place apply leaves a modded EXE under the output name
+        # beside the vanilla one.  With the executable off the output must be
+        # the vanilla EXE renamed, never that stale build.
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            game_dir, manifest, output_name = self.real_icon_overlay_fixture(tmp_path)
+            vanilla = (game_dir / "Virtual Families 2.exe").read_bytes()
+            (game_dir / output_name.lower()).write_bytes(b"stale modded build")
+            output_dir = tmp_path / "VF2-BIcon-Modded"
+            self.run_patcher(
+                "apply", "--game-dir", str(game_dir), "--output-dir", str(output_dir),
+                "--manifest", str(manifest), "--disable-all",
+            )
+            exes = sorted(path.name.lower() for path in output_dir.glob("*.exe"))
+            self.assertEqual(exes, [output_name.lower()])
+            self.assertEqual((output_dir / output_name).read_bytes(), vanilla)
+            self.assertEqual((game_dir / output_name).read_bytes(), b"stale modded build")
+
+    @unittest.skipUnless(sys.platform == "win32", "Windows resource APIs are required")
     def test_executable_off_in_place_still_fails_icon_preservation(self):
         # In place (output folder == game folder) nothing renames the EXE, so
         # skipping preservation would report success with no modded EXE.
