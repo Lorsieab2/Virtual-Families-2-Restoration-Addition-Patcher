@@ -3285,6 +3285,49 @@ def default_settings(
     return settings
 
 
+INFORMATIONAL_NATIVE_NOTE = (
+    " Built into the patched game executable: it cannot be switched off separately and is "
+    "present whenever Patch game executable is enabled."
+)
+INFORMATIONAL_EMPTY_NOTE = " No file in this build is controlled by this setting on its own, so it is always on."
+
+
+def mark_informational_settings(
+    settings: list[dict[str, Any]],
+    records: list[dict[str, Any]],
+    native_core_settings: set[str],
+) -> list[dict[str, Any]]:
+    """Mark settings that gate no record as ``informational``.
+
+    B196 listed Text fixes, Add unused pets, Add visible mobile version
+    purchases and the core-assets row as ordinary checkboxes. No record
+    requires any of them -- the first three are compiled into all 32
+    executables and core_assets had no files -- so unticking one changed
+    nothing while the GUI reported it "disabled/restored to vanilla". They
+    stay listed (the release verifier and the docs expect them), but as
+    always-on rows whose description says why.
+    """
+    if not records:
+        # A bundle without records (a settings-only or dry export) describes
+        # no build; the patcher treats it the same way.
+        return settings
+    required = {
+        setting
+        for record in records
+        for setting in (record.get("requires") or [])
+    }
+    marked: list[dict[str, Any]] = []
+    for row in settings:
+        row = dict(row)
+        if row["id"] not in required:
+            row["informational"] = True
+            note = INFORMATIONAL_NATIVE_NOTE if row["id"] in native_core_settings else INFORMATIONAL_EMPTY_NOTE
+            if note.strip() not in str(row.get("description", "")):
+                row["description"] = (str(row.get("description", "")) + note).strip()
+        marked.append(row)
+    return marked
+
+
 def apply_final_playtest_defaults(
     settings: list[dict[str, Any]],
     available_settings: set[str],
@@ -4719,6 +4762,11 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
         available_settings,
     )
     settings = apply_crash_warning_for_build(settings, build_label)
+    settings = mark_informational_settings(
+        settings,
+        [*byte_patches, *asset_patches, *post_asset_patches],
+        native_core_settings,
+    )
     final_profile = None
     if getattr(args, "final_playtest_all_enabled", False):
         settings = apply_final_playtest_defaults(settings, available_settings)

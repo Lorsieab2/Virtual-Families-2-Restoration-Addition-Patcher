@@ -3793,5 +3793,115 @@ class MobileFurnitureCrashWarningScopeTests(unittest.TestCase):
                 )
 
 
+class EverySelectableSettingGatesSomethingTests(unittest.TestCase):
+    """A checkbox must change something, or say that it cannot.
+
+    B196 offered Text fixes, Add unused pets, Add visible mobile version
+    purchases and the core-assets row as ordinary checkboxes, yet no record in
+    its manifest required any of them: the first three are compiled into all
+    32 executables and core_assets had no files. Unticking one changed nothing
+    while the GUI reported it "disabled/restored to vanilla".
+    """
+
+    def assert_every_setting_gates_a_record_or_is_informational(self, manifest):
+        records = [
+            *manifest.get("patches", []),
+            *manifest.get("asset_patches", []),
+            *manifest.get("post_asset_patches", []),
+        ]
+        required = {setting for record in records for setting in record.get("requires", [])}
+        for row in manifest["settings"]:
+            with self.subTest(setting=row["id"]):
+                self.assertTrue(
+                    row["id"] in required or row.get("informational") is True,
+                    f"{row['id']} is selectable but no record requires it and it is not marked informational",
+                )
+                if row.get("informational"):
+                    self.assertNotIn(row["id"], required, "an informational setting must gate nothing")
+
+    def test_zero_record_settings_are_marked_informational(self):
+        settings = [
+            {"id": "core_executable", "description": "Exe."},
+            {"id": "text_fixes", "description": "Misc text fixes."},
+            {"id": "unused_pets", "description": "Pets."},
+            {"id": "mobile_purchases", "description": "Upgrades."},
+            {"id": "core_assets", "description": "Copies files."},
+            {"id": "cheat_upgrades", "description": "Cheats."},
+        ]
+        records = [
+            {"requires": ["core_executable"]},
+            {"requires": ["core_executable", "cheat_upgrades"]},
+        ]
+        native = {"text_fixes", "unused_pets", "mobile_purchases"}
+        marked = {row["id"]: row for row in exporter.mark_informational_settings(settings, records, native)}
+        self.assertEqual(
+            {setting_id for setting_id, row in marked.items() if row.get("informational")},
+            {"text_fixes", "unused_pets", "mobile_purchases", "core_assets"},
+        )
+        self.assertIn("Built into the patched game executable", marked["text_fixes"]["description"])
+        self.assertIn("always on", marked["core_assets"]["description"])
+        self.assertNotIn("informational", marked["cheat_upgrades"])
+        self.assertEqual(marked["cheat_upgrades"]["description"], "Cheats.")
+        # Idempotent: marking twice must not repeat the note.
+        again = exporter.mark_informational_settings(list(marked.values()), records, native)
+        self.assertEqual(
+            {row["id"]: row["description"] for row in again},
+            {row["id"]: row["description"] for row in marked.values()},
+        )
+        self.assert_every_setting_gates_a_record_or_is_informational(
+            {"settings": list(marked.values()), "asset_patches": records}
+        )
+        # The patcher reads the same rows as informational, with the executable as prerequisite.
+        manifest = {
+            "settings": list(marked.values()),
+            "asset_patches": records,
+            "export_summary": {"native_core_settings": sorted(native)},
+        }
+        parsed = patcher.manifest_settings(manifest)
+        self.assertEqual(
+            patcher.informational_settings(manifest, parsed),
+            {
+                "text_fixes": frozenset({"core_executable"}),
+                "unused_pets": frozenset({"core_executable"}),
+                "mobile_purchases": frozenset({"core_executable"}),
+                "core_assets": frozenset(),
+            },
+        )
+
+    def test_a_manifest_without_records_is_left_alone(self):
+        settings = [{"id": "core_assets", "description": "Copies files."}]
+        self.assertEqual(exporter.mark_informational_settings(settings, [], set()), settings)
+
+    def test_an_exported_bundle_has_no_setting_that_gates_nothing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            base = tmp_path / "base"
+            build = tmp_path / "build"
+            out = tmp_path / "bundle"
+            base.mkdir()
+            build.mkdir()
+            vanilla = tmp_path / "vanilla.exe"
+            vanilla.write_bytes(bytes([1, 2, 3, 4, 5, 6]))
+            (build / "Virtual Families 2 - Additive Mobile Furniture Pack.exe").write_bytes(bytes([1, 2, 0xAA, 0xBB, 5, 6]))
+            result = subprocess.run(
+                [
+                    sys.executable, str(EXPORTER),
+                    "--build-dir", str(build),
+                    "--base-payload", str(base),
+                    "--out-dir", str(out),
+                    "--vanilla-exe", str(vanilla),
+                    "--include-byte-patches",
+                ],
+                cwd=ROOT, text=True, capture_output=True,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        by_id = {row["id"]: row for row in manifest["settings"]}
+        # core_assets has no file in this bundle; the byte patch gates core_native_patch.
+        self.assertTrue(by_id["core_assets"].get("informational"))
+        self.assertNotIn("informational", by_id["core_native_patch"])
+        self.assert_every_setting_gates_a_record_or_is_informational(manifest)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -1275,10 +1275,157 @@ def resolve_enabled_settings(manifest: dict[str, Any], args: argparse.Namespace)
     return settings, enabled
 
 
-def settings_log(settings: dict[str, PatchSetting], enabled: set[str]) -> dict[str, Any]:
+def manifest_change_record_requirements(manifest: dict[str, Any]) -> list[tuple[str, ...]]:
+    """The ``requires`` of every record that changes a file: byte, asset and post-asset patches."""
+    rows: list[tuple[str, ...]] = []
+    for field, raw_list in (
+        ("patch", manifest.get("patches", [])),
+        ("asset patch", manifest.get("asset_patches", manifest.get("assets", []))),
+        ("post-asset patch", manifest.get("post_asset_patches", [])),
+    ):
+        if not isinstance(raw_list, list):
+            continue
+        for index, raw in enumerate(raw_list):
+            if isinstance(raw, dict):
+                rows.append(record_requires(raw, f"{field} #{index}"))
+    return rows
+
+
+def informational_settings(
+    manifest: dict[str, Any],
+    settings: dict[str, PatchSetting],
+) -> dict[str, frozenset[str]]:
+    """Settings that gate no record, mapped to the settings they depend on.
+
+    Such a setting cannot be switched off: nothing in the manifest changes
+    with it. The exporter marks them ``"informational": true``; older
+    manifests (B196 and earlier) do not, so a setting that no byte, asset or
+    post-asset record requires is treated the same way. Settings the exporter
+    lists in ``export_summary.native_core_settings`` are compiled into every
+    patched executable, so they are present exactly when core_executable is.
+    A manifest with no records at all describes no build, and yields nothing.
+    """
+    requirements = manifest_change_record_requirements(manifest)
+    if not requirements:
+        return {}
+    required = {setting_id for row in requirements for setting_id in row}
+    raw_settings = manifest.get("settings", [])
+    explicit = {
+        str(raw.get("id")).strip()
+        for raw in raw_settings
+        if isinstance(raw, dict) and raw.get("informational") is True
+    } if isinstance(raw_settings, list) else set()
+    summary = manifest.get("export_summary")
+    native = summary.get("native_core_settings", []) if isinstance(summary, dict) else []
+    native_ids = {str(value) for value in native} if isinstance(native, list) else set()
+    result: dict[str, frozenset[str]] = {}
+    for setting_id, setting in settings.items():
+        if setting.blocked:
+            continue
+        if setting_id in required and setting_id not in explicit:
+            continue
+        prerequisites: set[str] = set()
+        if setting_id in native_ids and setting_id != "core_executable" and "core_executable" in settings:
+            prerequisites.add("core_executable")
+        result[setting_id] = frozenset(prerequisites)
+    return result
+
+
+def setting_dependencies(
+    manifest: dict[str, Any],
+    settings: dict[str, PatchSetting],
+) -> dict[str, frozenset[str]]:
+    """Map each setting to the settings it cannot work without.
+
+    Derived from the records, not a hardcoded list: B is a prerequisite of A
+    when every record that requires A also requires B (No AI Icons ->
+    Cheat Upgrades + Patch game executable). A setting with at least one
+    record that works without B (Holiday Ornaments' images without the
+    executable) does not depend on B. Informational settings depend on what
+    informational_settings() says.
+    """
+    requirements = manifest_change_record_requirements(manifest)
+    informational = informational_settings(manifest, settings)
+    dependencies: dict[str, frozenset[str]] = {}
+    for setting_id in settings:
+        if setting_id in informational:
+            dependencies[setting_id] = informational[setting_id]
+            continue
+        rows = [set(row) for row in requirements if setting_id in row]
+        common = set.intersection(*rows) - {setting_id} if rows else set()
+        dependencies[setting_id] = frozenset(other for other in common if other in settings)
+    return dependencies
+
+
+def effective_settings_report(
+    manifest: dict[str, Any],
+    settings: dict[str, PatchSetting],
+    selected: set[str],
+) -> dict[str, Any]:
+    """What the selection actually does, as opposed to what was ticked.
+
+    A selected setting is enabled only when at least one of its records is
+    active. Unticking Cheat Upgrades leaves every No AI Icons record inactive,
+    so No AI Icons is "selected but inactive", not enabled. Informational
+    settings are enabled exactly when their prerequisites are.
+    """
+    requirements = manifest_change_record_requirements(manifest)
+    informational = informational_settings(manifest, settings)
+    enabled: set[str] = set()
+    inactive: dict[str, str] = {}
+    for setting_id in settings:
+        if setting_id in informational:
+            missing = sorted(informational[setting_id] - selected)
+            if not missing:
+                enabled.add(setting_id)
+            elif setting_id in selected:
+                inactive[setting_id] = "selected but inactive: requires " + ", ".join(missing)
+            continue
+        if setting_id not in selected:
+            continue
+        rows = [set(row) for row in requirements if setting_id in row]
+        if any(row <= selected for row in rows):
+            enabled.add(setting_id)
+            continue
+        if rows:
+            missing = sorted(set.intersection(*rows) - selected) or sorted(set().union(*rows) - selected)
+            inactive[setting_id] = "selected but inactive: requires " + ", ".join(missing)
+        else:
+            inactive[setting_id] = "selected but inactive: no patch record uses this setting"
     return {
-        "enabled": sorted(enabled),
-        "disabled": sorted(set(settings) - enabled),
+        "enabled": enabled,
+        "inactive": inactive,
+        "informational": {
+            setting_id: (
+                "built into the patched executable; present when "
+                + ", ".join(sorted(prerequisites))
+                + " is enabled"
+                if prerequisites
+                else "always on; no patch record is gated by this setting"
+            )
+            for setting_id, prerequisites in informational.items()
+        },
+    }
+
+
+def settings_log(
+    settings: dict[str, PatchSetting],
+    enabled: set[str],
+    report: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Settings section of a patch log.
+
+    Without ``report`` this records the selection as given. With one (from
+    effective_settings_report) "enabled" lists only settings that actually
+    took effect, and selected-but-inactive settings are listed with the
+    prerequisite they are missing.
+    """
+    effective = set(enabled) if report is None else set(report["enabled"])
+    inactive: dict[str, str] = {} if report is None else dict(report["inactive"])
+    informational: dict[str, str] = {} if report is None else dict(report["informational"])
+    log: dict[str, Any] = {
+        "enabled": sorted(effective),
+        "disabled": sorted(set(settings) - effective - set(inactive)),
         "blocked": {
             setting.id: setting.readiness_reason
             for setting in settings.values()
@@ -1290,16 +1437,24 @@ def settings_log(settings: dict[str, PatchSetting], enabled: set[str]) -> dict[s
                 "label": setting.label,
                 "description": setting.description,
                 "default": setting.default,
-                "enabled": setting.id in enabled,
+                "enabled": setting.id in effective,
                 "category": setting.category,
                 "readiness_status": setting.readiness_status,
                 "readiness_reason": setting.readiness_reason,
                 "selection_policy": setting.selection_policy,
-                "selectable": not setting.blocked,
+                "selectable": not setting.blocked and setting.id not in informational,
+                **({"selected": setting.id in enabled} if report is not None else {}),
+                **({"inactive_reason": inactive[setting.id]} if setting.id in inactive else {}),
+                **({"informational": informational[setting.id]} if setting.id in informational else {}),
             }
             for setting in settings.values()
         ],
     }
+    if report is not None:
+        log["selected"] = sorted(enabled)
+        log["selected_but_inactive"] = dict(sorted(inactive.items()))
+        log["informational"] = dict(sorted(informational.items()))
+    return log
 
 
 def manifest_output_folder_name(manifest: dict[str, Any]) -> str | None:
@@ -3970,6 +4125,9 @@ def apply_manifest(args: argparse.Namespace) -> int:
         )
         save_folder_name = manifest_output_save_folder_name(manifest, modded_exe_name)
         save_dir = Path.home() / "Documents" / "LDW" / save_folder_name
+        # Report what took effect, not what was ticked: a setting whose every
+        # record needs an unticked prerequisite changed nothing.
+        settings_report = effective_settings_report(manifest, settings, enabled_settings)
         log = {
             "action": "apply",
             "dry_run": bool(args.dry_run),
@@ -3983,7 +4141,7 @@ def apply_manifest(args: argparse.Namespace) -> int:
             "modded_save_dir": str(save_dir),
             "manifest": str(manifest_path),
             "manifest_name": manifest.get("name"),
-            "settings": settings_log(settings, enabled_settings),
+            "settings": settings_log(settings, enabled_settings, settings_report),
             "target_checks": target_checks,
             "runtime_checks": runtime_checks,
             "backup_dir": None if backup_dir is None else str(backup_dir),
@@ -4015,7 +4173,7 @@ def apply_manifest(args: argparse.Namespace) -> int:
                 "modded_save_folder_name": save_folder_name,
                 "modded_save_dir": str(save_dir),
                 "enabled_settings": sorted(enabled_settings),
-                "settings": settings_log(settings, enabled_settings),
+                "settings": settings_log(settings, enabled_settings, settings_report),
                 "patched_files": patched_files,
                 "asset_files": asset_files,
                 "dry_run": bool(args.dry_run),
@@ -4023,9 +4181,22 @@ def apply_manifest(args: argparse.Namespace) -> int:
         )
 
         if settings:
-            print("Enabled settings: " + (", ".join(sorted(enabled_settings)) if enabled_settings else "(none)"))
-            disabled_settings = sorted(set(settings) - enabled_settings)
+            effective = settings_report["enabled"]
+            inactive = settings_report["inactive"]
+            print("Enabled settings: " + (", ".join(sorted(effective)) if effective else "(none)"))
+            disabled_settings = sorted(set(settings) - effective - set(inactive))
             print("Disabled settings: " + (", ".join(disabled_settings) if disabled_settings else "(none)"))
+            informational = settings_report["informational"]
+            if informational:
+                print(
+                    "Always-on settings (cannot be switched off separately): "
+                    + ", ".join(sorted(informational))
+                )
+            if inactive:
+                print(
+                    "Selected but inactive settings: "
+                    + "; ".join(f"{setting_id} ({reason})" for setting_id, reason in sorted(inactive.items()))
+                )
         print(
             f"Validated {len(patches)} active byte patch record(s) across {len(grouped)} file(s) "
             f"and {len(all_assets)} active/restore asset patch record(s)."
