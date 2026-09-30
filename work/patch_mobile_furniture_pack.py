@@ -35113,6 +35113,21 @@ def patch_spontaneous_behaviors(manifest):
     # LoadAI initializes the same table, then restores saved selection weights.
     # Run the same additive enabler after either stock LoadAI return path so an
     # existing household receives the new choices on its next load.
+    #
+    # KNOWN LIMITATION, NOT YET RESOLVED (owner decision): running the enabler
+    # AFTER the restore means every candidate it configures gets its fixed
+    # weight back on every load, so praise/scold training of those candidates
+    # (theMainScene::InvokeReward/InvokeScolding adjust +0x0C; SaveAI saves it)
+    # does not survive a reload. "Only set the weight on first enable" cannot
+    # fix this: LoadAI calls InitAI first, which clears +0xCD for every
+    # candidate, so a patch-enabled candidate looks newly enabled on EVERY
+    # load. And the saved 16-bit weight alone cannot say whether it was written
+    # by a patched build (a trained patch weight) or an unpatched one (stock
+    # InitAI's 1500 +/- 20%), so keeping the restored value would hand
+    # first-time households stock frequencies instead of the patch's. A real
+    # fix needs a persisted "these weights are ours" marker. The per-decision
+    # refresh no longer resets trained weights in-session; see
+    # VF2SetGatedCandidate.
     load_ai = obj.symbol("?LoadAI@CVillager@@QAEXAAUSSaveState@1@@Z")
     sec = obj.section(load_ai.section)
     load_section_index = sec.index
@@ -35668,20 +35683,58 @@ static bool AnyHammockInWorld()
 // The yoga route accepts the stock Yoga Equipment (0x220) as well as the
 // invisible copy, matching VF2YogaEquipmentWorkout's own item/altItem pair.
 // Gating on only one of them would make a placed stock item unusable.
-static void VF2RefreshWorkoutEligibility(unsigned char *data)
+//
+// PRAISE AND SCOLDING TRAIN THESE WEIGHTS, SO A REFRESH MUST NOT RESET THEM.
+//
+// theMainScene::InvokeReward raises the current behaviour's candidate weight
+// (+0x0C) towards its maximum (+0x14) and InvokeScolding lowers it towards its
+// minimum (+0x10); SaveAI saves that weight and LoadAI restores it. The
+// per-decision refresh used to write a FIXED weight on every call, so praise
+// or a scolding on the hammock, playhouse, snow play, Home Gym or Yoga
+// Equipment was undone at the villager's very next decision.
+//
+// The ENABLED flag (+0xCD) alone decides whether a candidate is considered:
+// CVillagerAI::DecideWhatToDo skips a candidate whose +0xCD is 0 before it
+// reads the weight (cmp byte [edi+esi+6C85h],0 / je next). So a per-decision
+// refresh toggles +0xCD and leaves a trained weight alone. It writes the
+// default weight only into a weight of 0, which is what the load-time
+// configuration below leaves in a candidate that was ineligible at load;
+// praise and scolding never produce 0 (scolding stops at the +0x10 minimum,
+// 50 by stock default).
+//
+// resetWeights is true only from VF2EnableAutonomousCandidates (InitAI and
+// LoadAI), which keeps that path byte-for-byte what it was: fixed weight when
+// eligible, 0 when not.
+static void VF2SetGatedCandidate(
+    unsigned char *candidate, int allowed, unsigned int weight, bool resetWeights)
+{
+    candidate[0xCD] = (unsigned char)allowed;
+    unsigned int *current = (unsigned int *)(candidate + 0x0C);
+    if (resetWeights) {
+        *current = allowed ? weight : 0;
+    } else if (allowed && *current == 0) {
+        *current = weight;
+    }
+}
+
+static void VF2RefreshWorkoutEligibilityEx(unsigned char *data, bool resetWeights)
 {
     unsigned char *gym = data + 0x6BB8 + 0x0B3 * 0xD0;
     const int gymPlaced =
         FurnitureManager.IsInWorld((EInventoryItem)__VF2_HOME_GYM_ITEM_ID__);
-    gym[0xCD] = (unsigned char)gymPlaced;
-    *(unsigned int *)(gym + 0x0C) = gymPlaced ? 450 : 0;
+    VF2SetGatedCandidate(gym, gymPlaced, 450, resetWeights);
 
     unsigned char *yoga = data + 0x6BB8 + 0x0B4 * 0xD0;
     const int yogaPlaced =
         FurnitureManager.IsInWorld((EInventoryItem)__VF2_YOGA_EQUIPMENT_ITEM_ID__) ||
         FurnitureManager.IsInWorld((EInventoryItem)0x220);
-    yoga[0xCD] = (unsigned char)yogaPlaced;
-    *(unsigned int *)(yoga + 0x0C) = yogaPlaced ? 450 : 0;
+    VF2SetGatedCandidate(yoga, yogaPlaced, 450, resetWeights);
+}
+
+// The load-time form: fixed weights, as before.
+static void VF2RefreshWorkoutEligibility(unsigned char *data)
+{
+    VF2RefreshWorkoutEligibilityEx(data, true);
 }
 
 // Despite the hammock-specific name this is the per-decision refresh hook:
@@ -35691,15 +35744,13 @@ static void VF2RefreshWorkoutEligibility(unsigned char *data)
 // in VF2EnableAutonomousCandidates would leave a Home Gym or Yoga item bought
 // after load uncastable until a reload, and one SOLD after load still offered
 // -- which lands in the handler with no venue and silently does nothing.
-extern "C" void __cdecl VF2RefreshHammockEligibility(void *villager)
+static void VF2RefreshVolatileCandidates(unsigned char *data, bool resetWeights)
 {
-    unsigned char *data = (unsigned char *)villager;
-    VF2RefreshWorkoutEligibility(data);
+    VF2RefreshWorkoutEligibilityEx(data, resetWeights);
     unsigned char *candidate = data + 0x6BB8 + 0x023 * 0xD0;
     const int weatherAllowsHammock = Weather.currentType == 0 || Weather.currentType == 1;
     const int hammockAllowsAction = weatherAllowsHammock && AnyHammockInWorld();
-    candidate[0xCD] = (unsigned char)hammockAllowsAction;
-    *(unsigned int *)(candidate + 0x0C) = hammockAllowsAction ? 3000 : 0;
+    VF2SetGatedCandidate(candidate, hammockAllowsAction, 3000, resetWeights);
     *(unsigned int *)(candidate + 0x48) = 0;
     *(unsigned int *)(candidate + 0x4C) = 0;
     // THE WEATHER GATE ABOVE IS THE ONLY ONE. Stock InitAI gives this
@@ -35719,17 +35770,23 @@ extern "C" void __cdecl VF2RefreshHammockEligibility(void *villager)
 
     unsigned char *playhouse = data + 0x6BB8 + 0x11E * 0xD0;
     const int daytimeAllowsPlayhouse = Night.AIIsDayTime();
-    playhouse[0xCD] = (unsigned char)daytimeAllowsPlayhouse;
-    *(unsigned int *)(playhouse + 0x0C) = daytimeAllowsPlayhouse ? 3000 : 0;
+    VF2SetGatedCandidate(playhouse, daytimeAllowsPlayhouse, 3000, resetWeights);
     *(unsigned int *)(playhouse + 0x48) = 0x117;
     *(unsigned int *)(playhouse + 0x4C) = 0;
 
     unsigned char *snow = data + 0x6BB8 + 0x108 * 0xD0;
     const int weatherAllowsSnow = Weather.currentType == 5;
-    snow[0xCD] = (unsigned char)weatherAllowsSnow;
-    *(unsigned int *)(snow + 0x0C) = weatherAllowsSnow ? 700 : 0;
+    VF2SetGatedCandidate(snow, weatherAllowsSnow, 700, resetWeights);
     *(unsigned int *)(snow + 0x48) = 0x117;
     *(unsigned int *)(snow + 0x4C) = 0;
+}
+
+// The per-decision entry, called from CVillagerAI::DecideWhatToDo: gates are
+// re-evaluated (VF2RefreshWorkoutEligibilityEx(data, false) included), trained
+// weights are kept.
+extern "C" void __cdecl VF2RefreshHammockEligibility(void *villager)
+{
+    VF2RefreshVolatileCandidates((unsigned char *)villager, false);
 }
 
 class CVillager;
@@ -38792,7 +38849,10 @@ extern "C" void __cdecl VF2EnableAutonomousCandidates(void *villager)
     EnableAdultOnlyAutonomousCandidateWithWeight(data, 0x048, 450);
     EnableAdultOnlyAutonomousCandidateWithWeight(data, 0x02C, 450); // OfficeCarreerWork
     EnableAdultOnlyAutonomousCandidateWithWeight(data, 0x04B, 450); // WorkWorkshop
-    VF2RefreshHammockEligibility(data);
+    // The LOAD-TIME refresh resets the volatile candidates' weights to their
+    // fixed values, exactly as before; only the per-decision refresh keeps
+    // trained weights (see VF2SetGatedCandidate).
+    VF2RefreshVolatileCandidates(data, true);
     // Home Gym and Yoga are gated per ITEM, not per object: they share
     // object 0x75, so an object prerequisite admits both when only one is
     // placed and the mismatched handler silently does nothing.
