@@ -58,33 +58,35 @@ class TestAddedFurnitureContract(unittest.TestCase):
 
     def test_stock_donor_wrappers_use_strict_selector_only_for_added_items(self):
         src = source()
-        # THE POOL WRAPPER IS DELIBERATELY NOT IN THIS LIST ANY MORE.
+        # NONE OF THE THREE STOCK-DONOR WRAPPERS CARRIES A SELECTOR ANY MORE.
         #
-        # SUPERSEDED, recorded rather than deleted (AGENTS.md 11): it used to
-        # be checked alongside the two treadmill wrappers, because all three
-        # had to choose between a stock donor's label and an added item's while
-        # the pairs shared a content-map object.
+        # SUPERSEDED, recorded rather than deleted (AGENTS.md 11): the two
+        # treadmill wrappers used to be required to call VF2ApplyVenueLabel,
+        # on the reasoning that "the bike's LABELS are still applied by
+        # wrapping the stock treadmill behaviours even though the bike's venue
+        # object is now its own". That was false: the bike's labels are applied
+        # by VF2ExerciseBikeWalk/Run, which run the treadmill donors DIRECTLY,
+        # not through these retargeted table entries. With the bike on object
+        # 0x99 the stock treadmill behaviours (object 0x04) only ever reach a
+        # Treadmill, so the selector could only put a bike caption on a
+        # treadmill action -- exactly what it did whenever the villager was
+        # still standing on the bike when they chose the treadmill.
         #
-        # The Ping-Pong Table now has its own object (0x9A), so stock
-        # PlayingPooltable routes only to genuine pool tables and its wrapper
-        # applies no label at all -- any selector there could only mislabel a
-        # stock action. The treadmill wrappers still need theirs, because the
-        # bike's LABELS are still applied by wrapping the stock treadmill
-        # behaviours even though the bike's venue object is now its own.
-        for start_marker, end_marker in (
-            ("extern \"C\" void __cdecl VF2RandomTreadmillWalkLabel", "extern \"C\" void __cdecl VF2RandomTreadmillRunLabel"),
-            ("extern \"C\" void __cdecl VF2RandomTreadmillRunLabel", "extern \"C\" void __cdecl VF2RandomDrinkLabel"),
+        # The pool wrapper was made pass-through earlier for the same reason.
+        for name, stop in (
+            ("VF2RandomPooltableLabel", "// The Exercise Bike borrows"),
+            ("VF2RandomTreadmillWalkLabel", "extern \"C\" void __cdecl VF2RandomTreadmillRunLabel"),
+            ("VF2RandomTreadmillRunLabel", "extern \"C\" void __cdecl VF2RandomDrinkLabel"),
         ):
-            start = src.index(start_marker, src.index("// The Ping-Pong Table borrows the Pool Table's behaviour wholesale"))
-            body = src[start:src.index(end_marker, start)]
-            self.assertIn("VF2ApplyVenueLabel", body)
-            self.assertIn("if (!", body)
-        # And the pool wrapper must NOT carry a selector.
-        pool = src.index(
-            "extern \"C\" void __cdecl VF2RandomPooltableLabel(CVillager &villager)")
-        pool_body = src[pool:src.index("// The Exercise Bike borrows", pool)]
-        self.assertNotIn("VF2ApplyVenueLabel", pool_body,
-                         "the stock pool wrapper must not relabel anything")
+            start = src.index(
+                "extern \"C\" void __cdecl %s(CVillager &villager)" % name)
+            body = src[start:src.index(stop, start)]
+            code = "\n".join(
+                line for line in body.splitlines()
+                if not line.lstrip().startswith("//"))
+            self.assertIn("VF2RunNativeBehaviorAndChangedLabel", code)
+            self.assertNotIn("VF2ApplyVenueLabel", code,
+                             "the stock %s wrapper must not relabel anything" % name)
 
     def test_missing_venue_does_not_run_the_shared_donor(self):
         src = source()
@@ -383,46 +385,41 @@ class TestAddedFurnitureContract(unittest.TestCase):
         "I want ONLY the exercise bike to have the behaviors 'doing
         high-intensity cycling' and 'using the exercise bike'."
 
-        Both treadmill caption wrappers previously asked
-        VF2LinkedFurnitureItemIs, which is FindFurniture(0x04, feet) -- a
-        NEAREST MATCH. It resolves its winner by placement handle so it never
-        confuses two records, but "nearest to the feet" is not "the machine this
-        villager is on": a bike beside the treadmill can win, and the caption
-        then lands on a treadmill action.
-
-        VF2VillagerIsStandingOnItem reads the item id from the placement record
-        under the villager, which is the test the drop dispatcher already trusts
-        for these shared-object items.
+        SUPERSEDED, recorded rather than deleted (AGENTS.md 11): this test
+        required both stock treadmill wrappers to call
+        VF2VillagerIsStandingOnItem(villager, bike) and relabel on a hit. That
+        replaced an earlier nearest-match probe (VF2LinkedFurnitureItemIs), but
+        it samples where the villager stands BEFORE the stock behaviour walks
+        them, so a villager still on the bike who autonomously chose the stock
+        WorkoutTreadmill reached the Treadmill wearing the bike caption. Since
+        the bike declares its own object (0x99) and the stock treadmill
+        behaviours search 0x04, those wrappers can never be serving a bike user;
+        the bike's captions come from VF2ExerciseBikeWalk/Run alone.
         """
         src = source()
-        self.assertIn("static bool VF2VillagerIsStandingOnItem(", src)
-
         for wrapper, donor in (
                 ("VF2RandomTreadmillWalkLabel", "WorkoutTreadmill"),
                 ("VF2RandomTreadmillRunLabel", "RunningOnTreadmill")):
             start = src.index('extern "C" void __cdecl %s(CVillager &villager)' % wrapper)
             body = src[start:src.index("\n}", start)]
-            self.assertIn(
-                "VF2VillagerIsStandingOnItem(\n        villager, __VF2_EXERCISE_BIKE_ITEM_ID__)",
-                body,
-                "%s no longer requires the villager to be ON the bike" % wrapper)
-            # Comments deliberately NAME the superseded approach (AGENTS.md 11
-            # records dead ends rather than deleting them), so strip comment
-            # lines before asserting the CODE no longer calls it. Asserting
-            # against the raw text would forbid documenting the very mistake
-            # this test exists to prevent.
             code = "\n".join(
                 line for line in body.splitlines()
                 if not line.lstrip().startswith("//"))
-            self.assertNotIn(
-                "VF2LinkedFurnitureItemIs", code,
-                "%s is back on the nearest-match test, which can put the "
-                "bike's caption on a treadmill" % wrapper)
-            self.assertIn("if (!onBike) return;", body,
-                          "%s no longer leaves the stock label alone when the "
-                          "villager is not on the bike" % wrapper)
-            self.assertIn("CBehavior::%s" % donor, body,
-                          "%s no longer runs its native donor" % wrapper)
+            self.assertEqual(
+                code.strip().splitlines()[-1].strip(),
+                "VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::%s);" % donor,
+                "%s must run its stock donor and nothing else" % wrapper)
+            for forbidden in ("VF2VillagerIsStandingOnItem", "VF2LinkedFurnitureItemIs",
+                              "VF2ApplyVenueLabel", "exercise_bike"):
+                self.assertNotIn(forbidden, code,
+                                 "%s can put a bike caption on a treadmill "
+                                 "again (%s)" % (wrapper, forbidden))
+        for handler, group in (
+                ("VF2ExerciseBikeWalk", "kVF2BehaviorLabels_exercise_bike_walk"),
+                ("VF2ExerciseBikeRun", "kVF2BehaviorLabels_exercise_bike_run")):
+            start = src.index('extern "C" void __cdecl %s(CVillager &villager)' % handler)
+            body = src[start:src.index("\n}", start)]
+            self.assertIn(group, body, "%s lost its bike caption" % handler)
 
     def test_the_stock_treadmill_candidates_are_never_disabled(self):
         """The Treadmill must stay autonomously reachable exactly as stock.
