@@ -14574,6 +14574,97 @@ class HolidayOrnamentGateTests(unittest.TestCase):
 
         self.with_temp_patched_objs(["theMenuScene.obj"], run)
 
+    def test_invisible_furniture_counts_as_its_donor_where_stock_tests_item_ids(self):
+        objs = ["VillagerAI.obj", "VillagerState.obj", "theMainScene.obj", "FurnitureManager.obj"]
+
+        def have_upgrade_calls(obj, function):
+            _code, relocations = self._section_code(obj, function)
+            return {
+                vaddr: name for vaddr, (name, rtype) in relocations.items()
+                if "HaveUpgrade" in name
+            }
+
+        def run(temp_root):
+            manifest = {}
+            patcher.patch_invisible_furniture_parity(manifest)
+            helper = patcher.INVISIBLE_HAVE_UPGRADE_HELPER
+            stock_name = patcher.HAVE_UPGRADE_SYMBOL
+            # Exactly these HaveUpgrade calls move to the helper; every other
+            # HaveUpgrade in the same functions is untouched.
+            expected_changed = {
+                ("VillagerState.obj", "?UpdateHappinessState@CVillagerState@@QAEXAAVCVillager@@@Z"):
+                    {0x401: 0x207, 0x47C: 0x1E4, 0x48F: 0x1E5, 0x4B8: 0x1E1},
+                ("theMainScene.obj", "?MapClickFeedback@theMainScene@@IAEXUldwPoint@@@Z"):
+                    {0x1C6: 0x207},
+                ("VillagerAI.obj", "?DecideWhatToDo@CVillagerAI@@AAEXAAVCVillager@@@Z"):
+                    {0x5F1: None},  # the candidate's +0xC8 item
+            }
+            for (obj_name, function), changed in expected_changed.items():
+                with self.subTest(function=function):
+                    stock_obj = CoffObject(patcher.SRC_OBJS / obj_name)
+                    stock_calls = have_upgrade_calls(stock_obj, function)
+                    patched_calls = have_upgrade_calls(CoffObject(temp_root / obj_name), function)
+                    self.assertEqual(len(stock_calls), len(patched_calls))
+                    self.assertEqual(sorted(stock_calls), sorted(patched_calls))  # temp objs are stock + this patch
+                    stock_code, _ = self._section_code(stock_obj, function)
+                    for vaddr, name in patched_calls.items():
+                        if vaddr in changed:
+                            self.assertEqual(name, helper)
+                            self.assertEqual(stock_calls[vaddr], stock_name)
+                            item = changed[vaddr]
+                            if item is not None:
+                                # push item; mov ecx,InventoryManager; call
+                                self.assertEqual(stock_code[vaddr - 11], 0x68)
+                                self.assertEqual(struct.unpack_from("<I", stock_code, vaddr - 10)[0], item)
+                            else:
+                                self.assertEqual(stock_code[vaddr - 19 : vaddr - 12], bytes.fromhex("8B8437806C0000"))  # mov eax,[edi+esi+6C80h]
+                        else:
+                            self.assertEqual(name, stock_name)
+            # The stock InitAI is what puts 0x1E4 in the Kiddie Pool rows' +0xC8.
+            initai, _ = self._section_code(CoffObject(patcher.SRC_OBJS / "Villager.obj"), "?InitAI@CVillager@@QAEXXZ")
+            self.assertIn(bytes.fromhex("C7843E806C0000E4010000"), initai)
+            # The helper maps exactly these donors to their invisible copies.
+            self.assertEqual(patcher.INVISIBLE_HAVE_UPGRADE_COPIES,
+                             {0x1E1: 0x30C, 0x1E4: 0x30A, 0x1E5: 0x30B, 0x207: 0x319})
+
+            # HandleAchievements translates the invisible pools and music
+            # player to their donors, then runs the stock switch.
+            fn = patcher.HANDLE_ACHIEVEMENTS_FUNCTION
+            code, _ = self._section_code(CoffObject(temp_root / "FurnitureManager.obj"), fn)
+            stock_code, _ = self._section_code(CoffObject(patcher.SRC_OBJS / "FurnitureManager.obj"), fn)
+            stub = len(stock_code)
+            self.assertEqual(len(code), stub + patcher.INVISIBLE_ACHIEVEMENT_STUB_SIZE)
+            self.assertEqual(code[3], 0xE9)
+            self.assertEqual(3 + 5 + struct.unpack_from("<i", code, 4)[0], stub)
+            self.assertEqual(code[8:0x0B], b"\x90" * 3)
+            self.assertEqual(code[:3] + code[0x0B:stub], stock_code[:3] + stock_code[0x0B:])
+            self.assertEqual(stock_code[3:0x0B], bytes.fromhex("8B45080553FEFFFF"))
+            self.assertEqual(self._decode(code, stub), [
+                (stub + 0x00, "mov", "eax, dword ptr [ebp + 8]"),
+                (stub + 0x03, "cmp", "eax, 0x30a"),
+                (stub + 0x08, "jne", hex(stub + 0x0F)),
+                (stub + 0x0A, "mov", "eax, 0x1e4"),
+                (stub + 0x0F, "cmp", "eax, 0x30b"),
+                (stub + 0x14, "jne", hex(stub + 0x1B)),
+                (stub + 0x16, "mov", "eax, 0x1e5"),
+                (stub + 0x1B, "cmp", "eax, 0x319"),
+                (stub + 0x20, "jne", hex(stub + 0x27)),
+                (stub + 0x22, "mov", "eax, 0x207"),
+                (stub + 0x27, "add", "eax, 0xfffffe53"),
+                (stub + 0x2C, "jmp", "0xb"),
+            ])
+            self.assertEqual(manifest["InvisibleFurnitureParity"]["status"], "installed in every executable")
+
+        self.with_temp_patched_objs(objs, run)
+        source = Path(patcher.__file__).read_text(encoding="utf-8")
+        main_body = source.split("\ndef main():\n", 1)[1].split("\ndef ", 1)[0]
+        self.assertIn("\n    patch_invisible_furniture_parity(manifest)\n", main_body)
+        # The helper is emitted into the always-compiled special-upgrade
+        # helper and declared on the same class the stock calls use.
+        self.assertIn("    bool VF2HaveUpgradeOrInvisible(EInventoryItem item);", source)
+        self.assertIn("bool CInventoryManager::VF2HaveUpgradeOrInvisible(EInventoryItem item)", source)
+        self.assertIn("    return HaveUpgrade((EInventoryItem)invisible);", source)
+
     def test_fix_vanilla_game_bugs_is_one_default_on_runtime_flag(self):
         def run(temp_root):
             manifest = {}

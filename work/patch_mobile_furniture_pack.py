@@ -10322,6 +10322,135 @@ extern "C" bool __cdecl VF2EitherHammockInWorld()
     }
 
 
+# Invisible furniture parity. The stock sites that test a donor ITEM id
+# rather than a content-map object or click alias, found by sweeping every
+# stock object for the 31 donor ids (2026-10-01). Everything else -- the
+# autonomous candidates' +0xC4 object test, the click dispatch table, every
+# patcher route -- already accepts the invisible copies.
+#   VillagerState  UpdateHappinessState  likes bonus for owning a music player
+#                  (0x207), a pool (0x1E4 or 0x1E5) and a hammock (0x1E1)
+#   theMainScene   MapClickFeedback      hotspot 0x18 plays the music player
+#                  sound only when HaveUpgrade(0x207)
+#   VillagerAI     DecideWhatToDo        candidate +0xC8 "requires item": the
+#                  Kiddie Pool rows SplashingPool 0x92 and PlayInPool 0xD7 carry
+#                  0x1E4 (stock InitAI +0x2D89)
+#   FurnitureManager HandleAchievements  placing a pool counts toward
+#                  achievement 0x27 and a music player toward 0x29; the byte
+#                  switch ends at item 0x21C
+# Not an item test, despite the id: CBehavior::AdultsFillInHole pushes 0x1E5
+# as the x of the PlanToGo point (0x1E5, 0x100) -- a yard position.
+def _invisible_have_upgrade_copies():
+    by_donor = {}
+    for row in list(INVISIBLE_OUTDOOR_ITEMS) + list(INVISIBLE_TRANSPARENT_BASE_ITEMS):
+        by_donor.setdefault(row["donor"], []).append(row["item_id"])
+    copies = {}
+    for donor in (0x1E1, 0x1E4, 0x1E5, 0x207):
+        if len(by_donor.get(donor, [])) != 1:
+            raise RuntimeError(f"donor {donor:#x} has invisible copies {by_donor.get(donor)}")
+        copies[donor] = by_donor[donor][0]
+    return copies
+
+
+INVISIBLE_HAVE_UPGRADE_COPIES = _invisible_have_upgrade_copies()
+INVISIBLE_HAVE_UPGRADE_HELPER = "?VF2HaveUpgradeOrInvisible@CInventoryManager@@QAE_NW4EInventoryItem@@@Z"
+HAVE_UPGRADE_SYMBOL = "?HaveUpgrade@CInventoryManager@@QAE_NW4EInventoryItem@@@Z"
+INVISIBLE_HAVE_UPGRADE_SITES = (
+    # (object, function, unique stock bytes ending in the call opcode)
+    ("VillagerState.obj", "?UpdateHappinessState@CVillagerState@@QAEXAAVCVillager@@@Z",
+     bytes.fromhex("6807020000" "B900000000" "E8")),
+    ("VillagerState.obj", "?UpdateHappinessState@CVillagerState@@QAEXAAVCVillager@@@Z",
+     bytes.fromhex("68E4010000" "B900000000" "E8")),
+    ("VillagerState.obj", "?UpdateHappinessState@CVillagerState@@QAEXAAVCVillager@@@Z",
+     bytes.fromhex("68E5010000" "B900000000" "E8")),
+    ("VillagerState.obj", "?UpdateHappinessState@CVillagerState@@QAEXAAVCVillager@@@Z",
+     bytes.fromhex("68E1010000" "B900000000" "E8")),
+    ("theMainScene.obj", "?MapClickFeedback@theMainScene@@IAEXUldwPoint@@@Z",
+     bytes.fromhex("6807020000" "B900000000" "E8")),
+    # mov eax,[edi+esi+6C80h] (+0xC8); cmp eax,-1; je; push eax; mov ecx,InventoryManager; call
+    ("VillagerAI.obj", "?DecideWhatToDo@CVillagerAI@@AAEXAAVCVillager@@@Z",
+     None),
+)
+HANDLE_ACHIEVEMENTS_FUNCTION = "?HandleAchievements@CFurnitureManager@@AAEXW4EInventoryItem@@@Z"
+INVISIBLE_ACHIEVEMENT_STUB_SIZE = 0x31
+
+
+def patch_invisible_furniture_parity(manifest):
+    retargeted = []
+    for obj_name, function, pattern in INVISIBLE_HAVE_UPGRADE_SITES:
+        obj = CoffObject(PATCHED / obj_name)
+        sym = obj.symbol(function)
+        sec = obj.section(sym.section)
+        code = bytes(obj.buf[sec.raw_ptr : sec.raw_ptr + sec.raw_size])
+        if pattern is None:
+            # The +0xC8 test: its operand encoding is taken from the stock
+            # object so the anchor cannot be mistyped.
+            stock = CoffObject(SRC_OBJS / obj_name)
+            ssym = stock.symbol(function)
+            ssec = stock.section(ssym.section)
+            stock_code = bytes(stock.buf[ssec.raw_ptr : ssec.raw_ptr + ssec.raw_size])
+            pattern = stock_code[0x5DE : 0x5F0 + 1]
+            if pattern[3:7] != struct.pack("<I", 0x6C80) or pattern[-6:] != bytes.fromhex("B900000000E8"):
+                raise RuntimeError(f"{function} +0x5DE is not the +0xC8 HaveUpgrade test: {pattern.hex()}")
+        hits = [i for i in range(len(code)) if code.startswith(pattern, i)]
+        if len(hits) != 1:
+            raise RuntimeError(f"{function}: {pattern.hex()} found {len(hits)} times")
+        call_rel = hits[0] + len(pattern)
+        relocation = None
+        for index in range(sec.nreloc):
+            vaddr, symbol_index, rtype = struct.unpack_from(
+                "<IIH", obj.buf, sec.reloc_ptr + index * 10
+            )
+            if vaddr == call_rel:
+                relocation = (obj.symbol_by_index[symbol_index].name, rtype)
+        if relocation != (HAVE_UPGRADE_SYMBOL, IMAGE_REL_I386_REL32):
+            raise RuntimeError(f"{function} +{call_rel:#x}: call is {relocation}, not HaveUpgrade")
+        helper = obj.append_undefined_symbol(INVISIBLE_HAVE_UPGRADE_HELPER)
+        obj.retarget_relocation(sec.index, call_rel, helper, IMAGE_REL_I386_REL32)
+        obj.write(PATCHED / obj_name)
+        retargeted.append({"object": obj_name, "function": function, "call": hex(call_rel - 1)})
+
+    # HandleAchievements(item) starts `mov eax,[ebp+8]; add eax,-1ADh; cmp
+    # eax,6Fh; ja default` into a byte table of case numbers. The invisible
+    # ids are past what that imm8 bound can reach, so the entry is detoured:
+    # an invisible pool or music player is translated to its donor's id and
+    # the stock switch runs unchanged.
+    obj = CoffObject(PATCHED / "FurnitureManager.obj")
+    sym = obj.symbol(HANDLE_ACHIEVEMENTS_FUNCTION)
+    sec = obj.section(sym.section)
+    if sym.value != 0:
+        raise RuntimeError("HandleAchievements is not at the start of its section")
+    code = bytes(obj.buf[sec.raw_ptr : sec.raw_ptr + sec.raw_size])
+    if code[3:0x0F] != bytes.fromhex("8B4508" "0553FEFFFF" "83F86F" "77"):
+        raise RuntimeError("HandleAchievements entry drifted")
+    stub_off = sec.raw_size
+    stub = bytearray(b"\x8B\x45\x08")                          # +00 mov eax,[ebp+8]
+    achievement_aliases = []
+    for donor in (0x1E4, 0x1E5, 0x207):
+        invisible = INVISIBLE_HAVE_UPGRADE_COPIES[donor]
+        stub += b"\x3D" + struct.pack("<I", invisible)          # cmp eax,invisible
+        stub += b"\x75\x05"                                    # jne past the mov
+        stub += b"\xB8" + struct.pack("<I", donor)              # mov eax,donor
+        achievement_aliases.append({"item": hex(invisible), "as": hex(donor)})
+    stub += b"\x05\x53\xFE\xFF\xFF"                            # add eax,-1ADh
+    stub += b"\xE9" + struct.pack("<i", 0x0B - (stub_off + len(stub) + 5))  # back to +0x0B
+    assert len(stub) == INVISIBLE_ACHIEVEMENT_STUB_SIZE
+    obj.insert_section_bytes(sec.index, stub_off, bytes(stub))
+    sec = obj.section(sym.section)
+    raw = sec.raw_ptr
+    obj.buf[raw + 3 : raw + 0x0B] = b"\xE9" + struct.pack("<i", stub_off - (3 + 5)) + b"\x90" * 3
+    obj.write(PATCHED / "FurnitureManager.obj")
+
+    manifest["InvisibleFurnitureParity"] = {
+        "status": "installed in every executable",
+        "helper": INVISIBLE_HAVE_UPGRADE_HELPER,
+        "copies": {hex(k): hex(v) for k, v in INVISIBLE_HAVE_UPGRADE_COPIES.items()},
+        "have_upgrade_calls_retargeted": retargeted,
+        "achievements": {"function": HANDLE_ACHIEVEMENTS_FUNCTION, "stub_offset": hex(stub_off),
+                         "translated": achievement_aliases},
+        "not_an_item_test": "CBehavior::AdultsFillInHole push 0x1E5 is the x of a PlanToGo yard point",
+    }
+
+
 def sync_invisible_furniture_reference_sets(manifest):
     """Bundle editable invisible-furniture variants from the generated build."""
     copied = []
@@ -12818,6 +12947,10 @@ SPECIAL_UPGRADE_HELPER_SECTION_END = "// VF2 generated special-upgrade helper se
 
 def write_outfit_store_helpers(manifest):
     helper_path = PATCHED / "vf2_special_upgrade_effects.cpp"
+    invisible_have_upgrade_cases = "\n".join(
+        f"    case {donor:#x}: invisible = {invisible:#x}; break;"
+        for donor, invisible in sorted(INVISIBLE_HAVE_UPGRADE_COPIES.items())
+    )
     if not helper_path.exists():
         raise RuntimeError("Expected vf2_special_upgrade_effects.cpp before adding outfit helpers")
     first_short, _first_long = outfit_string_ids_for_entry(0)
@@ -13072,6 +13205,9 @@ class CInventoryManager {{
 public:
     bool IsLocked(EInventoryItem item);
     bool HaveUpgrade(EInventoryItem item);
+    // Defined below. Same signature as HaveUpgrade, so stock call sites can be
+    // retargeted to it with only their relocation changed.
+    bool VF2HaveUpgradeOrInvisible(EInventoryItem item);
     void TakeOne(EInventoryItem item);
     void ReturnOne(EInventoryItem item);
     int GetNumAvailable(EInventoryItem item);
@@ -13092,6 +13228,25 @@ extern CInventoryManager InventoryManager;
 extern CFurnitureManager FurnitureManager;
 extern CVillagerManager VillagerManager;
 extern EInventoryItem gGoodiesList[];
+
+// Invisible furniture parity (owner request 2026-10-01: "if there's invisible
+// furniture the fixes apply to them as well"). A few stock routines ask
+// HaveUpgrade(<donor item>) with a hardcoded item id, so the invisible copy
+// of that item never satisfied them. patch_invisible_furniture_parity points
+// exactly those calls here: the stock answer first, then the invisible copy.
+// For furniture, HaveUpgrade is FurnitureManager.IsInWorld(item) and its item
+// range is widened to the added items, so the second call asks the same
+// question about the invisible copy.
+bool CInventoryManager::VF2HaveUpgradeOrInvisible(EInventoryItem item)
+{{
+    if (HaveUpgrade(item)) return true;
+    int invisible;
+    switch ((int)item) {{
+{invisible_have_upgrade_cases}
+    default: return false;
+    }}
+    return HaveUpgrade((EInventoryItem)invisible);
+}}
 
 // Real definition; forward-declared earlier (before CInventoryManager/
 // InventoryManager are visible) as _VF2CheatToggleActiveByte.  Reuses the
@@ -31483,6 +31638,9 @@ extern "C" bool __cdecl VF2TryStartMobileFurnitureAutonomous(
 static bool VF2WeatherAllowsOutdoorFurniture()
 {
     // Mobile values: 0 sunny, 1 cloudy, 2 rain, 3 storm, 4 fog, 5 snow.
+    // (Internal names. On screen 0 is normal weather with no effect and 1 is
+    // the sun-beam weather Bottled Tropical Sunshine produces, which the owner
+    // calls Sunny; internal "cloudy" is NOT fog.)
     return static_cast<unsigned int>(Weather.currentType) < 2;
 }
 
@@ -36614,6 +36772,9 @@ static void VF2RefreshVolatileCandidates(unsigned char *data, bool resetWeights)
     //     cmp  eax, -1 / je  next
     //     cmp  [Weather], eax / jne reject
     //
+    // (Internal names: 0 "Sunny" is normal weather with no effect; 1
+    // "Cloudy" is the sun-beam weather Bottled Tropical Sunshine produces,
+    // which the owner calls Sunny. Neither is fog, type 4.)
     // Left at 0, that stock field vetoed Cloudy (1) even though this refresh
     // admits it, so the hammock was only ever chosen in Sunny weather while
     // the README and manifest said Sunny/Cloudy. -1 hands the decision to
@@ -39820,7 +39981,7 @@ extern "C" void __cdecl VF2EnableAutonomousCandidates(void *villager)
         },
         "selection": "existing weighted CVillagerAI::DecideWhatToDo selection; weight 3000 per enabled candidate",
         "actions": [
-            "hammock anchored rest (0x23; all ages; Sunny/Cloudy weather only)",
+            "hammock anchored rest (0x23; all ages; normal weather or Sunny (sun beams, Bottled Tropical Sunshine) only -- Weather.currentType 0 or 1)",
             "warm hands by fireplace (all ages)",
             "watch fireplace (all ages)",
             "pinball/slots/pachinko/pool table/foosball (all ages)",
@@ -39848,7 +40009,7 @@ extern "C" void __cdecl VF2EnableAutonomousCandidates(void *villager)
             "why": "CVillagerAI::RealtimeWorkDone advances careers during catch-up with weight/400 rolls of the career row, so a fixed weight re-applied at every load erased praise-driven career progress",
             "superseded": "B196 and earlier wrote weight 450 and min age 0x118 into all three rows and cloned 0x047 into 0x048 at every InitAI and LoadAI",
         },
-        "note": "No Bored hook. Behavior Patches enables every registered variation route after stock InitAI and LoadAI, except Petting which is explicitly kept non-spontaneous. Native candidate fields continue to supply age, time, object, weather, and gender eligibility unless B150 documents an intentional override. The hammock candidate is refreshed at each native AI decision and is eligible only when base HammockStd item 0x1E1 or Invisible Hammock item 0x30C is in-world and Weather.currentType is 0 (Sunny) or 1 (Cloudy). Snow play is enabled only for Weather.currentType 5 (Snowing). Playhouse remains child-only and daytime-only. Raw age at CVillager+0x6A54 is displayed as years by dividing by 20.",
+        "note": "No Bored hook. Behavior Patches enables every registered variation route after stock InitAI and LoadAI, except Petting which is explicitly kept non-spontaneous. Native candidate fields continue to supply age, time, object, weather, and gender eligibility unless B150 documents an intentional override. The hammock candidate is refreshed at each native AI decision and is eligible only when base HammockStd item 0x1E1 or Invisible Hammock item 0x30C is in-world and Weather.currentType is 0 (the game's internal 'Sunny': normal weather, no effect) or 1 (internal 'Cloudy': the sun-beam weather Bottled Tropical Sunshine produces, which players call Sunny); never 4 (Foggy). Snow play is enabled only for Weather.currentType 5 (Snowing). Playhouse remains child-only and daytime-only. Raw age at CVillager+0x6A54 is displayed as years by dividing by 20.",
     }
 
 
@@ -41344,6 +41505,9 @@ def main():
     # Fix Vanilla Game Bugs (.vf2bugs, on by default in the patcher): Start
     # Over, Settings Pause Yes, the title hotspot and the stale title screen.
     patch_fix_vanilla_game_bugs(manifest)
+    # Invisible furniture counts as its stock donor where stock code tests
+    # the donor's item id (every executable).
+    patch_invisible_furniture_parity(manifest)
     patch_event_collectable_slot_replacement(manifest)
     # Always link the dormant B152 hook. The offline patcher's exact-SHA
     # post-asset phase changes .vf2preg from 00 to 01 only when selected, so
