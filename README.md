@@ -182,7 +182,7 @@ verified against the shipped `manifest.json`.
 
 Release bundles are exported with the all-enabled release profile, so **nearly
 all of these arrive on** when you pick **Defaults** in the GUI — including
-**Cheat Upgrades**. Of B196's 35 settings, 34 arrive enabled and one arrives
+**Cheat Upgrades**. Of B198's 36 settings, 35 arrive enabled and one arrives
 off (**Swap Invisible Furniture Graphics with Transparent Graphics**). The
 `(on)` marks below are a reading aid on entries whose default has surprised
 people, **not** an exhaustive index -- an unmarked entry is not thereby off.
@@ -226,8 +226,8 @@ release bundle, like almost everything else)
 - **Add optional song mods** - optional music replacements.
 - **No AI Icons** - requires Cheat Upgrades; swaps the late Special Upgrade icons for non-AI artwork.
 
-**Almost everything in the release bundle is on by default.** Of B196's 35
-settings, **34 arrive enabled** when you pick **Defaults** in the GUI, and
+**Almost everything in the release bundle is on by default.** Of B198's 36
+settings, **35 arrive enabled** when you pick **Defaults** in the GUI, and
 exactly one arrives off: **Swap Invisible Furniture Graphics with Transparent
 Graphics**. The `(on)` marks below are therefore not an exhaustive index --
 they were added to entries where the default has surprised people, and an
