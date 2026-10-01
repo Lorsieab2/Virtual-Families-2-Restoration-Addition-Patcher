@@ -157,6 +157,20 @@ RUNTIME_FLAG_SECTIONS = {
     "same_sex_marriage": ".vf2same",
     "older_villager_mortality": ".vf2mort",
     "store_scroll_bar": ".vf2scrl",
+    "fix_vanilla_game_bugs": ".vf2bugs",
+}
+
+# Every record exporter.b152_runtime_flag_post_asset_patches() emits for a
+# linked build manifest: setting id -> (runtime_flags key, section). A new
+# runtime-flag emitter must be registered here too, or every matrix build that
+# runs this validator fails on the record count.
+POST_ASSET_RECORD_SECTIONS = {
+    "mobile_furniture_behaviors": ("mobile_furniture_behaviors", ".vf2beh"),
+    "holiday_furniture": ("holiday_furniture_goals", ".vf2goal"),
+    "allow_older_pregnancies": ("allow_older_pregnancies", ".vf2preg"),
+    "same_sex_marriage": ("same_sex_marriage", ".vf2same"),
+    "older_villager_mortality": ("older_villager_mortality", ".vf2mort"),
+    "fix_vanilla_game_bugs": ("fix_vanilla_game_bugs", ".vf2bugs"),
 }
 
 
@@ -712,13 +726,7 @@ def validate_post_asset_records(
         output_exe_name=f"Virtual Families 2 - Modded {build_label}.exe",
         build_manifest_data=build_manifest,
     )
-    expected = {
-        "mobile_furniture_behaviors": ("mobile_furniture_behaviors", ".vf2beh"),
-        "holiday_furniture": ("holiday_furniture_goals", ".vf2goal"),
-        "allow_older_pregnancies": ("allow_older_pregnancies", ".vf2preg"),
-        "same_sex_marriage": ("same_sex_marriage", ".vf2same"),
-        "older_villager_mortality": ("older_villager_mortality", ".vf2mort"),
-    }
+    expected = POST_ASSET_RECORD_SECTIONS
     if len(records) != len(expected):
         raise ValueError(
             f"Expected {len(expected)} runtime records, got {len(records)}"

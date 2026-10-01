@@ -14231,51 +14231,55 @@ class HolidayOrnamentGateTests(unittest.TestCase):
                 for ins in Cs(CS_ARCH_X86, CS_MODE_32).disasm(code[stub:], stub)
             ]
             self.assertEqual(decoded, [
-                (stub + 0x00, "cmp", "dword ptr [0], 0"),
+                # Fix Vanilla Game Bugs off: the stock Play/Start Over path.
+                (stub + 0x00, "cmp", "byte ptr [0], 0"),
                 (stub + 0x07, "je", hex(patcher.START_OVER_SHARED_PATH)),
-                (stub + 0x0D, "push", "0xb9"),
-                (stub + 0x12, "mov", "ecx, 0"),
-                (stub + 0x17, "call", hex(stub + 0x1C)),
-                (stub + 0x1C, "push", "1"),
-                (stub + 0x1E, "push", "0"),
-                (stub + 0x20, "push", "0x744"),
-                (stub + 0x25, "push", "edi"),
-                (stub + 0x26, "call", hex(stub + 0x2B)),
-                (stub + 0x2B, "add", "esp, 0x10"),
-                (stub + 0x2E, "test", "eax, eax"),
-                (stub + 0x30, "jne", hex(patcher.START_OVER_RETURN_TRUE)),
-                (stub + 0x36, "mov", "esi, dword ptr [edi + 0xc]"),
-                (stub + 0x39, "cmp", "dword ptr [esi + 0x25b18], 0x3e7"),
-                (stub + 0x43, "jl", hex(stub + 0x4F)),
-                (stub + 0x45, "mov", "dword ptr [esi + 0x25b18], 0xa"),
-                (stub + 0x4F, "push", "dword ptr [esi + 0x25ad0]"),
-                (stub + 0x55, "push", "dword ptr [esi + 0x25acc]"),
-                (stub + 0x5B, "push", "dword ptr [esi + 0x25ac8]"),
-                (stub + 0x61, "push", "dword ptr [esi + 0x25ac4]"),
-                (stub + 0x67, "push", "dword ptr [esi + 0x25ac0]"),
-                (stub + 0x6D, "push", "dword ptr [esi + 0x25abc]"),
-                (stub + 0x73, "mov", "ecx, esi"),
-                (stub + 0x75, "call", hex(stub + 0x7A)),
-                (stub + 0x7A, "pop", "dword ptr [esi + 0x25abc]"),
-                (stub + 0x80, "pop", "dword ptr [esi + 0x25ac0]"),
-                (stub + 0x86, "pop", "dword ptr [esi + 0x25ac4]"),
-                (stub + 0x8C, "pop", "dword ptr [esi + 0x25ac8]"),
-                (stub + 0x92, "pop", "dword ptr [esi + 0x25acc]"),
-                (stub + 0x98, "pop", "dword ptr [esi + 0x25ad0]"),
-                (stub + 0x9E, "mov", "ecx, esi"),
-                (stub + 0xA0, "call", hex(stub + 0xA5)),
-                (stub + 0xA5, "jmp", hex(patcher.START_OVER_AFTER_SOUND)),
+                (stub + 0x0D, "cmp", "dword ptr [0], 0"),
+                (stub + 0x14, "je", hex(patcher.START_OVER_SHARED_PATH)),
+                (stub + 0x1A, "push", "0xb9"),
+                (stub + 0x1F, "mov", "ecx, 0"),
+                (stub + 0x24, "call", hex(stub + 0x29)),
+                (stub + 0x29, "push", "1"),
+                (stub + 0x2B, "push", "0"),
+                (stub + 0x2D, "push", "0x744"),
+                (stub + 0x32, "push", "edi"),
+                (stub + 0x33, "call", hex(stub + 0x38)),
+                (stub + 0x38, "add", "esp, 0x10"),
+                (stub + 0x3B, "test", "eax, eax"),
+                (stub + 0x3D, "jne", hex(patcher.START_OVER_RETURN_TRUE)),
+                (stub + 0x43, "mov", "esi, dword ptr [edi + 0xc]"),
+                (stub + 0x46, "cmp", "dword ptr [esi + 0x25b18], 0x3e7"),
+                (stub + 0x50, "jl", hex(stub + 0x5C)),
+                (stub + 0x52, "mov", "dword ptr [esi + 0x25b18], 0xa"),
+                (stub + 0x5C, "push", "dword ptr [esi + 0x25ad0]"),
+                (stub + 0x62, "push", "dword ptr [esi + 0x25acc]"),
+                (stub + 0x68, "push", "dword ptr [esi + 0x25ac8]"),
+                (stub + 0x6E, "push", "dword ptr [esi + 0x25ac4]"),
+                (stub + 0x74, "push", "dword ptr [esi + 0x25ac0]"),
+                (stub + 0x7A, "push", "dword ptr [esi + 0x25abc]"),
+                (stub + 0x80, "mov", "ecx, esi"),
+                (stub + 0x82, "call", hex(stub + 0x87)),
+                (stub + 0x87, "pop", "dword ptr [esi + 0x25abc]"),
+                (stub + 0x8D, "pop", "dword ptr [esi + 0x25ac0]"),
+                (stub + 0x93, "pop", "dword ptr [esi + 0x25ac4]"),
+                (stub + 0x99, "pop", "dword ptr [esi + 0x25ac8]"),
+                (stub + 0x9F, "pop", "dword ptr [esi + 0x25acc]"),
+                (stub + 0xA5, "pop", "dword ptr [esi + 0x25ad0]"),
+                (stub + 0xAB, "mov", "ecx, esi"),
+                (stub + 0xAD, "call", hex(stub + 0xB2)),
+                (stub + 0xB2, "jmp", hex(patcher.START_OVER_AFTER_SOUND)),
             ])
             stub_relocations = {
                 vaddr - stub: target for vaddr, target in relocations.items() if vaddr >= stub
             }
             self.assertEqual(stub_relocations, {
-                0x02: ("?GameStats@@3VCGameStats@@A", patcher.IMAGE_REL_I386_DIR32),
-                0x13: ("?Sound@@3VCSound@@A", patcher.IMAGE_REL_I386_DIR32),
-                0x18: ("?Play@CSound@@QAEXW4ESound@@@Z", patcher.IMAGE_REL_I386_REL32),
-                0x27: (patcher.START_OVER_SHOW_MESSAGE_BOX_SYMBOL, patcher.IMAGE_REL_I386_REL32),
-                0x76: ("?Init@theGameState@@QAEXXZ", patcher.IMAGE_REL_I386_REL32),
-                0xA1: ("?SaveCurrentGame@theGameState@@QAE_NXZ", patcher.IMAGE_REL_I386_REL32),
+                0x02: (patcher.VANILLA_BUGS_FLAG_SYMBOL, patcher.IMAGE_REL_I386_DIR32),
+                0x0F: ("?GameStats@@3VCGameStats@@A", patcher.IMAGE_REL_I386_DIR32),
+                0x20: ("?Sound@@3VCSound@@A", patcher.IMAGE_REL_I386_DIR32),
+                0x25: ("?Play@CSound@@QAEXW4ESound@@@Z", patcher.IMAGE_REL_I386_REL32),
+                0x34: (patcher.START_OVER_SHOW_MESSAGE_BOX_SYMBOL, patcher.IMAGE_REL_I386_REL32),
+                0x83: ("?Init@theGameState@@QAEXXZ", patcher.IMAGE_REL_I386_REL32),
+                0xAE: ("?SaveCurrentGame@theGameState@@QAE_NXZ", patcher.IMAGE_REL_I386_REL32),
             })
             # The developer-dead routine is not what Start Over runs.
             names = {name for name, _rtype in relocations.values()}
@@ -14285,10 +14289,328 @@ class HolidayOrnamentGateTests(unittest.TestCase):
             self.assertEqual(patcher.START_OVER_CONFIRM_STRING_ID, 0x744)
 
         self.with_temp_patched_objs(["theMenuScene.obj"], run)
-        # A base-game fix: installed unconditionally by main(), in every executable.
+        # Fix Vanilla Game Bugs: main() installs it in every executable, and
+        # it installs Start Over; the .vf2bugs byte decides at run time.
         source = Path(patcher.__file__).read_text(encoding="utf-8")
         main_body = source.split("\ndef main():\n", 1)[1].split("\ndef ", 1)[0]
-        self.assertIn("\n    patch_title_menu_start_over_confirms(manifest)\n", main_body)
+        self.assertIn("\n    patch_fix_vanilla_game_bugs(manifest)\n", main_body)
+        self.assertNotIn("\n    patch_title_menu_start_over_confirms(manifest)\n", main_body)
+        parent = source.split("\ndef patch_fix_vanilla_game_bugs(manifest):\n", 1)[1].split("\ndef ", 1)[0]
+        self.assertIn("\n    patch_title_menu_start_over_confirms(manifest)\n", parent)
+
+    @staticmethod
+    def _section_code(obj, symbol):
+        sym = obj.symbol(symbol)
+        sec = obj.section(sym.section)
+        code = bytes(obj.buf[sec.raw_ptr : sec.raw_ptr + sec.raw_size])
+        relocations = {}
+        for index in range(sec.nreloc):
+            vaddr, symbol_index, rtype = struct.unpack_from(
+                "<IIH", obj.buf, sec.reloc_ptr + index * 10
+            )
+            relocations[vaddr] = (obj.symbol_by_index[symbol_index].name, rtype)
+        return code, relocations
+
+    def _decode(self, code, start, end=None):
+        from capstone import Cs, CS_ARCH_X86, CS_MODE_32
+        return [
+            (ins.address, ins.mnemonic, ins.op_str)
+            for ins in Cs(CS_ARCH_X86, CS_MODE_32).disasm(code[start:end], start)
+        ]
+
+    def _assert_detour(self, code, stock_code, at, length, stub):
+        # jmp to the stub, NOP padding, and every other stock byte unchanged.
+        self.assertEqual(code[at], 0xE9)
+        self.assertEqual(at + 5 + struct.unpack_from("<i", code, at + 1)[0], stub)
+        self.assertEqual(code[at + 5 : at + length], b"\x90" * (length - 5))
+        self.assertEqual(code[:at] + code[at + length : stub], stock_code[:at] + stock_code[at + length :])
+
+    def _assert_stock_relocations_kept(self, relocations, stock_relocations):
+        for vaddr, target in stock_relocations.items():
+            self.assertEqual(relocations[vaddr], target)
+
+    def test_settings_pause_yes_skips_the_add_when_already_paused(self):
+        def run(temp_root):
+            manifest = {}
+            patcher.patch_options_pause_yes_idempotent(manifest)
+            fn = patcher.PAUSE_YES_FUNCTION
+            code, relocations = self._section_code(CoffObject(temp_root / "theOptionsDialog.obj"), fn)
+            stock_code, stock_relocations = self._section_code(
+                CoffObject(patcher.SRC_OBJS / "theOptionsDialog.obj"), fn
+            )
+            stub = 0x473
+            self.assertEqual(len(code), stub + patcher.PAUSE_YES_STUB_SIZE)
+            self._assert_detour(code, stock_code, patcher.PAUSE_YES_ADD_OFFSET, 10, stub)
+            self._assert_stock_relocations_kept(relocations, stock_relocations)
+            # The displaced instruction is the stock unconditional add.
+            self.assertEqual(
+                stock_code[patcher.PAUSE_YES_ADD_OFFSET : patcher.PAUSE_YES_ADD_OFFSET + 10],
+                bytes.fromhex("8180185B0200E7030000"),
+            )
+            resume = hex(patcher.PAUSE_YES_RESUME_OFFSET)
+            self.assertEqual(self._decode(code, stub), [
+                (stub + 0x00, "cmp", "byte ptr [0], 0"),
+                (stub + 0x07, "je", hex(stub + 0x19)),       # flag off: stock add
+                (stub + 0x09, "cmp", "dword ptr [eax + 0x25b18], 0x3e7"),
+                (stub + 0x13, "jge", resume),                # already paused: no add
+                (stub + 0x19, "add", "dword ptr [eax + 0x25b18], 0x3e7"),
+                (stub + 0x23, "jmp", resume),
+            ])
+            self.assertEqual(
+                {v - stub: t for v, t in relocations.items() if v >= stub},
+                {0x02: (patcher.VANILLA_BUGS_FLAG_SYMBOL, patcher.IMAGE_REL_I386_DIR32)},
+            )
+            # The Space key's own pause test is the >= 999 the stub repeats.
+            main_code, _ = self._section_code(
+                CoffObject(patcher.SRC_OBJS / "theMainScene.obj"),
+                "?HandleKeyCharacter@theMainScene@@IAE?B_ND@Z",
+            )
+            self.assertEqual(main_code[0x20B:0x216], bytes.fromhex("8B80185B02003DE7030000"))
+            self.assertEqual(
+                manifest["SettingsPauseYesIdempotent"]["offline_patcher_setting"],
+                patcher.VANILLA_BUGS_SETTING,
+            )
+
+        self.with_temp_patched_objs(["theOptionsDialog.obj"], run)
+
+    def test_title_menu_leftover_change_player_hotspot_is_emptied(self):
+        def run(temp_root):
+            manifest = {}
+            patcher.patch_title_menu_stale_hotspot(manifest)
+            ctor = "??0theMenuScene@@QAE@XZ"
+            code, relocations = self._section_code(CoffObject(temp_root / "theMenuScene.obj"), ctor)
+            stock_code, stock_relocations = self._section_code(
+                CoffObject(patcher.SRC_OBJS / "theMenuScene.obj"), ctor
+            )
+            stub = 0x83A
+            self.assertEqual(len(code), stub + patcher.TITLE_HOTSPOT_STUB_SIZE)
+            self._assert_detour(code, stock_code, patcher.TITLE_HOTSPOT_TOP_STORE_OFFSET, 10, stub)
+            self._assert_stock_relocations_kept(relocations, stock_relocations)
+            self.assertEqual(self._decode(code, stub), [
+                (stub + 0x00, "mov", "dword ptr [esi + 0xa0], 0xf9"),   # stock top
+                (stub + 0x0A, "cmp", "byte ptr [0], 0"),
+                (stub + 0x11, "je", hex(stub + 0x1D)),                 # flag off: keep it
+                (stub + 0x13, "mov", "dword ptr [esi + 0xa0], 0x118"),  # bottom + 1: empty
+                (stub + 0x1D, "jmp", hex(patcher.TITLE_HOTSPOT_RESUME_OFFSET)),
+            ])
+            self.assertEqual(
+                {v - stub: t for v, t in relocations.items() if v >= stub},
+                {0x0C: (patcher.VANILLA_BUGS_FLAG_SYMBOL, patcher.IMAGE_REL_I386_DIR32)},
+            )
+            # The stock bottom the empty rect is measured against.
+            self.assertEqual(
+                stock_code[0x297:0x2A1], bytes.fromhex("C786A800000017010000")
+            )
+            # HandleMouse is untouched: its branches simply never match.
+            mouse = "?HandleMouse@theMenuScene@@UAE_NHUldwPoint@@@Z"
+            self.assertEqual(
+                self._section_code(CoffObject(temp_root / "theMenuScene.obj"), mouse)[0],
+                self._section_code(CoffObject(patcher.SRC_OBJS / "theMenuScene.obj"), mouse)[0],
+            )
+
+        self.with_temp_patched_objs(["theMenuScene.obj"], run)
+
+    def test_title_menu_refreshes_name_manage_games_and_label(self):
+        def run(temp_root):
+            manifest = {}
+            # Start Over first, as patch_fix_vanilla_game_bugs does: the
+            # cancel stub is appended after its stub in HandleMessage.
+            patcher.patch_title_menu_start_over_confirms(manifest)
+            patcher.patch_title_menu_refresh_on_activate(manifest)
+            obj = CoffObject(temp_root / "theMenuScene.obj")
+            stock = CoffObject(patcher.SRC_OBJS / "theMenuScene.obj")
+            flag = (patcher.VANILLA_BUGS_FLAG_SYMBOL, patcher.IMAGE_REL_I386_DIR32)
+
+            # UpdateShowPlayer: label refresh on entry, Manage Games re-add.
+            fn = patcher.TITLE_SHOW_PLAYER_FUNCTION
+            code, relocations = self._section_code(obj, fn)
+            stock_code, stock_relocations = self._section_code(stock, fn)
+            label = 0xC6
+            manage = label + patcher.TITLE_SHOW_PLAYER_LABEL_STUB_SIZE
+            at = patcher.TITLE_SHOW_PLAYER_ADD_NAME_OFFSET
+            self.assertEqual(len(code), manage + patcher.TITLE_SHOW_PLAYER_STUB_SIZE)
+            # entry detour (the 6-byte prologue) and the AddControl(name) detour
+            self.assertEqual(code[0], 0xE9)
+            self.assertEqual(5 + struct.unpack_from("<i", code, 1)[0], label)
+            self.assertEqual(code[5], 0x90)
+            self.assertEqual(stock_code[:6], bytes.fromhex("558BEC83EC6C"))
+            self.assertEqual(code[at], 0xE9)
+            self.assertEqual(at + 5 + struct.unpack_from("<i", code, at + 1)[0], manage)
+            self.assertEqual(code[at + 5 : at + 8], b"\x90" * 3)
+            self.assertEqual(code[6:at] + code[at + 8 : label], stock_code[6:at] + stock_code[at + 8 :])
+            self._assert_stock_relocations_kept(relocations, stock_relocations)
+            self.assertEqual(self._decode(code, label, manage), [
+                (label + 0x00, "cmp", "byte ptr [0], 0"),
+                (label + 0x07, "je", hex(label + 0x48)),        # flag off: prologue
+                (label + 0x09, "push", "esi"),
+                (label + 0x0A, "mov", "esi, ecx"),
+                (label + 0x0C, "mov", "ecx, dword ptr [esi + 0x14]"),
+                (label + 0x0F, "call", hex(label + 0x14)),
+                (label + 0x14, "push", "eax"),
+                (label + 0x15, "mov", "eax, dword ptr [0]"),
+                (label + 0x1A, "push", "eax"),
+                (label + 0x1B, "push", "eax"),
+                (label + 0x1C, "push", "eax"),
+                (label + 0x1D, "mov", "eax, 0x775"),
+                (label + 0x22, "cmp", "dword ptr [0], 0"),
+                (label + 0x29, "je", hex(label + 0x30)),
+                (label + 0x2B, "mov", "eax, 0x280"),
+                (label + 0x30, "push", "eax"),
+                (label + 0x31, "mov", "ecx, dword ptr [esi + 0x14]"),
+                (label + 0x34, "call", hex(label + 0x39)),
+                (label + 0x39, "push", "eax"),
+                (label + 0x3A, "mov", "ecx, dword ptr [esi + 0xd8]"),
+                (label + 0x40, "call", hex(label + 0x45)),
+                (label + 0x45, "mov", "ecx, esi"),                # this back in ecx
+                (label + 0x47, "pop", "esi"),
+                (label + 0x48, "push", "ebp"),                    # displaced prologue
+                (label + 0x49, "mov", "ebp, esp"),
+                (label + 0x4B, "sub", "esp, 0x6c"),
+                (label + 0x4E, "jmp", "6"),               # back to +06
+            ])
+            name = hex(manage + 0x27)
+            self.assertEqual(self._decode(code, manage), [
+                (manage + 0x00, "cmp", "byte ptr [0], 0"),
+                (manage + 0x07, "je", name),                      # flag off: name only
+                (manage + 0x09, "push", "dword ptr [ebx + 0xc4]"),
+                (manage + 0x0F, "mov", "ecx, ebx"),
+                (manage + 0x11, "call", hex(manage + 0x16)),
+                (manage + 0x16, "test", "eax, eax"),
+                (manage + 0x18, "jne", name),                     # already in the scene
+                (manage + 0x1A, "push", "dword ptr [ebx + 0xe4]"),
+                (manage + 0x20, "mov", "ecx, ebx"),
+                (manage + 0x22, "call", hex(manage + 0x27)),
+                (manage + 0x27, "push", "dword ptr [ebx + 0xf0]"),
+                (manage + 0x2D, "mov", "ecx, ebx"),
+                (manage + 0x2F, "jmp", hex(at + 8)),              # the stock AddControl call
+            ])
+            self.assertEqual({v - label: t for v, t in relocations.items() if v >= label}, {
+                0x02: flag,
+                0x10: ("?GetLargeFont@theStringManager@@QAEPAVldwFont@@XZ", patcher.IMAGE_REL_I386_REL32),
+                0x16: ("?cLdwWhite@@3UldwColor@@B", patcher.IMAGE_REL_I386_DIR32),
+                0x24: ("?GameStats@@3VCGameStats@@A", patcher.IMAGE_REL_I386_DIR32),
+                0x35: ("?GetString@theStringManager@@QAEPADW4StringId@@@Z", patcher.IMAGE_REL_I386_REL32),
+                0x41: ("?SetText@ldwButton@@QAEXPBDUldwColor@@11PAVldwFont@@@Z", patcher.IMAGE_REL_I386_REL32),
+                0x53 + 0x02: flag,
+                0x53 + 0x12: ("?GetControl@ldwScene@@IAEPAVldwControl@@H@Z", patcher.IMAGE_REL_I386_REL32),
+                0x53 + 0x23: ("?AddControl@ldwScene@@IAEXPAVldwControl@@@Z", patcher.IMAGE_REL_I386_REL32),
+            })
+
+            # Activate(true) calls UpdateShowPlayer.
+            fn = patcher.TITLE_ACTIVATE_FUNCTION
+            code, relocations = self._section_code(obj, fn)
+            stock_code, stock_relocations = self._section_code(stock, fn)
+            stub = 0x23
+            self.assertEqual(len(code), stub + patcher.TITLE_ACTIVATE_STUB_SIZE)
+            self._assert_detour(code, stock_code, patcher.TITLE_ACTIVATE_EPILOGUE_OFFSET, 5, stub)
+            self._assert_stock_relocations_kept(relocations, stock_relocations)
+            done = hex(stub + 0x16)
+            self.assertEqual(self._decode(code, stub), [
+                (stub + 0x00, "cmp", "byte ptr [ebp + 8], 0"),
+                (stub + 0x04, "je", done),                        # deactivating
+                (stub + 0x06, "cmp", "byte ptr [0], 0"),
+                (stub + 0x0D, "je", done),                        # flag off
+                (stub + 0x0F, "mov", "ecx, esi"),
+                (stub + 0x11, "call", hex(stub + 0x16)),
+                (stub + 0x16, "pop", "esi"),
+                (stub + 0x17, "pop", "ebp"),
+                (stub + 0x18, "ret", "4"),
+            ])
+            self.assertEqual({v - stub: t for v, t in relocations.items() if v >= stub}, {
+                0x08: flag,
+                0x12: (patcher.TITLE_SHOW_PLAYER_FUNCTION, patcher.IMAGE_REL_I386_REL32),
+            })
+
+            # The name prompt's cancel branch calls it too.
+            fn = patcher.START_OVER_MENU_FUNCTION
+            code, relocations = self._section_code(obj, fn)
+            stock_code, stock_relocations = self._section_code(stock, fn)
+            cancel = 0x1DD + patcher.START_OVER_STUB_SIZE
+            branch = patcher.TITLE_NICKNAME_CANCEL_BRANCH_OFFSET
+            self.assertEqual(len(code), cancel + patcher.TITLE_NICKNAME_CANCEL_STUB_SIZE)
+            self.assertEqual(stock_code[branch - 3 : branch + 2], bytes.fromhex("83FEFF0F84"))
+            self.assertEqual(self._je_target(stock_code, branch), patcher.START_OVER_RETURN_TRUE)
+            self.assertEqual(self._je_target(code, branch), cancel)
+            # the stock path's own refresh the stub repeats
+            self.assertEqual(stock_relocations[0xFF][0], patcher.TITLE_SHOW_PLAYER_FUNCTION)
+            self.assertEqual(self._decode(code, cancel), [
+                (cancel + 0x00, "cmp", "byte ptr [0], 0"),
+                (cancel + 0x07, "je", hex(patcher.START_OVER_RETURN_TRUE)),   # flag off: stock
+                (cancel + 0x0D, "mov", "dword ptr [ebp - 4], 0xffffffff"),
+                (cancel + 0x14, "mov", "ecx, edi"),
+                (cancel + 0x16, "call", hex(cancel + 0x1B)),
+                (cancel + 0x1B, "jmp", hex(patcher.START_OVER_RETURN_TRUE)),
+            ])
+            self.assertEqual({v - cancel: t for v, t in relocations.items() if v >= cancel}, {
+                0x02: flag,
+                0x17: (patcher.TITLE_SHOW_PLAYER_FUNCTION, patcher.IMAGE_REL_I386_REL32),
+            })
+
+            # The label repeats the constructor's own calls and test, on the
+            # same button (this+0D8h), and HandleMessage tests the same dword.
+            ctor_code, ctor_relocations = self._section_code(stock, "??0theMenuScene@@QAE@XZ")
+            self.assertEqual(ctor_code[0x32D:0x332], bytes.fromhex("6875070000"))
+            self.assertEqual(ctor_code[0x36D:0x372], bytes.fromhex("6880020000"))
+            self.assertEqual(ctor_code[0x337:0x33D], bytes.fromhex("8B8ED8000000"))
+            self.assertEqual(ctor_relocations[0x352][0], "?GameStats@@3VCGameStats@@A")
+            self.assertEqual(stock_relocations[0x12A][0], "?GameStats@@3VCGameStats@@A")
+            # Manage Games is this+0E4h with id this+0C4h, and the stock
+            # no-player branch removes exactly that pointer.
+            self.assertEqual(ctor_code[0x4DF:0x4E5], bytes.fromhex("FFB6C4000000"))
+            self.assertEqual(ctor_code[0x4F9:0x4FF], bytes.fromhex("8986E4000000"))
+            show_stock, _ = self._section_code(stock, patcher.TITLE_SHOW_PLAYER_FUNCTION)
+            self.assertEqual(show_stock[0x9D:0xA3], bytes.fromhex("FFB3E4000000"))
+            # RemoveControl unlinks the node but never frees the control, so
+            # re-adding the stored pointer is safe.
+            scene_code, scene_relocations = self._section_code(
+                CoffObject(patcher.SRC_OBJS / "ldwScene.obj"),
+                "?RemoveControl@ldwScene@@IAEXPAVldwControl@@@Z",
+            )
+            self.assertEqual(
+                {name for name, _rtype in scene_relocations.values()}, {"??3@YAXPAXI@Z"}
+            )
+            self.assertEqual(scene_code[0x3F:0x42], bytes.fromhex("6A0850"))  # delete(node, 8)
+            self.assertEqual(manifest["TitleMenuRefresh"]["offline_patcher_setting"], "fix_vanilla_game_bugs")
+
+        self.with_temp_patched_objs(["theMenuScene.obj"], run)
+
+    def test_fix_vanilla_game_bugs_is_one_default_on_runtime_flag(self):
+        def run(temp_root):
+            manifest = {}
+            patcher.patch_fix_vanilla_game_bugs(manifest)
+            contract = manifest["FixVanillaGameBugs"]
+            self.assertEqual(contract["offline_patcher_setting"], "fix_vanilla_game_bugs")
+            self.assertTrue(contract["default"])
+            self.assertEqual(contract["runtime_flag"]["source_section"], ".vf2bugs")
+            self.assertEqual(contract["runtime_flag"]["symbol"], "_gVF2FixVanillaGameBugs")
+            self.assertEqual(contract["runtime_flag"]["default"], "00")
+            self.assertEqual(set(contract["fixes"]), {
+                "TitleMenuStartOverConfirms", "SettingsPauseYesIdempotent",
+                "TitleMenuStaleHotspot", "TitleMenuRefresh",
+            })
+            for key in contract["fixes"]:
+                self.assertEqual(manifest[key]["status"], "installed")
+                self.assertEqual(manifest[key]["offline_patcher_setting"], "fix_vanilla_game_bugs")
+
+        self.with_temp_patched_objs(["theMenuScene.obj", "theOptionsDialog.obj"], run)
+        # The exporter emits a .vf2bugs post-asset record, so every tool that
+        # enumerates runtime flags has to know the section (Codex, PR #412).
+        import export_offline_patch_bundle as exporter
+        import validate_b158_mobile_feature_readback as b158_readback
+        self.assertEqual(exporter.RUNTIME_FLAG_SECTION_BY_SETTING["fix_vanilla_game_bugs"], ".vf2bugs")
+        self.assertEqual(b153_runtime.RUNTIME_FLAG_SECTIONS["fix_vanilla_game_bugs"], ".vf2bugs")
+        self.assertEqual(
+            b153_runtime.POST_ASSET_RECORD_SECTIONS["fix_vanilla_game_bugs"],
+            ("fix_vanilla_game_bugs", ".vf2bugs"),
+        )
+        self.assertEqual(b158_readback.RUNTIME_FLAG_SECTIONS["fix_vanilla_game_bugs"], ".vf2bugs")
+        source = Path(patcher.__file__).read_text(encoding="utf-8")
+        self.assertIn(
+            '#pragma section(".vf2bugs", read, write)\n'
+            'extern "C" __declspec(allocate(".vf2bugs"))\n'
+            "volatile unsigned char gVF2FixVanillaGameBugs = 0;\n",
+            source,
+        )
 
     def test_ornamentologist_completion_hook_is_idempotent(self):
         def run(temp_root):

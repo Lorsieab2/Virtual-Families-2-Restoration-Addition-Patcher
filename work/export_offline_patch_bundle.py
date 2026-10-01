@@ -256,6 +256,7 @@ MOBILE_FURNITURE_BEHAVIOR_FMAP_FILES = (
 SOURCE_BACKED_OPTIONAL_SETTINGS = {
     "unused_pets",
     "text_fixes",
+    "fix_vanilla_game_bugs",
     "mobile_purchases",
     "store_scroll_bar",
     "allow_older_pregnancies",
@@ -380,6 +381,13 @@ SETTINGS = [
         "id": "text_fixes",
         "label": "Text fixes",
         "description": "Misc text fixes, including {name} sees their adorable pet and Not feeling clean.",
+        "default": True,
+        "category": "main",
+    },
+    {
+        "id": "fix_vanilla_game_bugs",
+        "label": "Fix Vanilla Game Bugs",
+        "description": "Fixes bugs in the original game's menus. Start Over on the title screen asks before restarting instead of just continuing the current game. Choosing Pause Game: Yes in Settings while already paused no longer leaves the game stuck paused after one Space press. The invisible Change Player click spot above the title buttons is removed. The title screen now always shows the current player's name, keeps the Manage Games button, and labels the first button Play or Continue correctly.",
         "default": True,
         "category": "main",
     },
@@ -977,6 +985,7 @@ def _is_persisted_byte_flag(runtime_flag: dict[str, Any]) -> bool:
 RUNTIME_FLAG_SECTION_BY_SETTING = {
     "allow_older_pregnancies": ".vf2preg",
     "older_villager_mortality": ".vf2mort",
+    "fix_vanilla_game_bugs": ".vf2bugs",
     "same_sex_marriage": ".vf2same",
     "holiday_furniture": ".vf2goal",
     "mobile_furniture_behaviors": ".vf2beh",
@@ -1080,6 +1089,30 @@ def older_mortality_post_asset_patches(
         section_name=RUNTIME_FLAG_SECTION_BY_SETTING["older_villager_mortality"],
         setting_id="older_villager_mortality",
         feature_label="Older Villager Mortality Curve",
+    )
+
+
+def fix_vanilla_game_bugs_post_asset_patches(
+    executable_sources: list[Path],
+    *,
+    output_exe_name: str,
+    build_manifest_data: dict[str, Any],
+) -> list[dict[str, Any]]:
+    contract = build_manifest_data.get("FixVanillaGameBugs")
+    if not isinstance(contract, dict):
+        return []
+    runtime_flag = contract.get("runtime_flag")
+    if not isinstance(runtime_flag, dict):
+        raise ValueError(
+            "Build manifest has an invalid FixVanillaGameBugs contract."
+        )
+    return setting_runtime_flag_post_asset_patches(
+        executable_sources,
+        output_exe_name=output_exe_name,
+        runtime_flag=runtime_flag,
+        section_name=RUNTIME_FLAG_SECTION_BY_SETTING["fix_vanilla_game_bugs"],
+        setting_id="fix_vanilla_game_bugs",
+        feature_label="Fix Vanilla Game Bugs",
     )
 
 
@@ -1399,6 +1432,11 @@ def b152_runtime_flag_post_asset_patches(
             build_manifest_data=build_manifest_data,
         ),
         *same_sex_marriage_post_asset_patches(
+            executable_sources,
+            output_exe_name=output_exe_name,
+            build_manifest_data=build_manifest_data,
+        ),
+        *fix_vanilla_game_bugs_post_asset_patches(
             executable_sources,
             output_exe_name=output_exe_name,
             build_manifest_data=build_manifest_data,
@@ -3941,6 +3979,7 @@ def write_transparency_log(bundle_dir: Path, manifest: dict[str, Any]) -> str:
         "- Allow Older Pregnancies is an exact-SHA post-asset toggle of the dormant .vf2preg byte; age-50+ failed attempts skip the stock cooldown deadline write. The same byte permits the native Next Generation flow when the oldest active living non-departed villager reaches age 60 while still requiring a surviving child. Native StartNextGeneration and its 30-record MakeRoomInTree rollover remain unchanged. The setting does not add another executable overlay dimension.",
         "- Same-sex marriage support is linked behind the default-zero .vf2same byte. When enabled, only the post-spawn marriage candidate gender field is flipped; the proposal scene keeps native Accept, Reject, close, proposal-state, parent-storage, and selector behavior. Same-sex spouse drops use the native private-romantic-time sequence, TryToMakeBaby returns before pregnancy, and refusal/argument routes are not used for the established same-sex spouse pair.",
         "- Older Villager Mortality Curve is an exact-SHA post-asset toggle of the dormant .vf2mort byte; flag-off resumes the stock old-age block and it does not add another executable overlay dimension.",
+        "- Fix Vanilla Game Bugs is an exact-SHA post-asset toggle of the dormant .vf2bugs byte (on by default): title Start Over confirms before restarting, Settings Pause Yes is idempotent, the invisible title Change Player hotspot is emptied, and the title refreshes its player name, Manage Games button and Play/Continue label on every visit. Flag-off runs the stock instructions at every site and it does not add another executable overlay dimension.",
         "- F5 enables and toggles the native debugger overlay; Up/Down change pages, F6 selects Waypoint Editor, F7 selects Light Source Editor, and F4 exits an editor. B153 recognizes VF2's internal key codes as well as Win32/SDL fallbacks.",
     ]
     )

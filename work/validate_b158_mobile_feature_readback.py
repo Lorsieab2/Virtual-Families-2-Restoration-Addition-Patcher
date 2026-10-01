@@ -25,6 +25,7 @@ RUNTIME_FLAG_SECTIONS = {
     "same_sex_marriage": ".vf2same",
     "older_villager_mortality": ".vf2mort",
     "store_scroll_bar": ".vf2scrl",
+    "fix_vanilla_game_bugs": ".vf2bugs",
 }
 
 FURNITURE_LINK_MARKERS = {
