@@ -1,0 +1,349 @@
+VIRTUAL FAMILIES 2 RESTORATION/ADDITION PATCHER -- FINAL AUDIT REPORT
+=====================================================================
+Dates: 2026-09-29 to 2026-10-01
+Audited: B196 (main at bf46d44): every setting, the patcher engine and GUI,
+defaults, apply / Enable-Disable / restore, the bundle exporter, the release
+gate and packaging; then the stock menu buttons.
+Result: 32 pull requests merged (#384-#415), released as B197, B198 and B199.
+Final main: 74f0c61.
+
+RELEASE (CURRENT)
+-----------------
+  B199 -- https://github.com/Lorsieab2/Virtual-Families-2-Restoration-Addition-Patcher/releases/tag/B199
+  - Marked Latest. B198 and earlier demoted to prerelease.
+  - Built from main at 303e5d1 (#414), seeded from the B198 matrix. The tag
+    points at 74f0c61 (#415: release config, notes, identities).
+  - 32 variants built, 32 distinct executables, identities recorded.
+  - Bundle: reproduces the build on a clean install (8194 of 8194 files).
+  - Release gate: RELEASE GATE PASSED; no features lost against 19 retained
+    releases.
+  - Asset: VF2-B199-Release.zip, 146,662,820 bytes,
+    SHA-256 9194ad2bb278e34c94d069e3cd65020d2397030037c709fb0ee293ce6f4a9a1b
+  - FRESH-DOWNLOAD CHECK: I downloaded the published asset again.
+    - Same SHA-256 and size as the gated zip.
+    - The bundle verifier passes on it.
+    - Applied from the untouched vanilla game, all six redirected item
+      checks in the resulting executable reach the new helper, and the goal
+      check translates the invisible pools and MP3 player.
+  - Release notes: docs/B199-release-notes.md (also on the release page).
+
+  Previous: B198 (now prerelease) -- Fix Vanilla Game Bugs. Details below.
+  - Marked Latest at the time; B197 and B196 demoted to prerelease.
+  - Built from main at eab44df (#412), seeded from the B197 matrix. The tag
+    points at 7a922d2 (#413: release config, notes, identities).
+  - 32 variants built, 32 distinct executables. Each carries the new
+    .vf2bugs byte at 00 (the patcher sets it). Identities are recorded.
+  - Bundle: reproduces the build on a clean install (8194 of 8194 files).
+  - Release gate: RELEASE GATE PASSED; no features lost against 18 retained
+    releases.
+  - Asset: VF2-B198-Release.zip, 146,659,573 bytes,
+    SHA-256 79f3d8f86aba041f16a8978f65de46adb8e898506c8d307268f48bd97b47510a
+  - FRESH-DOWNLOAD CHECK: I downloaded the published asset again.
+    - Same SHA-256 and size as the gated zip.
+    - The bundle verifier passes on it (32 variant identities
+      authenticated).
+    - Applied from the untouched vanilla game with defaults, it produces
+      exactly the executable I live-tested (SHA-256 1cc993b1...).
+  - Release notes: docs/B198-release-notes.md (also on the release page).
+
+  Previous: B197 (now prerelease)
+  - Built from 580a698 (#384-#407).
+  - VF2-B197-Release.zip, SHA-256 45a9159072a636f4321f0023177a64368ef6eb256ad8f8b56eeb650b8af56cec.
+
+HOW IT WAS DONE
+---------------
+- Five parallel auditors covered:
+  - engine/GUI;
+  - packaging/gate;
+  - cheats/rule flags;
+  - behaviour/furniture;
+  - assets.
+  Follow-up sub-audits covered behaviour and the stock menu buttons.
+- Every claimed defect was verified against the code, the disassembly, the
+  shipped executables or the running game before it was fixed. One claimed
+  defect, a furnished-looking new house, was your Custom Map Images art, not
+  a bug.
+- Each fix went in its own PR, with tests that fail when the fix is
+  reverted. For #412, 12 deliberate breakages of the fix were each caught by
+  a test.
+- Reviews:
+  - Codex where available. It approved #384 (first version), #385, #386,
+    #390, #398, #400, #401, #411, #412 and #413.
+  - When Codex hit its usage limit, an independent self-review stood in
+    (your instruction). Self-reviews found and fixed real defects in #384,
+    #387, #388, #389, #393, #396 and #406.
+- Main's full test suite was red before this work (two stale doc tests). It
+  is green apart from environment-only checks.
+
+DEFECTS FOUND AND FIXED (with the PR that fixes each)
+------------------------------------------------------
+Crash
+ #384  ISSUE #378 ROOT CAUSE. Dropping a villager on these could crash once
+       the store's Pets page had been shown:
+       - Invisible Patio Table
+       - Invisible Picnic Table
+       - Invisible Lounger
+       - Invisible Spa Lounger
+       - visible Spa Lounger
+       Cause:
+       - Their placement maps carried mobile-only hotspot numbers
+         (0x6B-0x6D).
+       - The PC drop handler indexes its table without a bound. It read a
+         pet item number (0x240-0x244) and executed it.
+       Reproduced LIVE on B196 under a debugger (access violation executing
+       0x245). After the fix:
+       - Footprints are unchanged: the built maps match B196 cell for cell.
+       - Unticking Mobile Furniture Behaviors no longer restores the raw
+         maps.
+
+Villagers
+ #405  Careers could not be maxed. Behavior Patches reset the career
+       activities' weights on every load, which erased praise training; the
+       base game uses that training to drive career progress while the game
+       is closed. Career rows now stay exactly as in the base game; the label
+       variations are kept.
+ #385  The computer-drop coin flip read the villager's AGE (+0x6A54)
+       instead of the current behaviour (+0x1BBA0). It almost never fired on
+       a computer, and instead fired on any drop of a villager aged exactly
+       4.5.
+ #395  The hammock was never chosen in Cloudy weather: a stock Sunny-only
+       field had been left in place.
+ #403  Fireplace, foosball, pinball, slots, pachinko, the kids table, the
+       easel, the playhouse and couch sitting were offered in houses without
+       that furniture. They now require it.
+ #398  Praise/scold training of hammock, playhouse, snow, gym and yoga was
+       reset on every decision.
+ #397  The stock Treadmill could show Exercise Bike captions. One 40-byte
+       label was truncated.
+ #394  Picnic and Patio tables now match the VF2 mobile game (taken from its
+       code):
+       - the correct refusal text;
+       - props on every table for 300 s;
+       - several preparers at once;
+       - every preparation activates the props.
+
+Cheat Upgrades
+ #391  Max out sock pile overflowed the laundering goals. It is now
+       1,000,000, and saves already damaged are repaired on load. Reset
+       Achievements keeps armed pregnancy one-shots.
+ #392  Complete all Achievements paid only about one reward; it now pays
+       every goal's reward.
+ #393  Fixed in this PR:
+       - Unlock Everything was lost on relaunch.
+       - Non-cheat builds acted on saved cheat state.
+       - An unlock leaked into the next village (fixed in review).
+ #406  A new village in the same session inherited the old village's Health
+       Plan and Oldest Villager record. This also affects B196.
+
+Base-game (vanilla) bugs -- the new "Fix Vanilla Game Bugs" setting
+ #411  Title Start Over did exactly what Continue does: both buttons ran the
+       same code. Now:
+       - It asks "Are you sure you want to restart the current game?"
+       - OK starts a new village for the same player.
+       - Cancel changes nothing.
+       - It uses the steps the game's own new-player dialogs take (Init,
+         keep the name, save), never the developer-dead
+         RestartCurrentGame routine.
+ #412  NEW SETTING "Fix Vanilla Game Bugs" (Main, on by default), as you
+       asked.
+       - It is one byte (.vf2bugs) in the patched executable, the same kind
+         of switch as Allow Older Pregnancies, so it adds no extra builds.
+       - Unticked, every site runs the original game's instructions.
+       - Start Over (#411) now lives under it.
+       It also fixes these stock bugs:
+       - Settings > Pause Game: Yes while already paused stored the pause
+         twice (2008). One Space press then left the game paused (1009) and
+         a second press was needed. The second +999 is now skipped.
+       - An invisible Change Player click spot sat on the title screen at
+         the Manage Games button's position before the game moves it.
+         - That rect is now emptied.
+         - Its code is left in place, per your no-dead-code-removal
+           instruction.
+       - The title screen went stale:
+         - Play/Continue was chosen once, at load.
+         - The player name appeared only after a dialog closed.
+         - Manage Games vanished for the session after the last player was
+           deleted.
+         - Cancelling the name prompt left the deleted player's name and
+           "Continue" on screen. Live testing found this last case, and it
+           is fixed too.
+         The fix: the game's own UpdateShowPlayer now re-applies the label
+         and re-adds Manage Games. It runs whenever the title is shown and
+         when the name prompt is cancelled.
+       - Codex flagged that two older validator scripts did not know the new
+         section. That was fixed, and Codex then approved.
+       Evict (the Settings button that is invisible in the stock game) was
+       already fixed in an older build and is unchanged.
+
+Patcher / GUI
+ #386  GUI Restore Backup restored INTO THE VANILLA GAME FOLDER and could
+       delete about 166 vanilla files. Also fixed:
+       - The output-folder guard was bypassed, so a personal folder's files
+         could be moved into backups.
+       - Read-only files crashed rebuilds with no failure log.
+ #387  Fixed in this PR:
+       - Enable/Disable on an existing modded folder always failed on real
+         B196 output (the icon rewrite).
+       - Unticking Patch game executable always failed.
+       - A stale modded exe could be copied (fixed in review).
+ #396  Enable/Disable left unticked settings' files behind and could not
+       disable Holiday Ornaments. It now matches a fresh apply (41
+       selections compared). A release export could also ship without undo
+       data (fixed in review).
+ #388  A Backup folder picked with Browse always failed, because an
+       existing folder was refused. It now gets a per-run subfolder. Backup
+       growth is documented.
+ #402  Fixed in this PR:
+       - Setting dependencies now close both ways (e.g. No AI Icons <->
+         Cheat Upgrades).
+       - Built-in settings are shown as always on.
+       - The summary no longer calls a setting "enabled" when nothing of it
+         was installed.
+ #404  The --backup-dir help text was wrong.
+
+Bundle / release tooling
+ #389  The release gate passed bundles with any of these problems; 20+
+       corruption cases now fail:
+       - missing or corrupted files;
+       - wrong runtime-flag offsets or bytes;
+       - overlapping or swapped flag records;
+       - missing runners.
+ #390  Fixed in this PR:
+       - Editor junk was installed into the game folder.
+       - Super Fridge stayed visible under Invisible Workspace Upgrades.
+       - Hairstyle icons and Bathroom 2 art were gated on the wrong
+         settings.
+
+Invisible furniture (you asked that every fix also apply to it)
+ #414  I searched the base game for the stock item number of all 33
+       invisible items. Almost everything already treated the invisible
+       copies like the stock ones:
+       - The furniture a villager chooses on its own is recognised by the
+         kind of object it is, which the invisible copies share.
+       - The click table and every route this patcher adds list both items.
+       - Every fix from this audit applies to them.
+       Seven places in the base game asked for one exact stock item, so the
+       invisible copy did not count: six item checks (redirected to a new
+       "stock or invisible" helper) and the goal switch (which now
+       translates an invisible pool or MP3 player to its stock item first):
+       - Goals: "Staying cool in the pool" (Invisible Kiddie or Full-Size
+         Pool) and "Let's dance" (Invisible MP3 Player). Both are CONFIRMED
+         LIVE: each completed in a village whose only pool, or only music
+         player, was the invisible one.
+       - Kiddie pool play: children never chose to play in an Invisible
+         Kiddie Pool. The two activities required the stock pool by item
+         number.
+       - Happiness: the "likes" bonus came only from the stock MP3 player,
+         pools and hammock.
+       - Clicking the Invisible MP3 Player was silent unless a stock one was
+         also placed.
+       All seven now accept the invisible copy, in every executable.
+       - The hammock had no item check on how villagers choose it.
+       - "Filling in a hole" uses the number 0x1E5 as a yard position, not
+         as an item, so it needed nothing.
+       Codex approved; 8 deliberate breakages of the fix were all caught by a
+       test.
+
+Docs and tests
+ #400  README and setting descriptions corrected where the code disagreed:
+       - the duplicate behaviour section;
+       - Same-Sex Marriage storage;
+       - both marriage rows free;
+       - Christmas-tree maps;
+       - default-on settings;
+       - store rows remain when unticked;
+       - lowered stock weights documented;
+       - spa;
+       - UseCouch;
+       - inherited art.
+ #410  README: the autonomous hammock also needs a tired villager (energy
+       65 or lower). This is the base game's rule; you chose to keep it.
+ #401, #407, #408  Main's own test suite had real failures (stale doc tests,
+       a merge-order interaction, bundle-count tests); fixed.
+ #409, #413  The B197 and B198 release configs, notes and identities. #413
+       also updates the README's setting counts: B198 offers 36 settings, 35
+       of them on by default.
+
+LIVE TESTING
+------------
+Verified live by me or by you:
+  - #378: crash reproduced on B196. On B197, no crash on the Invisible Patio
+    or Picnic Table after the Pets page; drinks are drawn on the table.
+  - Computer drop, career progress, Change Player resetting the Health Plan
+    and generation locks, Unlock Everything surviving a relaunch, Complete
+    all Achievements (6,225 coins from 0), max coins, the meal shown on two
+    tables, sock goals completing, and an Island Event.
+  - Reset Ants: you confirmed it fully works.
+  - Start Over (#411): all four cases.
+  - Fix Vanilla Game Bugs (#412), on the test build and again on the
+    B198 bundle-applied game, new save folders:
+    - With the setting on:
+      - Pause Yes then one Space leaves the game running.
+      - The hotspot click does nothing.
+      - The title shows the name and Continue.
+      - Start Over asks first; Cancel keeps the village and OK restarts.
+      - Deleting the last player and cancelling refreshes the title.
+      - A new player brings Manage Games back.
+    - With the setting off (same exe, byte set to 00): all four original
+      bugs return exactly as in the base game.
+
+NOT CONFIRMED IN PLAY
+---------------------
+  - The autonomous hammock in Sunny weather (#395). In your terms that is
+    the sun-beam weather Bottled Tropical Sunshine makes; the game's own code
+    calls it "Cloudy", which is why the earlier wording was confusing.
+    - It works in normal and Sunny weather only, never in fog. You chose to
+      keep that (2026-10-01), and the README now says it in your terms.
+    - The base game also requires a tired villager (energy 65 or lower).
+    - Fog in a Bottle therefore cannot trigger it, which explains your fog
+      test. I have not yet seen a tired villager pick it in Sunny weather.
+
+OWNER DECISIONS FLAGGED (documented, not changed)
+-------------------------------------------------
+  - Behavior Patches lowers several stock weights (e.g. heat-food/snacks
+    10000 -> 450) and re-applies them on every load; documented in README.
+  - Content settings leave their store rows when unticked (rows are compiled
+    into every exe); documented.
+  - Hammock energy rule kept (see above).
+  - Pre-existing observations noted in PRs: Gym and Yoga inherit a
+    Sunny-only gate; Unlock Everything pruning and backups pruning are left
+    to you.
+
+FOUND IN PASSING, RECORDED NOT CHANGED
+--------------------------------------
+  - work/validate_b153_runtime_flags.py and
+    validate_b158_mobile_feature_readback.py are stale against current
+    builds:
+    - They still require a .vf2same section, which no executable has had
+      since Same-Sex Marriage moved into the save.
+    - They call the exporter without the authenticated hashes that Mobile
+      Sound Assets needs.
+    Only the old B153/B155.5 build scripts run them; the release pipeline
+    does not.
+  - Developer-dead stock code seen in the menu audit, reported only (you
+    said not to remove dead code):
+    - the "Current Player:" and "Click name to change player" labels (built,
+      never shown);
+    - title button id 8;
+    - the Store sub-menu (category 1);
+    - message 0x309 (save and quit);
+    - Settings "Redeem Credit";
+    - theGameState::RestartCurrentGame.
+    The mobile game has the same dead items, so none is a patcher
+    regression.
+
+RELATED
+-------
+  - The hidden-gates hunt for the five Virtual Villagers games (population,
+    food, age, skill, level and random-roll conditions on jobs, building,
+    breeding, healing and research) was delivered after this release. It is
+    kept in the Virtual Villagers Fun Patcher repository as
+    docs/hidden-gates-all-five-games.md.
+
+SAFETY
+------
+  - No writes to the owner's saves: every test build ran under its own unique
+    executable name, so the game created a new save folder for it.
+  - The owner's untouched game installs were used read-only, as the source.
+  - All test game processes closed; no leftover processes from this
+    session.
