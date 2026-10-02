@@ -92,7 +92,9 @@ Crash
          pet item number (0x240-0x244) and executed it.
        Reproduced LIVE on B196 under a debugger (access violation executing
        0x245). After the fix:
-       - Footprints are unchanged: the built maps match B196 cell for cell.
+       - Footprints are unchanged: the same cells are occupied as in B196.
+         The maps differ only where a mobile hotspot number was removed
+         (a hotspot-only cell keeps an inert occupancy bit instead).
        - Unticking Mobile Furniture Behaviors no longer restores the raw
          maps.
 
@@ -318,8 +320,10 @@ FOUND IN PASSING, RECORDED NOT CHANGED
       since Same-Sex Marriage moved into the save.
     - They call the exporter without the authenticated hashes that Mobile
       Sound Assets needs.
-    Only the old B153/B155.5 build scripts run them; the release pipeline
-    does not.
+    The old B153/B155.5 build scripts run only the first one;
+    validate_b158_mobile_feature_readback.py is run by no build script and is
+    used only by the unit tests and by hand. The release pipeline runs
+    neither.
   - Developer-dead stock code seen in the menu audit, reported only (you
     said not to remove dead code):
     - the "Current Player:" and "Click name to change player" labels (built,
