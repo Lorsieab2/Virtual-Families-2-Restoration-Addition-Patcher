@@ -22,9 +22,9 @@ RELEASE (CURRENT)
   - FRESH-DOWNLOAD CHECK: I downloaded the published asset again.
     - Same SHA-256 and size as the gated zip.
     - The bundle verifier passes on it.
-    - Applied from the untouched vanilla game, every one of the six
-      invisible-furniture checks in the resulting executable reaches the new
-      helper.
+    - Applied from the untouched vanilla game, all six redirected item
+      checks in the resulting executable reach the new helper, and the goal
+      check translates the invisible pools and MP3 player.
   - Release notes: docs/B199-release-notes.md (also on the release page).
 
   Previous: B198 (now prerelease) -- Fix Vanilla Game Bugs. Details below.
@@ -222,8 +222,10 @@ Invisible furniture (you asked that every fix also apply to it)
          kind of object it is, which the invisible copies share.
        - The click table and every route this patcher adds list both items.
        - Every fix from this audit applies to them.
-       Only six base-game checks asked for one exact stock item, so the
-       invisible copy did not count:
+       Seven places in the base game asked for one exact stock item, so the
+       invisible copy did not count: six item checks (redirected to a new
+       "stock or invisible" helper) and the goal switch (which now
+       translates an invisible pool or MP3 player to its stock item first):
        - Goals: "Staying cool in the pool" (Invisible Kiddie or Full-Size
          Pool) and "Let's dance" (Invisible MP3 Player). Both are CONFIRMED
          LIVE: each completed in a village whose only pool, or only music
@@ -235,7 +237,7 @@ Invisible furniture (you asked that every fix also apply to it)
          pools and hammock.
        - Clicking the Invisible MP3 Player was silent unless a stock one was
          also placed.
-       All six now accept the invisible copy, in every executable.
+       All seven now accept the invisible copy, in every executable.
        - The hammock had no item check on how villagers choose it.
        - "Filling in a hole" uses the number 0x1E5 as a yard position, not
          as an item, so it needed nothing.
