@@ -462,7 +462,7 @@ SETTINGS = [
     {
         "id": "island_events",
         "label": "Add mobile-exclusive Island Events",
-        "description": "Optional patch: adds all 25 authenticated mobile-exclusive Island Event records, including mobile-only email events, with bundled event text and choice/result dialogs. Twenty-three events use recovered native firing/award/impact routes; two retain mobile CanFire=false. Static and linked validation are complete; live player QA remains.",
+        "description": "Optional patch: adds all 25 authenticated mobile-exclusive Island Event records, including mobile-only email events, with bundled event text and choice/result dialogs. Twenty-three events use recovered native firing/award/impact routes; two retain mobile CanFire=false. Static and linked validation are complete; live player QA remains. Also restores the PC game's unused Virtual Scouts event as a random event (OK: everyone celebrates and gets +5 happiness; What rats?: -100 food), and gives Power Failure's Take a chance a 1 in 4 chance that the food was not ok, with each villager having a 15% chance of an upset stomach.",
         "default": True,
         "category": "optional",
     },
