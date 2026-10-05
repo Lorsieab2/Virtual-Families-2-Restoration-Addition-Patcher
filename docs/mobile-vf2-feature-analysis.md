@@ -401,7 +401,11 @@ Mobile exposes real event classes and virtual methods:
 
 The PC port preserves stock desktop slots `0x01-0x60` and appends mobile-only
 events beginning at `0x61`. `mEventHasFired` is moved after the enlarged
-pointer table. The new exclusive scan bound is `0x7A`.
+pointer table. The new exclusive scan bound is `0x7B` (B200, PR #418: the
+restored Virtual Scouts event takes slot `0x7A`). **Superseded:** before
+B200 this read "The new exclusive scan bound is `0x7A`", with the mapping
+ending at `0x79`; that was correct for the 25 mobile events alone and is wrong
+for B200 and later builds.
 
 Current appended mapping:
 
@@ -432,6 +436,7 @@ Current appended mapping:
 | `0x77` | `CEventSurpriseVisitFromUnclePhineas` | `SoManyBabies` | no | no |
 | `0x78` | `CEventTeens` | `CareerChangeCouncelor` | no | yes |
 | `0x79` | `CEventVolunteer` | generated shell | no | yes |
+| `0x7A` | `CEventVirtualScouts` (restored stock PC text 0x944-0x949, no class in either game; B200) | generated shell | no | yes |
 
 ### Current Outcome Status
 

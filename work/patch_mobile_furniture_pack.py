@@ -20578,7 +20578,8 @@ def patch_power_failure_event(manifest):
         "forbidden_event_offsets": ["0x0C", "0x14"],
         "routes": applied,
         "lifecycle_evidence": "FireEvent -> dialog +0x830 -> CalcAward(choice) -> GetResultDescription(choice) -> ImpactGame(choice)",
-        "native_symptom_route": "CVillagerManager::GiveAllVillagersSymptom(ESymptom,int); symptom 2, duration 100",
+        "native_symptom_route": "CVillagerManager::GiveAllVillagersSymptom(ESymptom,int); symptom 2, percentage 15 (rand(100) < 15 for each villager)",
+        "native_symptom_route_superseded": "before B200 this read 'symptom 2, duration 100': the second argument is a per-villager percentage, not a duration, and B200 lowered it from 100 to 15",
     }
 
 

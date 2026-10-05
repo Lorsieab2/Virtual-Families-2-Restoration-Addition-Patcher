@@ -10,6 +10,7 @@ import struct
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import patch_mobile_furniture_pack as patcher
 import rebuild_holiday_ornament_collection_assets as ornament_assets
@@ -8456,6 +8457,56 @@ class TextFixStringManagerTests(unittest.TestCase):
                 self.assertIn("\\n\\nYou will keep all the money", helper)
             finally:
                 patcher.PATCHED = old_patched
+
+    def _power_failure_text_fix(self, island_events):
+        """Run patch_string_manager with Island Events on or off and return
+        (manifest updates, written object, helper source)."""
+        with tempfile.TemporaryDirectory() as tmp:
+            temp_root = Path(tmp)
+            shutil.copy2(patcher.SRC_OBJS / "theStringManager.obj", temp_root / "theStringManager.obj")
+            old_patched = patcher.PATCHED
+            try:
+                patcher.PATCHED = temp_root
+                manifest = {}
+                with mock.patch.object(patcher, "ENABLE_ISLAND_EVENTS", island_events):
+                    patcher.patch_string_manager(manifest)
+                updates = manifest["theStringManager"]["updated_existing_strings"]
+                obj = CoffObject(temp_root / "theStringManager.obj")
+                helper = (temp_root / "vf2_mobile_string_table.c").read_text(encoding="ascii")
+                return updates, obj, helper
+            finally:
+                patcher.PATCHED = old_patched
+
+    def test_power_failure_spoiled_text_is_retargeted_in_island_event_builds(self):
+        """Codex on PR #418: the B2 result must really read "The food was not
+        ok." now that only 15% of villagers fall ill, not "Everyone gets an
+        upset stomach..."."""
+        updates, obj, helper = self._power_failure_text_fix(True)
+        rows = [row for row in updates
+                if row["old"] == "Everyone gets an upset stomach. The food was not ok."]
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["new"], "The food was not ok.")
+        self.assertEqual(len(rows[0]["table_relocations"]), 1)
+        # The relocation sits in the text field (+8) of the string record
+        # whose id is the stock eEventThePowerFailureResultB2, 0x9BE, and now
+        # names the patcher's own replacement text.
+        vaddr = int(rows[0]["table_relocations"][0], 16)
+        table = obj.symbol(patcher.STRINGTABLE)
+        sec = obj.section(table.section)
+        record_id = struct.unpack_from("<I", obj.buf, sec.raw_ptr + vaddr - 8)[0]
+        self.assertEqual(record_id, 0x9BE)
+        target = None
+        for i in range(sec.nreloc):
+            va, symidx, _ = struct.unpack_from("<IIH", obj.buf, sec.reloc_ptr + i * 10)
+            if va == vaddr:
+                target = obj.symbol_by_index[symidx].name
+        self.assertEqual(target, "_vf2textfix_power_failure_b2_text")
+        self.assertIn('vf2textfix_power_failure_b2_text[] = "The food was not ok.";', helper)
+
+    def test_power_failure_text_is_stock_without_island_events(self):
+        updates, _obj, helper = self._power_failure_text_fix(False)
+        self.assertFalse([row for row in updates if "upset stomach" in row["old"]])
+        self.assertNotIn("power_failure_b2", helper)
 
     def test_all_custom_achievement_strings_are_exact_and_stable(self):
         with tempfile.TemporaryDirectory() as tmp:
