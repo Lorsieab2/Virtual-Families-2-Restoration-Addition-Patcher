@@ -17,6 +17,8 @@ the executable will actually contain:
   a free state slot for the event (the defect found live on 2026-10-04), and
   ImpactGame calls GiveAllVillagersSymptom(2, 15).
 """
+import hashlib
+import json
 import re
 import shutil
 import struct
@@ -86,30 +88,38 @@ def pushes_before_call(insns, callee_fragment):
     return result
 
 
+def compile_fresh_helper(vcvars):
+    """Regenerate vf2_island_events.cpp from the current generator into a
+    temporary directory and compile it with the build's own flags. Returns
+    (TemporaryDirectory, Disassembly of the fresh object)."""
+    holder = tempfile.TemporaryDirectory()
+    tmp = Path(holder.name)
+    old = patcher.PATCHED
+    try:
+        patcher.PATCHED = tmp
+        shutil.copy2(patcher.SRC_OBJS / "IslandEvents.obj", tmp / "IslandEvents.obj")
+        manifest = {}
+        patcher.patch_island_events(manifest)
+        patcher.patch_power_failure_event(manifest)
+    finally:
+        patcher.PATCHED = old
+    flags = " ".join(build_flags())
+    result = subprocess.run(
+        f'"{vcvars}" >nul 2>&1 && cd /d "{tmp}" && cl {flags} vf2_island_events.cpp',
+        shell=True, capture_output=True, text=True)
+    if result.returncode != 0:
+        holder.cleanup()
+        raise AssertionError("vf2_island_events.cpp does not compile:\n" + result.stdout[-2000:])
+    return holder, Disassembly(tmp / "vf2_island_events.obj")
+
+
 class CompiledIslandHelper(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.vcvars = _vcvars()
         if cls.vcvars is None or Cs is None:
             raise unittest.SkipTest("no Visual Studio toolchain or capstone on this machine")
-        cls.tmp = tempfile.TemporaryDirectory()
-        tmp = Path(cls.tmp.name)
-        old = patcher.PATCHED
-        try:
-            patcher.PATCHED = tmp
-            shutil.copy2(patcher.SRC_OBJS / "IslandEvents.obj", tmp / "IslandEvents.obj")
-            manifest = {}
-            patcher.patch_island_events(manifest)
-            patcher.patch_power_failure_event(manifest)
-        finally:
-            patcher.PATCHED = old
-        flags = " ".join(build_flags())
-        result = subprocess.run(
-            f'"{cls.vcvars}" >nul 2>&1 && cd /d "{tmp}" && cl {flags} vf2_island_events.cpp',
-            shell=True, capture_output=True, text=True)
-        if result.returncode != 0:
-            raise AssertionError("vf2_island_events.cpp does not compile:\n" + result.stdout[-2000:])
-        cls.dis = Disassembly(tmp / "vf2_island_events.obj")
+        cls.tmp, cls.dis = compile_fresh_helper(cls.vcvars)
 
     @classmethod
     def tearDownClass(cls):
@@ -179,6 +189,205 @@ class CompiledIslandHelper(unittest.TestCase):
         insns = self.dis.function("_VF2PowerFailureImpactGame")
         self.assertEqual(
             pushes_before_call(insns, "GiveAllVillagersSymptom"), [["0xf", "2"]])
+
+
+LINKED_FUNCTIONS = (
+    "_VF2RegisterMobileIslandEvents",
+    "?ImpactGame@CMobileIslandEvent@@QAEXH@Z",
+    "_VF2PowerFailureCalcAward",
+    "_VF2PowerFailureImpactGame",
+    "_VF2PowerFailureGetResultDescription",
+)
+
+
+IMAGE_REL_I386_DIR32 = 0x06
+IMAGE_REL_I386_REL32 = 0x14
+
+
+def current_release():
+    """The newest release with recorded variant identities: (identities,
+    island-events variant names). Provenance comes from these records, not
+    from file dates."""
+    def number(path):
+        return int(re.search(r"B(\d+)", path.name).group(1))
+    records = sorted((ROOT / "data" / "vf2").glob("release-identities-B*.json"), key=number)
+    identities = json.loads(records[-1].read_text(encoding="utf-8"))
+    toggles = json.loads((ROOT / "data" / "vf2" / "build-matrix-toggles.json").read_text(encoding="utf-8"))
+    return identities, [v["name"] for v in toggles["variants"] if v["island_events"]]
+
+
+def executable_ranges(data):
+    pe = struct.unpack_from("<I", data, 0x3C)[0]
+    count = struct.unpack_from("<H", data, pe + 6)[0]
+    opt = struct.unpack_from("<H", data, pe + 20)[0]
+    image_base = struct.unpack_from("<I", data, pe + 24 + 28)[0]
+    for i in range(count):
+        o = pe + 24 + opt + i * 40
+        _vsize, va, raw_size, raw_ptr = struct.unpack_from("<IIII", data, o + 8)
+        if struct.unpack_from("<I", data, o + 36)[0] & 0x20000000:
+            yield image_base + va, raw_ptr, raw_size
+
+
+def section_pattern(obj, secno):
+    """A whole COFF code section as a regex (relocated fields wildcarded),
+    plus its relocations as (offset, target symbol, type)."""
+    sec = obj.section(secno)
+    code = bytes(obj.buf[sec.raw_ptr:sec.raw_ptr + sec.raw_size])
+    wild = set()
+    relocs = []
+    for i in range(sec.nreloc):
+        off, symidx, rtype = struct.unpack_from("<IIH", obj.buf, sec.reloc_ptr + i * 10)
+        wild.update(range(off, off + 4))
+        relocs.append((off, obj.symbol_by_index[symidx].name, rtype))
+    pattern = re.compile(b"".join(b"." if i in wild else re.escape(bytes([b]))
+                                  for i, b in enumerate(code)), re.S)
+    return pattern, relocs
+
+
+def locate(data, pattern):
+    """Every (virtual address, file offset) where the section occurs."""
+    return [(va + m.start() - raw, m.start())
+            for va, raw, size in executable_ranges(data)
+            for m in pattern.finditer(data, raw, raw + size)]
+
+
+def defining_object(name):
+    """(CoffObject, symbol) defining a stock function, from the generator's
+    patched objects first and the untouched desktop objects second."""
+    for folder in (patcher.PATCHED, patcher.SRC_OBJS):
+        for path in sorted(Path(folder).glob("*.obj")):
+            if name.encode() not in path.read_bytes():
+                continue
+            obj = CoffObject(path)
+            sym = [s for s in obj.symbols if s.name == name and s.section > 0]
+            if sym:
+                return obj, sym[0]
+    return None
+
+
+class LinkedIslandHelper(unittest.TestCase):
+    """Codex on PRs #420 and #422: check what players install, not an object.
+
+    For every island-events variant of the current release (selected by its
+    identity record, and its executable's SHA-256 checked against it):
+
+    * each helper's code section, compiled fresh from the current generator,
+      occurs exactly once in the linked executable;
+    * every call the helper makes resolves, at its relocation's exact operand
+      offset, to the located definition of the named function: another helper,
+      or the stock function located from its own object file (functions too
+      small to locate uniquely are listed and skipped);
+    * every data reference to the same global resolves to one address;
+    * every hook the patched IslandEvents.obj installs -- the CIslandEvents
+      constructor and Power Failure's CalcAward, GetResultDescription and
+      ImpactGame -- sits in that stock method's own linked section and
+      resolves to the right helper.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        vcvars = _vcvars()
+        if vcvars is None or Cs is None:
+            raise unittest.SkipTest("no Visual Studio toolchain or capstone on this machine")
+        cls.identities, cls.variants = current_release()
+        prefix = cls.identities["matrix_prefix"]
+        cls.exes = {}
+        for name in cls.variants:
+            found = sorted((ROOT / "outputs" / f"{prefix}-{name}").glob("*.exe"))
+            if found:
+                cls.exes[name] = found[0]
+        if not cls.exes:
+            raise unittest.SkipTest(f"{prefix} is not built in outputs/; run work/build_matrix.ps1")
+        cls.tmp, cls.dis = compile_fresh_helper(vcvars)
+        cls.helper = cls.dis.obj
+        cls.island = CoffObject(Path(cls.tmp.name) / "IslandEvents.obj")
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tmp.cleanup()
+
+    def test_every_island_variant_of_the_release_is_built(self):
+        self.assertEqual(sorted(self.exes), sorted(self.variants))
+
+    def test_executables_match_the_release_identities(self):
+        expected = {v["variant"]: v["sha256"] for v in self.identities["variants"]}
+        for name, exe in self.exes.items():
+            with self.subTest(name):
+                self.assertEqual(hashlib.sha256(exe.read_bytes()).hexdigest(), expected[name])
+
+    def test_helpers_calls_and_hooks_resolve_in_every_variant(self):
+        helper_sections = {}
+        for fn in LINKED_FUNCTIONS:
+            sym = [s for s in self.helper.symbols if s.name == fn and s.section > 0][0]
+            helper_sections[fn] = (sym,) + section_pattern(self.helper, sym.section)
+        stock = {}
+        unlocatable = set()
+        for name, exe in self.exes.items():
+            data = exe.read_bytes()
+            with self.subTest(name):
+                located = {}
+                for fn, (sym, pattern, relocs) in helper_sections.items():
+                    hits = locate(data, pattern)
+                    self.assertEqual(len(hits), 1, f"{fn}: {len(hits)} linked copies")
+                    located[fn] = (hits[0][0] + sym.value, hits[0], relocs)
+                globals_seen = {}
+                for fn, (_addr, (va, raw), relocs) in located.items():
+                    sec = self.helper.section(helper_sections[fn][0].section)
+                    for off, target, rtype in relocs:
+                        value = struct.unpack_from("<I", data, raw + off)[0]
+                        if rtype == IMAGE_REL_I386_DIR32:
+                            # The object holds the addend (e.g. +4 into an
+                            # array); the symbol's own address is the rest.
+                            addend = struct.unpack_from("<I", self.helper.buf, sec.raw_ptr + off)[0]
+                            globals_seen.setdefault(target, set()).add((value - addend) & 0xFFFFFFFF)
+                            continue
+                        if rtype != IMAGE_REL_I386_REL32 or not target.startswith(("?", "_VF2")):
+                            continue
+                        dest = va + off + 4 + struct.unpack_from("<i", data, raw + off)[0]
+                        if target in located:
+                            self.assertEqual(dest, located[target][0], f"{fn} -> {target}")
+                            continue
+                        if target not in stock:
+                            found = defining_object(target)
+                            stock[target] = (found[1].value,) + section_pattern(found[0], found[1].section)[:1] if found else None
+                        if stock[target] is None:
+                            unlocatable.add(target)
+                            continue
+                        value_in_section, pattern = stock[target]
+                        hits = locate(data, pattern)
+                        if len(hits) != 1:
+                            unlocatable.add(target)
+                            continue
+                        self.assertEqual(dest, hits[0][0] + value_in_section, f"{fn} -> {target}")
+                for target, values in globals_seen.items():
+                    self.assertEqual(len(values), 1, f"{target} resolves to {len(values)} addresses")
+                hooks = 0
+                for secno in range(1, len(self.island.sections) + 1):
+                    if not self.island.section(secno).name.startswith(".text"):
+                        continue
+                    pattern, relocs = section_pattern(self.island, secno)
+                    to_helpers = [(off, tg) for off, tg, rt in relocs
+                                  if rt == IMAGE_REL_I386_REL32 and tg in LINKED_FUNCTIONS]
+                    if not to_helpers:
+                        continue
+                    hits = locate(data, pattern)
+                    self.assertEqual(len(hits), 1, f"IslandEvents section {secno}: {len(hits)} copies")
+                    va, raw = hits[0]
+                    for off, target in to_helpers:
+                        dest = va + off + 4 + struct.unpack_from("<i", data, raw + off)[0]
+                        self.assertEqual(dest, located[target][0], f"hook -> {target}")
+                        hooks += 1
+                # The constructor registration and the three Power Failure
+                # lifecycle detours.
+                self.assertEqual(hooks, 4)
+        # Only tiny stock functions may be unlocatable, and the ones the new
+        # behaviour depends on must not be.
+        for needed in ("?GiveAllVillagersSymptom@CVillagerManager@@QAEXW4ESymptom@@H@Z",
+                       "?GetRandom@ldwGameState@@SAHH@Z",
+                       "?AdjustHappiness@CVillagerState@@QAEXH@Z",
+                       "?Adjust@CFoodStore@@QAEXH@Z",
+                       "?MakeAllVillagersDoIt@CVillagerManager@@QAEXW4EBehavior@@HHW4EGender@@PAHH@Z"):
+            self.assertNotIn(needed, unlocatable)
 
 
 if __name__ == "__main__":
