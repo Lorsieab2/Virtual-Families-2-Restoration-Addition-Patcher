@@ -36899,6 +36899,24 @@ static void VF2RefreshVolatileCandidates(unsigned char *data, bool resetWeights)
     // weatherAllowsHammock, which this function re-evaluates every decision.
     *(int *)(candidate + 0xA8) = -1;
 
+    // WORKING OUT IN NORMAL AND SUNNY WEATHER. Owner (2026-10-04): "working
+    // out, home gym and yoga should be possible in sunny weather and normal
+    // weather". Stock InitAI gives WorkingOut (0x04A) +0xA8 = 0, and the quick
+    // workout (0x08B) jumps into the same case, so both were normal-weather
+    // only; Home Gym (0x0B3) and Yoga (0x0B4) are clones of those two rows and
+    // inherited it. The field names ONE weather type, so it is set to the
+    // current type when that is normal (0) or Sunny (1), which passes the
+    // native check above, and left at 0 otherwise, which keeps the stock
+    // rejection in fog, rain, storm and snow. Only the weather field is
+    // touched: enabled flags, weights and the per-item gym/yoga gates stay
+    // as they were.
+    const int workoutWeather =
+        (Weather.currentType == 0 || Weather.currentType == 1) ? Weather.currentType : 0;
+    static const unsigned int kWorkoutRows[] = { 0x04A, 0x08B, 0x0B3, 0x0B4 };
+    for (int i = 0; i < 4; ++i) {
+        *(int *)(data + 0x6BB8 + kWorkoutRows[i] * 0xD0 + 0xA8) = workoutWeather;
+    }
+
     unsigned char *playhouse = data + 0x6BB8 + 0x11E * 0xD0;
     const int daytimeAllowsPlayhouse = Night.AIIsDayTime();
     VF2SetGatedCandidate(playhouse, daytimeAllowsPlayhouse, 3000, resetWeights);
@@ -40100,6 +40118,7 @@ extern "C" void __cdecl VF2EnableAutonomousCandidates(void *villager)
         "selection": "existing weighted CVillagerAI::DecideWhatToDo selection; weight 3000 per enabled candidate",
         "actions": [
             "hammock anchored rest (0x23; all ages; normal weather or Sunny (sun beams, Bottled Tropical Sunshine) only -- Weather.currentType 0 or 1)",
+            "working out (0x04A), quick workout (0x08B), Home Gym (0x0B3) and Yoga (0x0B4): normal weather or Sunny (sun beams) -- stock +0xA8 weather field set per decision to Weather.currentType when it is 0 or 1, else 0 (stock rejection kept)",
             "warm hands by fireplace (all ages)",
             "watch fireplace (all ages)",
             "pinball/slots/pachinko/pool table/foosball (all ages)",

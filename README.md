@@ -514,6 +514,7 @@ above that was not the whole story.
 - Mending a button and ironing clothes — from displayed age 14.
 - Kitchen, office, and workshop career work are *not* on this list: the stock game already chooses them on its own, and Behavior Patches leaves their selection weights, praise training and age/career gates exactly as vanilla, so career progress works as in the unpatched game. Only their captions vary. (Up to B196 the patch reset these weights at every load, which erased the praise that drives career progress.)
 - Checking weight, playing video games, browsing the web, watching TV, getting a drink, heating up food, looking for snacks, preparing a meal, bookshelf reading, showers and baths (including the north shower), coffee/tea and the rare grande latte, cocktails, the trampoline, board games, the swimming pool, watering flowers/roses/window boxes, bathroom sink washing and grooming, the telescope, working out, breakfast, teen homework, and teen online exams.
+- **Working out, the Home Gym System and the Yoga Equipment in normal weather and Sunny** (the sun-beam weather Bottled Tropical Sunshine produces), never in Foggy, Raining, Stormy or Snowing weather. The base game allowed working out (and the quick workout) in normal weather only, and the Home Gym and Yoga actions, which are built on those two, inherited that rule. A manual drop has no weather limit.
 - Teaching first words and the infant-care label family — nursing mothers carrying a baby only.
 - **"Needs to sit down" on couches and chairs** (`CBehavior::UseCouch`, `0x189`). This is the behavior a manual drop on a couch or chair runs via `CHotSpot::Couch`, and it is enabled as its own autonomous candidate at weight 450 so the AI picks it too. The stock game has no autonomous record for it, so there is no candidate age gate; the couch requirement lives inside the behavior (it links to a free couch or chair, or does nothing). **Corrected 2026-09-29:** previously "Native couch and age gates are retained".
 - **RestingBody** (`0x127`) and its resting label family. Autonomous for all ages at weight 450. Its native sittable targeting and plans are retained. When **Add mobile furniture behaviors** is also enabled, that patch runs last and raises this candidate to weight 2000, where it additionally carries the chaise sunbathing and sit-down routes.
@@ -592,6 +593,7 @@ relabelled at the last moment.
     whole-executable hash change shows a relink rather than a feature, and a
     fix being built is not the same as a defect being over.
 - The **Yoga Equipment** has its own action, labelled **Doing yoga**.
+- Villagers choose the Home Gym and Yoga actions on their own in normal weather and Sunny, like working out itself.
 - The **Ping-Pong Table** has its own action, labelled **Playing ping-pong**.
   Villagers choose it on their own, and only while a ping-pong table is placed
   -- the candidate carries the table's own content-map object, so raising how
