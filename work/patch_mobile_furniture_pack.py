@@ -19600,7 +19600,9 @@ public:
     void AdjustAllChildrenHappiness(int amount);
     void MakeAllVillagersDoIt(EBehavior behavior, int minimum_age, int maximum_age, EGender gender, int *ids, int id_count);
     void CureAllVillagers();
-    void GiveAllVillagersSymptom(ESymptom symptom, int duration);
+    // percentage: each living villager at home gets the symptom when
+    // rand(100) < percentage. (Named "duration" before B200, which was wrong.)
+    void GiveAllVillagersSymptom(ESymptom symptom, int percentage);
 }};
 
 extern CVillagerManager VillagerManager;

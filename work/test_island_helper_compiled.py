@@ -86,30 +86,38 @@ def pushes_before_call(insns, callee_fragment):
     return result
 
 
+def compile_fresh_helper(vcvars):
+    """Regenerate vf2_island_events.cpp from the current generator into a
+    temporary directory and compile it with the build's own flags. Returns
+    (TemporaryDirectory, Disassembly of the fresh object)."""
+    holder = tempfile.TemporaryDirectory()
+    tmp = Path(holder.name)
+    old = patcher.PATCHED
+    try:
+        patcher.PATCHED = tmp
+        shutil.copy2(patcher.SRC_OBJS / "IslandEvents.obj", tmp / "IslandEvents.obj")
+        manifest = {}
+        patcher.patch_island_events(manifest)
+        patcher.patch_power_failure_event(manifest)
+    finally:
+        patcher.PATCHED = old
+    flags = " ".join(build_flags())
+    result = subprocess.run(
+        f'"{vcvars}" >nul 2>&1 && cd /d "{tmp}" && cl {flags} vf2_island_events.cpp',
+        shell=True, capture_output=True, text=True)
+    if result.returncode != 0:
+        holder.cleanup()
+        raise AssertionError("vf2_island_events.cpp does not compile:\n" + result.stdout[-2000:])
+    return holder, Disassembly(tmp / "vf2_island_events.obj")
+
+
 class CompiledIslandHelper(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.vcvars = _vcvars()
         if cls.vcvars is None or Cs is None:
             raise unittest.SkipTest("no Visual Studio toolchain or capstone on this machine")
-        cls.tmp = tempfile.TemporaryDirectory()
-        tmp = Path(cls.tmp.name)
-        old = patcher.PATCHED
-        try:
-            patcher.PATCHED = tmp
-            shutil.copy2(patcher.SRC_OBJS / "IslandEvents.obj", tmp / "IslandEvents.obj")
-            manifest = {}
-            patcher.patch_island_events(manifest)
-            patcher.patch_power_failure_event(manifest)
-        finally:
-            patcher.PATCHED = old
-        flags = " ".join(build_flags())
-        result = subprocess.run(
-            f'"{cls.vcvars}" >nul 2>&1 && cd /d "{tmp}" && cl {flags} vf2_island_events.cpp',
-            shell=True, capture_output=True, text=True)
-        if result.returncode != 0:
-            raise AssertionError("vf2_island_events.cpp does not compile:\n" + result.stdout[-2000:])
-        cls.dis = Disassembly(tmp / "vf2_island_events.obj")
+        cls.tmp, cls.dis = compile_fresh_helper(cls.vcvars)
 
     @classmethod
     def tearDownClass(cls):
@@ -179,6 +187,100 @@ class CompiledIslandHelper(unittest.TestCase):
         insns = self.dis.function("_VF2PowerFailureImpactGame")
         self.assertEqual(
             pushes_before_call(insns, "GiveAllVillagersSymptom"), [["0xf", "2"]])
+
+
+LINKED_FUNCTIONS = (
+    "_VF2RegisterMobileIslandEvents",
+    "?ImpactGame@CMobileIslandEvent@@QAEXH@Z",
+    "_VF2PowerFailureCalcAward",
+    "_VF2PowerFailureImpactGame",
+    "_VF2PowerFailureGetResultDescription",
+)
+
+
+def newest_linked_all_enabled_exe():
+    """The newest matrix build's all-enabled executable, or None.
+
+    outputs/ is this checkout's own (git-ignored) build folder."""
+    candidates = sorted(
+        (ROOT / "outputs").glob("VF2-B*-matrix-final_all_enabled/*.exe"),
+        key=lambda p: p.stat().st_mtime)
+    return candidates[-1] if candidates else None
+
+
+def executable_ranges(data):
+    pe = struct.unpack_from("<I", data, 0x3C)[0]
+    count = struct.unpack_from("<H", data, pe + 6)[0]
+    opt = struct.unpack_from("<H", data, pe + 20)[0]
+    image_base = struct.unpack_from("<I", data, pe + 24 + 28)[0]
+    for i in range(count):
+        o = pe + 24 + opt + i * 40
+        _vsize, va, raw_size, raw_ptr = struct.unpack_from("<IIII", data, o + 8)
+        if struct.unpack_from("<I", data, o + 36)[0] & 0x20000000:
+            yield image_base + va, raw_ptr, raw_size
+
+
+class LinkedIslandHelper(unittest.TestCase):
+    """Codex on PR #420: the compiled object is not what players install.
+
+    Each helper body compiled above (its relocated fields as wildcards) must
+    occur exactly once in the LINKED executable of the newest all-enabled
+    matrix build, and must be reached by a rel32 call or jmp -- the
+    IslandEvents detours, the CIslandEvents constructor hook and the
+    ImpactGame thunk. A build that linked a stale helper, dropped it, or lost
+    a detour fails here.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        vcvars = _vcvars()
+        if vcvars is None or Cs is None:
+            raise unittest.SkipTest("no Visual Studio toolchain or capstone on this machine")
+        cls.exe = newest_linked_all_enabled_exe()
+        if cls.exe is None:
+            raise unittest.SkipTest("no matrix build in outputs/; run work/build_matrix.ps1")
+        if cls.exe.stat().st_mtime < Path(patcher.__file__).stat().st_mtime:
+            raise unittest.SkipTest(
+                f"{cls.exe.parent.name} predates the generator; rebuild before trusting this check")
+        cls.tmp, cls.dis = compile_fresh_helper(vcvars)
+        cls.data = cls.exe.read_bytes()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tmp.cleanup()
+
+    def body_pattern(self, name):
+        obj = self.dis.obj
+        sym = [s for s in obj.symbols if s.name == name and s.section > 0][0]
+        sec = obj.section(sym.section)
+        code = bytes(obj.buf[sec.raw_ptr + sym.value:sec.raw_ptr + sec.raw_size])
+        wild = set()
+        for i in range(sec.nreloc):
+            va, _, _ = struct.unpack_from("<IIH", obj.buf, sec.reloc_ptr + i * 10)
+            if va >= sym.value:
+                wild.update(range(va - sym.value, va - sym.value + 4))
+        return re.compile(b"".join(b"." if i in wild else re.escape(bytes([b]))
+                                   for i, b in enumerate(code)), re.S)
+
+    def test_each_helper_is_linked_once_and_reached(self):
+        data = self.data
+        ranges = list(executable_ranges(data))
+        for name in LINKED_FUNCTIONS:
+            with self.subTest(name):
+                pattern = self.body_pattern(name)
+                hits = [va + m.start() - raw
+                        for va, raw, size in ranges
+                        for m in pattern.finditer(data, raw, raw + size)]
+                self.assertEqual(len(hits), 1, f"{name}: {len(hits)} linked copies")
+                target = hits[0]
+                callers = [
+                    va + i - raw
+                    for va, raw, size in ranges
+                    for i in range(raw, raw + size - 5)
+                    if data[i] in (0xE8, 0xE9)
+                    and va + i - raw + 5 + struct.unpack_from("<i", data, i + 1)[0] == target
+                ]
+                self.assertTrue(callers, f"{name} is linked but nothing reaches it")
 
 
 if __name__ == "__main__":
