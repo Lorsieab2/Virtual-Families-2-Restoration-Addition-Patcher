@@ -6734,8 +6734,11 @@ class MobileIslandEventTextTests(unittest.TestCase):
                     "?mEventHasFired@CIslandEvents@@0PA_NA"
                 )
                 island_section = island.section(fired.section)
-                new_bound = 0x61 + len(events)
-                self.assertEqual(fired.value - event_list.value, 0x1E8)
+                # The 25 mobile events plus the restored stock Virtual Scouts.
+                added = len(events) + len(patcher.RESTORED_PC_ISLAND_EVENTS)
+                self.assertEqual(added, 26)
+                new_bound = 0x61 + added
+                self.assertEqual(fired.value - event_list.value, new_bound * 4)
                 self.assertGreaterEqual(
                     island_section.raw_size,
                     fired.value + new_bound,
@@ -6746,7 +6749,7 @@ class MobileIslandEventTextTests(unittest.TestCase):
                 )
                 self.assertEqual(
                     manifest["IslandEvents"]["mEventHasFired_tail_growth_bytes"],
-                    0x12,
+                    0x13,  # 0x12 for the 25 mobile events, +1 for Virtual Scouts
                 )
                 rows = {
                     row["class"]: row for row in manifest["IslandEvents"]["added"]
@@ -6803,10 +6806,45 @@ class MobileIslandEventTextTests(unittest.TestCase):
                     rows["CEventMarchingBandTripExpenses"]["outcome_status"],
                     "exact mobile dummied-out CanFire=false",
                 )
+                # Virtual Scouts: stock PC text with no event class anywhere,
+                # restored as a door event in the slot after the mobile set,
+                # reusing the stock string ids rather than adding strings.
+                scouts = rows["CEventVirtualScouts"]
+                self.assertEqual(scouts["table_slot"], hex(0x61 + len(events)))
+                self.assertEqual(scouts["outcome_kind"], 26)
+                self.assertTrue(scouts["has_choices"])
+                self.assertFalse(scouts["is_email_event"])
+                self.assertEqual(scouts["strings"], [])
+                self.assertEqual(
+                    scouts["outcome_status"],
+                    "owner-specified outcome for restored stock text",
+                )
 
                 source = (
                     patcher.PATCHED / "vf2_island_events.cpp"
                 ).read_text(encoding="ascii")
+                self.assertIn(
+                    "new CMobileIslandEvent(2372, 2373, 2374, 2375, 2376, 2377, true, false, 26);",
+                    source,
+                )
+                scouts_impact = source[source.index("if (outcome_kind_ == 26) {"):]
+                scouts_impact = scouts_impact[:scouts_impact.index("if (outcome_kind_ == 25) {")]
+                ok_branch, rats_branch = scouts_impact.split("} else {", 1)
+                # Choice 0 is "OK" (ChoiceA, string 2374); anything else is
+                # "What rats?".
+                self.assertRegex(ok_branch, r'if \(choice == 0\) \{\s*// "OK"')
+                # OK: every living villager at home +5 happiness, everyone
+                # celebrates (behaviour 100 = CBehavior::Celebrate, no age
+                # limit), and nothing else.
+                self.assertIn("state->AdjustHappiness(5);", ok_branch)
+                self.assertIn("VillagerManager.VillagerExists(index, false)", ok_branch)
+                self.assertIn("+ 0x6B00) <= 0) continue;", ok_branch)
+                self.assertIn("(EBehavior)100, 7, 7, eGenderAny, 0, 0);", ok_branch)
+                self.assertNotIn("FoodStore", ok_branch)
+                # What rats?: 100 food, nothing else.
+                self.assertIn("FoodStore.Adjust(-100);", rats_branch)
+                self.assertNotIn("AdjustHappiness", rats_branch)
+                self.assertNotIn("MakeAllVillagersDoIt", rats_branch)
                 native_binding = manifest["IslandEvents"]["native_vtable_binding"]
                 self.assertEqual(native_binding["symbol"], "??_7CIslandEventChoiceAB@@6B@")
                 self.assertEqual(native_binding["slot_offset"], "0x44")
@@ -7294,9 +7332,17 @@ class MobileIslandEventTextTests(unittest.TestCase):
                 self.assertIn("gVF2PowerFailureStates[4]", helper_tail)
                 self.assertIn("VF2FindPowerFailureState", helper_tail)
                 self.assertIn("VF2ClearPowerFailureState", helper_tail)
-                self.assertIn("ldwGameState::GetRandom(2)", helper_tail)
-                self.assertIn("GiveAllVillagersSymptom((ESymptom)2, 100)", helper_tail)
-                self.assertIn("second argument is a percentage", helper_tail)
+                # Owner, 2026-10-04: the food goes bad 1 time in 4, and then
+                # each villager has a 15% chance of an upset stomach.
+                self.assertIn("ldwGameState::GetRandom(4) == 0", helper_tail)
+                self.assertNotIn("GetRandom(2)", helper_tail)
+                self.assertIn("GiveAllVillagersSymptom((ESymptom)2, 15)", helper_tail)
+                # A free state slot must be claimed for the event, or the roll
+                # is stored under event 0 and B2 can never be found (live,
+                # 2026-10-04: 18 rolls, all B1).
+                self.assertIn("empty->event = event;", helper_tail)
+                self.assertNotIn("if (empty) return empty;", helper_tail)
+                self.assertNotIn("GiveAllVillagersSymptom((ESymptom)2, 100)", helper_tail)
                 self.assertNotIn("+ 0x0C", helper_tail)
                 self.assertNotIn("+ 0x14", helper_tail)
 

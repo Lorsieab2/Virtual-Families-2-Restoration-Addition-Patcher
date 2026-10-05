@@ -11525,6 +11525,34 @@ MOBILE_EVENT_OUTCOME_KINDS = {
     "Volunteer": 25,
 }
 
+# Island events whose text ships in the stock PC string table but which have
+# no event class anywhere -- not in the PC game, not in the mobile game. The
+# owner asked for Virtual Scouts to be a full random event (2026-10-04):
+# "OK" makes everyone celebrate with +5 happiness, "What rats?" costs 100
+# food. It reuses the stock strings 0x944-0x949 unchanged, so it adds no
+# string-table rows, and it rides the same CMobileIslandEvent graft as the
+# mobile events (outcome kind 26).
+VIRTUAL_SCOUTS_OUTCOME_KIND = 26
+VIRTUAL_SCOUTS_FOOD_COST = 100
+VIRTUAL_SCOUTS_HAPPINESS = 5
+VIRTUAL_SCOUTS_CELEBRATE_BEHAVIOR = 100  # CBehavior::Celebrate
+RESTORED_PC_ISLAND_EVENTS = [
+    {
+        "name": "VirtualScouts",
+        "ids": {
+            "Title": 0x944,    # eEventVirtualScoutsTitle   "Virtual Scouts"
+            "Desc": 0x945,     # eEventVirtualScoutsDesc
+            "ChoiceA": 0x946,  # eEventVirtualScoutsChoiceA "OK"
+            "ChoiceB": 0x947,  # eEventVirtualScoutsChoiceB "What rats?"
+            "ResultA": 0x948,  # eEventVirtualScoutsResultA (the brass plaque)
+            "ResultB": 0x949,  # eEventVirtualScoutsResultB
+        },
+        "has_choices": True,
+        "is_email_event": False,
+        "outcome_kind": VIRTUAL_SCOUTS_OUTCOME_KIND,
+    },
+]
+
 EVENT_CHOICE_OVERRIDES = {
     ("GroupOfKidsAtTheDoor", "ChoiceA"): "Take one",
     ("GroupOfKidsAtTheDoor", "ChoiceB"): "No thanks",
@@ -19265,6 +19293,19 @@ def patch_string_manager(manifest):
             ),
         },
     ]
+    if ENABLE_ISLAND_EVENTS:
+        # Power Failure's spoiled-food result no longer makes EVERYONE ill
+        # (each person has a 15% chance; see append_power_failure_helper_cpp),
+        # so its stock text would now overstate it. Only the island-events
+        # executables carry that changed outcome; the others keep the stock
+        # event and its stock text.
+        existing_text_fixes.append({
+            "old": "Everyone gets an upset stomach. The food was not ok.",
+            "new": "The food was not ok.",
+            "key": "eEventThePowerFailureResultB2",
+            "symbol_prefix": "_vf2textfix_power_failure_b2",
+            "candidates": (b"Everyone gets an upset stomach. The food was not ok.",),
+        })
     existing_text_fix_symbols = []
     for fix in existing_text_fixes:
         symbol = find_literal_symbol(fix["candidates"])
@@ -19390,6 +19431,18 @@ def patch_island_events(manifest):
     if not mobile_events:
         manifest["IslandEvents"] = {"added": [], "status": "no mobile event rows found"}
         return
+    for restored in RESTORED_PC_ISLAND_EVENTS:
+        mobile_events.append({
+            "name": restored["name"],
+            "class": f"CEvent{restored['name']}",
+            "slot": 0x61 + len(mobile_events),
+            "strings": [],
+            "ids": dict(restored["ids"]),
+            "has_choices": restored["has_choices"],
+            "is_email_event": restored["is_email_event"],
+            "outcome_kind": restored["outcome_kind"],
+            "source": "stock PC event text with no event class (restored)",
+        })
 
     obj = CoffObject(PATCHED / "IslandEvents.obj")
     ctor_sym = obj.symbol("??0CIslandEvents@@AAE@XZ")
@@ -19518,6 +19571,7 @@ public:
 class CVillagerState {{
 public:
     void AdjustHappinessTrend(int amount);
+    void AdjustHappiness(int amount);
     void SetSymptom(ESymptom symptom);
 }};
 
@@ -19584,7 +19638,20 @@ public:
     bool AddToStorage(EInventoryItem item);
 }};
 
+// Shared with the Power Failure helper appended to this file later; both
+// declare the same two native methods under one guard.
+#ifndef VF2_FOODSTORE_DECLARED
+#define VF2_FOODSTORE_DECLARED
+class CFoodStore {{
+public:
+    void Reset(bool notify);
+    // Native: adds the amount and clamps the stock at 0 (and at INT_MAX).
+    void Adjust(int amount);
+}};
+#endif
+
 extern CMoney Money;
+extern CFoodStore FoodStore;
 extern CCollectableItem CollectableItem;
 extern CToolTray ToolTray;
 // Defined in the special-upgrade helper unit, which every variant links.
@@ -20001,6 +20068,32 @@ struct CMobileIslandEvent {{
             }}
             return;
         }}
+        if (outcome_kind_ == {scouts_kind}) {{
+            // Virtual Scouts (restored stock text, owner-specified outcome).
+            if (choice == 0) {{
+                // "OK": she finds the original owners' brass plaque. Every
+                // living villager at home gets +{scouts_happiness} happiness and
+                // celebrates (CBehavior::Celebrate; 7/7 are the "no age
+                // limit" sentinels of MakeAllVillagersDoIt).
+                // The same villagers MakeAllVillagersDoIt picks: present
+                // (+0x1BB84), not away (+0x1BB88, both via VillagerExists)
+                // and the +0x6B00 vital above 0 (its [eax-0x15088] test).
+                for (int index = 0; index < 30; ++index) {{
+                    if (!VillagerManager.VillagerExists(index, false)) continue;
+                    CVillager &resident = VillagerManager.GetVillager(index);
+                    if (*reinterpret_cast<int *>(
+                            reinterpret_cast<unsigned char *>(&resident) + 0x6B00) <= 0) continue;
+                    CVillagerState *state = VF2MobileEventVillagerState(&resident);
+                    if (state) state->AdjustHappiness({scouts_happiness});
+                }}
+                VillagerManager.MakeAllVillagersDoIt(
+                    (EBehavior){scouts_celebrate}, 7, 7, eGenderAny, 0, 0);
+            }} else {{
+                // "What rats?": "...is some food missing from the pantry?"
+                FoodStore.Adjust(-{scouts_food});
+            }}
+            return;
+        }}
         if (outcome_kind_ == 25) {{
             if (choice == 0 && target1_) {{
                 Money.Adjust((float)-award_, true);
@@ -20163,7 +20256,13 @@ extern "C" void __cdecl VF2RegisterMobileIslandEvents(void **slots)
     }}
 {registrations}
 }}
-'''.format(registrations="\n".join(registrations)).strip() + "\n"
+'''.format(
+        registrations="\n".join(registrations),
+        scouts_kind=VIRTUAL_SCOUTS_OUTCOME_KIND,
+        scouts_happiness=VIRTUAL_SCOUTS_HAPPINESS,
+        scouts_celebrate=VIRTUAL_SCOUTS_CELEBRATE_BEHAVIOR,
+        scouts_food=VIRTUAL_SCOUTS_FOOD_COST,
+    ).strip() + "\n"
     (PATCHED / "vf2_island_events.cpp").write_text(helper_cpp, encoding="ascii")
 
     # The stock ChoiceAB vtable is also consumed by the event scheduler.  Its
@@ -20204,13 +20303,15 @@ extern "C" void __cdecl VF2RegisterMobileIslandEvents(void **slots)
                 "class": event["class"],
                 "table_slot": hex(event["slot"]),
                 "slot_offset": f"mEventList+0x{event['slot'] * 4:X}",
-                "source": "mobile-only island event class/string names",
+                "source": event.get("source", "mobile-only island event class/string names"),
                 "is_email_event": event["is_email_event"],
                 "has_choices": event["has_choices"],
                 "strings": [hex(row["string_id"]) for row in event["strings"]],
                 "outcome_kind": event["outcome_kind"],
                 "outcome_status": (
-                    "exact mobile outcome"
+                    "owner-specified outcome for restored stock text"
+                    if event["outcome_kind"] == VIRTUAL_SCOUTS_OUTCOME_KIND
+                    else "exact mobile outcome"
                     if event["outcome_kind"] in (
                         2, 3, 4, 5, 6, 8, 9, 10, 11, 12, 13, 14, 15,
                         16, 17, 18, 19, 20, 21, 22, 23, 24, 25
@@ -20282,10 +20383,14 @@ def append_power_failure_helper_cpp():
         return
     helper = r'''
 
+#ifndef VF2_FOODSTORE_DECLARED
+#define VF2_FOODSTORE_DECLARED
 class CFoodStore {
 public:
     void Reset(bool notify);
+    void Adjust(int amount);
 };
+#endif
 
 #ifndef VF2_ENVIRONMENT_DECLARED
 #define VF2_ENVIRONMENT_DECLARED
@@ -20323,7 +20428,16 @@ static VF2PowerFailureState *VF2FindPowerFailureState(void *event, bool create)
         }
     }
     if (!create) return 0;
-    if (empty) return empty;
+    if (empty) {
+        // Claim the free slot for this event. Returning it unclaimed (as
+        // this helper did until 2026-10-04) stored the roll under event 0,
+        // so GetResultDescription/ImpactGame never found it and the spoiled
+        // outcome could never happen -- found live: 18 "Take a chance"
+        // rolls in a row all came out B1.
+        empty->event = event;
+        empty->b2 = 0;
+        return empty;
+    }
     VF2PowerFailureState *slot =
         &gVF2PowerFailureStates[gVF2PowerFailureReplacement++ % 4];
     slot->event = event;
@@ -20344,9 +20458,11 @@ extern "C" void __cdecl VF2PowerFailureCalcAward(void *event, int choice)
 {
     VF2PowerFailureState *state = VF2FindPowerFailureState(event, true);
     if (!state) return;
-    // Choice A remains the stock food-reset result. Choice B rolls once and
-    // records only the B1/B2 description/effect branch for this event.
-    state->b2 = (choice != 0) && (ldwGameState::GetRandom(2) != 0);
+    // Choice A remains the stock food-reset result. Choice B ("Take a
+    // chance") rolls once and records only the B1/B2 description/effect
+    // branch for this event: the food has gone bad 1 time in 4 (owner,
+    // 2026-10-04; it was 1 in 2).
+    state->b2 = (choice != 0) && (ldwGameState::GetRandom(4) == 0);
 }
 
 extern "C" int __cdecl VF2PowerFailureGetResultDescription(void *event, int choice)
@@ -20367,9 +20483,11 @@ extern "C" void __cdecl VF2PowerFailureImpactGame(void *event, int choice)
     } else {
         VF2PowerFailureState *state = VF2FindPowerFailureState(event, false);
         if (state && state->b2) {
-            // Native GiveAllVillagersSymptom filters out away/dead villagers;
-            // its second argument is a percentage, and 100 is intentional.
-            VillagerManager.GiveAllVillagersSymptom((ESymptom)2, 100);
+            // Native GiveAllVillagersSymptom filters out away/dead villagers
+            // and rolls rand(100) < N for each one separately: every person
+            // has a 15% chance of an upset stomach (symptom 2), as the owner
+            // asked (2026-10-04; it was everyone).
+            VillagerManager.GiveAllVillagersSymptom((ESymptom)2, 15);
         }
     }
     VF2ClearPowerFailureState(event);
@@ -20454,7 +20572,7 @@ def patch_power_failure_event(manifest):
     manifest["PowerFailure"] = {
         "status": "enabled",
         "choice_a": "stock food reset: Environment.SetProp(0x17), FoodStore.Reset(true)",
-        "choice_b": "one GetRandom(2) roll; B1 no illness, B2 ResultB2 + GiveAllVillagersSymptom(2,100)",
+        "choice_b": "one GetRandom(4) roll: 3 in 4 B1 (no illness), 1 in 4 B2 (ResultB2 'The food was not ok.' + GiveAllVillagersSymptom(2,15): each villager 15%)",
         "result_ids": {"a": "0x9BC", "b1": "0x9BD", "b2": "0x9BE"},
         "state_storage": "four bounded helper slots keyed by stock event pointer; overwritten on CalcAward and cleared by ImpactGame",
         "forbidden_event_offsets": ["0x0C", "0x14"],
