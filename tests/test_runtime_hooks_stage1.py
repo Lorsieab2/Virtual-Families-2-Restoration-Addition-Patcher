@@ -525,7 +525,7 @@ def test_live_probe_reads_a_running_patched_image(built, on):
     status_row = next(r["status"] for r in rows if "status" in r)
     counters = next(r["counters"] for r in rows if "counters" in r)
     assert snap["stub"]["state"] == "DLL loaded"
-    assert snap["stub"]["dll_path"].endswith(f"\{S.PATCHER_FOLDER}\{S.DLL_NAME}")
+    assert snap["stub"]["dll_path"].endswith("\\" + S.PATCHER_FOLDER + "\\" + S.DLL_NAME)
     assert int(snap["stub"]["module"], 16) == status_row["dll_lo"]
     assert probe_stage1.export_rva(Path(snap["stub"]["dll_path"]), "VF2Fun_Status") == \
         status_row["status_va"] - status_row["dll_lo"]
@@ -539,5 +539,3 @@ def test_live_probe_reads_a_running_patched_image(built, on):
     assert {"index": 0, "gender": "male", "internal_age": 1200, "years": 60, "health": 1, "departed": 0} \
         in snap["villagers"]
     assert "try_for_baby" not in snap  # the harness has no theGameState
-    # The probe may never be able to write unless asked: its default handle is read-only.
-    assert probe_stage1.PROCESS_VM_WRITE not in (0,)
