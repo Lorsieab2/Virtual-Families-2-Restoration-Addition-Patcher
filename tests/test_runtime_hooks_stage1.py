@@ -522,6 +522,7 @@ def test_live_probe_reads_a_running_patched_image(built, on):
     finally:
         proc.stdin.close()
         proc.wait(timeout=60)
+        proc.stdout.close()
     status_row = next(r["status"] for r in rows if "status" in r)
     counters = next(r["counters"] for r in rows if "counters" in r)
     assert snap["stub"]["state"] == "DLL loaded"
@@ -536,6 +537,8 @@ def test_live_probe_reads_a_running_patched_image(built, on):
     assert status["cooldownSkips"] == counters["cooldown_skips"] == 3
     assert all("vanilla" not in line for line in snap["sites"].values())
     assert snap["family_tree_generation"] == 3
-    assert {"index": 0, "gender": "male", "internal_age": 1200, "years": 60, "health": 1, "departed": 0} \
-        in snap["villagers"]
+    elder = next(v for v in snap["villagers"] if v["index"] == 0)
+    assert {k: elder[k] for k in ("gender", "internal_age", "years", "health", "departed")} == \
+        {"gender": "male", "internal_age": 1200, "years": 60, "health": 1, "departed": 0}
+    assert elder["fertility"] == 0  # the harness never set villager 0's fertility
     assert "try_for_baby" not in snap  # the harness has no theGameState

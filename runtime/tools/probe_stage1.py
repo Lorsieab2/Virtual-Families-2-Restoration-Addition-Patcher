@@ -160,6 +160,10 @@ def snapshot(p: Process) -> dict:
         age = p.i32(v + 0x6A54)
         villagers.append({"index": i, "gender": "female" if p.i32(v + 0x6A58) == 1 else "male",
                           "internal_age": age, "years": age // 20, "health": p.i32(v + 0x6B00),
+                          # CVillagerState (+6AF4h) fertility at +4Ch: the value
+                          # ChanceOfPregnancy reads for the mother and is
+                          # passed for the father ([edi+6B40h] at 0x49F5DD).
+                          "fertility": p.i32(v + 0x6B40),
                           "departed": p.read(v + 0x1BB88, 1)[0]})
     out["villagers"] = villagers
     out["family_tree_generation"] = p.i32(S.FAMILY_TREE + 4)
@@ -182,7 +186,7 @@ def show(snap: dict) -> None:
         print("status: " + ", ".join(f"{k}={hex(v) if k in ('magic', 'trampoline') else v}" for k, v in s.items()))
     for v in snap["villagers"]:
         print(f"  villager {v['index']:2}: {v['gender']:6} age {v['years']:3} ({v['internal_age']}) "
-              f"health {v['health']} departed {v['departed']}")
+              f"health {v['health']} fertility {v['fertility']} departed {v['departed']}")
     print(f"family tree generation: {snap['family_tree_generation']}")
     if "try_for_baby" in snap:
         print(f"try-for-baby: {snap['try_for_baby']}")
