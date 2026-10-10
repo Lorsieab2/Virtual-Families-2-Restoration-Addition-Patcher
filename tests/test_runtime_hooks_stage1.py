@@ -493,3 +493,51 @@ def test_next_generation_wrapper_matches_b200(on, off):
     for r in off_rows:
         assert r["target"] == S.CAN_START_NEXT_GENERATION
         assert r["result"] == (1 if r["next_generation"] == "stock_yes" else 0), r
+
+
+def test_live_probe_reads_a_running_patched_image(built, on):
+    """The read-only probe the live test uses, run against a held harness."""
+    sys.path.insert(0, str(RUNTIME / "tools"))
+    import probe_stage1
+
+    run = built / "run-probe"
+    if run.exists():
+        shutil.rmtree(run)
+    run.mkdir()
+    shutil.copy2(built / "stage1_harness.exe", run)
+    files = run / S.PATCHER_FOLDER
+    files.mkdir()
+    shutil.copy2(built / "vf2fun.dll", files / S.DLL_NAME)
+    P.write_settings(files / S.INI_NAME, True)
+    proc = subprocess.Popen([str(run / "stage1_harness.exe"), str(built / "patched.exe"), "--hold"],
+                            stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+    try:
+        rows = []
+        for line in proc.stdout:
+            rows.append(json.loads(line))
+            if "holding" in rows[-1] or "fatal" in rows[-1]:
+                break
+        assert "holding" in rows[-1], rows[-1]
+        snap = probe_stage1.snapshot(probe_stage1.Process(rows[-1]["holding"]))
+    finally:
+        proc.stdin.close()
+        proc.wait(timeout=60)
+    status_row = next(r["status"] for r in rows if "status" in r)
+    counters = next(r["counters"] for r in rows if "counters" in r)
+    assert snap["stub"]["state"] == "DLL loaded"
+    assert snap["stub"]["dll_path"].endswith(f"\{S.PATCHER_FOLDER}\{S.DLL_NAME}")
+    assert int(snap["stub"]["module"], 16) == status_row["dll_lo"]
+    assert probe_stage1.export_rva(Path(snap["stub"]["dll_path"]), "VF2Fun_Status") == \
+        status_row["status_va"] - status_row["dll_lo"]
+    status = snap["status"]
+    assert status["magic"] == 0x53324656 and status["allowOlderPregnancies"] == 1
+    assert status["installedMask"] == 0b111111 and status["trampoline"] == status_row["trampoline"]
+    assert status["chanceCalls"] == counters["chance"] and status["olderRolls"] == counters["older_rolls"]
+    assert status["cooldownSkips"] == counters["cooldown_skips"] == 3
+    assert all("vanilla" not in line for line in snap["sites"].values())
+    assert snap["family_tree_generation"] == 3
+    assert {"index": 0, "gender": "male", "internal_age": 1200, "years": 60, "health": 1, "departed": 0} \
+        in snap["villagers"]
+    assert "try_for_baby" not in snap  # the harness has no theGameState
+    # The probe may never be able to write unless asked: its default handle is read-only.
+    assert probe_stage1.PROCESS_VM_WRITE not in (0,)

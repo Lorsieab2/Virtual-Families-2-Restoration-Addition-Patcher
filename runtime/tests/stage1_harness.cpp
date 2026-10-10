@@ -185,11 +185,11 @@ static const char *ProtAt(unsigned va) {
 // Process start-up maps heaps and locale data in the 0x400000-0xB3D000 range,
 // so the harness re-launches itself suspended and reserves that range in the
 // child before any of its start-up code runs.
-static int RunChild(const wchar_t *exe) {
+static int RunChild(const wchar_t *exe, bool hold) {
     wchar_t self[MAX_PATH];
     GetModuleFileNameW(0, self, MAX_PATH);
     wchar_t cmd[MAX_PATH * 3];
-    _snwprintf_s(cmd, _countof(cmd), _TRUNCATE, L"\"%s\" \"%s\" child", self, exe);
+    _snwprintf_s(cmd, _countof(cmd), _TRUNCATE, L"\"%s\" \"%s\" %s", self, exe, hold ? L"hold" : L"child");
     STARTUPINFOW si = { sizeof si };
     si.dwFlags = STARTF_USESTDHANDLES;
     si.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
@@ -213,8 +213,11 @@ static int RunChild(const wchar_t *exe) {
 
 int wmain(int argc, wchar_t **argv) {
     if (argc == 2)
-        return RunChild(argv[1]);
-    if (argc != 3 || wcscmp(argv[2], L"child") != 0) {
+        return RunChild(argv[1], false);
+    if (argc == 3 && wcscmp(argv[2], L"--hold") == 0)
+        return RunChild(argv[1], true);
+    bool hold = argc == 3 && wcscmp(argv[2], L"hold") == 0;
+    if (argc != 3 || (!hold && wcscmp(argv[2], L"child") != 0)) {
         Out("{\"fatal\": \"usage\"}");
         return 2;
     }
@@ -304,9 +307,9 @@ int wmain(int argc, wchar_t **argv) {
         Out("{\"site\": %u, \"bytes\": \"%s\", \"protect\": \"%s\"}", sites[i], hex, ProtAt(sites[i]));
     }
     Out("{\"status\": {\"magic\": %u, \"allow\": %u, \"pins\": %u, \"mask\": %u, \"trampoline\": %u, "
-        "\"dll_lo\": %u, \"dll_hi\": %u}}",
+        "\"dll_lo\": %u, \"dll_hi\": %u, \"status_va\": %u}}",
         status->magic, status->allowOlderPregnancies, status->pinsMatched, status->installedMask,
-        status->trampoline, dllLo, dllHi);
+        status->trampoline, dllLo, dllHi, (unsigned)status);
     if (status->trampoline) {
         Hex(hex, (const unsigned char *)status->trampoline, 16);
         Out("{\"trampoline\": %u, \"bytes\": \"%s\", \"protect\": \"%s\"}", status->trampoline, hex,
@@ -434,6 +437,12 @@ int wmain(int argc, wchar_t **argv) {
         "\"cooldown_skips\": %u, \"next_generation\": %u, \"older_grants\": %u}}",
         status->chanceCalls, status->olderRolls, status->olderSuccesses, status->cooldownStores,
         status->cooldownSkips, status->nextGenerationCalls, status->nextGenerationOlderGrants);
+    if (hold) {
+        // Keep this process alive for the live-probe test until stdin closes.
+        Out("{\"holding\": %lu}", GetCurrentProcessId());
+        char line[16];
+        fgets(line, sizeof line, stdin);
+    }
     Out("{\"done\": 1}");
     return 0;
 }
