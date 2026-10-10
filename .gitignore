@@ -126,3 +126,6 @@ src/patcher_local_settings.json
 # work/decode_candidate_object_prerequisites.py. It is a large machine-
 # generated build artifact, not source, and review flagged committing it.
 work/Villager_relocations.txt
+
+# Stage 1 runtime-hook module: locally built DLL and objects.
+/runtime/build/
