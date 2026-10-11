@@ -28,6 +28,7 @@
 //   career_room_goals  career-room goals rebuilt from owned upgrades on load
 //   time_controls      "Time Controls" dialog from the store screen (new; vf2fun_time.inc)
 //   event_collectable_slot_replacement  island events replace the oldest unpicked collectable
+//   power_failure_event  the Power Failure event's Take-a-chance outcome
 //   older_villager_mortality  the old-age death curve (.vf2mort; the mortality half)
 //
 // The VF2Fun_Status export is the DLL's install-status block (documented
@@ -141,6 +142,7 @@ static const unsigned kMaxWriteLen = 16;
 struct HookWrite {
     unsigned va;
     unsigned len;
+    bool data;  // a 4-byte vtable slot (never made executable), not code
     unsigned char bytes[kMaxWriteLen];
     unsigned char original[kMaxWriteLen];
 };
@@ -163,8 +165,8 @@ struct Plan {
     unsigned count;
     bool ok;
 
-    HookWrite *Add(unsigned va, unsigned len) {
-        if (!ok || count >= kMaxWrites || len < 5 || len > kMaxWriteLen) {
+    HookWrite *Add(unsigned va, unsigned len, bool data = false) {
+        if (!ok || count >= kMaxWrites || len < (data ? 4u : 5u) || len > kMaxWriteLen) {
             ok = false;
             return 0;
         }
@@ -172,7 +174,15 @@ struct Plan {
         memset(&w, 0, sizeof w);
         w.va = va;
         w.len = len;
+        w.data = data;
         return &w;
+    }
+    // Replace the 4-byte function pointer in the vtable slot at va with `to`.
+    void Slot(unsigned va, const void *to) {
+        HookWrite *w = Add(va, 4, true);
+        if (!w) return;
+        unsigned target = (unsigned)to;
+        memcpy(w->bytes, &target, 4);
     }
     // jmp rel32 at va to `to`, the rest of `len` bytes NOP.
     void Jmp(unsigned va, unsigned len, const void *to) {
@@ -229,9 +239,10 @@ static bool PinsMatch(unsigned module) {
 
 // The ONLY function that writes game code. The page is writable for this
 // write alone and gets its original protection back before returning.
-static bool WriteCode(unsigned va, const unsigned char *bytes, unsigned len) {
+static bool WriteCode(unsigned va, const unsigned char *bytes, unsigned len, bool data = false) {
     DWORD old = 0;
-    if (!VirtualProtect((void *)va, len, PAGE_EXECUTE_READWRITE, &old))
+    // A data write (a vtable slot) never makes its page executable.
+    if (!VirtualProtect((void *)va, len, data ? PAGE_READWRITE : PAGE_EXECUTE_READWRITE, &old))
         return false;
     memcpy((void *)va, bytes, len);
     DWORD ignored = 0;
@@ -264,14 +275,14 @@ static bool Apply(Plan &plan) {
     for (unsigned i = 0; i < plan.count; ++i) {
         HookWrite &w = plan.writes[i];
         memcpy(w.original, (const void *)w.va, w.len);
-        if (!WriteCode(w.va, w.bytes, w.len)) {
+        if (!WriteCode(w.va, w.bytes, w.len, w.data)) {
             Log("module %s: write at 0x%08X failed (error %lu); restoring its writes",
                 VF2_MODULE_NAMES[plan.module], w.va, GetLastError());
             for (unsigned j = 0; j < i; ++j)
-                WriteCode(plan.writes[j].va, plan.writes[j].original, plan.writes[j].len);
+                WriteCode(plan.writes[j].va, plan.writes[j].original, plan.writes[j].len, plan.writes[j].data);
             // A write that failed at VirtualProtect wrote nothing; one whose
             // restore failed did write, so put it back too.
-            WriteCode(w.va, w.original, w.len);
+            WriteCode(w.va, w.original, w.len, w.data);
             VF2Fun_Status.writeMasks[plan.module] = 0;
             return false;
         }
@@ -908,6 +919,111 @@ static void PlanEventCollectables(Plan &plan) {
         plan.Retarget(VF2_EVENT_COLLECTABLE_ADD_CALLSITES[i], (const void *)&EventCollectableAddThunk);
 }
 
+// ================================================================ module: power_failure_event
+// B200 patch_power_failure_event. Stock CEventThePowerFailure: choice A resets
+// the food store; choice B ("Take a chance") used to hit 0-3 random villagers.
+// B200 rolls once in CalcAward (1 in 4 = the food was bad, result text 0x9BE,
+// otherwise 0x9BD) and on a bad roll gives every living villager at home a 15%
+// upset stomach. State is per event pointer in four slots, one-shot, not
+// persisted. The class's three vtable slots (CalcAward, GetResultDescription,
+// ImpactGame) are replaced; the code is B200's VF2PowerFailure* helpers.
+static bool PowerFailureEvent;
+
+typedef void (__thiscall *EnvironmentSetPropFn)(void *environment, int prop);
+typedef void (__thiscall *FoodStoreResetFn)(void *foodStore, bool notify);
+typedef void (__thiscall *GiveAllSymptomFn)(void *manager, int symptom, int percent);
+static const EnvironmentSetPropFn EnvironmentSetProp = (EnvironmentSetPropFn)VF2_ENVIRONMENT_SET_PROP;
+static const FoodStoreResetFn FoodStoreReset = (FoodStoreResetFn)VF2_FOOD_STORE_RESET;
+static const GiveAllSymptomFn GiveAllVillagersSymptom = (GiveAllSymptomFn)VF2_GIVE_ALL_VILLAGERS_SYMPTOM;
+static_assert(VF2_POWER_FAILURE_RESULT_A == 0x9BC && VF2_POWER_FAILURE_RESULT_B1 == 0x9BD &&
+                  VF2_POWER_FAILURE_RESULT_B2 == 0x9BE && VF2_PROP_FOOD_SPOILED == 0x17 &&
+                  VF2_SYMPTOM_UPSET_STOMACH == 2 && VF2_POWER_FAILURE_SYMPTOM_PERCENT == 15,
+              "the Power Failure constants follow the sites module");
+
+struct PowerFailureState {
+    void *event;
+    int b2;
+};
+
+static PowerFailureState gPowerFailureStates[4] = {};
+static unsigned int gPowerFailureReplacement = 0;
+
+static PowerFailureState *FindPowerFailureState(void *event, bool create) {
+    if (!event) return 0;
+    PowerFailureState *empty = 0;
+    for (int i = 0; i < 4; ++i) {
+        if (gPowerFailureStates[i].event == event) {
+            return &gPowerFailureStates[i];
+        }
+        if (!empty && !gPowerFailureStates[i].event) {
+            empty = &gPowerFailureStates[i];
+        }
+    }
+    if (!create) return 0;
+    if (empty) {
+        empty->event = event;
+        empty->b2 = 0;
+        return empty;
+    }
+    PowerFailureState *slot = &gPowerFailureStates[gPowerFailureReplacement++ % 4];
+    slot->event = event;
+    slot->b2 = 0;
+    return slot;
+}
+
+static void ClearPowerFailureState(void *event) {
+    PowerFailureState *state = FindPowerFailureState(event, false);
+    if (state) {
+        state->event = 0;
+        state->b2 = 0;
+    }
+}
+
+static void PowerFailureCalcAward(void *event, int choice) {
+    PowerFailureState *state = FindPowerFailureState(event, true);
+    if (!state) return;
+    state->b2 = (choice != 0) && (GetRandom(4) == 0);
+}
+
+static int PowerFailureGetResultDescription(void *event, int choice) {
+    if (choice == 0) return 0x9BC;
+    PowerFailureState *state = FindPowerFailureState(event, false);
+    if (state && state->b2) {
+        return 0x9BE;
+    }
+    return 0x9BD;
+}
+
+static void PowerFailureImpactGame(void *event, int choice) {
+    if (choice == 0) {
+        EnvironmentSetProp((void *)VF2_ENVIRONMENT, 0x17);
+        FoodStoreReset((void *)VF2_FOOD_STORE, true);
+    } else {
+        PowerFailureState *state = FindPowerFailureState(event, false);
+        if (state && state->b2) {
+            GiveAllVillagersSymptom((void *)VF2_VILLAGER_MANAGER, 2, 15);
+        }
+    }
+    ClearPowerFailureState(event);
+}
+
+// The three virtuals: thiscall, the choice on the stack, the callee pops 4.
+static void __fastcall PowerFailureCalcAwardSlot(void *self, void *, int choice) {
+    PowerFailureCalcAward(self, choice);
+}
+static int __fastcall PowerFailureDescriptionSlot(void *self, void *, int choice) {
+    return PowerFailureGetResultDescription(self, choice);
+}
+static void __fastcall PowerFailureImpactSlot(void *self, void *, int choice) {
+    PowerFailureImpactGame(self, choice);
+}
+
+static void PlanPowerFailureEvent(Plan &plan) {
+    plan.Slot(VF2_POWER_FAILURE_SLOT_CALC_AWARD, (const void *)&PowerFailureCalcAwardSlot);
+    plan.Slot(VF2_POWER_FAILURE_SLOT_DESCRIPTION, (const void *)&PowerFailureDescriptionSlot);
+    plan.Slot(VF2_POWER_FAILURE_SLOT_IMPACT, (const void *)&PowerFailureImpactSlot);
+}
+
 // ================================================================ module: older_villager_mortality
 // B200 patch_older_villager_mortality (.vf2mort), the mortality half. In
 // CVillagerManager::AllVillagersRealtimePhysiologyAndProductivityUpkeep the
@@ -990,6 +1106,7 @@ static const ModuleDef Modules[] = {
     { PlanCareerRoomGoals, &CareerRoomGoalReconciliation },  // VF2_MODULE_CAREER_ROOM_GOALS
     { PlanTimeControls, &TimeControls },               // VF2_MODULE_TIME_CONTROLS
     { PlanEventCollectables, &EventCollectableSlotReplacement },  // VF2_MODULE_EVENT_COLLECTABLE_SLOT_REPLACEMENT
+    { PlanPowerFailureEvent, &PowerFailureEvent },  // VF2_MODULE_POWER_FAILURE_EVENT
     { PlanOlderVillagerMortality, &OlderVillagerMortality },  // VF2_MODULE_OLDER_VILLAGER_MORTALITY
 };
 static_assert(sizeof(Modules) / sizeof(Modules[0]) == VF2_MODULE_COUNT, "module table out of step with the sites");

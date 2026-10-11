@@ -19,7 +19,9 @@ Two separate jobs:
       re-issues itself);
     - a "retarget" pin is exactly one `call rel32` / `jmp rel32` / `jcc rel32`
       to its target;
-    - a "context" pin ends on an instruction boundary;
+    - a "context" pin ends on an instruction boundary; a "data" pin is exact bytes only;
+    - a "vtable_slot" pin is a 4-byte data pointer holding exactly its target,
+      inside a declared vtable (VTABLE_CLASSES) whose RTTI names the class;
     - no two written runs overlap, in any module;
     - no direct branch anywhere in .text lands inside the bytes the DLL
       overwrites (it may land on their first byte);
@@ -151,6 +153,34 @@ def validate(data: bytes) -> list[str]:
         live = img.read(pin.va, len(pin.expected))
         if live != pin.expected:
             raise SiteError(f"{pin.name} at {pin.va:#x}: expected {pin.expected.hex()} found {live.hex()}")
+        if pin.role == "data":
+            facts.append(f"{pin.name} {pin.va:#x} [data] {len(pin.expected)} bytes")
+            continue
+        if pin.role == "vtable_slot":
+            # A 4-byte function pointer in a vtable (data, never decoded): it must hold
+            # exactly the pinned function, lie outside .text, and sit inside a vtable
+            # whose RTTI names the expected class.
+            if (len(pin.expected) != 4 or pin.target is None
+                    or struct.unpack("<I", pin.expected)[0] != pin.target
+                    or img.text_va <= pin.va < img.text_va + len(img.text)):
+                raise SiteError(f"{pin.name}: not a data slot holding {pin.target}")
+            owners = [(vt, name, n) for vt, (name, n) in S.VTABLE_CLASSES.items() if vt <= pin.va < vt + 4 * n]
+            if len(owners) != 1:
+                raise SiteError(f"{pin.name}: {pin.va:#x} is not in exactly one declared vtable")
+            vt, cls, _n = owners[0]
+            col = struct.unpack("<I", img.read(vt - 4, 4))[0]
+            td = struct.unpack("<I", img.read(col + 12, 4))[0]
+            found = b""
+            while True:
+                ch = img.read(td + 8 + len(found), 1)
+                if ch == b"\0":
+                    break
+                found += ch
+            if found != cls.encode("ascii"):
+                raise SiteError(f"{pin.name}: vtable {vt:#x} is {found!r}, not {cls}")
+            overwritten.append((pin.name, pin.va, 4))
+            facts.append(f"{pin.name} {pin.va:#x} [vtable_slot] slot {(pin.va - vt) // 4} of {cls} holds {pin.target:#x}")
+            continue
         insns = decode_run(md, live, pin.va)
         text = "; ".join(f"{i.mnemonic} {i.op_str}".strip() for i in insns)
         if pin.module != S.CORE and pin.module not in S.MODULE_BY_KEY:

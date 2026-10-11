@@ -581,3 +581,73 @@ static void RunCollectableScenarios() {
     for (int slot = 0; slot < 2; ++slot) SetCollectSlot(slot, CollectKind(slot, 0, T));
     *(unsigned char **)0x558FC0 = 0;
 }
+
+// ------------------------------------------------------------ power_failure_event
+// The three virtuals of CEventThePowerFailure are called through the class's
+// vtable (0x4E22DC) exactly as the game's event dialog calls them. Off, the
+// copied stock methods run (GetRandom and the villager selection are the
+// harness recorders); on, the DLL's replacements.
+static void __fastcall FSetProp(void *self, void *, int prop) {
+    Ev("setprop %s %X", self == (void *)0xA87478 ? "env" : "BAD-THIS", prop);
+}
+static void __fastcall FFoodReset(void *self, void *, int notify) {
+    Ev("reset %s %d", self == (void *)0x567F88 ? "food" : "BAD-THIS", notify & 0xFF);
+}
+static void __fastcall FGiveAll(void *self, void *, int symptom, int percent) {  // ret 8
+    Ev("giveall %s %d %d", self == (void *)0x5B9F58 ? "villagers" : "BAD-THIS", symptom, percent);
+}
+static void __fastcall FSetSymptom(void *self, void *, int symptom) {  // ret 4
+    int index = (int)(((unsigned)self - 0x5B9F58 - 0x1CC70 - 0x6AF4) / 0x1CC0C);
+    Ev("symptom %d villager %d", symptom, index);
+}
+
+static int CallPowerSlot(int slot, void *event, int choice, int *espOk) {
+    void *fn = *(void **)(0x4E22DC + 4 * slot);
+    unsigned before = 0, after = 0;
+    int result = 0;
+    __asm {
+        mov before, esp
+        push choice
+        mov ecx, event
+        mov eax, fn
+        call eax
+        mov result, eax
+        mov after, esp
+    }
+    *espOk = before == after ? 1 : 0;
+    return result;
+}
+
+static void RunPowerFailureScenarios() {
+    WriteJmp(0x4A58B0, (void *)&FSetProp);
+    WriteJmp(0x427530, (void *)&FFoodReset);
+    WriteJmp(0x4995E0, (void *)&FGiveAll);
+    WriteJmp(0x4A09D0, (void *)&FSetSymptom);
+    gSelectResult = 2;
+    struct Op { int slot; int ev; int choice; int rv; };
+    static Op script[200];
+    int n = 0;
+    // one event at a time: every choice and every random value
+    for (int rv = 0; rv < 4; ++rv)
+        for (int choice = 0; choice < 2; ++choice) {
+            script[n++] = { 14, 0, choice, rv };   // CalcAward
+            script[n++] = { 11, 0, choice, rv };   // GetResultDescription
+            script[n++] = { 11, 0, choice, rv };   // asked twice: the same answer
+            script[n++] = { 12, 0, choice, rv };   // ImpactGame
+            script[n++] = { 11, 0, choice, rv };   // after the impact: the state is gone
+        }
+    // five events at once: only four state slots (the oldest is overwritten)
+    for (int ev = 0; ev < 5; ++ev) script[n++] = { 14, ev, 1, ev == 1 ? 1 : 0 };
+    for (int ev = 0; ev < 5; ++ev) script[n++] = { 11, ev, 1, 1 };
+    for (int ev = 0; ev < 5; ++ev) script[n++] = { 12, ev, 1, 1 };
+    for (int ev = 0; ev < 5; ++ev) script[n++] = { 11, ev, 1, 1 };
+    for (int i = 0; i < n; ++i) {
+        const Op &o = script[i];
+        EvReset();
+        gRandomValue = o.rv;
+        int espOk = 0;
+        int ret = CallPowerSlot(o.slot, (void *)(0x7400000 + o.ev * 16), o.choice, &espOk);
+        Out("{\"power\": %d, \"op\": [%d, %d, %d, %d], \"ret\": %d, \"esp_ok\": %d, \"events\": [%s]}", i, o.slot,
+            o.ev, o.choice, o.rv, ret, espOk, gEv);
+    }
+}

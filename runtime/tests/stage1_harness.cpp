@@ -785,8 +785,9 @@ int wmain(int argc, wchar_t **argv) {
     const unsigned sites[] = { 0x4A0810, 0x49F6DF, 0x430681, 0x430DB8, 0x43C0BD, 0x4407DC, 0x40D1DA,
                                0x4226A6, 0x44337B, 0x42A75E, 0x4322B0, 0x4332A5, 0x499893,
                                0x443F5C, 0x443B80, 0x443C00, 0x443A07, 0x444073,
-                               0x49BBBD, 0x419A2F, 0x41AF0E, 0x41AF4B };
-    const unsigned lens[] = { 8, 6, 5, 5, 5, 5, 5, 10, 10, 5, 7, 5, 5, 6, 8, 7, 5, 5, 9, 5, 5, 5 };
+                               0x49BBBD, 0x419A2F, 0x41AF0E, 0x41AF4B,
+                               0x4E2308, 0x4E230C, 0x4E2314 };
+    const unsigned lens[] = { 8, 6, 5, 5, 5, 5, 5, 10, 10, 5, 7, 5, 5, 6, 8, 7, 5, 5, 9, 5, 5, 5, 4, 4, 4 };
     const unsigned nSites = sizeof sites / sizeof sites[0];
     char hex[64];
     for (unsigned i = 0; i < nSites; ++i) {
@@ -1039,6 +1040,7 @@ int wmain(int argc, wchar_t **argv) {
     RunMenuScenarios();
     RunMortalityScenarios();
     RunCollectableScenarios();
+    RunPowerFailureScenarios();
 
     Out("{\"counters\": {\"chance\": %u, \"older_rolls\": %u, \"older_successes\": %u, \"cooldown_stores\": %u, "
         "\"cooldown_skips\": %u, \"next_generation\": %u, \"older_grants\": %u, \"scene_writes\": %u, "

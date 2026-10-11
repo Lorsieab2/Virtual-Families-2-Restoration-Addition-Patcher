@@ -83,6 +83,9 @@ MODULES = [
     Module("event_collectable_slot_replacement", "EventCollectableSlotReplacement",
            "patch_event_collectable_slot_replacement (unconditional in B200; the three native "
            "sites. The fossil email is a mobile island event: static)", True),
+    Module("power_failure_event", "PowerFailureEvent",
+           "patch_power_failure_event (B200 installs it in builds with island events, "
+           "VF2_ENABLE_ISLAND_EVENTS, on by default; it only changes stock Power Failure)", True),
     Module("older_villager_mortality", "OlderVillagerMortality",
            "patch_older_villager_mortality (.vf2mort; the mortality half: the longevity-"
            "achievement observer is the static custom-achievements feature)", False),
@@ -99,7 +102,10 @@ class Pin:
                 (a run may end in one `call rel32` when `target` names it:
                 the DLL then issues that call itself);
     retarget -- one `call rel32` / `jmp rel32` / `jcc rel32` to `target`, redirected;
-    context  -- bytes the module's logic relies on; never written.
+    context  -- bytes the module's logic relies on; never written;
+    data     -- non-code bytes (a table record, a text) the module relies on; never written;
+    vtable_slot -- a 4-byte function pointer in a vtable (data) that the module replaces;
+                `target` is the stock function it holds.
     """
 
     def __init__(self, name: str, va: int, hex_bytes: str, role: str, why: str,
@@ -1159,6 +1165,164 @@ PINS += [
     ),
 ]
 
+# --------------------------------------------------------------------------
+# power_failure_event -- B200 patch_power_failure_event. Stock
+# CEventThePowerFailure (RTTI ".?AVCEventThePowerFailure@@", vtable 0x4E22DC)
+# is a two-choice event: A "Throw it out" resets the food store, B "Take a
+# chance" gave 0-3 random villagers an upset stomach. B200 gives B a 1-in-4
+# roll in CalcAward that picks the result text (eEventThePowerFailureResultB1
+# 0x9BD "This stuff still looks okay." or ResultB2 0x9BE "Everyone gets an upset
+# stomach. The food was not ok.") and, on B2, an upset stomach (symptom 2)
+# with a 15% chance per living villager at home. B200 detours the three
+# methods inside IslandEvents.obj; here the three vtable slots of the class
+# are replaced instead (CalcAward is the shared `ret 4` stub 0x4B58A0, which
+# no other class is affected by, as only this class's slot changes). Nothing
+# else calls the three methods directly (the stock addresses have no caller
+# and no pointer to them outside this vtable). The state B200 keeps per event
+# (four slots keyed by the event pointer, one-shot, not persisted) lives in
+# the DLL. String 0x9BE is in the vanilla string table: theStringManager's
+# constructor (0x449300) points every id 1..0xA68 at its entry of the static
+# table at 0x53DCE0, which has the 0x9BE record "eEventThePowerFailureResultB2".
+# --------------------------------------------------------------------------
+POWER_FAILURE_VTABLE = 0x4E22DC
+POWER_FAILURE_SLOT_DESCRIPTION = 0x4E2308   # vtable slot 11: GetResultDescription(int)
+POWER_FAILURE_SLOT_IMPACT = 0x4E230C        # vtable slot 12: ImpactGame(int)
+POWER_FAILURE_SLOT_CALC_AWARD = 0x4E2314    # vtable slot 14: CalcAward(int) = the shared `ret 4` stub
+POWER_FAILURE_DESCRIPTION_STOCK = 0x41C2F0
+POWER_FAILURE_IMPACT_STOCK = 0x41C310
+CALC_AWARD_STUB = 0x4B58A0
+POWER_FAILURE_RESULT_A = 0x9BC
+POWER_FAILURE_RESULT_B1 = 0x9BD
+POWER_FAILURE_RESULT_B2 = 0x9BE
+ENVIRONMENT = 0xA87478                      # global Environment
+ENVIRONMENT_SET_PROP = 0x4A58B0             # CEnvironment::SetProp(EPropEnum) thiscall, ret 4
+PROP_FOOD_SPOILED = 0x17
+FOOD_STORE = 0x567F88                       # global FoodStore
+FOOD_STORE_RESET = 0x427530                 # CFoodStore::Reset(bool) thiscall, ret 4
+GIVE_ALL_VILLAGERS_SYMPTOM = 0x4995E0       # CVillagerManager::GiveAllVillagersSymptom(ESymptom, int percent) thiscall, ret 8
+SYMPTOM_UPSET_STOMACH = 2
+POWER_FAILURE_SYMPTOM_PERCENT = 15
+STRING_TABLE_ENTRIES = 0x53DCE0             # static {id, name, text, 0} records, 16 bytes each
+STRING_TABLE_COUNT = 0xA5D
+
+# Vtables whose slots a module replaces: base address -> (RTTI name, slot count to allow).
+VTABLE_CLASSES = {
+    POWER_FAILURE_VTABLE: (".?AVCEventThePowerFailure@@", 16),
+}
+
+PINS += [
+    Pin(
+        "power_failure_description", 0x41C2F0,
+        "33C0394424040F95C005BC090000C20400",
+        "context",
+        "CEventThePowerFailure::GetResultDescription(int choice) (thiscall, ret 4): "
+        "xor eax,eax; cmp [esp+4],eax; setne al; add eax,9BCh -- "
+        "eEventThePowerFailureResultA for choice 0, ResultB1 (0x9BD) otherwise. "
+        "Vtable 0x4E22DC slot 11.",
+        module="power_failure_event",
+    ),
+    Pin(
+        "power_failure_impact", 0x41C310,
+        "6A17B97874A800E894950800837C2404007512C744240401000000B9887F5600E9FBB100006A04E8347C"
+        "FEFF50E82E7CFEFF83C40885C07E31568BF08D6424006A00B9589F5B00E854DB070050B9589F5B00E849"
+        "C907006A028D88F46A0000E85C46080083EE0175D75EC20400",
+        "context",
+        "CEventThePowerFailure::ImpactGame(int choice) (thiscall, ret 4), vtable slot "
+        "12: SetProp(0x17) on Environment 0xA87478; choice 0: FoodStore "
+        "(0x567F88).Reset(true) by a tail jump to 0x427530; choice 1: n = "
+        "GetRandom(GetRandom(4)) villagers, each SelectRandomLivingVillager -> "
+        "SetSymptom(2). Stock B is the random 0-3 villagers B200 replaces.",
+        module="power_failure_event",
+    ),
+    Pin(
+        "calc_award_stub", 0x4B58A0,
+        "C20400",
+        "context",
+        "ret 4: the shared no-op CalcAward(int) the Power Failure vtable's slot 14 "
+        "holds.",
+        module="power_failure_event",
+    ),
+    Pin(
+        "environment_set_prop", 0x4A58B0,
+        "535556578B7C241433F632DB83FF548BE90F8707030000",
+        "context",
+        "Entry of CEnvironment::SetProp(EPropEnum) (thiscall, ret 4; the prop number "
+        "is the stack argument, ecx the global Environment).",
+        module="power_failure_event",
+    ),
+    Pin(
+        "food_store_reset", 0x427530,
+        "566A328BF1E836CAFDFF83C03289467833C083C40438442408750988467C8986840000005EC20400",
+        "context",
+        "Whole CFoodStore::Reset(bool) (thiscall, ret 4); the stock choice A tail- "
+        "jumps here with the argument slot set to 1.",
+        module="power_failure_event",
+    ),
+    Pin(
+        "give_all_villagers_symptom", 0x4995E0,
+        "538B5C240C558B6C240C56578DB1F8870300BF1E000000807EFC007428803E00752383BE78AFFEFF007E"
+        "1A6A64E85EA9F6FF83C4043BC37D0C558D8E6CAFFEFFE8AB73000081C60CCC010083EF0175C75F5E5D5B"
+        "C20800",
+        "context",
+        "Whole CVillagerManager::GiveAllVillagersSymptom(ESymptom symptom, int "
+        "percent) (thiscall, ret 8): for each of the 30 villagers that is active, at "
+        "home and alive, SetSymptom(symptom) when GetRandom(100) < percent.",
+        module="power_failure_event",
+    ),
+    Pin(
+        "string_manager_table_loop", 0x449330,
+        "B9E0DC530033C03911740F83C00183C1103D5D0A000072EF33C9890C95F0EC560083C20181FA690A0000"
+        "7CD4",
+        "context",
+        "theStringManager constructor: for each id 1..0xA68, search the static table "
+        "at 0x53DCE0 (0xA5D records of 16 bytes) for that id and store the record "
+        "pointer (or 0) in the pointer table at 0x56ECF0 -- so every id with a "
+        "record, 0x9BE included, resolves through GetString (0x448E90).",
+        module="power_failure_event",
+    ),
+    Pin(
+        "power_failure_string_records", 0x548040,
+        "BC0900000CB44E00CCB34E0000000000BD090000ACB34E008CB34E0000000000BE0900006CB34E0034B3"
+        "4E0000000000",
+        "data",
+        "Static string records for ids 0x9BC (ResultA), 0x9BD (ResultB1) and 0x9BE "
+        "(ResultB2): {id, name pointer, text pointer, 0}.",
+        module="power_failure_event",
+    ),
+    Pin(
+        "power_failure_b2_text", 0x4EB334,
+        "45766572796F6E65206765747320616E2075707365742073746F6D6163682E2054686520666F6F642077"
+        "6173206E6F74206F6B2E00",
+        "data",
+        "The ResultB2 text: 'Everyone gets an upset stomach. The food was not ok.'",
+        module="power_failure_event",
+    ),
+    Pin(
+        "power_failure_slot_description", 0x4E2308,
+        "F0C24100",
+        "vtable_slot",
+        "CEventThePowerFailure vtable slot 11 (GetResultDescription): the function "
+        "pointer the module replaces.",
+        module="power_failure_event", target=POWER_FAILURE_DESCRIPTION_STOCK,
+    ),
+    Pin(
+        "power_failure_slot_impact", 0x4E230C,
+        "10C34100",
+        "vtable_slot",
+        "CEventThePowerFailure vtable slot 12 (ImpactGame): the function pointer the "
+        "module replaces.",
+        module="power_failure_event", target=POWER_FAILURE_IMPACT_STOCK,
+    ),
+    Pin(
+        "power_failure_slot_calc_award", 0x4E2314,
+        "A0584B00",
+        "vtable_slot",
+        "CEventThePowerFailure vtable slot 14 (CalcAward): the function pointer the "
+        "module replaces.",
+        module="power_failure_event", target=CALC_AWARD_STUB,
+    ),
+]
+
 # Byte offsets the branch scan (deliberately over-approximate: every offset
 # counts as an opcode) reports but which are inside another instruction;
 # source -> the start of the function containing it. gen_sites proves each by
@@ -1178,6 +1342,8 @@ EXCLUSIVE_CALLERS = {
     TECH_LOAD_STATE: (TECH_LOAD_STATE_CALL,),
     MENU_ACTIVATE_TAIL_TARGET: (MENU_ACTIVATE_TAIL_CALL,),
     COLLECTABLE_ADD: (COLLECTABLE_UPDATE_ADD_CALL,) + EVENT_COLLECTABLE_ADD_CALLSITES,
+    POWER_FAILURE_DESCRIPTION_STOCK: (),  # only ever reached through the vtable slot
+    POWER_FAILURE_IMPACT_STOCK: (),
 }
 # Functions that must have no absolute (pointer) reference anywhere in the file.
 NO_ABSOLUTE_REFERENCES = (CAN_START_NEXT_GENERATION, CHANCE_OF_PREGNANCY)

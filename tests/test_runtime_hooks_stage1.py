@@ -81,10 +81,10 @@ def test_committed_stub_matches_the_stub_builder():
 
 
 def test_overwritten_pins_do_not_overlap_each_other():
-    spans = sorted((p.va, p.end, p.name) for p in S.PINS if p.role != "context")
+    spans = sorted((p.va, p.end, p.name) for p in S.PINS if p.role not in ("context", "data"))
     for (a_lo, a_hi, a), (b_lo, b_hi, b) in zip(spans, spans[1:]):
         assert a_hi <= b_lo, f"{a} overlaps {b}"
-    assert {p.role for p in S.PINS} == {"detour", "replace", "retarget", "context"}
+    assert {p.role for p in S.PINS} == {"detour", "replace", "retarget", "context", "data", "vtable_slot"}
     assert len([p for p in S.PINS if p.role == "retarget" and p.module == "older_pregnancies"]) == 4
     assert {p.module for p in S.PINS} <= {S.CORE} | set(S.MODULE_BY_KEY)
 
@@ -377,6 +377,11 @@ def test_bootstrap_loads_the_dll_by_full_path_then_runs_init(on):
     assert boot["init_calls"] == 1 and boot["init_this_ok"] == 1 and boot["init_result"] == 1
 
 
+def _expected_protect(va):
+    """Game code is read-execute; a vtable (data) page is read-only. Never writable."""
+    return "R" if any(p.va == va and p.role == "vtable_slot" for p in S.PINS) else "RX"
+
+
 def _sites(rows):
     return {r["site"]: r for r in rows if "site" in r and "bytes" in r}
 
@@ -390,9 +395,9 @@ def test_setting_off_writes_nothing(off):
     assert status["requested"] == 0 and status["installed"] == 0 and status["trampoline"] == 0
     assert not any(status["write_masks"])
     for va, row in _sites(off).items():
-        pin = next(p for p in S.PINS if p.va == va and p.role != "context")
+        pin = next(p for p in S.PINS if p.va == va and p.role not in ("context", "data"))
         assert bytes.fromhex(row["bytes"]) == pin.expected
-        assert row["protect"] == "RX"
+        assert row["protect"] == _expected_protect(va)
     assert _one(off, "wx_regions")["wx_regions"] == 0
 
 
@@ -421,8 +426,8 @@ def test_installed_bytes_trampoline_and_protections(on):
         assert len(insns) == 1 and insns[0].mnemonic == "call"
         targets.add(insns[0].operands[0].imm)
     assert len(targets) == 1 and lo <= targets.pop() < hi
-    for row in sites.values():
-        assert row["protect"] == "RX", "game code left writable"
+    for va, row in sites.items():
+        assert row["protect"] == _expected_protect(va), "game code left writable"
 
     tramp = _one(on, "trampoline")
     t = tramp["trampoline"]
@@ -631,7 +636,7 @@ def test_modules_install_independently(built):
         assert status["requested"] == status["installed"] == bit, (m.key, status)
         sites = _sites(rows)
         for pin in S.PINS:
-            if pin.role == "context" or pin.va not in sites:
+            if pin.role in ("context", "data") or pin.va not in sites:
                 continue
             live = bytes.fromhex(sites[pin.va]["bytes"])
             assert (live != pin.expected) == (pin.module == m.key), (m.key, pin.name)
@@ -956,8 +961,8 @@ def test_time_controls_writes_exactly_its_three_sites(built):
     assert call.mnemonic == "call" and lo <= call.operands[0].imm < hi
     warp = next(md.disasm(bytes.fromhex(sites[S.WARP_SITE]["bytes"]), S.WARP_SITE))
     assert warp.mnemonic == "jmp" and warp.size == 5 and lo <= warp.operands[0].imm < hi
-    for row in sites.values():
-        assert row["protect"] == "RX"
+    for va, row in sites.items():
+        assert row["protect"] == _expected_protect(va)
     # The trampoline the handler's stolen prologue runs through.
     tramp = _one(rows, "trampoline")
     code = list(md.disasm(bytes.fromhex(tramp["bytes"])[:12], tramp["trampoline"]))
@@ -1666,4 +1671,156 @@ def test_collectable_module_writes_exactly_its_three_calls(built):
         c = next(md.disasm(bytes.fromhex(sites[va]["bytes"]), va))
         assert c.mnemonic == "call" and status["dll_lo"] <= c.operands[0].imm < status["dll_hi"]
     assert S.COLLECTABLE_UPDATE_ADD_CALL not in sites  # the natural spawn is never touched
+    assert _one(rows, "wx_regions")["wx_regions"] == 0
+
+
+# =============================================================== power_failure_event
+class _PowerModel:
+    """B200's VF2PowerFailure* helpers (state: four slots keyed by event, one-shot)."""
+
+    def __init__(self):
+        self.states = [[None, 0] for _ in range(4)]
+        self.replacement = 0
+
+    def find(self, event, create):
+        empty = None
+        for st in self.states:
+            if st[0] == event:
+                return st
+            if empty is None and st[0] is None:
+                empty = st
+        if not create:
+            return None
+        if empty is not None:
+            empty[0], empty[1] = event, 0
+            return empty
+        st = self.states[self.replacement % 4]
+        self.replacement += 1
+        st[0], st[1] = event, 0
+        return st
+
+    def op(self, slot, ev, choice, rv):
+        if slot == 14:
+            st = self.find(ev, True)
+            st[1] = 1 if (choice != 0 and rv == 0) else 0
+            return [], None
+        if slot == 11:
+            if choice == 0:
+                return [], 0x9BC
+            st = self.find(ev, False)
+            return [], (0x9BE if st and st[1] else 0x9BD)
+        events = ["setprop env 17", "reset food 1"] if choice == 0 else []
+        if choice != 0:
+            st = self.find(ev, False)
+            if st and st[1]:
+                events = ["giveall villagers 2 15"]
+        st = self.find(ev, False)
+        if st:
+            st[0], st[1] = None, 0
+        return events, None
+
+
+def _stock_power(slot, ev, choice, rv):
+    if slot == 14:
+        return [], None
+    if slot == 11:
+        return [], 0x9BC + (1 if choice else 0)
+    events = ["setprop env 17"]  # the stock method sets the prop for BOTH choices
+    events += ["reset food 1"] if choice == 0 else ["symptom 2 villager 2"] * rv
+    return events, None
+
+
+def _power_rows(rows):
+    return [r for r in rows if "power" in r]
+
+
+def test_power_failure_helpers_are_b200s_text():
+    b200 = GENERATOR.read_text(encoding="utf-8")
+    dll = DLL_SOURCE.read_text(encoding="utf-8")
+
+    def norm(text):
+        text = text.replace("gVF2", "g").replace("VF2", "").replace("ldwGameState::GetRandom", "GetRandom")
+        return _normalise(text)
+
+    pairs = (
+        (r"static VF2PowerFailureState \*VF2FindPowerFailureState\(", r"static PowerFailureState \*FindPowerFailureState\("),
+        (r"static void VF2ClearPowerFailureState\(", r"static void ClearPowerFailureState\("),
+    )
+    for b_sig, d_sig in pairs:
+        # B200's comment in Find explains the history; _normalise strips comments.
+        assert norm(_c_function(b200, b_sig)) == norm(_c_function(dll, d_sig)), b_sig
+    for b_sig, d_sig in ((r'extern "C" void __cdecl VF2PowerFailureCalcAward\(', r"static void PowerFailureCalcAward\("),
+                         (r'extern "C" int __cdecl VF2PowerFailureGetResultDescription\(', r"static int PowerFailureGetResultDescription\(")):
+        assert norm(_c_function(b200, b_sig)) == norm(_c_function(dll, d_sig)), b_sig
+    # ImpactGame: B200 calls Environment.SetProp / FoodStore.Reset / VillagerManager.GiveAllVillagersSymptom.
+    impact_b = norm(_c_function(b200, r'extern "C" void __cdecl VF2PowerFailureImpactGame\('))
+    impact_b = (impact_b.replace("Environment.SetProp((EPropEnum)0x17)", "EnvironmentSetProp((void*)_ENVIRONMENT,0x17)")
+                .replace("FoodStore.Reset(true)", "FoodStoreReset((void*)_FOOD_STORE,true)")
+                .replace("VillagerManager.GiveAllVillagersSymptom((ESymptom)2,15)",
+                         "GiveAllVillagersSymptom((void*)_VILLAGER_MANAGER,2,15)"))
+    assert impact_b == norm(_c_function(dll, r"static void PowerFailureImpactGame\("))
+    assert S.POWER_FAILURE_RESULT_A == 0x9BC and S.POWER_FAILURE_RESULT_B1 == 0x9BD and S.POWER_FAILURE_RESULT_B2 == 0x9BE
+    assert '"result_ids": {"a": "0x9BC", "b1": "0x9BD", "b2": "0x9BE"}' in b200
+    assert S.MODULE_BY_KEY["power_failure_event"].b200_default is True
+
+
+def test_power_failure_sites_and_the_b2_string_exist_in_the_vanilla_game():
+    facts = gen_sites.validate(vanilla_bytes())
+    assert any("slot 14 of .?AVCEventThePowerFailure@@ holds 0x4b58a0" in f for f in facts)
+    assert any("direct callers of 0x41c310: " in f for f in facts)
+    vanilla = vanilla_bytes()
+    pe = P.PE(vanilla)
+    # Exactly one pointer to each stock method anywhere in the file: the vtable slot.
+    for target in (S.POWER_FAILURE_DESCRIPTION_STOCK, S.POWER_FAILURE_IMPACT_STOCK):
+        assert vanilla.count(struct.pack("<I", target)) == 1
+    # String 0x9BE has a record in the static table the string manager indexes, with the B2 text.
+    rec = {}
+    for i in range(S.STRING_TABLE_COUNT):
+        at = pe.offset(S.STRING_TABLE_ENTRIES + 16 * i)
+        sid, name, text, zero = struct.unpack_from("<IIII", vanilla, at)
+        rec[sid] = (name, text)
+    assert 0x9BE in rec
+
+    def cstr(va):
+        at = pe.offset(va)
+        return vanilla[at:vanilla.index(b"\0", at)]
+
+    assert cstr(rec[0x9BE][0]) == b"eEventThePowerFailureResultB2"
+    assert cstr(rec[0x9BE][1]) == b"Everyone gets an upset stomach. The food was not ok."
+    assert cstr(rec[0x9BD][0]) == b"eEventThePowerFailureResultB1" and cstr(rec[0x9BC][0]) == b"eEventThePowerFailureResultA"
+
+
+@pytest.mark.parametrize("installed", [False, True])
+def test_power_failure_follows_b200_and_off_is_stock(on, off, installed):
+    rows = _power_rows(on if installed else off)
+    assert len(rows) == 40 + 20
+    model = _PowerModel()
+    for r in rows:
+        slot, ev, choice, rv = r["op"]
+        want_events, want_ret = model.op(slot, ev, choice, rv) if installed else _stock_power(slot, ev, choice, rv)
+        assert r["events"] == want_events, (installed, r)
+        if want_ret is not None:
+            assert r["ret"] == want_ret, (installed, r)
+        assert r["esp_ok"] == 1
+
+
+def test_power_failure_installed_differs_from_stock_where_b200_does(on, off):
+    a, b = _power_rows(on), _power_rows(off)
+    # B200 never sets the spoiled-food prop on "Take a chance" and gives 15% per villager on a bad roll.
+    impacts = [(x, y) for x, y in zip(a, b) if x["op"][0] == 12 and x["op"][2] == 1]
+    assert impacts and all("setprop env 17" in y["events"] and "setprop env 17" not in x["events"] for x, y in impacts)
+    assert any("giveall villagers 2 15" in x["events"] for x, _ in impacts)
+    descriptions = {x["ret"] for x, _ in zip(a, b) if x["op"][0] == 11 and x["op"][2] == 1}
+    assert descriptions == {0x9BD, 0x9BE}
+
+
+def test_power_failure_module_writes_exactly_three_vtable_slots(built):
+    rows = _harness(built, {k.ini_key: k.key == "power_failure_event" for k in S.MODULES}, tag="-pf")
+    status = _one(rows, "status")
+    idx = [m.key for m in S.MODULES].index("power_failure_event")
+    assert status["installed"] == _module_bit("power_failure_event") and status["write_masks"][idx] == 0b111
+    sites = _sites(rows)
+    for slot in (S.POWER_FAILURE_SLOT_CALC_AWARD, S.POWER_FAILURE_SLOT_DESCRIPTION, S.POWER_FAILURE_SLOT_IMPACT):
+        ptr = struct.unpack("<I", bytes.fromhex(sites[slot]["bytes"]))[0]
+        assert status["dll_lo"] <= ptr < status["dll_hi"] and sites[slot]["protect"] == "R"
     assert _one(rows, "wx_regions")["wx_regions"] == 0

@@ -141,11 +141,15 @@ def snapshot(p: Process) -> dict:
                    "startup": hex(startup), "module": hex(module), "dll_path": path}
     sites = {}
     for pin in S.PINS:
-        if pin.role == "context":
+        if pin.role in ("context", "data"):
             continue
         live = p.read(pin.va, len(pin.expected))
         if live == pin.expected:
             what = "vanilla (not installed)"
+        elif pin.role == "vtable_slot":
+            what = f"vtable slot -> {struct.unpack_from('<I', live)[0]:#x}"
+        elif live[0] == 0x0F:  # jcc rel32
+            what = f"jcc {pin.va + 6 + struct.unpack_from('<i', live, 2)[0]:#x}"
         else:
             rel = struct.unpack_from("<i", live, 1)[0]
             what = f"{'jmp' if live[0] == 0xE9 else 'call' if live[0] == 0xE8 else '??'} {pin.va + 5 + rel:#x}"
