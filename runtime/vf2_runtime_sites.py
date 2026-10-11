@@ -77,6 +77,9 @@ MODULES = [
            "converted; start_over_confirms + refresh_on_activate pending", True),
     Module("career_room_goals", "CareerRoomGoalReconciliation",
            "patch_career_room_goal_reconciliation (unconditional in B200; load hook)", True),
+    Module("time_controls", "TimeControls",
+           "none: new in the runtime build (the Virtual Families 1 patcher's Time Controls "
+           "dialog; B200 has no equivalent, so the default is off)", False),
 ]
 MODULE_BY_KEY = {m.key: m for m in MODULES}
 CORE = "core"  # pins every module relies on: any mismatch installs nothing
@@ -455,6 +458,205 @@ PINS += [
         "context",
         "Whole vanilla CTech::Level(ETech): the stock routine B200 calls.",
         module="career_room_goals",
+    ),
+]
+
+# --------------------------------------------------------------------------
+# time_controls -- NEW in the runtime build (no B200 equivalent): the Virtual
+# Families 1 patcher's "Time Controls" Windows dialog (pause, resume, 2x/5x/10x
+# speed, one "Time Warp: +3 years"), opened by a button on the store screen.
+#
+# Game time. CGameTime (global 0x568088; Seconds = base + realElapsed /
+# (speed / 10)) has SetSpeed(int) 0x427A50 (thiscall, ret 4): speed 10 is
+# normal, 5 is 2x, 2 is 5x, 1 is 10x, and 999 pauses (the active CGameTimers
+# are paused). theGameState (singleton pointer at 0x558FC0) keeps the same
+# speed in a field at +0x25B18 that the aging code divides by. The Space key
+# (theMainScene::HandleMessage, 0x43BC2D) is the game's own pause toggle: field
+# >= 999 means paused and Space does SetSpeed(field - 999) and field = that
+# value (10 if it is 0); otherwise it does SetSpeed(999) and field += 999. The
+# only other callers of SetSpeed are the Options dialog's Pause Game Yes
+# (0x42269B) and No (0x4226EA, stores 10). Nothing in the game resets a
+# non-paused speed except a new village (0x429733 stores 10) and the Options
+# dialog's No.
+#
+# Aging. CVillagerManager::AllVillagersTimeflowUpkeep(bool) 0x499700 (called
+# by theRealtimeManager::UpdateAll 0x42ACB0, from theMainScene::UpdateScene
+# every frame, and once from 0x432A46) runs for each of the 30 villagers
+# (stride 0x1CC0C; the loop pointer esi is villager + 0x1BB88 = the
+# "left home" byte). When one is active, at home and alive it turns the real
+# seconds since its last update (villager + 0x6AF4 = seconds accumulator,
+# + 0x6AF8 = last update) into age ticks: ticks = accumulator / 60 / speed
+# (the speed field). Then, at 0x499893, `mov ecx,edi; mov ebx,eax; push ebx;
+# call 0x498B40` adds them to the age at villager + 0x6A54 through
+# CVillagerBio::IncrementAge (0x498B40, `add [ecx],eax; ret 4`), and
+# afterwards the SAME function does the leaving-home check at 19 years (380
+# ticks), the oldest-age record (GameStats + 0x20 = 0x568038) and subtracts
+# speed * ticks * 60 from the accumulator using ebx (the native ticks). 20 ticks
+# are one year (the pregnancy code divides the age by 20; 380 ticks = 19
+# years), so "+3 years" is 60 extra ticks. The module hands the game extra
+# ticks through that one IncrementAge call and never writes an age itself.
+#
+# Entry point. The store screen is CScrollingStoreScene (RTTI
+# ".?AVCScrollingStoreScene@@" TD 0x534854 -> COL 0x52528C -> vtable
+# 0x4E2E44; slot 0 dtor 0x4332C0, 1 HandleMouse 0x4340E0, 3 HandleMessage
+# 0x4322B0). Its constructor (0x432F10; stores the vtable at 0x432F44) builds
+# the controls: "Done" (string 0x76C) and "Back" (0x76D) on btn_orange.png
+# (image 0x129, 145 x 34 per state) at (widescreenOffset + 0x10 / + 0xBA,
+# 0x2DD) with ids 1 and 3, and the Bank hit-area (id 2). Its last act is
+# `push 2; call SetStoreCategory` (0x4332A5). HandleMessage handles message 8
+# (button clicked) with the button id in the second argument; ids 1, 2 and 3
+# are the only ones it knows. The module adds a fourth button of the same
+# art at widescreenOffset + 0x164 (the next slot to the right of Back) by
+# retargeting that one call to a wrapper, and takes ownership of its clicks
+# (id 0x5646) by detouring HandleMessage's entry.
+# --------------------------------------------------------------------------
+GAME_TIME = 0x568088
+SET_SPEED = 0x427A50
+GAME_STATE_SPEED_FIELD = 0x25B18      # same field as PAUSE_FIELD
+SPEED_NORMAL = 10
+STORE_VTABLE = 0x4E2E44
+STORE_SET_CATEGORY = 0x432050         # CScrollingStoreScene::SetStoreCategory(int) thiscall, ret 4
+STORE_CTOR_SET_CATEGORY_CALL = 0x4332A5
+STORE_HANDLE_MESSAGE = 0x4322B0       # CScrollingStoreScene::HandleMessage(int,long) thiscall, ret 8
+STORE_HANDLE_MESSAGE_STEAL = 7        # push -1; push offset handler
+STORE_WIDESCREEN_OFFSET_FIELD = 0xE0
+STORE_TIME_BUTTON_X = 0x164
+STORE_TIME_BUTTON_Y = 0x2DD
+MESSAGE_BUTTON_CLICKED = 8
+BUTTON_IMAGE = 0x129                  # btn_orange.png
+BUTTON_TEXT_COLOUR = 0x5347E4         # cLdwWhite
+GAME_NEW = 0x4C379D                   # operator new (cdecl)
+GRAPHICS_GET = 0x448950               # theGraphicsManager::Get()
+GRAPHICS_GET_IMAGE_GRID = 0x448710    # (EImage) thiscall, ret 4
+STRING_GET = 0x449610                 # theStringManager::Get()
+STRING_GET_LARGE_FONT = 0x448E80      # thiscall
+BUTTON_CTOR = 0x401A40                # ldwButton(id, grid, ldwPoint, scene, bool) thiscall, ret 18h
+BUTTON_SET_TEXT = 0x4015E0            # (text, c1, c2, c3, font) thiscall, ret 14h
+SCENE_ADD_CONTROL = 0x40CF80          # ldwScene::AddControl(ctrl) thiscall, ret 4
+WARP_SITE = 0x499893                  # mov ecx,edi; mov ebx,eax; push ebx
+WARP_SITE_LEN = 5
+WARP_RESUME = 0x499898                # call CVillagerBio::IncrementAge
+INCREMENT_AGE = 0x498B40
+VILLAGER_ACTIVE_OFFSET = 0x1BB84
+VILLAGER_LEFT_HOME_OFFSET = 0x1BB88
+VILLAGER_HEALTH_OFFSET = 0x6B00
+TICKS_PER_YEAR = 20
+
+PINS += [
+    Pin(
+        "store_ctor", 0x432F37,
+        "8BF189742424E8EE9EFDFF33DBC706442E4E00889EDC000000899EE4000000899EE8000000899EEC0000"
+        "00899EF0000000899EF4000000899EF8000000899EFC000000899E00010000895C2430899E0401000089"
+        "9E08010000899E0C010000899E10010000E8AF59010089442420E8666601008BF8E86F7CFFFF8BC8E838"
+        "67FFFF8986E000000001054448530001054C485300B87000000001053448530001053C4853006A14899E"
+        "34010000E8B50709008BE883C404896C241C3BEBC644243001743B8B86E0000000D9E851D91C24050002"
+        "00006A038BCF8944241CE8385E0100506A01686C2E4E00B823000000508B44242850568BCDE85DB6FDFF"
+        "EB0233C0508BCE885C2434898658010000E8379FFDFF6A14E84D0709008BE883C404896C241C3BEBC644"
+        "243002742E8B86E00000005356B9DD020000518B4C242C83C010506829010000E88E560100506A018BCD"
+        "E8B4E9FCFF8BE8EB0233ED8BCF885C2430E8E35D010050A1E4475300505050686C0700008BCFE8DE5D01"
+        "00508BCDE826E5FCFF558BCEE8BE9EFDFF6A14E8D40609008BE883C404896C241C3BEBC644243003742E"
+        "8B86E00000005356B9DD020000518B4C242C05BA000000506829010000E813560100506A038BCDE839E9"
+        "FCFFEB0233C08BCF885C243089865C010000E8645D010050A1E4475300505050686D0700008BCFE85F5D"
+        "01008B8E5C01000050E8A3E4FCFF6A14E8590609008BE883C404896C241C3BEBC64424300474318B86E0"
+        "0000006A0156B9A4020000518B4C242C053E03000050682B010000E897550100506A028BCDE8BDE8FCFF"
+        "8BE8EB0233EDB0FF8BCF885C2430884424148844241588442416884424178844241C8844241D8844241E"
+        "8844241F88442420884424218844242288442423E8BA5C01008B4C24148B54241C508B4424245152506A"
+        "7D8BCFE8B15C0100508BCDE8F9E3FCFF6AF06A148BCDE81EE4FCFF558BCEE8869DFDFF8B86E00000008D"
+        "48288D90D603000005E90200008986F4000000C786F800000079000000C786000100002D02000083C01D"
+        "8986FC0000008B86F4000000898EE40000008B8EF80000008986040100008B86000100008996EC000000"
+        "8B96FC000000898E0801000089960C010000C786E800000055000000C786F00000000003000089861001"
+        "0000838604010000FA83860C010000066A028BCE889E14010000889E21010000899E48010000E8A6EDFF"
+        "FF8BC68B4C242864890D00000000595F5E5D5B83C420C3",
+        "context",
+        "Body of CScrollingStoreScene::CScrollingStoreScene from `mov esi,ecx`: "
+        "the vtable store 0x4E2E44, the Done (id 1, string 0x76C), Back (id 3, "
+        "string 0x76D) and Bank (id 2) buttons with their images, positions and "
+        "calls (operator new 0x4C379D, theGraphicsManager::Get 0x448950, "
+        "GetImageGrid 0x448710, theStringManager::Get 0x449610, GetLargeFont "
+        "0x448E80, ldwButton ctor 0x401A40, SetText 0x4015E0, AddControl "
+        "0x40CF80) and the final `push 2; call 0x432050`.",
+        module="time_controls",
+    ),
+    Pin(
+        "store_ctor_category_call", STORE_CTOR_SET_CATEGORY_CALL, "E8A6EDFFFF",
+        "retarget",
+        "The constructor's last call, SetStoreCategory(2) with ecx = the new "
+        "scene. The module's wrapper makes that call and then adds its button.",
+        module="time_controls", target=STORE_SET_CATEGORY,
+    ),
+    Pin(
+        "store_handle_message", STORE_HANDLE_MESSAGE,
+        "6AFF688BBC4D0064A1000000005081EC98000000535657A1447A550033C4508D8424A800000064A30000"
+        "00008BF133DB83BC24B800000008889E640100000F85010100008B8424BC00000083F801",
+        "context",
+        "Entry of CScrollingStoreScene::HandleMessage (vtable slot 3): SEH "
+        "prologue, esi = this, `cmp [esp+0B8h],8` (message 8 = button clicked), "
+        "then the button id at [esp+0BCh] compared with 1.",
+        module="time_controls",
+    ),
+    Pin(
+        "store_handle_message_entry", STORE_HANDLE_MESSAGE, "6AFF688BBC4D00",
+        "detour",
+        "push -1; push 4DBC8Bh: whole, non-relative instructions at the entry. "
+        "The trampoline runs them and resumes at 0x4322B7 (mov eax,fs:[0]).",
+        module="time_controls",
+    ),
+    Pin(
+        "timeflow_ticks", 0x499859,
+        "8BCBE890A7F6FF8BAECCAEFEFF8B9E6CAFFEFF8DBECCAEFEFF898670AFFEFFE8A313F9FF8BC8B8898888"
+        "88F7E38BC2C1E80533D2F7B1185B02008BCF8BD853E8A3F2FFFF",
+        "context",
+        "Inside AllVillagersTimeflowUpkeep: the last update stored (esi-15090h), "
+        "ebp = the old age, ebx = the accumulator, edi = &age (esi-15134h), then "
+        "ticks = (accumulator * 88888889h >> 37) / [state+25B18h] and "
+        "`mov ecx,edi; mov ebx,eax; push ebx; call IncrementAge`.",
+        module="time_controls",
+    ),
+    Pin(
+        "timeflow_ticks_site", WARP_SITE, "8BCF8BD853",
+        "replace",
+        "mov ecx,edi; mov ebx,eax; push ebx -- exactly 5 bytes, non-relative. "
+        "The module's stub redoes them with the queued warp ticks added to the "
+        "pushed value (ebx keeps the native ticks for the accumulator remainder) "
+        "and jumps to the call at 0x499898.",
+        module="time_controls",
+    ),
+    Pin(
+        "increment_age", INCREMENT_AGE, "8B4424040101C20400",
+        "context",
+        "CVillagerBio::IncrementAge(int): mov eax,[esp+4]; add [ecx],eax; ret 4. "
+        "Adding is all it does; the leaving-home and oldest-age checks are in "
+        "the caller, after this call.",
+        module="time_controls",
+    ),
+    Pin(
+        "space_pause_toggle", 0x43BC2D,
+        "8B46148B80185B02003DE70300007C340519FCFFFF578BF87505BF0A00000050B988805600E8F9BDFEFF"
+        "8B4E1489B9185B0200B9B0B15600E846BC00005F32C05EC2040068E7030000B988805600E8D0BDFEFF8B"
+        "76148186185B0200E703000032C05EC20400",
+        "context",
+        "The Space key's pause toggle in theMainScene::HandleMessage: field "
+        "[state+25B18h] >= 999 -> SetSpeed(field - 999), field = that (10 if 0); "
+        "else SetSpeed(999), field += 999. GameTime is 0x568088 and the callee "
+        "is 0x427A50.",
+        module="time_controls",
+    ),
+    Pin(
+        "set_speed", SET_SPEED,
+        "83EC0C558B6C2414568BF13B6E200F841401000081FDE703000057753733FF33ED393D808056000F8ED8"
+        "0000008D49008B0CBEE83801000084C074088B0CBEE86C01000083C7013B3D808056007CE1E9B1000000"
+        "53E8763100008BC8E83FC5FDFF8BC88B462085C089442410750BD9E82B4E28D95C2410EB48DB4424208B"
+        "C185C089442420DA742410D95C2410DB4424207D06D80534294E00D84C2410D97C24200FB74424200D00"
+        "0C000089442414D96C2414DF7C24148B5424142BCAD96C242033FF393D808056008BD97E378D49008B0C"
+        "BEE89800000084C0741D8B0CBEE89C00000084C07511D9442410518B0CBED91C2453E83700000083C701"
+        "3B3D808056007CCC5B8BCEE8C4FDFFFF89462CE8BC3000008BC8E885C4FDFF8946288B4620894624896E"
+        "205F5E5D83C40CC20400",
+        "context",
+        "Whole CGameTime::SetSpeed(int): returns at once when the speed is "
+        "unchanged; 999 pauses the registered timers; any other value rescales "
+        "them (CGameTimer::Adjust) and stores the new speed at +20h (the old "
+        "one at +24h).",
+        module="time_controls",
     ),
 ]
 
