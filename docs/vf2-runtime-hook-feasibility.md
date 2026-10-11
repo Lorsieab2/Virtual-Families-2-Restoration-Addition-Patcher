@@ -308,4 +308,61 @@ All found structurally in the vanilla image and pinned byte for byte in `runtime
 **Pass = A–G as stated.** Behaviour then matches B200's documented Allow Older Pregnancies: stock under 50; the older-parent cap; 50+ failed attempts skip the 1200 s cooldown; Next Generation at 60 with a surviving child; off is stock. The decision-level identity is already proved by the harness (§9.4). The live run proves the same code runs inside the real game. **Optional A/B:** repeat C–E in a B200 playtest build with `.vf2preg` = 01. The probe does not work there (different addresses), so compare the visible behaviour only.
 
 ## 11. Complete, ordered conversion plan
-*(See below.)*
+
+Rule (owner): **DLLs over cave space unless absolutely necessary.** The executable keeps only the Stage 1 loader stub (`.vf2fun`/`.vf2fud`) and the one Init vtable slot. Everything else is a module in `vf2fun.dll`. A patch converts only when its equivalence to released B200 is proved against the pinned vanilla bytes and the B200 generator source. Anything doubtful stays static and is listed here with the reason.
+
+### 11.1 S0: the host registry (done, commit `3a5570a`)
+- **One install path owns every write** (`InstallAll` → `Apply` → `WriteCode` in `vf2fun.cpp`). It reads each module's `[Patches]` key from `vf2fun.ini` (1 = on; anything else or a missing key = off = stock). It checks the core pins, then every pin of the module. It builds trampolines in one private page that is RW while it is filled and RX before any game byte changes. It installs each module all or nothing: a failed write puts back every write of that module, and the other modules are unaffected. A runtime overlap check refuses a write that touches another module's bytes; `gen_sites` refuses overlapping pins at build time too.
+- **Sites:** `vf2_runtime_sites.py` holds `MODULES` (key, ini key, B200 feature, B200 default) and tags every `Pin` with its module (or `core`). `gen_sites.py` proves every pin with capstone. Retargets name their target (call or jmp), `replace` runs may span whole instructions, and `EXCLUSIVE_CALLERS` / `NO_ABSOLUTE_REFERENCES` are checked for every listed function. The generated header carries the module table.
+- **Status block:** `VF2Fun_Status` is the documented install-status block (layout v2: requested, pins-ok, installed and refused masks, the trampoline page, and per-module write masks). It is written only by the install path. The per-call counters moved to `VF2Fun_TestCounters`, compiled only with `/DVF2FUN_TEST_COUNTERS`. `native/build.bat` (the release build) never sets that flag, and a test builds the release DLL and checks the export is absent.
+- **Settings:** the patcher writes every module key explicitly. The defaults are each feature's state in a default B200 build; `--set KEY=0|1` overrides one.
+- Allow Older Pregnancies moved onto the registry unchanged. All 23 Stage 1 tests still pass.
+
+### 11.2 Per-patch table (every `patch_*` in `work/patch_mobile_furniture_pack.py`)
+**Converted** = a runtime module, harness-proved, with a mutation confirmed caught. **Pending** = table-free and convertible in principle, but not done or not proved this round. **Static** = must stay in the static build for the reason given. **n/a** = generator plumbing, not a feature.
+
+| B200 patch | State | Module / reason |
+|---|---|---|
+| allow_older_pregnancies, next_generation_age_gate | **Converted** (Stage 1, moved onto S0) | `older_pregnancies`, key `AllowOlderPregnancies` (B200 default off) |
+| ldwscene_setactive_null_guard | **Converted** (`3a5570a`) | `scene_null_guard`, key `SceneSetActiveNullGuard` (unconditional in B200 → default 1). Vanilla `ldwScene::SetActive` 0x40D1D0, 59 callers. The stub keeps the `test bl,bl` flags and returns through vanilla's own epilogue. |
+| options_pause_yes_idempotent | **Converted** (`481a641`) | `fix_vanilla_bugs`, key `FixVanillaGameBugs` (default 1). Add at 0x4226A6 in theOptionsDialog::HandleMouse. |
+| title_menu_stale_hotspot | **Converted** (`481a641`) | `fix_vanilla_bugs`. Top store at 0x44337B in the theMenuScene constructor; the inclusive readers are pinned. |
+| title_menu_start_over_confirms | Pending | Vanilla `theMenuScene::HandleMessage` (0x443EF0) is shaped differently from the B200 object: dialogs are built inline, and Play/Start Over share 0x443FFD through `je` rel32 at 0x443F5C. Converting needs a jcc retarget role, located ShowMessageBox / theGameState::Init / SaveCurrentGame, and the "return true" path (0x443FF6). Convertible, not proved. **Until it lands, `FixVanillaGameBugs=1` is not yet the whole B200 setting.** |
+| title_menu_refresh_on_activate | Pending | Four sites (UpdateShowPlayer entry and re-add, Activate, theCreateNickNameDlg cancel). Uses only stock strings 0x775/0x280 and stock controls. Same caveat as above. |
+| fix_vanilla_game_bugs | n/a | Umbrella that calls the four fixes above. |
+| career_room_goal_reconciliation | **Converted** (`17541be`) | `career_room_goals`, key `CareerRoomGoalReconciliation` (unconditional → 1). Load hook only: CTech::LoadState call 0x42A75E. B200's second call, after Cheat Upgrades' Reset Achievements, belongs to Cheat Upgrades (static). |
+| event_collectable_slot_replacement | Pending | The three native sites (Bug Whisperer ×2, Neighbor Collectible) call stock `CCollectableItem::Add` and use stock slots (+0x34C/+0x368); the helper keeps its last-spawn slot/stamp in DLL globals, and B200 keeps them in helper globals too. Not done this round. The fourth (fossil) site is an island-events (mobile) event and stays with that static feature. |
+| options_dialog | Pending | Evict button: two constructor branch NOPs plus an inserted `AddControl` (needs a detour). Stock strings 0x10/0x11 and the stock EvictFamily handler. Not done. |
+| power_failure_event | Pending | Stock `CEventThePowerFailure` CalcAward/GetResultDescription/ImpactGame (vtable slots, found by RTTI). B2 returns string 0x9BE, which the stock table must be shown to contain in vanilla before converting. Not done. |
+| older_villager_mortality | Pending (S2) | The hazard table would live in the DLL (`OLDER_MORTALITY_HAZARDS_MILLIONTHS`), hooked in `CVillagerManager::AllVillagersRealtimePhysiologyAndProductivityUpkeep` before the old-age roll. In B200 that hook also calls the longevity-achievement observer (custom achievements 0x85–0x89, static), so the runtime module would carry the mortality half only. Not done this round. |
+| mobile_table_prop_draw, mobile_table_prop_paint, mobile_patio_prop_execution | **Static** | They draw and paint props for B200-added mobile furniture (picnic table, patio), whose item and image IDs come from the shared append cascade (§4). |
+| mobile_sound_routes | **Static** | Added sound assets and IDs. |
+| holiday_body_draw_redirect, collectable_item_holiday_ornaments, collectable_holiday_ornament_observers, collection_scene_holiday_ornaments, the_collector_holiday_ornaments | **Static** | Holiday image/ID tables and `achievementOrder` (§4, §8.3 Stage 3). |
+| furniture_manager, inventory_manager, visible_special_upgrades, house_renovations, scrolling_store_scene, purchase_dialog, special_upgrade_titles, string_manager, graphics_manager, floating_anim_table, added_furniture_click_aliases, added_furniture_venue_callsites, invisible_hammock_drop_action, invisible_furniture_parity, second_bathroom_leaks, bathroom1_curtain_decal, mobile_renovation_renderer | **Static** | They grow or index the shared furniture, inventory, string and image tables, or draw B200-added items (§4). |
+| island_events | **Static** | Added events, strings and images (matrix toggle; needs the Stage 3 table protocol). |
+| custom_achievement_draw_bounds, custom_achievements, achiever_load_reconciliation, pet_achievement_callsites, family_tree_appearance_achievement_callsites, maximum_resource_achievement_callsites, longevity_achievement_load_reconciliation, lifetime_generation_counter, new_village_clears_patcher_achievement_state | **Static** | Custom achievements: the `achievementOrder` table and B200-only bytes in achievement record 0xA8 (save data). |
+| same_sex_marriage, villager_same_sex_embrace, same_sex_pregnancy_guard, villager_manager_spouse_accessors, marriage_finalization_for_same_sex, villager_details_same_sex_married_status, embrace_role_split | **Static** | The on/off state is a persisted inventory byte that exists only because Cheat Upgrades grows the inventory table (§9.1). |
+| force_successful_pregnancy_callsites, force_pregnancy_skips_refusals | **Static** | Cheat Upgrades one-shot (inventory and string tables). |
+| six_child_private_time, spontaneous_behaviors, bookshelf_reading_behavior, radio_drop_behavior, behavior_label_variants, arcade_behavior_labels, mobile_furniture_behavior_dispatch, mobile_furniture_behavior_macros, mobile_furniture_autonomous_candidates, mobile_furniture_external_autonomous_selection | **Static** for now | Behavior Patches and mobile-furniture behaviour: labels use the string cascade, and the dispatch tables index added furniture. The macro-table part is §8.3 Stage 2's candidate, not yet proved table-free. |
+| multiple_marriage_candidates, marriage_candidate_reroll, vf3_style_child_adoption_chooser, tool_tray_outfit_normalization, main_scene_outfit_body_apply, main_scene_random_tip_click | Pending (not assessed this round) | Not yet checked for table or Cheat Upgrades dependencies. |
+| debug_features, plan_logging | **Never ported** | Debug-only: must not ship (owner rule). |
+| all, all_in_sections, section_near_jump, count_sites | n/a | Generator plumbing. |
+
+### 11.3 Order for the next round
+1. Finish `fix_vanilla_bugs` (start_over_confirms, refresh_on_activate). The setting is only B200-complete once these land.
+2. older_villager_mortality (DLL hazard table, mortality half).
+3. event_collectable_slot_replacement (native sites), power_failure_event (after the 0x9BE string check), options_dialog.
+4. Assess the "not assessed" rows.
+5. Stage 2/3 of §8.3 for the table-coupled rows.
+
+## 12. Stage 2 live-test checklist (main session; one live test at a time)
+**Build:** `C:\vf2w\vf2-runtime-stage2-test\VF2 Runtime Stage2 Test.exe`. The exe is byte-identical to the Stage 1 test exe (SHA-256 `04f9ff02…1b28e`): the bootstrap did not change. `Virtual Families 2 Patcher Files\vf2fun.dll` is a **test build** (`/DVF2FUN_TEST_COUNTERS`, SHA-256 `c58b420a…ce1280`). `vf2fun.ini` turns every module on, and `ldw.ini` has FullScreen=0. Saves go to `Documents\LDW\VF2 Runtime Stage2 Test\`. Probe from `C:\vf2w\wt-runtime`: `python runtime\tools\probe_stage1.py --exe-name "VF2 Runtime Stage2 Test.exe"`.
+
+- **A. Install.** Launch and reach the title screen. Probe: stub `DLL loaded`, and the modules `older_pregnancies`, `scene_null_guard`, `fix_vanilla_bugs` and `career_room_goals` are all `installed`, none `REFUSED`. Every written site shows `jmp`/`call` into the DLL. `vf2fun.log` lists four "installed" lines.
+- **B. Title hotspot.** On the title screen, click empty space where Manage Games first sat (the old rect: x 326–516 plus the widescreen offset, y 249–279), then hover there. Expect no Change Player dialog and no hover sound. The real Manage Games button (centre, lower) still works.
+- **C. Pause Yes.** In a family, open Settings and press Pause Game: Yes **twice** (pause is already on the second time), close Settings, then press Space once. Expect the game to resume on that single Space. Stock needed two.
+- **D. Career-room goals.** Load a family that owns career upgrades (or buy one, quit cleanly, relaunch). After load, the Achievements screen's kitchen/office/workshop goals show the owned count (all owned = complete). Counters are not exposed for this module; judge by the screen.
+- **E. SetActive guard.** Reach six children in one family (the stock crash point B200 recorded). Expect no crash when the six-child scene event fires. `sceneNullSkips` in the probe's test counters rises if the null slot is hit; `sceneActiveWrites` rises on every scene change.
+- **F. Allow Older Pregnancies.** Repeat §10 C–E with this build (same expectations).
+- **G. Off = stock.** Quit cleanly, set every key in `vf2fun.ini` to 0, relaunch. Probe: every module `off` and every site vanilla. The hotspot opens Change Player again, and Yes twice then Space stays paused.
+- **H. Save/reload.** Quit cleanly and relaunch; the family loads. No module writes save data of its own. Career goals and pause state are stock fields that B200 writes the same way.
