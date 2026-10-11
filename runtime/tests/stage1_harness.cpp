@@ -676,6 +676,8 @@ static void RunTimeScenarios(HMODULE dll, unsigned char *gameState, bool install
     *(unsigned *)(gameTime + 0x28) = 0;
 }
 
+#include "stage4_scenarios.inc"
+
 int wmain(int argc, wchar_t **argv) {
     // "--hold": keep the process for the live-probe test. "--status-only":
     // stop after the install report (the image may be deliberately corrupt).
@@ -781,21 +783,28 @@ int wmain(int argc, wchar_t **argv) {
 
     // ---- what is now at every written site
     const unsigned sites[] = { 0x4A0810, 0x49F6DF, 0x430681, 0x430DB8, 0x43C0BD, 0x4407DC, 0x40D1DA,
-                               0x4226A6, 0x44337B, 0x42A75E, 0x4322B0, 0x4332A5, 0x499893 };
-    const unsigned lens[] = { 8, 6, 5, 5, 5, 5, 5, 10, 10, 5, 7, 5, 5 };
+                               0x4226A6, 0x44337B, 0x42A75E, 0x4322B0, 0x4332A5, 0x499893,
+                               0x443F5C, 0x443B80, 0x443C00, 0x443A07, 0x444073 };
+    const unsigned lens[] = { 8, 6, 5, 5, 5, 5, 5, 10, 10, 5, 7, 5, 5, 6, 8, 7, 5, 5 };
     const unsigned nSites = sizeof sites / sizeof sites[0];
     char hex[64];
     for (unsigned i = 0; i < nSites; ++i) {
         Hex(hex, (const unsigned char *)sites[i], lens[i]);
         Out("{\"site\": %u, \"bytes\": \"%s\", \"protect\": \"%s\"}", sites[i], hex, ProtAt(sites[i]));
     }
-    Out("{\"status\": {\"magic\": %u, \"version\": %u, \"modules\": %u, \"requested\": %u, \"pins_ok\": %u, "
-        "\"installed\": %u, \"refused\": %u, \"trampoline\": %u, \"write_masks\": [%u, %u, %u, %u, %u, %u, %u, %u], "
-        "\"dll_lo\": %u, \"dll_hi\": %u, \"status_va\": %u}}",
-        status->magic, status->version, status->moduleCount, status->requestedMask, status->pinsOkMask,
-        status->installedMask, status->refusedMask, status->trampolinePage, status->writeMasks[0],
-        status->writeMasks[1], status->writeMasks[2], status->writeMasks[3], status->writeMasks[4],
-        status->writeMasks[5], status->writeMasks[6], status->writeMasks[7], dllLo, dllHi, (unsigned)status);
+    {
+        char masks[200];
+        int mlen = 0;
+        for (unsigned m = 0; m < 16; ++m)
+            mlen += _snprintf_s(masks + mlen, sizeof masks - mlen, _TRUNCATE, "%s%u", m ? ", " : "",
+                                status->writeMasks[m]);
+        Out("{\"status\": {\"magic\": %u, \"version\": %u, \"modules\": %u, \"requested\": %u, \"pins_ok\": %u, "
+            "\"installed\": %u, \"refused\": %u, \"trampoline\": %u, \"write_masks\": [%s], "
+            "\"dll_lo\": %u, \"dll_hi\": %u, \"status_va\": %u}}",
+            status->magic, status->version, status->moduleCount, status->requestedMask, status->pinsOkMask,
+            status->installedMask, status->refusedMask, status->trampolinePage, masks, dllLo, dllHi,
+            (unsigned)status);
+    }
     if (status->trampolinePage) {
         Hex(hex, (const unsigned char *)status->trampolinePage, 16);
         Out("{\"trampoline\": %u, \"bytes\": \"%s\", \"protect\": \"%s\"}", status->trampolinePage, hex,
@@ -1026,6 +1035,7 @@ int wmain(int argc, wchar_t **argv) {
     }
 
     RunTimeScenarios(dll, gameState, (status->installedMask & (1u << 4)) != 0);
+    RunMenuScenarios();
 
     Out("{\"counters\": {\"chance\": %u, \"older_rolls\": %u, \"older_successes\": %u, \"cooldown_stores\": %u, "
         "\"cooldown_skips\": %u, \"next_generation\": %u, \"older_grants\": %u, \"scene_writes\": %u, "

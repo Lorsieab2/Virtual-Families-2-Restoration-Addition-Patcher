@@ -73,8 +73,8 @@ MODULES = [
     Module("scene_null_guard", "SceneSetActiveNullGuard",
            "patch_ldwscene_setactive_null_guard (unconditional in B200)", True),
     Module("fix_vanilla_bugs", "FixVanillaGameBugs",
-           "fix_vanilla_game_bugs (.vf2bugs): pause_yes_idempotent + title_menu_stale_hotspot "
-           "converted; start_over_confirms + refresh_on_activate pending", True),
+           "fix_vanilla_game_bugs (.vf2bugs): pause_yes_idempotent + title_menu_stale_hotspot + "
+           "title_menu_start_over_confirms + title_menu_refresh_on_activate (all four)", True),
     Module("career_room_goals", "CareerRoomGoalReconciliation",
            "patch_career_room_goal_reconciliation (unconditional in B200; load hook)", True),
     Module("time_controls", "TimeControls",
@@ -89,8 +89,10 @@ class Pin:
     """Exact vanilla bytes at an address. `role` says why the module needs it:
 
     detour   -- a function-entry prologue stolen into a trampoline;
-    replace  -- whole non-relative instructions (5+ bytes) the DLL re-does;
-    retarget -- one `call rel32` / `jmp rel32` to `target`, redirected;
+    replace  -- whole non-relative instructions (5+ bytes) the DLL re-does
+                (a run may end in one `call rel32` when `target` names it:
+                the DLL then issues that call itself);
+    retarget -- one `call rel32` / `jmp rel32` / `jcc rel32` to `target`, redirected;
     context  -- bytes the module's logic relies on; never written.
     """
 
@@ -383,6 +385,254 @@ PINS += [
     ),
 ]
 
+
+MENU_HANDLE_MESSAGE = 0x443EF0
+START_OVER_BRANCH = 0x443F5C
+START_OVER_SHARED_PATH = 0x443FFD     # stock Play / Start Over handler (click sound first)
+START_OVER_RETURN_TRUE = 0x443FF6     # mov al,1; jmp epilogue
+START_OVER_AFTER_SOUND = 0x44400C     # the shared handler after its click sound
+START_OVER_CONFIRM_STRING_ID = 0x744  # eSayConfirmRestart
+SHOW_MESSAGE_BOX = 0x421410           # cdecl (ldwScene*, StringId, int, bool); 0 = Yes
+GAME_STATS = 0x568018                 # GameStats[0] (a village exists when non-zero)
+SOUND_OBJECT = 0x569DB0
+SOUND_PLAY = 0x446BC0                 # CSound::Play(ESound) thiscall, ret 4
+SOUND_CLICK = 0xB9
+GAME_STATE_INIT = 0x429DD0            # theGameState::Init() thiscall
+GAME_STATE_SAVE_CURRENT = 0x429660    # theGameState::SaveCurrentGame() thiscall
+MENU_GAME_STATE_FIELD = 0xC           # theMenuScene + 0Ch = theGameState*
+GAME_STATE_NAME_FIRST = 0x25ABC       # six name dwords +25ABCh .. +25AD0h (24 bytes)
+GAME_STATE_NAME_LAST = 0x25AD0
+UPDATE_SHOW_PLAYER = 0x443B80         # theMenuScene::UpdateShowPlayer() thiscall
+UPDATE_SHOW_PLAYER_STEAL = 8
+SHOW_PLAYER_ADD_NAME = 0x443C00
+SHOW_PLAYER_ADD_NAME_LEN = 7
+SHOW_PLAYER_ADD_NAME_RESUME = 0x443C07
+SCENE_GET_CONTROL = 0x40CFD0          # ldwScene::GetControl(int id) thiscall, ret 4
+SCENE_ADD_CONTROL = 0x40CF80          # ldwScene::AddControl(ctrl) thiscall, ret 4
+MENU_STRING_MANAGER_FIELD = 0x14
+MENU_PLAY_BUTTON_FIELD = 0xD8
+MENU_MANAGE_GAMES_ID_FIELD = 0xC4
+MENU_MANAGE_GAMES_BUTTON_FIELD = 0xE4
+MENU_NAME_BUTTON_FIELD = 0xF0
+STRING_GET_STRING = 0x448E90          # theStringManager::GetString(StringId) thiscall, ret 4
+STRING_GET_LARGE_FONT = 0x448E80      # theStringManager::GetLargeFont() thiscall
+BUTTON_SET_TEXT = 0x4015E0            # ldwButton::SetText(text, c1, c2, c3, font) thiscall, ret 14h
+TITLE_TEXT_COLOUR = 0x534BF4          # cLdwWhite as the title constructor reads it
+TITLE_PLAY_STRING_ID = 0x775          # "Play"
+TITLE_CONTINUE_STRING_ID = 0x280      # "Continue"
+MENU_ACTIVATE = 0x4439F0
+MENU_ACTIVATE_TAIL_TARGET = 0x42C020  # the floating-animation reset Activate(true) ends with
+MENU_ACTIVATE_TAIL_CALL = 0x443A07
+NICKNAME_DIALOG_DTOR = 0x41F970
+NICKNAME_CANCEL_DTOR_CALL = 0x444073
+
+
+# ---- fix_vanilla_bugs, part 2: title_menu_start_over_confirms and
+# title_menu_refresh_on_activate (the rest of B200's .vf2bugs).
+#
+# (c) patch_title_menu_start_over_confirms. theMenuScene::HandleMessage
+#     (vtable 0x4E3AB8 slot 3 = 0x443EF0; RTTI ".?AVtheMenuScene@@") tests a
+#     clicked button id against Play ([this+0C0h]) and Start Over ([this+0C8h]);
+#     both `je` rel32 land on the shared handler 0x443FFD: click sound, then
+#     the GameStats[0] test, and with a village in progress it just rolls the
+#     current story slot over and returns (the owner-reported defect: Start
+#     Over keeps going into the current game). B200 re-points Start Over's
+#     `je` (0x443F5C) at a stub: no village yet -> the stock path; else the
+#     click sound, ShowMessageBox(this, eSayConfirmRestart 0x744, 0, true),
+#     No (non-zero) -> the function's own `mov al,1` return at 0x443FF6, Yes
+#     -> the live new-player sequence on the game state [this+0Ch] (clamp the
+#     speed field, theGameState::Init with the 6 name dwords at +25ABCh..
+#     +25AD0h kept, SaveCurrentGame), then the stock story/scene-9 path just
+#     after its click sound (0x44400C). ShowMessageBox 0x421410 (cdecl, 4
+#     args, returns 0 for Yes) is the function behind 4 callers whose
+#     argument shape is proved by the Options dialog's Evict confirmation
+#     (0x4229D9: push 1; push 0; push 11h; push esi; call; add esp,10h; test
+#     eax,eax; jne skip; call EvictFamily). theGameState::Init 0x429DD0 and
+#     SaveCurrentGame 0x429660 are the calls the stock theCreateNickNameDlg
+#     (vtable 0x4E24F4, HandleMessage 0x41F980) makes for a new player, in the
+#     same order and with the same speed clamp.
+PINS += [
+    Pin(
+        "start_over_dispatch", 0x443F1B,
+        "8BF183BC24F4000000080F85890100008B8424F80000003B86CC0000000F846A0100003B86D40000000F"
+        "845E0100003B86C00000000F84A70000003B86C80000000F849B0000003B86C4000000",
+        "context",
+        "theMenuScene::HandleMessage: esi = this; message 8 (button clicked); the "
+        "button id [esp+0F8h] is compared with [esi+0CCh] and [esi+0D4h] (other "
+        "buttons), Play [esi+0C0h] (je 0x443FFD), Start Over [esi+0C8h] (je 0x443FFD, "
+        "the branch B200 re-points) and Manage Games [esi+0C4h].",
+        module="fix_vanilla_bugs",
+    ),
+    Pin(
+        "start_over_branch", 0x443F5C,
+        "0F849B000000",
+        "retarget",
+        "je rel32 taken when the clicked id is Start Over's: the one branch the fix "
+        "re-points (B200: the je at theMenuScene::HandleMessage+0x64). Play's own je "
+        "at 0x443F50 stays.",
+        module="fix_vanilla_bugs", target=START_OVER_SHARED_PATH,
+    ),
+    Pin(
+        "start_over_paths", 0x443FF6,
+        "B001E9B900000068B9000000B9B09D5600E8B42B0000833D1880560000741E8B760C8B86B85C02008986"
+        "BC5C0200C786B85C020000000000E9810000008B4E0C83B9205B02000075426A008D4C2410E8F6B5FDFF"
+        "6A00568D4C2414C78424F400000000000000E8FFDAFBFF83C9FF898C24EC0000003BC18D4C240C7509E8"
+        "F8B8FDFFB001EB3AE8EFB8FDFF6A00B9A095AA00E8031D07008B760C8B96B85C02008996BC5C0200C786"
+        "B85C020009000000EB0CE84349FCFF8BC8E84C49FCFF32C08B8C24E400000064890D00000000595E5B81"
+        "C4E4000000C20800",
+        "context",
+        "The tail of HandleMessage: return-true at 0x443FF6 (mov al,1; jmp epilogue); "
+        "the shared Play/Start Over handler 0x443FFD (push 0B9h; mov ecx,Sound "
+        "0x569DB0; call CSound::Play 0x446BC0; cmp GameStats[0] 0x568018,0; je "
+        "0x444033; rollover that keeps the current game); 0x444033 (slot "
+        "[state+25B20h] zero -> the name prompt theCreateNickNameDlg: DoModal -1 = "
+        "cancel -> dtor + return true, via the call at 0x444073); 0x444081 "
+        "(SetStory(0), story slot [state+25CB8h] = 9, return false); the epilogue.",
+        module="fix_vanilla_bugs",
+    ),
+    Pin(
+        "show_message_box", 0x421410,
+        "6AFF6808B14D0064A1000000005083EC7056A1447A550033C4508D44247864A3000000008B8424940000"
+        "008B8C24900000008B94248C0000005051528D4C2414E87BFDFFFF8B8424880000006A00508D4C2410C7"
+        "84248800000000000000E8ED06FEFF8D4C24088BF0C7842480000000FFFFFFFFE8F7FBFFFF8BC68B4C24"
+        "7864890D00000000595E83C47CC3",
+        "context",
+        "Whole ShowMessageBox(ldwScene*, StringId, int, bool) (cdecl, 4 stack "
+        "arguments, the caller pops): builds the message dialog, DoModal(scene, 0), "
+        "returns its result.",
+        module="fix_vanilla_bugs",
+    ),
+    Pin(
+        "show_message_box_caller", 0x4229D4,
+        "3B7E7C75216A016A006A1156E82BEAFFFF83C41085C075078BCEE87DFEFFFF",
+        "context",
+        "theOptionsDialog::HandleMouse, Evict: push 1; push 0; push 11h; push esi; "
+        "call ShowMessageBox; add esp,10h; test eax,eax; jne past; mov ecx,esi; call "
+        "EvictFamily. Result 0 = Yes: the argument order the Start Over stub uses.",
+        module="fix_vanilla_bugs",
+    ),
+    Pin(
+        "new_player_sequence", 0x41F9B1,
+        "81BE185B0200E70300007C0AC786185B02000A000000578BCEE801A400008B4D4C6A148DBEBC5A020057"
+        "E830E8FEFF8D96305B02008BC72BD75FEB038D49008A08880C0283C00184C975F48BCEC686995B020001"
+        "C786205B020001000000E84C9C00005E8BCD",
+        "context",
+        "theCreateNickNameDlg::HandleMessage (vtable 0x4E24F4 slot 3), OK branch: "
+        "[state+25B18h] >= 999 -> 10; theGameState::Init(0x429DD0); the typed name "
+        "copied to +25ABCh; slot [state+25B20h] = 1; theGameState::SaveCurrentGame "
+        "(0x429660). The live sequence B200's Yes repeats.",
+        module="fix_vanilla_bugs",
+    ),
+    Pin(
+        "game_state_init", 0x429DD0,
+        "53568BF133DB57B988805600C686CC5C020001889EBC5A0200899ED45A0200E88CDAFFFF",
+        "context",
+        "theGameState::Init entry: first byte of the player name [esi+25ABCh] cleared "
+        "(so the stub keeps the name dwords around the call) and the start of the "
+        "subsystem resets.",
+        module="fix_vanilla_bugs",
+    ),
+    Pin(
+        "save_current_game", 0x429660,
+        "53568BF18B068B50386A00FFD28AD88B86205B020085C0741A8B16508B42388BCEFFD022D8E89691FDFF"
+        "83C0788986E45C02005E8AC35BC3",
+        "context",
+        "Whole theGameState::SaveCurrentGame (thiscall, no arguments, returns bool in "
+        "al).",
+        module="fix_vanilla_bugs",
+    ),
+
+# (d) patch_title_menu_refresh_on_activate. The title screen is built once
+#     while loading. theMenuScene::UpdateShowPlayer (0x443B80, thiscall, no
+#     arguments; callers 0x443DA9 and 0x443FF1) keeps the player-name label
+#     (control id [this+0D0h], object [this+0F0h]) and Manage Games
+#     (id [this+0C4h], object [this+0E4h]) in step with the current player,
+#     but it only ever re-adds the name, so Manage Games is gone for the
+#     session once a player is removed, and nothing calls it on Activate or
+#     after a cancelled name prompt. B200 makes it the one refresh point:
+#     (1) on entry it repeats the constructor's Play/Continue label choice;
+#     (2) when it re-adds the name it re-adds Manage Games unless a control
+#     with Manage Games' id is already in the scene; (3) Activate(true) calls
+#     it; (4) the name prompt's cancel path calls it before returning true.
+#     The constructor's label choice is at 0x4433F5..0x44346C: GetLargeFont
+#     (0x448E80) of the string manager [this+14h], cLdwWhite x3 (the copy at
+#     0x534BF4), the string 0x775 ("Play") or, with GameStats[0] != 0, 0x280
+#     ("Continue") through GetString (0x448E90), ldwButton::SetText (0x4015E0)
+#     on [this+0D8h].
+    Pin(
+        "title_ctor_label", 0x4433F5,
+        "8B4E14889C24480100008986D8000000E8765A00008B4E1450A1F44B53005050506875070000E8705A00"
+        "008B8ED800000050E8B4E1FBFF8B8ED8000000518BCEE8469BFCFF391D18805600742A8B4E14E8365A00"
+        "008B4E1450A1F44B53005050506880020000E8305A00008B8ED800000050E874E1FBFF",
+        "context",
+        "theMenuScene constructor: the Play button [esi+0D8h] gets its label: ecx = "
+        "[esi+14h]; GetLargeFont; push cLdwWhite (0x534BF4) three times; "
+        "GetString(0x775); SetText; AddControl; cmp GameStats[0],ebx; je; the same "
+        "with 0x280.",
+        module="fix_vanilla_bugs",
+    ),
+    Pin(
+        "show_player_body", 0x443B80,
+        "83EC68A1447A550033C489442464538BD98B83D00000005550E83294FCFF8BE88B430C83B8205B020000"
+        "747305BC5A0200C6442408008BD08A0883C00184C975F756578D7C24102BC283C7FF8D6424008A4F0183"
+        "C70184C975F68BC8C1E9028BF2F3A58BC883E103F3A48D4C2410518B8BF0000000E8D6A5FCFF85ED5F5E"
+        "753F8B93F0000000528BCBE87293FCFF5D5B8B4C246433CCE8B3FF070083C468C385ED741C8B83E40000"
+        "00508BCBE8CF93FCFF8B8BF0000000518BCBE8C193FCFF8B4C246C5D5B33CCE882FF070083C468C3",
+        "context",
+        "Whole theMenuScene::UpdateShowPlayer: ebx = this; ebp = GetControl(0x40CFD0) "
+        "of the name id [ebx+0D0h]; a player exists when [state+25B20h] != 0: the "
+        "name is copied and SetText'd on [ebx+0F0h], and when ebp is 0 "
+        "AddControl([ebx+0F0h]) (0x443C00); no player: Manage Games [ebx+0E4h] and "
+        "the name are RemoveControl'd (0x40D000) when the name is shown.",
+        module="fix_vanilla_bugs",
+    ),
+    Pin(
+        "show_player_entry", 0x443B80,
+        "83EC68A1447A5500",
+        "detour",
+        "sub esp,68h; mov eax,[0x557A44]: whole non-relative instructions at the "
+        "function's entry; the trampoline resumes at 0x443B88. B200 detours the "
+        "6-byte prologue of its own build the same way.",
+        module="fix_vanilla_bugs",
+    ),
+    Pin(
+        "show_player_add_name", 0x443C00,
+        "8B93F000000052",
+        "replace",
+        "mov edx,[ebx+0F0h]; push edx -- the argument of the name's AddControl at "
+        "0x443C09. Not relative; the stub adds Manage Games first and then redoes "
+        "these two instructions and resumes at 0x443C07.",
+        module="fix_vanilla_bugs",
+    ),
+    Pin(
+        "menu_activate", 0x4439F0,
+        "807C240400568BF17412B998F55500E8CC31FEFF8B4E10E81486FEFF5EC20400",
+        "context",
+        "theMenuScene::Activate(bool) (vtable 0x4E3AB8 slot 9, ret 4): when the "
+        "argument is non-zero, SpawnButterflies (0x426BD0) and the floating animation "
+        "reset 0x42C020 on [this+10h]; esi = this throughout.",
+        module="fix_vanilla_bugs",
+    ),
+    Pin(
+        "menu_activate_tail", 0x443A07,
+        "E81486FEFF",
+        "retarget",
+        "call 0x42C020, the last act of Activate(true) (its only caller): the wrapper "
+        "makes the call and then UpdateShowPlayer(this) with esi.",
+        module="fix_vanilla_bugs", target=MENU_ACTIVATE_TAIL_TARGET,
+    ),
+    Pin(
+        "nickname_cancel_dtor", 0x444073,
+        "E8F8B8FDFF",
+        "retarget",
+        "call theCreateNickNameDlg's destructor (0x41F970) on the cancel path only "
+        "(DoModal returned -1: `jne 0x44407C` is not taken). The wrapper makes the "
+        "call and then UpdateShowPlayer(esi = this), then the stock `mov al,1` "
+        "return.",
+        module="fix_vanilla_bugs", target=NICKNAME_DIALOG_DTOR,
+    ),
+]
+
 # --------------------------------------------------------------------------
 # career_room_goals -- B200 patch_career_room_goal_reconciliation (load hook;
 # its second hook, after the Cheat Upgrades "Reset Achievements" action,
@@ -529,10 +779,8 @@ GAME_NEW = 0x4C379D                   # operator new (cdecl)
 GRAPHICS_GET = 0x448950               # theGraphicsManager::Get()
 GRAPHICS_GET_IMAGE_GRID = 0x448710    # (EImage) thiscall, ret 4
 STRING_GET = 0x449610                 # theStringManager::Get()
-STRING_GET_LARGE_FONT = 0x448E80      # thiscall
 BUTTON_CTOR = 0x401A40                # ldwButton(id, grid, ldwPoint, scene, bool) thiscall, ret 18h
-BUTTON_SET_TEXT = 0x4015E0            # (text, c1, c2, c3, font) thiscall, ret 14h
-SCENE_ADD_CONTROL = 0x40CF80          # ldwScene::AddControl(ctrl) thiscall, ret 4
+# (BUTTON_SET_TEXT, STRING_GET_LARGE_FONT and SCENE_ADD_CONTROL are defined with fix_vanilla_bugs above.)
 WARP_SITE = 0x499893                  # mov ecx,edi; mov ebx,eax; push ebx
 WARP_SITE_LEN = 5
 WARP_RESUME = 0x499898                # call CVillagerBio::IncrementAge
@@ -660,12 +908,21 @@ PINS += [
     ),
 ]
 
+# Byte offsets the branch scan (deliberately over-approximate: every offset
+# counts as an opcode) reports but which are inside another instruction;
+# source -> the start of the function containing it. gen_sites proves each by
+# linear decode before dropping it.
+NOT_INSTRUCTION_STARTS = {
+    0x443F08: MENU_HANDLE_MESSAGE,  # the 7Ah displacement byte of `mov eax,[557A44h]` at 0x443F06
+}
+
 # Every direct caller of these functions must be exactly the listed sites
 # (gen_sites refuses if .text has any other).
 EXCLUSIVE_CALLERS = {
     CAN_START_NEXT_GENERATION: NEXT_GENERATION_CALLSITES,
     CHANCE_OF_PREGNANCY: (0x49F5FA,),
     TECH_LOAD_STATE: (TECH_LOAD_STATE_CALL,),
+    MENU_ACTIVATE_TAIL_TARGET: (MENU_ACTIVATE_TAIL_CALL,),
 }
 # Functions that must have no absolute (pointer) reference anywhere in the file.
 NO_ABSOLUTE_REFERENCES = (CAN_START_NEXT_GENERATION, CHANCE_OF_PREGNANCY)

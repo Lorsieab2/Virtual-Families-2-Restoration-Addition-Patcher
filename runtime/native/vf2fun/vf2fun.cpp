@@ -186,6 +186,16 @@ struct Plan {
         if (!w) return;
         EncodeRel32(w->bytes, *(const unsigned char *)va, va, (unsigned)to);
     }
+    // Retarget the 6-byte `jcc rel32` at va to `to`, keeping its condition
+    // (pinned as 0F 80..8F by gen_sites).
+    void RetargetJcc(unsigned va, const void *to) {
+        HookWrite *w = Add(va, 6);
+        if (!w) return;
+        w->bytes[0] = ((const unsigned char *)va)[0];
+        w->bytes[1] = ((const unsigned char *)va)[1];
+        int rel = (int)((unsigned)to - (va + 6));
+        memcpy(w->bytes + 2, &rel, 4);
+    }
     // Copy the `steal` bytes at va (proved whole, non-relative instructions)
     // into the arena followed by jmp va+steal. Returns the trampoline, or 0.
     void *Trampoline(unsigned va, unsigned steal) {
@@ -537,9 +547,172 @@ static __declspec(naked) void TitleHotspotStub() {
 }
 static_assert(VF2_TITLE_HOTSPOT_BOTTOM + 1 == 0x118, "empty-rect top");
 
+// (c) patch_title_menu_start_over_confirms. The `je` taken for Start Over's id
+// in theMenuScene::HandleMessage (0x443F5C) goes here instead of the shared
+// Play / Start Over handler (esi = the menu scene, the stack as at the jump):
+//   no village yet (GameStats[0] == 0) -> the stock handler, unchanged;
+//   else the click sound, ShowMessageBox(this, eSayConfirmRestart, 0, true);
+//     non-zero (No) -> the function's own "return true" (menu stays up);
+//     zero (Yes)    -> the live new-player sequence on the game state
+//       [this+0Ch]: speed field >= 999 -> 10; theGameState::Init with the six
+//       name dwords +25ABCh..+25AD0h kept; SaveCurrentGame; then the stock
+//       handler just after its own click sound (it starts the intro story).
+// B200's stub does exactly this (work/patch_mobile_furniture_pack.py,
+// patch_title_menu_start_over_confirms). It holds the game state in esi; here
+// esi stays the menu scene, which the stock continuation needs, so the game
+// state is reloaded from [esi+0Ch] (a field nothing here changes).
+static const unsigned StartOverGameStats = VF2_GAME_STATS;
+static const unsigned StartOverSoundObject = VF2_SOUND_OBJECT;
+static const unsigned StartOverSoundPlay = VF2_SOUND_PLAY;
+static const unsigned StartOverShowMessageBox = VF2_SHOW_MESSAGE_BOX;
+static const unsigned StartOverInit = VF2_GAME_STATE_INIT;
+static const unsigned StartOverSave = VF2_GAME_STATE_SAVE_CURRENT;
+static const unsigned StartOverSharedPath = VF2_START_OVER_SHARED_PATH;
+static const unsigned StartOverReturnTrue = VF2_START_OVER_RETURN_TRUE;
+static const unsigned StartOverAfterSound = VF2_START_OVER_AFTER_SOUND;
+static_assert(VF2_START_OVER_CONFIRM_STRING_ID == 0x744 && VF2_SOUND_CLICK == 0xB9 &&
+                  VF2_GAME_STATE_NAME_FIRST == 0x25ABC && VF2_GAME_STATE_NAME_LAST == 0x25AD0 &&
+                  VF2_MENU_GAME_STATE_FIELD == 0xC && VF2_PAUSE_FIELD == 0x25B18,
+              "the Start Over stub's literals follow the sites module");
+
+static __declspec(naked) void StartOverStub() {
+    __asm {
+        mov eax, dword ptr [StartOverGameStats]
+        cmp dword ptr [eax], 0
+        je stock_path
+        push 0xB9
+        mov ecx, dword ptr [StartOverSoundObject]
+        call dword ptr [StartOverSoundPlay]
+        push 1
+        push 0
+        push 0x744
+        push esi
+        call dword ptr [StartOverShowMessageBox]
+        add esp, 16
+        test eax, eax
+        jne return_true
+        mov ecx, dword ptr [esi + 0xC]
+        cmp dword ptr [ecx + 0x25B18], 0x3E7
+        jl no_clamp
+        mov dword ptr [ecx + 0x25B18], 0xA
+    no_clamp:
+        push dword ptr [ecx + 0x25AD0]
+        push dword ptr [ecx + 0x25ACC]
+        push dword ptr [ecx + 0x25AC8]
+        push dword ptr [ecx + 0x25AC4]
+        push dword ptr [ecx + 0x25AC0]
+        push dword ptr [ecx + 0x25ABC]
+        call dword ptr [StartOverInit]
+        mov ecx, dword ptr [esi + 0xC]
+        pop dword ptr [ecx + 0x25ABC]
+        pop dword ptr [ecx + 0x25AC0]
+        pop dword ptr [ecx + 0x25AC4]
+        pop dword ptr [ecx + 0x25AC8]
+        pop dword ptr [ecx + 0x25ACC]
+        pop dword ptr [ecx + 0x25AD0]
+        call dword ptr [StartOverSave]
+        jmp dword ptr [StartOverAfterSound]
+    stock_path:
+        jmp dword ptr [StartOverSharedPath]
+    return_true:
+        jmp dword ptr [StartOverReturnTrue]
+    }
+}
+
+// (d) patch_title_menu_refresh_on_activate. theMenuScene::UpdateShowPlayer
+// becomes the one refresh point (see the sites module for the four hooks).
+typedef void *(__thiscall *GetLargeFontFn)(void *strings);
+typedef const char *(__thiscall *GetStringFn)(void *strings, int id);
+typedef void (__thiscall *ButtonSetTextFn)(void *button, const char *text, unsigned c1, unsigned c2,
+                                           unsigned c3, void *font);
+typedef void (__thiscall *UpdateShowPlayerFn)(void *scene);
+static const GetLargeFontFn TitleGetLargeFont = (GetLargeFontFn)VF2_STRING_GET_LARGE_FONT;
+static const GetStringFn TitleGetString = (GetStringFn)VF2_STRING_GET_STRING;
+static const ButtonSetTextFn TitleButtonSetText = (ButtonSetTextFn)VF2_BUTTON_SET_TEXT;
+static UpdateShowPlayerFn OriginalUpdateShowPlayer;  // the trampoline
+
+// The constructor's own label choice (0x4433F5..0x44346C): the large font of
+// the string manager [this+14h], the colour three times, "Play" (0x775) or,
+// with a village (GameStats[0] != 0), "Continue" (0x280), set on the Play
+// button [this+0D8h]. B200's label stub repeats these calls in this order.
+static void ApplyTitleLabel(unsigned char *scene) {
+    void *strings = *(void **)(scene + VF2_MENU_STRING_MANAGER_FIELD);
+    void *font = TitleGetLargeFont(strings);
+    unsigned colour = *(unsigned *)VF2_TITLE_TEXT_COLOUR;
+    int id = *(int *)VF2_GAME_STATS != 0 ? VF2_TITLE_CONTINUE_STRING_ID : VF2_TITLE_PLAY_STRING_ID;
+    const char *text = TitleGetString(strings, id);
+    TitleButtonSetText(*(void **)(scene + VF2_MENU_PLAY_BUTTON_FIELD), text, colour, colour, colour, font);
+}
+
+static void __fastcall UpdateShowPlayerDetour(void *scene, void *) {
+    ApplyTitleLabel((unsigned char *)scene);
+    OriginalUpdateShowPlayer(scene);
+}
+
+// Jumped to from 0x443C00 in place of `mov edx,[ebx+0F0h]; push edx` (the
+// argument of the name's AddControl): when no control with Manage Games' id
+// is in the scene, add the Manage Games button first, as B200 does; then
+// redo the two instructions and resume at 0x443C07 (ebx = the menu scene).
+static const unsigned ManageGetControl = VF2_SCENE_GET_CONTROL;
+static const unsigned ManageAddControl = VF2_SCENE_ADD_CONTROL;
+static const unsigned ManageResume = VF2_SHOW_PLAYER_ADD_NAME_RESUME;
+static_assert(VF2_MENU_MANAGE_GAMES_ID_FIELD == 0xC4 && VF2_MENU_MANAGE_GAMES_BUTTON_FIELD == 0xE4 &&
+                  VF2_MENU_NAME_BUTTON_FIELD == 0xF0,
+              "the Manage Games stub's literals follow the sites module");
+
+static __declspec(naked) void ManageGamesStub() {
+    __asm {
+        push dword ptr [ebx + 0xC4]
+        mov ecx, ebx
+        call dword ptr [ManageGetControl]
+        test eax, eax
+        jne already_shown
+        push dword ptr [ebx + 0xE4]
+        mov ecx, ebx
+        call dword ptr [ManageAddControl]
+    already_shown:
+        mov edx, dword ptr [ebx + 0xF0]
+        push edx
+        jmp dword ptr [ManageResume]
+    }
+}
+
+// Replace the two calls that end Activate(true) and the name prompt's cancel
+// path: make the original call, then refresh the title (esi = the menu scene
+// in both stock functions; the callee preserves it).
+static const unsigned ActivateTailTarget = VF2_MENU_ACTIVATE_TAIL_TARGET;
+static const unsigned NicknameDialogDtor = VF2_NICKNAME_DIALOG_DTOR;
+static const unsigned RefreshTitle = VF2_UPDATE_SHOW_PLAYER;
+
+static __declspec(naked) void ActivateTailWrapper() {
+    __asm {
+        call dword ptr [ActivateTailTarget]
+        mov ecx, esi
+        call dword ptr [RefreshTitle]
+        ret
+    }
+}
+
+static __declspec(naked) void NicknameCancelWrapper() {
+    __asm {
+        call dword ptr [NicknameDialogDtor]
+        mov ecx, esi
+        call dword ptr [RefreshTitle]
+        ret
+    }
+}
+
 static void PlanFixVanillaBugs(Plan &plan) {
     plan.Jmp(VF2_PAUSE_YES_ADD, VF2_PAUSE_YES_ADD_LEN, (const void *)&PauseYesStub);
     plan.Jmp(VF2_TITLE_HOTSPOT_TOP_STORE, VF2_TITLE_HOTSPOT_TOP_STORE_LEN, (const void *)&TitleHotspotStub);
+    plan.RetargetJcc(VF2_START_OVER_BRANCH, (const void *)&StartOverStub);
+    OriginalUpdateShowPlayer = (UpdateShowPlayerFn)plan.Trampoline(VF2_UPDATE_SHOW_PLAYER,
+                                                                  VF2_UPDATE_SHOW_PLAYER_STEAL);
+    plan.Jmp(VF2_UPDATE_SHOW_PLAYER, VF2_UPDATE_SHOW_PLAYER_STEAL, (const void *)&UpdateShowPlayerDetour);
+    plan.Jmp(VF2_SHOW_PLAYER_ADD_NAME, VF2_SHOW_PLAYER_ADD_NAME_LEN, (const void *)&ManageGamesStub);
+    plan.Retarget(VF2_MENU_ACTIVATE_TAIL_CALL, (const void *)&ActivateTailWrapper);
+    plan.Retarget(VF2_NICKNAME_CANCEL_DTOR_CALL, (const void *)&NicknameCancelWrapper);
+    if (!OriginalUpdateShowPlayer) plan.ok = false;
 }
 
 // ================================================================ module: career_room_goals

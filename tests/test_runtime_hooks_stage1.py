@@ -1089,3 +1089,222 @@ def test_time_controls_off_leaves_the_store_and_aging_stock(off):
     assert status["requested"] == status["installed"] == 0
     counters = _one(off, "counters")
     assert counters["time_buttons"] == counters["time_warps"] == counters["time_dialogs"] == 0
+
+
+# =============================================================== fix_vanilla_bugs, part 2
+# title_menu_start_over_confirms and title_menu_refresh_on_activate: the rest of
+# B200's .vf2bugs. The harness runs the copied stock theMenuScene code with
+# recorders for the game calls; the models below are written from B200's
+# generator (work/patch_mobile_furniture_pack.py), not from the DLL.
+def _menu_rows(rows):
+    return {r["menu_case"]: r for r in rows if "menu_case" in r}
+
+
+def test_start_over_stub_is_b200s_sequence():
+    """B200's stub, read from the generator: the same literals and call order."""
+    body = _python_function(GENERATOR.read_text(encoding="utf-8"), "patch_title_menu_start_over_confirms")
+    assert _b200_constant("START_OVER_CONFIRM_STRING_ID") == S.START_OVER_CONFIRM_STRING_ID == 0x744
+    assert 'b"\\x68\\xB9\\x00\\x00\\x00"' in body                                   # push 0B9h (click sound)
+    assert body.index('"\\x6A\\x01"') < body.index('"\\x6A\\x00"') < body.index("START_OVER_CONFIRM_STRING_ID")
+    assert 'b"\\x57"' in body and "call ShowMessageBox" in body                    # push this; call
+    assert "\\x81\\xBE\\x18\\x5B\\x02\\x00\\xE7\\x03\\x00\\x00" in body             # cmp [state+25B18h],3E7h
+    assert "\\xC7\\x86\\x18\\x5B\\x02\\x00\\x0A\\x00\\x00\\x00" in body             # mov [state+25B18h],10
+    assert body.count("(0x25AD0, 0x25ACC, 0x25AC8, 0x25AC4, 0x25AC0, 0x25ABC)") == 1   # push order
+    assert body.count("(0x25ABC, 0x25AC0, 0x25AC4, 0x25AC8, 0x25ACC, 0x25AD0)") == 1   # pop order
+    assert body.index("call theGameState::Init") < body.index("call SaveCurrentGame")
+    assert "jne return true" in body and "jmp +0x128" in body
+    assert S.GAME_STATE_NAME_FIRST == 0x25ABC and S.GAME_STATE_NAME_LAST == 0x25AD0
+    src = DLL_SOURCE.read_text(encoding="utf-8")
+    stub = src[src.index("static __declspec(naked) void StartOverStub()"):]
+    stub = stub[:stub.index("\n}\n") + 3]
+    assert [l.strip() for l in stub.splitlines() if "push dword ptr [ecx + 0x25A" in l or "push dword ptr [ecx + 0x25AB" in l] == [
+        f"push dword ptr [ecx + {o}]" for o in ("0x25AD0", "0x25ACC", "0x25AC8", "0x25AC4", "0x25AC0", "0x25ABC")]
+    assert [l.strip() for l in stub.splitlines() if l.strip().startswith("pop dword ptr")] == [
+        f"pop dword ptr [ecx + {o}]" for o in ("0x25ABC", "0x25AC0", "0x25AC4", "0x25AC8", "0x25ACC", "0x25AD0")]
+
+
+def test_title_label_rule_is_b200s():
+    body = _python_function(GENERATOR.read_text(encoding="utf-8"), "patch_title_menu_refresh_on_activate")
+    assert _b200_constant("TITLE_PLAY_STRING_ID") == S.TITLE_PLAY_STRING_ID == 0x775
+    assert _b200_constant("TITLE_CONTINUE_STRING_ID") == S.TITLE_CONTINUE_STRING_ID == 0x280
+    assert 'bytes.fromhex("833D0000000000" "742A")' in body  # the constructor's own cmp GameStats[0],0; je
+    # Manage Games: GetControl(id [this+0C4h]) then AddControl([this+0E4h]) before the name.
+    assert 'b"\\xFF\\xB3\\xC4\\x00\\x00\\x00"' in body and 'b"\\xFF\\xB3\\xE4\\x00\\x00\\x00"' in body
+    assert body.index("call GetControl") < body.index("call AddControl")
+    assert S.MENU_MANAGE_GAMES_ID_FIELD == 0xC4 and S.MENU_MANAGE_GAMES_BUTTON_FIELD == 0xE4
+    assert S.MENU_NAME_BUTTON_FIELD == 0xF0 and S.MENU_PLAY_BUTTON_FIELD == 0xD8
+
+
+def test_fix_vanilla_bugs_part2_sites_are_proved_against_the_vanilla_game():
+    facts = gen_sites.validate(vanilla_bytes())
+    for needle in ("start_over_branch: no direct branch lands in 0x443f5d-0x443f61",
+                   "show_player_entry: no direct branch lands in 0x443b81-0x443b87",
+                   "show_player_add_name: no direct branch lands in 0x443c01-0x443c06",
+                   "menu_activate_tail: no direct branch lands in 0x443a08-0x443a0b",
+                   "nickname_cancel_dtor: no direct branch lands in 0x444074-0x444077",
+                   "direct callers of 0x42c020: 0x443a07",
+                   "0x443f08 is inside 'mov eax, dword ptr [0x557a44]' at 0x443f06, not a branch"):
+        assert any(needle in f for f in facts), needle
+
+
+def test_the_branch_scan_waiver_is_checked_not_trusted():
+    saved = dict(S.NOT_INSTRUCTION_STARTS)
+    try:
+        S.NOT_INSTRUCTION_STARTS[0x443F06] = S.MENU_HANDLE_MESSAGE  # an instruction start: must be refused
+        with pytest.raises(gen_sites.SiteError):
+            gen_sites.validate(vanilla_bytes())
+    finally:
+        S.NOT_INSTRUCTION_STARTS.clear()
+        S.NOT_INSTRUCTION_STARTS.update(saved)
+
+
+def test_validation_refuses_a_non_conditional_or_wrong_target_jcc_retarget():
+    data = bytearray(vanilla_bytes())
+    pe = P.PE(bytes(data))
+    off = pe.offset(S.START_OVER_BRANCH)
+    data[off + 2] ^= 0x01   # the target moves: the pin no longer matches
+    with pytest.raises(gen_sites.SiteError):
+        gen_sites.validate(bytes(data))
+
+
+def _start_over_expected(case, on):
+    """Model of the click rows. Events are the recorders' log; story slots are
+    [state+25CB8h, state+25CBCh] (stock starts at [5, 0x77])."""
+    village, slot = case["village"], case["slot"]
+    name = (b"Alyssa\0" + bytes(0x41 + i for i in range(7, 0x18))).hex()
+    sound = "sound B9"
+    box = "msgbox menu 744 0 1"
+    if case["id"] == 5:
+        return dict(result=0, events=[], story=[5, 0x77], speed=case["speed"], gs0=village)
+    if case["id"] == 1 or not on or not village:
+        if village:  # the stock rollover: keeps going into the current game
+            return dict(result=0, events=[sound], story=[0, 5], speed=case["speed"], gs0=village)
+        events = [sound]
+        if not slot:
+            events += ["nick_ctor 0", "domodal menu 0", "nick_dtor"]
+        return dict(result=0, events=events + ["setstory 0"], story=[9, 5], speed=case["speed"], gs0=0)
+    if case["answer"] != 0:  # No
+        return dict(result=1, events=[sound, box], story=[5, 0x77], speed=case["speed"], gs0=village)
+    speed = 10 if case["speed"] >= 999 else case["speed"]
+    return dict(result=0, events=[sound, box, f"init state speed={speed}", "save state", "setstory 0"],
+                story=[9, 5], speed=speed, gs0=0, name=name)
+
+
+CLICK_CASES = {
+    "start_over_no_village": dict(id=6, village=0, answer=0, speed=10, slot=1),
+    "start_over_no_village_no_slot": dict(id=6, village=0, answer=0, speed=10, slot=0),
+    "start_over_no": dict(id=6, village=1, answer=-1, speed=10, slot=1),
+    "start_over_yes": dict(id=6, village=1, answer=0, speed=10, slot=1),
+    "start_over_yes_speed_998": dict(id=6, village=1, answer=0, speed=998, slot=1),
+    "start_over_yes_speed_999": dict(id=6, village=1, answer=0, speed=999, slot=1),
+    "start_over_yes_speed_1009": dict(id=6, village=1, answer=0, speed=1009, slot=1),
+    "play_village": dict(id=1, village=1, answer=-1, speed=10, slot=1),
+    "play_no_village": dict(id=1, village=0, answer=-1, speed=10, slot=1),
+    "unknown_button": dict(id=5, village=1, answer=-1, speed=10, slot=1),
+}
+ORIGINAL_NAME = (b"Alyssa\0" + bytes(0x41 + i for i in range(7, 0x18))).hex()
+
+
+@pytest.mark.parametrize("name", sorted(CLICK_CASES))
+def test_start_over_confirms_like_b200(on, off, name):
+    case = CLICK_CASES[name]
+    a, b = _menu_rows(on)[f"click:{name}"], _menu_rows(off)[f"click:{name}"]
+    for row, installed in ((b, False), (a, True)):
+        want = _start_over_expected(case, installed)
+        assert row["events"] == want["events"], (name, installed, row)
+        assert row["result"] == want["result"] and row["story"] == want["story"], (name, installed, row)
+        assert row["speed"] == want["speed"] and row["gs0"] == want["gs0"], (name, installed, row)
+        assert row["esp_ok"] == 1
+        assert row["name"] == ORIGINAL_NAME  # the name is untouched (restored after Init on Yes)
+    # The stock game never asks; with a village it silently rolls the story slot over.
+    if case["id"] == 6 and case["village"]:
+        assert b["events"] == ["sound B9"] and b["story"] == [0, 5] and b["result"] == 0
+        assert any("msgbox" in e for e in a["events"])
+    else:
+        assert a == b, "everything but Start Over with a village is stock"
+
+
+def test_start_over_yes_keeps_the_player_name_through_init(on):
+    row = _menu_rows(on)["click:start_over_yes"]
+    assert row["name"] == ORIGINAL_NAME  # the recorder's Init wiped all 24 bytes; the stub put them back
+
+
+def _label_events(village):
+    return ["font strings", f"string {0x280 if village else 0x775:X}",
+            f"settext play {'Continue' if village else 'Play'} white font"]
+
+
+def _show_player_expected(village, slot, name_present, manage_present, on):
+    ev = _label_events(village) if on else []
+    ev.append("get 7")
+    if slot:
+        ev.append("name_text name Alyssa")
+        if not name_present:
+            if on:
+                ev.append("get 2")
+                if not manage_present:
+                    ev.append("add manage")
+            ev.append("add name")
+    elif name_present:
+        ev += ["remove manage", "remove name"]
+    return ev
+
+
+@pytest.mark.parametrize("village", [0, 1])
+@pytest.mark.parametrize("slot", [0, 1])
+@pytest.mark.parametrize("name_present", [0, 1])
+@pytest.mark.parametrize("manage_present", [0, 1])
+def test_update_show_player_refreshes_like_b200(on, off, village, slot, name_present, manage_present):
+    key = f"update_show_player:village{village}_slot{slot}_name{name_present}_manage{manage_present}"
+    for rows, installed in ((off, False), (on, True)):
+        row = _menu_rows(rows)[key]
+        assert row["events"] == _show_player_expected(village, slot, name_present, manage_present, installed), \
+            (key, installed, row)
+        assert row["esp_ok"] == 1 and row["gs0"] == village
+
+
+def test_title_refresh_after_a_cancelled_name_prompt_and_on_activate(on, off):
+    # The cancel path: dtor, then the same refresh the Change Player path makes.
+    for rows, installed in ((off, False), (on, True)):
+        r = _menu_rows(rows)
+        cancel = r["nickname:cancel"]
+        base = ["sound B9", "nick_ctor 0", "domodal menu 0", "nick_dtor"]
+        refresh = _label_events(0) + ["get 7", "remove manage", "remove name"] if installed else []
+        assert cancel["events"] == base + refresh and cancel["result"] == 1, (installed, cancel)
+        nothing = r["nickname:cancel_nothing_shown"]
+        assert nothing["events"] == base + (_label_events(0) + ["get 7"] if installed else []), (installed, nothing)
+        ok = r["nickname:ok"]  # the OK path is stock in both
+        assert ok["events"] == base[:3] + ["nick_dtor", "setstory 0"] and ok["result"] == 0
+        for village in (0, 1):
+            true_row = r[f"activate:arg1_village{village}"]
+            want = ["butterflies ok", "anim ok"]
+            if installed:
+                want += _show_player_expected(village, 1, 0, 0, True)
+            assert true_row["events"] == want, (installed, village, true_row)
+            assert r[f"activate:arg0_village{village}"]["events"] == []  # deactivating: nothing
+            assert true_row["esp_ok"] == 1
+
+
+def test_fix_vanilla_bugs_writes_all_seven_sites(built):
+    rows = _harness(built, {k.ini_key: k.key == "fix_vanilla_bugs" for k in S.MODULES}, tag="-fvb")
+    status = _one(rows, "status")
+    idx = [m.key for m in S.MODULES].index("fix_vanilla_bugs")
+    assert status["installed"] == _module_bit("fix_vanilla_bugs") and status["write_masks"][idx] == 0b1111111
+    sites = _sites(rows)
+    lo, hi = status["dll_lo"], status["dll_hi"]
+    md = _md()
+    jcc = next(md.disasm(bytes.fromhex(sites[S.START_OVER_BRANCH]["bytes"]), S.START_OVER_BRANCH))
+    assert jcc.mnemonic == "je" and jcc.size == 6 and lo <= jcc.operands[0].imm < hi
+    for va in (S.UPDATE_SHOW_PLAYER, S.SHOW_PLAYER_ADD_NAME):
+        raw = bytes.fromhex(sites[va]["bytes"])
+        j = next(md.disasm(raw, va))
+        assert j.mnemonic == "jmp" and lo <= j.operands[0].imm < hi
+        assert raw[5:] == b"\x90" * (len(raw) - 5)
+    for va in (S.MENU_ACTIVATE_TAIL_CALL, S.NICKNAME_CANCEL_DTOR_CALL):
+        c = next(md.disasm(bytes.fromhex(sites[va]["bytes"]), va))
+        assert c.mnemonic == "call" and lo <= c.operands[0].imm < hi
+    tramp = _one(rows, "trampoline")
+    raw = bytes.fromhex(tramp["bytes"])
+    assert raw[:8] == S.PIN_BY_NAME["show_player_entry"].expected
+    assert next(md.disasm(raw[8:13], tramp["trampoline"] + 8)).operands[0].imm == S.UPDATE_SHOW_PLAYER + 8
+    assert _one(rows, "wx_regions")["wx_regions"] == 0

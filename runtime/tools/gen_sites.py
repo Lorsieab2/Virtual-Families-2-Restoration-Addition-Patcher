@@ -14,8 +14,11 @@ Two separate jobs:
       shortest such run, and none of its instructions is relative (no
       branch/call/ret/int, nothing position-dependent), so the stolen copy
       runs unchanged from the trampoline;
-    - a "replace" pin is whole, non-relative instructions of at least 5 bytes;
-    - a "retarget" pin is exactly one `call rel32` / `jmp rel32` to its target;
+    - a "replace" pin is whole, non-relative instructions of at least 5 bytes
+      (it may end in one `call rel32` to its named target, which the DLL
+      re-issues itself);
+    - a "retarget" pin is exactly one `call rel32` / `jmp rel32` / `jcc rel32`
+      to its target;
     - a "context" pin ends on an instruction boundary;
     - no two written runs overlap, in any module;
     - no direct branch anywhere in .text lands inside the bytes the DLL
@@ -156,16 +159,27 @@ def validate(data: bytes) -> list[str]:
                 raise SiteError(f"{pin.name}: steal length {n} does not match the pin ({len(pin.expected)})")
             overwritten.append((pin.name, pin.va, n))
         elif pin.role == "replace":
-            if sum(i.size for i in insns) < 5 or any(is_relative(i) for i in insns):
+            # Whole instructions the DLL re-does. A run may end in one `call
+            # rel32` when the pin names its target: the DLL then issues that
+            # same call itself (to the pinned absolute address).
+            body = insns
+            if pin.target is not None:
+                last = insns[-1]
+                if (last.mnemonic != "call" or last.size != 5 or last.bytes[0] != 0xE8
+                        or last.operands[0].type != X86_OP_IMM or last.operands[0].imm != pin.target):
+                    raise SiteError(f"{pin.name}: does not end in `call {pin.target:#x}`")
+                body = insns[:-1]
+            if sum(i.size for i in insns) < 5 or any(is_relative(i) for i in body):
                 raise SiteError(f"{pin.name}: must be whole non-relative instructions of 5+ bytes")
             overwritten.append((pin.name, pin.va, len(pin.expected)))
         elif pin.role == "retarget":
             i = insns[0]
-            if (len(insns) != 1 or i.mnemonic not in ("call", "jmp") or i.size != 5
-                    or i.bytes[0] not in (0xE8, 0xE9) or pin.target is None
+            is_jump_or_call = i.size == 5 and i.mnemonic in ("call", "jmp") and i.bytes[0] in (0xE8, 0xE9)
+            is_jcc = i.size == 6 and i.bytes[0] == 0x0F and 0x80 <= i.bytes[1] <= 0x8F
+            if (len(insns) != 1 or not (is_jump_or_call or is_jcc) or pin.target is None
                     or i.operands[0].type != X86_OP_IMM or i.operands[0].imm != pin.target):
-                raise SiteError(f"{pin.name}: not `call/jmp {pin.target}`")
-            overwritten.append((pin.name, pin.va, 5))
+                raise SiteError(f"{pin.name}: not `call/jmp/jcc {pin.target}`")
+            overwritten.append((pin.name, pin.va, i.size))
         elif pin.role != "context":
             raise SiteError(f"{pin.name}: unknown role {pin.role}")
         facts.append(f"{pin.name} {pin.va:#x} [{pin.role}] {text}")
@@ -180,6 +194,26 @@ def validate(data: bytes) -> list[str]:
     # new jmp/call); a branch to any later byte would execute half an
     # instruction.
     branches = img.direct_branch_targets()
+    # The scan above is deliberately over-approximate: it also "finds" branch
+    # opcodes inside the immediates and displacements of other instructions.
+    # A listed source is dropped only after a linear decode from its function's
+    # start proves it is NOT an instruction start (it sits inside one).
+    for source, func_start in S.NOT_INSTRUCTION_STARTS.items():
+        starts = set()
+        end = max(source + 16, func_start + 16)
+        for insn in md.disasm(img.read(func_start, end - func_start), func_start):
+            starts.add(insn.address)
+            if insn.address > source:
+                break
+        if source in starts or not any(a < source for a in starts):
+            raise SiteError(f"{source:#x} is an instruction start (or undecodable); the waiver is wrong")
+        covering = [a for a in starts if a < source]
+        last = max(covering)
+        insn = next(md.disasm(img.read(last, 16), last))
+        if not last < source < last + insn.size:
+            raise SiteError(f"{source:#x} is not inside an instruction")
+        facts.append(f"{source:#x} is inside '{insn.mnemonic} {insn.op_str}' at {last:#x}, not a branch")
+    branches = [(src, t) for src, t in branches if src not in S.NOT_INSTRUCTION_STARTS]
     for name, va, n in overwritten:
         inside = [(hex(s), hex(t)) for s, t in branches if va < t < va + n]
         if inside:
