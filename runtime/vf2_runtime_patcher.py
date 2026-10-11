@@ -161,7 +161,7 @@ def patch_executable(vanilla: bytes) -> bytes:
 
 def default_settings() -> dict[str, bool]:
     """Every module at its state in a default B200 build."""
-    return {m.ini_key: m.b200_default for m in S.MODULES}
+    return {m.ini_key: m.b200_default for m in S.MODULES if not m.internal}
 
 
 def resolve_settings(settings: dict[str, bool] | bool | None) -> dict[str, bool]:
@@ -219,7 +219,7 @@ def main() -> int:
     a.add_argument("--allow-older-pregnancies", action="store_true")
     a.add_argument("--set", action="append", default=[], metavar="KEY=0|1",
                    help="override one [Patches] setting (default: the B200 default build's state); "
-                        "keys: " + ", ".join(m.ini_key for m in S.MODULES))
+                        "keys: " + ", ".join(m.ini_key for m in S.MODULES if not m.internal))
     a.add_argument("--exe-name", help="name for the patched executable (test builds get their own save folder)")
     args = ap.parse_args()
     try:

@@ -133,7 +133,7 @@ static void Log(const char *fmt, ...) {
 }
 
 // ================================================================ host registry
-static const unsigned kMaxWrites = 16;
+static const unsigned kMaxWrites = 32;
 static const unsigned kMaxWriteLen = 16;
 
 struct HookWrite {
@@ -161,8 +161,8 @@ struct Plan {
     unsigned count;
     bool ok;
 
-    HookWrite *Add(unsigned va, unsigned len) {
-        if (!ok || count >= kMaxWrites || len < 5 || len > kMaxWriteLen) {
+    HookWrite *Add(unsigned va, unsigned len, unsigned minLen = 5) {
+        if (!ok || count >= kMaxWrites || len < minLen || len > kMaxWriteLen) {
             ok = false;
             return 0;
         }
@@ -178,6 +178,16 @@ struct Plan {
         if (!w) return;
         EncodeRel32(w->bytes, 0xE9, va, (unsigned)to);
         for (unsigned i = 5; i < len; ++i) w->bytes[i] = 0x90;
+    }
+    // Rewrite one displacement or immediate (1 or 4 bytes) of an instruction in
+    // place: the instruction keeps its length and its first byte. Only the pins
+    // of role "field" (proved by gen_sites) may be written this way.
+    void Field(unsigned va, unsigned size, unsigned value) {
+        // The one-byte fields are signed compare immediates: 0x80 and above would change meaning.
+        if ((size != 1 && size != 4) || (size == 1 && value > 0x7F)) { ok = false; return; }
+        HookWrite *w = Add(va, size, 1);
+        if (!w) return;
+        memcpy(w->bytes, &value, size);
     }
     // Retarget the 5-byte call rel32 (or jmp rel32) at va to `to`, keeping
     // its opcode (pinned as E8 or E9 by gen_sites).
@@ -575,6 +585,8 @@ static void PlanCareerRoomGoals(Plan &plan) {
     plan.Retarget(VF2_TECH_LOAD_STATE_CALL, (const void *)&TechLoadStateAndReconcile);
 }
 
+#include "vf2fun_ids.inc"
+
 // ================================================================ module table
 struct ModuleDef {
     void (*plan)(Plan &);
@@ -587,6 +599,9 @@ static const ModuleDef Modules[] = {
     { PlanFixVanillaBugs, &FixVanillaGameBugs },       // VF2_MODULE_FIX_VANILLA_BUGS
     { PlanCareerRoomGoals, &CareerRoomGoalReconciliation },  // VF2_MODULE_CAREER_ROOM_GOALS
     { PlanTimeControls, &TimeControls },               // VF2_MODULE_TIME_CONTROLS
+    { PlanAchievementRecords, &AchievementReservedRecords },  // VF2_MODULE_ACHIEVEMENT_RECORDS
+    { PlanOrnamentAchievement, &OrnamentAchievement },        // VF2_MODULE_ORNAMENT_ACHIEVEMENT
+    { PlanIdRegistry, &IdRegistry },                          // VF2_MODULE_ID_REGISTRY (internal, last)
 };
 static_assert(sizeof(Modules) / sizeof(Modules[0]) == VF2_MODULE_COUNT, "module table out of step with the sites");
 
@@ -602,9 +617,20 @@ static Plan Plans[VF2_MODULE_COUNT];
 static void InstallAll() {
     unsigned requested = 0;
     for (unsigned m = 0; m < VF2_MODULE_COUNT; ++m) {
+        if (VF2_MODULE_INTERNAL_MASK & (1u << m)) continue;  // no setting of its own
         *Modules[m].enabled = SettingOn(VF2_MODULE_INI_KEYS[m]);
         if (*Modules[m].enabled) requested |= 1u << m;
         Log("setting %ls=%d", VF2_MODULE_INI_KEYS[m], *Modules[m].enabled ? 1 : 0);
+    }
+    // An internal module is requested exactly when a module that requires it is.
+    for (unsigned m = 0; m < VF2_MODULE_COUNT; ++m) {
+        if (!(VF2_MODULE_INTERNAL_MASK & (1u << m))) continue;
+        for (unsigned k = 0; k < VF2_MODULE_COUNT; ++k) {
+            if ((requested & (1u << k)) && (VF2_MODULE_REQUIRES[k] & (1u << m))) {
+                *Modules[m].enabled = true;
+                requested |= 1u << m;
+            }
+        }
     }
     VF2Fun_Status.requestedMask = requested;
     // Off means stock: a module that is off writes nothing.
@@ -627,9 +653,19 @@ static void InstallAll() {
         plan.module = m;
         plan.count = 0;
         plan.ok = true;
+        CurrentModule = m;
+        PlannedSoFar = planned;
         Modules[m].plan(plan);
         if (plan.ok) planned |= 1u << m;
         else Log("module %s: could not be planned; installing nothing for it", VF2_MODULE_NAMES[m]);
+    }
+    // A module whose required (internal) module could not be planned installs nothing.
+    for (unsigned m = 0; m < VF2_MODULE_COUNT; ++m) {
+        if ((planned & (1u << m)) && (VF2_MODULE_REQUIRES[m] & ~planned)) {
+            Log("module %s: a module it requires was not planned; installing nothing for it",
+                VF2_MODULE_NAMES[m]);
+            planned &= ~(1u << m);
+        }
     }
     if (Arena) {
         DWORD old = 0;
@@ -643,11 +679,20 @@ static void InstallAll() {
         FlushInstructionCache(GetCurrentProcess(), Arena, 4096);
         VF2Fun_Status.trampolinePage = (unsigned)Arena;
     }
-    for (unsigned m = 0; m < VF2_MODULE_COUNT; ++m) {
-        if (!(planned & (1u << m))) continue;
-        if (Apply(Plans[m])) {
-            VF2Fun_Status.installedMask |= 1u << m;
-            Log("module %s installed (%u writes)", VF2_MODULE_NAMES[m], Plans[m].count);
+    // Internal modules first, so a module that requires one can see whether it is live.
+    for (unsigned pass = 0; pass < 2; ++pass) {
+        for (unsigned m = 0; m < VF2_MODULE_COUNT; ++m) {
+            bool internal = (VF2_MODULE_INTERNAL_MASK & (1u << m)) != 0;
+            if (!(planned & (1u << m)) || internal != (pass == 0)) continue;
+            if (VF2_MODULE_REQUIRES[m] & ~VF2Fun_Status.installedMask) {
+                Log("module %s: a module it requires is not installed; installing nothing for it",
+                    VF2_MODULE_NAMES[m]);
+                continue;
+            }
+            if (Apply(Plans[m])) {
+                VF2Fun_Status.installedMask |= 1u << m;
+                Log("module %s installed (%u writes)", VF2_MODULE_NAMES[m], Plans[m].count);
+            }
         }
     }
     VF2Fun_Status.refusedMask = requested & ~VF2Fun_Status.installedMask;

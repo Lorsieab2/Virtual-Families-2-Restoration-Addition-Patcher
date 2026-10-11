@@ -81,10 +81,12 @@ def test_committed_stub_matches_the_stub_builder():
 
 
 def test_overwritten_pins_do_not_overlap_each_other():
-    spans = sorted((p.va, p.end, p.name) for p in S.PINS if p.role != "context")
+    # A "field" pin writes only its displacement/immediate; "data" and "context" pins write nothing.
+    spans = sorted((p.field_va, p.field_va + p.field[1], p.name) if p.role == "field" else (p.va, p.end, p.name)
+                   for p in S.PINS if p.role not in ("context", "data"))
     for (a_lo, a_hi, a), (b_lo, b_hi, b) in zip(spans, spans[1:]):
         assert a_hi <= b_lo, f"{a} overlaps {b}"
-    assert {p.role for p in S.PINS} == {"detour", "replace", "retarget", "context"}
+    assert {p.role for p in S.PINS} == {"detour", "replace", "retarget", "context", "data", "field"}
     assert len([p for p in S.PINS if p.role == "retarget" and p.module == "older_pregnancies"]) == 4
     assert {p.module for p in S.PINS} <= {S.CORE} | set(S.MODULE_BY_KEY)
 
@@ -274,7 +276,7 @@ def test_apply_writes_a_new_folder_and_leaves_the_source_alone(tmp_path):
     ini = (out / S.PATCHER_FOLDER / S.INI_NAME).read_text(encoding="utf-16")
     assert "AllowOlderPregnancies=1" in ini
     for m in S.MODULES:  # every key written explicitly; the others at the B200 default
-        if m.ini_key != "AllowOlderPregnancies":
+        if not m.internal and m.ini_key != "AllowOlderPregnancies":
             assert f"{m.ini_key}={1 if m.b200_default else 0}" in ini
     assert {p: p.stat().st_mtime_ns for p in game.rglob("*") if p.is_file()} == before
     with pytest.raises(P.PatchError):
@@ -319,8 +321,8 @@ def built(tmp_path_factory):
     return work
 
 
-ALL_ON = {m.ini_key: True for m in S.MODULES}
-ALL_OFF = {m.ini_key: False for m in S.MODULES}
+ALL_ON = {m.ini_key: True for m in S.MODULES if not m.internal}
+ALL_OFF = {m.ini_key: False for m in S.MODULES if not m.internal}
 SETTINGS = {"on": ALL_ON, "off": ALL_OFF}
 
 
@@ -625,16 +627,18 @@ def test_every_counter_use_is_compiled_out_of_release_builds():
 def test_modules_install_independently(built):
     """Each module alone installs only its own writes; the others stay vanilla."""
     for m in S.MODULES:
-        rows = _harness(built, {k.ini_key: k is m for k in S.MODULES}, tag=f"-{m.key}")
+        if m.internal:
+            continue  # shared infrastructure: it installs with the modules that require it
+        rows = _harness(built, {k.ini_key: k is m for k in S.MODULES if not k.internal}, tag=f"-{m.key}")
         status = _one(rows, "status")
-        bit = _module_bit(m.key)
+        bit = _module_bit(m.key) | sum(_module_bit(r) for r in m.requires)
         assert status["requested"] == status["installed"] == bit, (m.key, status)
         sites = _sites(rows)
         for pin in S.PINS:
             if pin.role == "context" or pin.va not in sites:
                 continue
             live = bytes.fromhex(sites[pin.va]["bytes"])
-            assert (live != pin.expected) == (pin.module == m.key), (m.key, pin.name)
+            assert (live != pin.expected) == (pin.module == m.key or pin.module in m.requires), (m.key, pin.name)
         assert _one(rows, "wx_regions")["wx_regions"] == 0
 
 
@@ -940,7 +944,7 @@ def test_time_controls_release_build_has_no_test_exports(built):
 
 
 def test_time_controls_writes_exactly_its_three_sites(built):
-    rows = _harness(built, {k.ini_key: k.key == "time_controls" for k in S.MODULES}, tag="-time")
+    rows = _harness(built, {k.ini_key: k.key == "time_controls" for k in S.MODULES if not k.internal}, tag="-time")
     status = _one(rows, "status")
     bit = _module_bit("time_controls")
     assert status["installed"] == bit

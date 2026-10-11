@@ -59,11 +59,21 @@ class Module:
     default B200 build (the patcher writes every key explicitly).
     """
 
-    def __init__(self, key: str, ini_key: str, b200: str, b200_default: bool):
+    def __init__(self, key: str, ini_key: str | None, b200: str, b200_default: bool,
+                 requires: tuple[str, ...] = ()):
         self.key = key
         self.ini_key = ini_key
         self.b200 = b200
         self.b200_default = b200_default
+        # An internal module has no setting of its own (ini_key None): it is
+        # shared infrastructure, installed exactly when a module that lists it
+        # in `requires` is on, and a module whose requirement did not install
+        # installs nothing.
+        self.requires = requires
+
+    @property
+    def internal(self) -> bool:
+        return self.ini_key is None
 
 
 # Order = install order = bit index in the status block masks.
@@ -80,6 +90,20 @@ MODULES = [
     Module("time_controls", "TimeControls",
            "none: new in the runtime build (the Virtual Families 1 patcher's Time Controls "
            "dialog; B200 has no equivalent, so the default is off)", False),
+    # ---- ID reservation experiment (branch runtime-id-reservation), study section 14 ----
+    Module("achievement_records", "AchievementReservedRecords",
+           "patch_custom_achievements: CAchievement::LoadState keeps the saved rows below the "
+           "reserved tail (unconditional in B200)", True),
+    # Experimental. Registers ONE row through the shared ID registry; the collection,
+    # items, images and the Goal/Master Collector targets of Holiday Ornaments stay static.
+    Module("ornament_achievement", "OrnamentologistAchievement",
+           "patch_custom_achievements + patch_achievements_scene (holiday_ornaments): the "
+           "Ornamentologist row 0x5F, its two strings and its Achievements-screen slot only",
+           False, requires=("id_registry",)),
+    # Shared infrastructure. Must stay LAST: every module registers before it is planned.
+    Module("id_registry", None,
+           "what B200 does by growing the stock achievementList / achievementOrder / "
+           "stringTable at link time", False),
 ]
 MODULE_BY_KEY = {m.key: m for m in MODULES}
 CORE = "core"  # pins every module relies on: any mismatch installs nothing
@@ -91,11 +115,18 @@ class Pin:
     detour   -- a function-entry prologue stolen into a trampoline;
     replace  -- whole non-relative instructions (5+ bytes) the DLL re-does;
     retarget -- one `call rel32` / `jmp rel32` to `target`, redirected;
-    context  -- bytes the module's logic relies on; never written.
+    context  -- bytes the module's logic relies on; never written;
+    data     -- the bytes of a data table (not code, so not decoded); never written;
+    field    -- one whole instruction of which the DLL rewrites ONLY the
+                displacement or immediate field `field` = (offset, size) in
+                place: same instruction, same length, no jump. gen_sites proves
+                with capstone that (offset, size) is exactly that instruction's
+                displacement/immediate and that no branch lands inside it.
     """
 
     def __init__(self, name: str, va: int, hex_bytes: str, role: str, why: str,
-                 module: str = "older_pregnancies", target: int | None = None):
+                 module: str = "older_pregnancies", target: int | None = None,
+                 field: tuple[int, int] | None = None):
         self.name = name
         self.va = va
         self.expected = bytes.fromhex(hex_bytes)
@@ -103,10 +134,16 @@ class Pin:
         self.why = why
         self.module = module
         self.target = target
+        self.field = field
 
     @property
     def end(self) -> int:
         return self.va + len(self.expected)
+
+    @property
+    def field_va(self) -> int:
+        assert self.field is not None
+        return self.va + self.field[0]
 
 
 # Function / data addresses the companion DLL calls or reads.
@@ -659,6 +696,207 @@ PINS += [
         module="time_controls",
     ),
 ]
+
+# --------------------------------------------------------------------------
+# ID reservation experiment (study section 14): achievement rows, the
+# Achievements-screen order, and string ids, appended at RUNTIME instead of by
+# growing stock tables at link time. Everything below was located in the
+# vanilla image and is re-proved by gen_sites (every reader of each table is
+# pinned; a raw byte scan of the whole file finds no other reference).
+#
+# achievementList (0x54BB50): 0x5F rows of 28 bytes {id, target, icon, 0,
+#   titleString, descString, coinReward}, 2660 bytes of .data, matched byte for
+#   byte against Achievement.obj. Its ONLY readers are eight instructions, all
+#   in CAchievement (0x4B4CD0 PercentCompleted, 0x4B4D30 DrawAchievement,
+#   0x4B5300 IncrementProgress, 0x4B5340 Update); each indexes it with a
+#   32-bit displacement, so the DLL retargets the displacement to its own
+#   larger table. There is no relocation table, so the "capstone-complete
+#   cross-reference proof" is: the eight pins plus RAW_REFERENCE_CENSUS.
+# achievementOrder (0x4E2AE0): 0x5F ints, read by exactly one function,
+#   CAchievementsScene::DrawScene (0x42CC80), at three places.
+# CAchievement records: the save already holds 0x125 records of 12 bytes
+#   (SaveState 0x4B4C80 / LoadState 0x4B51E0 copy exactly that); stock uses the
+#   first 0x5F and CLEARS the rest on load, which is what B200 changes.
+# --------------------------------------------------------------------------
+ACH_LIST_BASE = 0x54BB50
+ACH_ROW_SIZE = 28
+ACH_STOCK_ROWS = 0x5F
+ACH_ROW_CAPACITY = 0xAC               # ids 0x00-0xAB: B200's CUSTOM_ACHIEVEMENT_LAST_ID + 1
+ACH_ORDER_BASE = 0x4E2AE0
+ACH_ORDER_STOCK_COUNT = 0x5F
+ACH_ORDER_MAX = 0xC0                  # capacity of the DLL's order array
+ACH_ORDER_ANCHOR_BOTTLOLOGIST = 0x5E  # stock order index 0x4E; B200 puts Ornamentologist after it
+ACH_RECORD_SIZE = 12
+ACH_RECORD_COUNT = 0x125
+ACH_RESERVED_FIRST = 0xAC             # first record id LoadState may clear (B200)
+ACH_CONTENT_HEIGHT_STOCK = 0x189A     # 0x5F * 0x42 + 0x1C
+ACH_ROW_PITCH = 0x42                  # pixels per Achievements-screen row
+ACH_DRAW_ID_LIMIT_MAX = 0x7F          # the stock `cmp ebp,imm8` can only hold ids below 0x80
+STRING_STOCK_MAX_ID = 0xA68
+STRING_UNKNOWN_TEXT = 0x518A18        # "Unknown String Id!!!!"
+STRING_GET_FAIL = 0x448EC7            # theStringManager::GetString: mov eax,<unknown text>
+STRING_GET_RETURN = 0x448ECC          # ... ret 4
+STRING_INLINE_FAIL = 0x448F43         # inlined lookup in the text-draw function 0x448ED0
+STRING_INLINE_RESUME = 0x448F4A
+# B200's own ids for the Ornamentologist row (identical in all 32 variants: strings are
+# reserved unconditionally, see the study).
+STRING_ORNAMENT_TITLE = 0xE31
+STRING_ORNAMENT_DESC = 0xE32
+ACH_ORNAMENT_ID = 0x5F
+ACH_ORNAMENT_TARGET = 12
+ACH_ORNAMENT_ICON = 0x1ED
+
+
+def _field_pin(name: str, va: int, hex_bytes: str, offset: int, size: int, why: str,
+               module: str = "id_registry") -> "Pin":
+    return Pin(name, va, hex_bytes, "field", why, module=module, field=(offset, size))
+
+
+_STOCK_ORDER_HEX = b"".join(
+    v.to_bytes(4, "little") for v in [*range(0x4D), 0x5D, 0x5E, *range(0x4D, 0x5D)]).hex().upper()
+
+PINS += [
+    _field_pin("ach_rows_target_div", 0x4B4CFC, "F73C8D54BB5400", 3, 4,
+               "CAchievement::PercentCompleted: idiv [ecx*4+list+4] (target) -- progress*100/target."),
+    _field_pin("ach_rows_title", 0x4B4F1A, "8B943660BB5400", 3, 4,
+               "DrawAchievement: mov edx,[esi+esi+list+0x10] (title string id; esi = 14*id)."),
+    _field_pin("ach_rows_desc", 0x4B4F45, "8B8E64BB5400", 2, 4,
+               "DrawAchievement: mov ecx,[esi+list+0x14] (description string id)."),
+    _field_pin("ach_rows_coins_draw", 0x4B4F70, "8B8668BB5400", 2, 4,
+               "DrawAchievement: mov eax,[esi+list+0x18] (coin reward, 0x19 when zero)."),
+    _field_pin("ach_rows_target_cmp", 0x4B4FCC, "83BE54BB540001", 2, 4,
+               "DrawAchievement: cmp [esi+list+4],1 (draw a progress bar only when target > 1)."),
+    _field_pin("ach_rows_target_load", 0x4B507B, "8B8654BB5400", 2, 4,
+               "DrawAchievement: mov eax,[esi+list+4] (target for the 'x of y' text)."),
+    _field_pin("ach_rows_target_inc", 0x4B5324, "3B04B554BB5400", 3, 4,
+               "CAchievement::IncrementProgress: cmp eax,[esi*4+list+4] -- completes at target."),
+    _field_pin("ach_rows_coins_update", 0x4B53CB, "8B048568BB5400", 3, 4,
+               "CAchievement::Update: mov eax,[eax*4+list+0x18] (reward paid when the popup shows)."),
+    Pin("ach_rows_first", ACH_LIST_BASE, "0000000064000000ED010000000000008E0200008F02000000000000"
+        "01000000E8030000ED01000000000000900200009102000032000000", "data",
+        "Rows 0 and 1 of achievementList (matched byte for byte with Achievement.obj, which holds "
+        "0x5F rows of seven dwords).", module="id_registry"),
+    Pin("ach_rows_last", ACH_LIST_BASE + 93 * ACH_ROW_SIZE,
+        "5D0000000C000000ED010000000000002803000029030000000000005E0000000C000000ED010000"
+        "000000002A0300002B03000000000000", "data",
+        "Rows 0x5D and 0x5E: the table ends 0x54C5B4, so the next row (0x5F) is free in B200's "
+        "layout and does not exist in vanilla.", module="id_registry"),
+    Pin("ach_order_stock", ACH_ORDER_BASE, _STOCK_ORDER_HEX, "data",
+        "The whole stock achievementOrder (0x5F ints). Index 0x4D holds 0x5D and 0x4E holds 0x5E "
+        "(Bottlologist), where B200 inserts Ornamentologist.", module="id_registry"),
+    # ---- DrawAchievement's own id bound (ids at or above it draw as "not complete") ----
+    _field_pin("ach_draw_bound_state", 0x4B4E05, "83FD5F", 2, 1,
+               "DrawAchievement: cmp ebp,5Fh; jge -> the complete flag reads as zero. Immediate "
+               "of the compare. Followed by `mov [esp+30h],eax; jge 4B4E1B` (0x4B4DFE-0x4B4E1B "
+               "pinned in ach_draw_bound_context)."),
+    _field_pin("ach_draw_bound_row", 0x4B4EF4, "83FD5F", 2, 1,
+               "DrawAchievement: cmp ebp,5Fh; jge 4B50FE -> the whole row body (strings, "
+               "progress, reward) is skipped for ids at or above the bound. Immediate of the "
+               "compare."),
+    Pin("ach_draw_bound_context", 0x4B4DFE,
+        "8BAC242C01000083FD5F894424307D0D8D446D008A0C86884C2417EB05", "context",
+        "mov ebp,[esp+12Ch] (the id); cmp ebp,5Fh; mov [esp+30h],eax; jge +0Dh; lea eax,[ebp+ebp*2]; "
+        "mov cl,[esi+eax*4] (the saved complete byte of record id); ...", module="id_registry"),
+    Pin("ach_draw_bound_row_context", 0x4B4EF4,
+        "83FD5F0F8D010200008D34ED00000000", "context",
+        "cmp ebp,5Fh; jge 4B50FE; lea esi,[ebp*8+0]; ... (esi = 7*id then doubled twice = 28*id).",
+        module="id_registry"),
+    # ---- CAchievementsScene (vtable-less: only DrawScene and the constructor matter) ----
+    _field_pin("scene_ctor_height_a", 0x42CADC, "C746689A180000", 3, 4,
+               "CAchievementsScene constructor 0x42C930: mov [esi+68h],189Ah -- the scrollable "
+               "content height, 0x5F rows * 0x42 + 0x1C."),
+    _field_pin("scene_ctor_height_b", 0x42CAE9, "059A180000", 1, 4,
+               "Same constructor: add eax,189Ah, where eax = [esi+10h]-[esi+18h] -> [esi+6Ch], "
+               "the scroll range."),
+    Pin("scene_ctor_height_context", 0x42CAC6,
+        "C7461055000000C746180003000083462CFA83463406C746689A1800008B46102B4618059A1800003BC389466C7E3B",
+        "context", "The constructor's layout block: top 55h, bottom 300h, [esi+68h]=189Ah, "
+        "[esi+6Ch]=(top-bottom)+189Ah.", module="id_registry"),
+    _field_pin("scene_draw_count", 0x42CD32, "83FD5F", 2, 1,
+               "DrawScene: cmp ebp,5Fh; jge -> nothing to draw (ebp = scroll / 0x42, the first "
+               "visible order index). Immediate = the number of order entries."),
+    _field_pin("scene_draw_order_base", 0x42CD37, "8D2CADE02A4E00", 3, 4,
+               "DrawScene: lea ebp,[ebp*4+achievementOrder] -- the first visible entry."),
+    _field_pin("scene_draw_order_end", 0x42CD66, "81FD5C2C4E00", 2, 4,
+               "DrawScene: cmp ebp,achievementOrder+17Ch (the end pointer), loop while below."),
+    Pin("scene_draw_loop", 0x42CD2D,
+        "E81EC0FDFF83FD5F7D378D2CADE02A4E008BFFD9E88B55008B460C51D91C246A00525750B94886AA00E8D57F"
+        "080083C7423B7E187D0B83C50481FD5C2C4E007CD2", "context",
+        "The whole draw loop: for each order entry from the first visible one, DrawAchievement(id) "
+        "at y += 0x42 until the bottom edge ([esi+18h]) or the end pointer. The loop reads "
+        "achievementOrder ONLY through ebp, set by the lea at 0x42CD37.", module="id_registry"),
+    # ---- string lookup: both readers fall to the same failure block ----
+    Pin("string_get", 0x448E90,
+        "8B44240485C07508B8F0E74D00C204008D48FF81F9670A0000771C8B0C85F0EC560085C974113901750D8B41"
+        "0C85C0750B8B4108C20400B8188A5100C20400", "context",
+        "Whole theStringManager::GetString(StringId) (thiscall, ret 4): id 0 -> empty string; "
+        "id-1 above 0xA67, an empty lookupTable slot or an entry whose id differs all go to "
+        "0x448EC7, `mov eax,<Unknown String Id!!!!>`, then `ret 4`.", module="id_registry"),
+    Pin("string_get_fail", STRING_GET_FAIL, "B8188A5100", "replace",
+        "mov eax,0x518A18 (5 bytes, the failure result of GetString). Reached with eax = the "
+        "string id from all three failure branches; only the next `ret 4` follows. The DLL's "
+        "stub returns its own text for ids it registered, else this same constant.",
+        module="id_registry"),
+    Pin("string_inline", 0x448F01,
+        "85C9895424148944240C7509C70424F0E74D00EB348D41FF3D670A000077238B048DF0EC560085C0741839"
+        "0875148B480C85C97405890C24EB0F8B4808890C24EB07C70424188A5100", "context",
+        "The same lookup inlined at the top of the text-draw function 0x448ED0 (ecx = id): "
+        "result written to [esp], failure block `mov [esp],0x518A18` at 0x448F43, join at 0x448F4A.",
+        module="id_registry"),
+    Pin("string_inline_fail", STRING_INLINE_FAIL, "C70424188A5100", "replace",
+        "mov dword ptr [esp],0x518A18 (7 bytes). Reached with ecx = the string id from the "
+        "three failure branches; every other register is live afterwards.",
+        module="id_registry"),
+    # ---- CAchievement::LoadState: which saved rows survive a load ----
+    Pin("load_state", 0x4B51E0,
+        "568BF1E8A8FFFFFF8B4C24088BC62BCEBA25010000578B3C0189388B7C01048978048B7C010889780883C00C83EA"
+        "0175E58D4A5F8D86740400005FEB038D490038107519395004751483C10183C00C81F9250100007CE9B0015EC204"
+        "008D865C040000B9C8000000881089500483C00C83E90175F3B0015EC20400", "context",
+        "Whole CAchievement::LoadState(SSaveState&): ResetNotifyQueue; copy 0x125 records of 12 "
+        "bytes; then a check that every record from 0x5F is empty (scan pointer esi+0x474 = "
+        "0x5F*12, counter 0x5F..0x125); if one is not, clear 200 (0xC8) records starting at "
+        "esi+0x45C (record 0x5D: stock also clears 0x5D and 0x5E, which nothing ever stores "
+        "outside a modded save).", module="achievement_records"),
+    _field_pin("load_ctr_start", 0x4B5211, "8D4A5F", 2, 1,
+               "lea ecx,[edx+5Fh] (edx = 0): the scan counter starts at record 0x5F. B200 changes "
+               "the immediate to 0 and counts to the reserved length instead.",
+               module="achievement_records"),
+    _field_pin("load_scan_ptr", 0x4B5214, "8D8674040000", 2, 4,
+               "lea eax,[esi+474h]: scan pointer = first record to validate (B200: reserved "
+               "first * 12).", module="achievement_records"),
+    _field_pin("load_scan_end", 0x4B522F, "81F925010000", 2, 4,
+               "cmp ecx,125h: scan end (B200: the reserved record count).",
+               module="achievement_records"),
+    _field_pin("load_clear_ptr", 0x4B523D, "8D865C040000", 2, 4,
+               "lea eax,[esi+45Ch]: first record cleared when the scan finds data (B200: reserved "
+               "first * 12).", module="achievement_records"),
+    _field_pin("load_clear_count", 0x4B5243, "B9C8000000", 1, 4,
+               "mov ecx,0C8h: number of records cleared (B200: the reserved record count).",
+               module="achievement_records"),
+]
+
+ACH_ROW_FIELDS = tuple(p.field_va for p in PINS if p.name.startswith("ach_rows_") and p.role == "field")
+ACH_DRAW_BOUND_FIELDS = (PINS[[p.name for p in PINS].index("ach_draw_bound_state")].field_va,
+                         PINS[[p.name for p in PINS].index("ach_draw_bound_row")].field_va)
+SCENE_HEIGHT_FIELDS = (0x42CADC + 3, 0x42CAE9 + 1)
+SCENE_DRAW_COUNT_FIELD = 0x42CD32 + 2
+SCENE_DRAW_ORDER_BASE_FIELD = 0x42CD37 + 3
+SCENE_DRAW_ORDER_END_FIELD = 0x42CD66 + 2
+LOAD_CTR_START_FIELD = 0x4B5211 + 2
+LOAD_SCAN_PTR_FIELD = 0x4B5214 + 2
+LOAD_SCAN_END_FIELD = 0x4B522F + 2
+LOAD_CLEAR_PTR_FIELD = 0x4B523D + 2
+LOAD_CLEAR_COUNT_FIELD = 0x4B5243 + 1
+
+# Completeness of the reader lists: a raw scan of EVERY section of the vanilla file, at every
+# byte offset, for any 32-bit value in [lo, hi) finds exactly these field addresses, no
+# others (checked by gen_sites). Vanilla has no relocation table, so an absolute reference
+# can only be one of these.
+RAW_REFERENCE_CENSUS = {
+    "achievementList": (ACH_LIST_BASE, ACH_LIST_BASE + ACH_STOCK_ROWS * ACH_ROW_SIZE + 1, ACH_ROW_FIELDS),
+    "achievementOrder": (ACH_ORDER_BASE, ACH_ORDER_BASE + ACH_ORDER_STOCK_COUNT * 4 + 1,
+                         (SCENE_DRAW_ORDER_BASE_FIELD, SCENE_DRAW_ORDER_END_FIELD)),
+}
 
 # Every direct caller of these functions must be exactly the listed sites
 # (gen_sites refuses if .text has any other).

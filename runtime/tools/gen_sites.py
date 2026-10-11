@@ -16,6 +16,8 @@ Two separate jobs:
       runs unchanged from the trampoline;
     - a "replace" pin is whole, non-relative instructions of at least 5 bytes;
     - a "retarget" pin is exactly one `call rel32` / `jmp rel32` to its target;
+    - a "field" pin is exactly one instruction whose displacement or immediate
+      is the pinned (offset, size) field, which is the only part rewritten;
     - a "context" pin ends on an instruction boundary;
     - no two written runs overlap, in any module;
     - no direct branch anywhere in .text lands inside the bytes the DLL
@@ -142,10 +144,17 @@ def validate(data: bytes) -> list[str]:
     md = _md()
     facts = []
     overwritten = []
+    fields_written = []
     for pin in S.PINS:
         live = img.read(pin.va, len(pin.expected))
         if live != pin.expected:
             raise SiteError(f"{pin.name} at {pin.va:#x}: expected {pin.expected.hex()} found {live.hex()}")
+        if pin.role == "data":
+            # Bytes of a data table: nothing to decode, nothing written.
+            if pin.module != S.CORE and pin.module not in S.MODULE_BY_KEY:
+                raise SiteError(f"{pin.name}: unknown module {pin.module}")
+            facts.append(f"{pin.name} {pin.va:#x} [data] {len(live)} bytes")
+            continue
         insns = decode_run(md, live, pin.va)
         text = "; ".join(f"{i.mnemonic} {i.op_str}".strip() for i in insns)
         if pin.module != S.CORE and pin.module not in S.MODULE_BY_KEY:
@@ -166,6 +175,19 @@ def validate(data: bytes) -> list[str]:
                     or i.operands[0].type != X86_OP_IMM or i.operands[0].imm != pin.target):
                 raise SiteError(f"{pin.name}: not `call/jmp {pin.target}`")
             overwritten.append((pin.name, pin.va, 5))
+        elif pin.role == "field":
+            if pin.field is None or len(insns) != 1:
+                raise SiteError(f"{pin.name}: a field pin is exactly one instruction with a field")
+            i = insns[0]
+            off, size = pin.field
+            fields = {(i.disp_offset, i.disp_size), (i.imm_offset, i.imm_size)} - {(0, 0)}
+            if (off, size) not in fields:
+                raise SiteError(f"{pin.name}: ({off}, {size}) is not the displacement/immediate of "
+                                f"'{i.mnemonic} {i.op_str}' (it has {sorted(fields)})")
+            if is_relative(i):
+                raise SiteError(f"{pin.name}: refusing to rewrite a field of a relative instruction")
+            fields_written.append((pin.name, pin.va, pin.field_va, size))
+            overwritten.append((pin.name, pin.field_va, size))
         elif pin.role != "context":
             raise SiteError(f"{pin.name}: unknown role {pin.role}")
         facts.append(f"{pin.name} {pin.va:#x} [{pin.role}] {text}")
@@ -180,11 +202,41 @@ def validate(data: bytes) -> list[str]:
     # new jmp/call); a branch to any later byte would execute half an
     # instruction.
     branches = img.direct_branch_targets()
+    field_names = {name for name, *_ in fields_written}
+    insn_of = {name: (pin_va, len(S.PIN_BY_NAME[name].expected)) for name, pin_va, _f, _n in fields_written}
     for name, va, n in overwritten:
+        if name in field_names:
+            # A field is rewritten in place inside an instruction that keeps its length
+            # and its first byte: a branch to the instruction start is fine; one to any
+            # later byte of it was already a branch into the middle of that instruction.
+            ins_va, ins_len = insn_of[name]
+            inside = [(hex(s), hex(t)) for s, t in branches if ins_va < t < ins_va + ins_len]
+            if inside:
+                raise SiteError(f"{name}: branches land inside the instruction: {inside}")
+            facts.append(f"{name}: field {va:#x}+{n}, no direct branch lands inside "
+                         f"{ins_va + 1:#x}-{ins_va + ins_len - 1:#x}")
+            continue
         inside = [(hex(s), hex(t)) for s, t in branches if va < t < va + n]
         if inside:
             raise SiteError(f"{name}: branches land inside the overwritten bytes: {inside}")
         facts.append(f"{name}: no direct branch lands in {va + 1:#x}-{va + n - 1:#x}")
+
+    # Completeness of reader lists: every 4-byte value in the range, at every byte offset of
+    # every section, is one of the pinned fields (and no data pointer exists).
+    for table, (lo, hi, expected) in S.RAW_REFERENCE_CENSUS.items():
+        found = []
+        for _n, sva, vsize, raw, rsize in img.sections:
+            blob = img.data[raw:raw + rsize]
+            for k in range(len(blob) - 3):
+                v = int.from_bytes(blob[k:k + 4], "little")
+                if lo <= v < hi:
+                    found.append(img.base + sva + k)
+        if sorted(found) != sorted(expected):
+            extra = sorted(set(found) - set(expected))
+            missing = sorted(set(expected) - set(found))
+            raise SiteError(f"{table}: references differ from the pinned readers; unpinned "
+                            f"{[hex(x) for x in extra]}, absent {[hex(x) for x in missing]}")
+        facts.append(f"{table}: exactly {len(found)} references in the whole file, all pinned")
 
     for target, expected in S.EXCLUSIVE_CALLERS.items():
         callers = sorted(s for s, t in branches
@@ -230,9 +282,18 @@ def render_header() -> str:
     lines.append(f"#define VF2_MODULE_COUNT {len(S.MODULES)}u")
     lines.append("#define VF2_MODULE_CORE 0xFFFFFFFFu")
     lines.append("static const wchar_t *const VF2_MODULE_INI_KEYS[] = { "
-                 + ", ".join(f'L"{m.ini_key}"' for m in S.MODULES) + " };")
+                 + ", ".join(f'L"{m.ini_key or ""}"' for m in S.MODULES) + " };")
     lines.append("static const char *const VF2_MODULE_NAMES[] = { "
                  + ", ".join(f'"{m.key}"' for m in S.MODULES) + " };")
+    order = {m.key: i for i, m in enumerate(S.MODULES)}
+    for m in S.MODULES:
+        for r in m.requires:
+            if r not in order or order[r] <= order[m.key]:
+                raise SiteError(f"{m.key} requires {r}, which must be a LATER module")
+    lines.append("// Bit m: module m requires these modules (they are installed first and plan last).")
+    lines.append("static const unsigned VF2_MODULE_REQUIRES[] = { "
+                 + ", ".join(f"0x{sum(1 << order[r] for r in m.requires):X}u" for m in S.MODULES) + " };")
+    lines.append(f"#define VF2_MODULE_INTERNAL_MASK 0x{sum(1 << i for i, m in enumerate(S.MODULES) if m.internal):X}u")
     lines.append("")
     index = {m.key: i for i, m in enumerate(S.MODULES)}
     for pin in S.PINS:
