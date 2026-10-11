@@ -80,6 +80,9 @@ MODULES = [
     Module("time_controls", "TimeControls",
            "none: new in the runtime build (the Virtual Families 1 patcher's Time Controls "
            "dialog; B200 has no equivalent, so the default is off)", False),
+    Module("older_villager_mortality", "OlderVillagerMortality",
+           "patch_older_villager_mortality (.vf2mort; the mortality half: the longevity-"
+           "achievement observer is the static custom-achievements feature)", False),
 ]
 MODULE_BY_KEY = {m.key: m for m in MODULES}
 CORE = "core"  # pins every module relies on: any mismatch installs nothing
@@ -908,12 +911,148 @@ PINS += [
     ),
 ]
 
+# --------------------------------------------------------------------------
+# older_villager_mortality -- B200 patch_older_villager_mortality, the
+# mortality half. B200 hooks CVillagerManager::
+# AllVillagersRealtimePhysiologyAndProductivityUpkeep (here 0x49B840) at the
+# `push 0; mov ecx,state; call FoodGroupsActive` that opens the stock old-age
+# statement. With its flag on, B200 never runs the stock statement: it asks
+# VF2RollOlderVillagerMortality(internal age, active food groups) and, when
+# that says so, SetHealth(0, OldAge = 2), then rejoins after the statement
+# (+0x3C8). Its flag-off path calls the longevity-achievement observer
+# (custom achievements 0x85-0x89) in place of FoodGroupsActive; that observer
+# belongs to the static custom-achievements feature and has no vanilla
+# counterpart, so the runtime module carries the mortality decision only.
+#
+# The stock statement is 0x49BBC6..0x49BC46 (see the pins); gen_sites proves it
+# is single-entry and that every exit of it is 0x49BC47.
+# --------------------------------------------------------------------------
+UPKEEP_FOOD_GROUPS_CALL = 0x49BBBD
+UPKEEP_FOOD_GROUPS_CALL_LEN = 9
+UPKEEP_FOOD_GROUPS_RESUME = 0x49BBC6
+OLDER_MORTALITY_DONE = 0x49BC47
+FOOD_GROUPS_ACTIVE = 0x4A0A80         # CVillagerState::FoodGroupsActive(int) thiscall, ret 4
+SET_HEALTH = 0x4A0420                 # CVillagerState::SetHealth(int, ECauseOfDeath) thiscall, ret 8
+CAUSE_OF_DEATH_OLD_AGE = 2
+VILLAGER_STATE_AGE_OFFSET = 8
+OLDER_MORTALITY_RANDOM_LIMIT = 1_000_000
+OLDER_MORTALITY_TABLE_FIRST_AGE = 55
+OLDER_MORTALITY_TABLE_LAST_AGE = 317
+OLDER_MORTALITY_HAZARD_CAP_MILLIONTHS = 999_999
+
+
+def older_mortality_hazard_millionths(effective_age: int) -> int:
+    """B200's annual old-age threshold in the 0..999999 domain (the same formula
+    as work/patch_mobile_furniture_pack.py; the test compares them)."""
+    import math
+    years_past_threshold = max(0, effective_age - 55)
+    late_years = max(0, effective_age - 110)
+    intensity = 0.00365 * years_past_threshold + 0.06 * late_years
+    hazard = -math.expm1(-intensity)
+    threshold = int(math.floor(hazard * OLDER_MORTALITY_RANDOM_LIMIT + 0.5))
+    return min(OLDER_MORTALITY_HAZARD_CAP_MILLIONTHS, threshold)
+
+
+OLDER_MORTALITY_HAZARDS = tuple(
+    older_mortality_hazard_millionths(a)
+    for a in range(OLDER_MORTALITY_TABLE_FIRST_AGE, OLDER_MORTALITY_TABLE_LAST_AGE + 1)
+)
+
+# The stock old-age statement: no branch from outside lands inside it (a branch
+# to its first byte is fine), and every jump inside it that leaves it goes to
+# `exit`. (name, first byte, one past the last byte, exit)
+SINGLE_ENTRY_REGIONS = (
+    ("older_mortality_statement", UPKEEP_FOOD_GROUPS_RESUME, OLDER_MORTALITY_DONE, OLDER_MORTALITY_DONE),
+)
+
+PINS += [
+    Pin(
+        "upkeep_caller", 0x42ACB4,
+        "6A00B9589F5B00E840EA0600B9589F5B00E8760B0700",
+        "context",
+        "theRealtimeManager::UpdateAll: push 0; mov ecx,VillagerManager (0x5B9F58); "
+        "call AllVillagersTimeflowUpkeep (0x499700); mov ecx,VillagerManager; call "
+        "0x49B840 = "
+        "CVillagerManager::AllVillagersRealtimePhysiologyAndProductivityUpkeep, the "
+        "function the old-age roll lives in (its only caller).",
+        module="older_villager_mortality",
+    ),
+    Pin(
+        "mortality_scope", 0x49BB1E,
+        "8DAE6CAFFEFF8BCDE8654E000084C074326A64E83A84F6FF83C40483F83C7F2383BE78AFFEFF147F0F6A"
+        "64E82284F6FF83C40483F81E7F0B6A006AFF8BCDE8FF480000833D00805600007E538BCDE81F4E000084"
+        "C075486A64E8F483F6FF83C40483F8327D398BCBE8A5CFFFFF84C0750F6A64E8DA83F6FF83C40483F814"
+        "7D0B6AFF6A018BCDE8B748000083BE78AFFEFF647E0B6AFF6A648BCDE863480000",
+        "context",
+        "Inside the per-villager loop of 0x49B840: esi = &villager+387F8h (the 'left "
+        "home' byte pointer), ebp = esi-15094h = the villager's CVillagerState, so "
+        "[ebp+8] = [esi-1508Ch] is its internal age (CVillagerBio, 20 ticks = 1 year; "
+        "IsNotOld 0x498B30 is `cmp [ecx],44Ch`, 55 years). The preceding statements "
+        "(sickness, healing, afraid) are untouched.",
+        module="older_villager_mortality",
+    ),
+    Pin(
+        "mortality_food_groups", 0x49BBBD,
+        "6A008BCDE8BA4E0000",
+        "replace",
+        "push 0; mov ecx,ebp; call CVillagerState::FoodGroupsActive(0) (0x4A0A80): "
+        "the first act of the old-age statement (B200 hooks the same call). The stub "
+        "redoes the call and takes the old-age decision itself.",
+        module="older_villager_mortality", target=FOOD_GROUPS_ACTIVE,
+    ),
+    Pin(
+        "mortality_block", 0x49BBBD,
+        "6A008BCDE8BA4E00008BBE74AFFEFF8D0C80B867666666F7EFC1FA038BC2C1E81F03C28D048003C003C9"
+        "03C08BD703C92BD075568D994C0400003BFB7E4C6A64E86E83F6FF89442420B867666666F7EFC1FA038B"
+        "C2C1E81F03C28BC8B867666666F7EBC1FA038BC2C1E81F03C22BC88B4424208D0C8903C983C4043BC17D"
+        "0B6A026A008BCDE8D9470000",
+        "context",
+        "The stock old-age statement, 0x49BBBD..0x49BC46: n = FoodGroupsActive(0) "
+        "(0-5 active food groups); only on a whole birthday (age % 20 == 0) and past "
+        "55 years + n (age > 1100 + 20n) roll GetRandom(100) < 10 * (age/20 - "
+        "(1100+20n)/20); if it succeeds SetHealth(0, 2 = OldAge) on ebp. Every exit "
+        "goes to 0x49BC47.",
+        module="older_villager_mortality",
+    ),
+    Pin(
+        "mortality_done", 0x49BC47,
+        "8B8690AFFEFF85C08B5C24100F8478020000",
+        "context",
+        "The statement after the old-age block (mov eax,[esi-15070h]; test eax,eax; "
+        "...): where B200 rejoins (+0x3C8) and where every stock exit of the block "
+        "lands.",
+        module="older_villager_mortality",
+    ),
+    Pin(
+        "food_groups_active", 0x4A0A80,
+        "53555633ED578DB1840000008DB9880000008D5D05E886A1F8FF8BC8E84F35F6FF39077305C60600EB08"
+        "803E00740383C50183C70483C60183EB0175D85F5E8BC55D5BC20400",
+        "context",
+        "Whole CVillagerState::FoodGroupsActive(int) (thiscall, ret 4): counts the 5 "
+        "food groups whose timer has not run out; returns 0-5.",
+        module="older_villager_mortality",
+    ),
+    Pin(
+        "set_health", 0x4A0420,
+        "8B44240485C089410C7F118B442408C7410C00000000894110C2080083F8647E07C7410C64000000C741"
+        "10FFFFFFFFC20800",
+        "context",
+        "Whole CVillagerState::SetHealth(int health, ECauseOfDeath) (thiscall, ret "
+        "8): [this+0Ch] = health (capped at 100), [this+10h] = cause. Called with (0, "
+        "2) at 0x49BC42, the only `push 2; push 0; call SetHealth` in the image.",
+        module="older_villager_mortality",
+    ),
+]
+
 # Byte offsets the branch scan (deliberately over-approximate: every offset
 # counts as an opcode) reports but which are inside another instruction;
 # source -> the start of the function containing it. gen_sites proves each by
 # linear decode before dropping it.
 NOT_INSTRUCTION_STARTS = {
     0x443F08: MENU_HANDLE_MESSAGE,  # the 7Ah displacement byte of `mov eax,[557A44h]` at 0x443F06
+    # Inside the old-age statement's neighbourhood (0x49B840): bytes of displacements.
+    0x49BC5E: 0x49B840,             # the 74h of `cmp eax,[esi-1508Ch]` (3B 86 74 AF FE FF) at 0x49BC5C
+    0x49BC93: 0x49B840,             # the 74h of `cmp [esi-1508Ch],edx` (39 96 74 AF FE FF) at 0x49BC91
 }
 
 # Every direct caller of these functions must be exactly the listed sites

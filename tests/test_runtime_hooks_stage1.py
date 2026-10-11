@@ -1308,3 +1308,150 @@ def test_fix_vanilla_bugs_writes_all_seven_sites(built):
     assert raw[:8] == S.PIN_BY_NAME["show_player_entry"].expected
     assert next(md.disasm(raw[8:13], tramp["trampoline"] + 8)).operands[0].imm == S.UPDATE_SHOW_PLAYER + 8
     assert _one(rows, "wx_regions")["wx_regions"] == 0
+
+
+# =============================================================== older_villager_mortality
+def _b200_hazard_function():
+    """B200's older_mortality_hazard_millionths, executed from the generator's own source."""
+    import ast
+    import math
+
+    text = GENERATOR.read_text(encoding="utf-8")
+    tree = ast.parse(text)
+    wanted = {"OLDER_MORTALITY_TABLE_FIRST_AGE", "OLDER_MORTALITY_RANDOM_LIMIT", "OLDER_MORTALITY_HAZARD_CAP_MILLIONTHS",
+              "OLDER_MORTALITY_BASE_INTENSITY_PER_YEAR", "OLDER_MORTALITY_LATE_INTENSITY_PER_YEAR",
+              "OLDER_MORTALITY_LATE_ACCELERATION_EFFECTIVE_AGE"}
+    body = [n for n in tree.body
+            if (isinstance(n, ast.Assign) and any(getattr(t, "id", None) in wanted for t in n.targets))
+            or (isinstance(n, ast.FunctionDef) and n.name == "older_mortality_hazard_millionths")]
+    namespace = {"math": math}
+    exec(compile(ast.Module(body=body, type_ignores=[]), "b200-hazard", "exec"), namespace)
+    return namespace["older_mortality_hazard_millionths"], namespace
+
+
+def test_mortality_hazard_table_is_b200s_formula():
+    hazard, ns = _b200_hazard_function()
+    assert ns["OLDER_MORTALITY_TABLE_FIRST_AGE"] == S.OLDER_MORTALITY_TABLE_FIRST_AGE == 55
+    assert ns["OLDER_MORTALITY_RANDOM_LIMIT"] == S.OLDER_MORTALITY_RANDOM_LIMIT
+    assert ns["OLDER_MORTALITY_HAZARD_CAP_MILLIONTHS"] == S.OLDER_MORTALITY_HAZARD_CAP_MILLIONTHS
+    assert _b200_constant("OLDER_MORTALITY_TABLE_LAST_AGE") == S.OLDER_MORTALITY_TABLE_LAST_AGE == 317
+    assert S.OLDER_MORTALITY_HAZARDS == tuple(hazard(a) for a in range(55, 318))
+    # Beyond the table B200 uses the cap, which is also the first age at the cap.
+    assert all(hazard(a) == 999999 for a in range(318, 700))
+    assert hazard(317) < 999999 and hazard(54) == 0 and hazard(55) == 0
+
+
+def test_mortality_decision_is_b200s_helper():
+    b200 = _normalise(_c_function(GENERATOR.read_text(encoding="utf-8"),
+                                  r'extern "C" int __cdecl VF2RollOlderVillagerMortality\('))
+    port = _normalise(_c_function(DLL_SOURCE.read_text(encoding="utf-8"), r"static int __cdecl RollOlderVillagerMortality\("))
+    b200 = b200.replace("kOlderMortalityHazardsMillionths", "OLDER_MORTALITY_HAZARDS")
+    port = port.replace("_OLDER_MORTALITY_HAZARDS", "OLDER_MORTALITY_HAZARDS")
+    assert b200 == port
+
+
+def test_mortality_stub_is_b200s_trampoline():
+    """B200: FoodGroups(0) (observer), then helper(age [state+8], groups); a hit does
+    SetHealth(0, OldAge=2); both rejoin after the statement."""
+    body = _python_function(GENERATOR.read_text(encoding="utf-8"), "patch_older_villager_mortality")
+    order = ["push 0", "call FoodGroupsActive observer", "push eax ; food groups", "push [ebx+8] ; internal age",
+             "call mortality helper", "test eax,eax", "push OldAge", "push zero health", "call SetHealth",
+             "jmp mortality done"]
+    positions = [body.index(f"# {item}") if f"# {item}" in body else body.index(item) for item in order]
+    assert positions == sorted(positions)
+    assert "0x6A, 0x02,                         # push OldAge" in body
+    assert "0x6A, 0x00,                         # push zero health" in body
+    src = DLL_SOURCE.read_text(encoding="utf-8")
+    stub = src[src.index("static __declspec(naked) void OlderMortalityStub()"):]
+    stub = stub[:stub.index("\n}\n") + 3]
+    lines = [l.strip() for l in stub.splitlines()]
+    assert lines.index("push dword ptr [ebp + 8]") < lines.index("call RollOlderVillagerMortality")
+    assert lines.index("push 2") + 1 == lines.index("push 0", lines.index("push 2"))
+    assert S.CAUSE_OF_DEATH_OLD_AGE == 2 and S.VILLAGER_STATE_AGE_OFFSET == 8
+    assert "OLDER_MORTALITY_FLAG_SYMBOL" in body and S.MODULE_BY_KEY["older_villager_mortality"].b200_default is False
+
+
+def test_mortality_sites_are_proved_against_the_vanilla_game():
+    facts = gen_sites.validate(vanilla_bytes())
+    for needle in ("mortality_food_groups: no direct branch lands in 0x49bbbe-0x49bbc5",
+                   "older_mortality_statement: 0x49bbc6-0x49bc46 is single-entry, every exit goes to 0x49bc47"):
+        assert any(needle in f for f in facts), needle
+
+
+def test_region_check_refuses_a_wrong_exit_a_misaligned_start_and_a_jump_out():
+    saved = S.SINGLE_ENTRY_REGIONS
+    try:
+        # Every stock exit of the statement is 0x49BC47; claiming another exit must fail.
+        S.SINGLE_ENTRY_REGIONS = (("wrong_exit", 0x49BBC6, 0x49BC47, 0x49BC00),)
+        with pytest.raises(gen_sites.SiteError, match="exits to"):
+            gen_sites.validate(vanilla_bytes())
+        # A start that is not a boundary a pinned run established is refused too.
+        S.SINGLE_ENTRY_REGIONS = (("split", 0x49BBC7, 0x49BC47, 0x49BC47),)
+        with pytest.raises(gen_sites.SiteError):
+            gen_sites.validate(vanilla_bytes())
+        # A range that runs on past the statement (its next jump leaves) is refused.
+        S.SINGLE_ENTRY_REGIONS = (("leaves", 0x49BBC6, 0x49BC47 + 0x12, 0x49BC47),)
+        with pytest.raises(gen_sites.SiteError):
+            gen_sites.validate(vanilla_bytes())
+    finally:
+        S.SINGLE_ENTRY_REGIONS = saved
+    assert gen_sites.validate(vanilla_bytes())
+
+
+def _stock_mortality(age, groups):
+    """(random calls, random limit, kill threshold) of the unpatched statement."""
+    if age % 20 or age <= 1100 + 20 * groups:
+        return 0, 0, 0
+    return 1, 100, 10 * (age // 20 - (1100 + 20 * groups) // 20)
+
+
+def _b200_mortality(age, groups):
+    if age < 0 or age % 20:
+        return 0, 0, 0
+    effective = age // 20 - max(0, min(4, groups))
+    if effective < 55:
+        return 0, 0, 0
+    hazard = S.OLDER_MORTALITY_HAZARDS[effective - 55] if effective <= 317 else 999999
+    return 1, 1000000, hazard
+
+
+def _mortality_rows(rows):
+    return {r["mortality"]: r["rows"] for r in rows if "mortality" in r}
+
+
+@pytest.mark.parametrize("groups", range(6))
+def test_older_mortality_matches_b200_and_off_is_the_stock_statement(on, off, groups):
+    a, b = _mortality_rows(on)[groups], _mortality_rows(off)[groups]
+    assert len(a) == len(b) == 338
+    ages = [r[0] for r in a]
+    assert ages[:332] == [20 * i for i in range(332)] and all(x % 20 for x in ages[332:])
+    rolled_on = rolled_off = 0
+    for (age, calls, limit, threshold, fga, fga_arg, flags), (age2, c2, l2, t2, fga2, arg2, flags2) in zip(a, b):
+        assert age == age2
+        # The stock statement always opens with FoodGroupsActive(0); registers and stack are kept.
+        assert (fga, fga_arg, fga2, arg2) == (1, 0, 1, 0) and flags == flags2 == 31, (age, a, b)
+        assert (c2, l2, t2) == _stock_mortality(age, groups), (age, "off")
+        assert (calls, limit, threshold) == _b200_mortality(age, groups), (age, "on")
+        rolled_on += calls
+        rolled_off += c2
+    assert rolled_on > 200 and rolled_off > 200
+    # The two curves really differ (B200's is gentler early and certain at the cap).
+    assert [r[3] for r in a] != [r[3] for r in b]
+
+
+def test_older_mortality_clamps_food_groups_at_four_like_b200(on):
+    four, five = _mortality_rows(on)[4], _mortality_rows(on)[5]
+    assert four == five
+
+
+def test_older_mortality_writes_one_site_and_is_independent(built):
+    rows = _harness(built, {k.ini_key: k.key == "older_villager_mortality" for k in S.MODULES}, tag="-mort")
+    status = _one(rows, "status")
+    idx = [m.key for m in S.MODULES].index("older_villager_mortality")
+    assert status["installed"] == _module_bit("older_villager_mortality") and status["write_masks"][idx] == 1
+    sites = _sites(rows)
+    raw = bytes.fromhex(sites[S.UPKEEP_FOOD_GROUPS_CALL]["bytes"])
+    jmp = next(_md().disasm(raw, S.UPKEEP_FOOD_GROUPS_CALL))
+    assert jmp.mnemonic == "jmp" and status["dll_lo"] <= jmp.operands[0].imm < status["dll_hi"]
+    assert raw[5:] == b"\x90" * 4
+    assert _one(rows, "wx_regions")["wx_regions"] == 0

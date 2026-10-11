@@ -23,6 +23,8 @@ Two separate jobs:
     - no two written runs overlap, in any module;
     - no direct branch anywhere in .text lands inside the bytes the DLL
       overwrites (it may land on their first byte);
+    - every SINGLE_ENTRY_REGIONS entry decodes exactly, is entered only at its
+      first byte and is left only through its named exit;
     - every function in EXCLUSIVE_CALLERS has exactly the pinned direct
       callers, and nothing in NO_ABSOLUTE_REFERENCES is referenced by
       absolute address.
@@ -219,6 +221,29 @@ def validate(data: bytes) -> list[str]:
         if inside:
             raise SiteError(f"{name}: branches land inside the overwritten bytes: {inside}")
         facts.append(f"{name}: no direct branch lands in {va + 1:#x}-{va + n - 1:#x}")
+
+    # A region the module skips whole must be single-entry and single-exit:
+    # decoded exactly, with every jump that leaves it going to the exit, and no
+    # branch from outside landing inside it.
+    for name, lo, hi, exit_ in S.SINGLE_ENTRY_REGIONS:
+        # Decoding alone self-synchronises from a misaligned start, so the first
+        # byte must be a boundary some pinned run already established.
+        if not any(pin.va == lo or pin.end == lo for pin in S.PINS):
+            raise SiteError(f"{name}: {lo:#x} is not the start or end of a pinned run")
+        insns = decode_run(md, img.read(lo, hi - lo), lo)
+        for i in insns:
+            if any(i.group(g) for g in (CS_GRP_RET, CS_GRP_INT, CS_GRP_IRET)):
+                raise SiteError(f"{name}: {i.mnemonic} at {i.address:#x} leaves the region")
+            if i.group(CS_GRP_JUMP):
+                op = i.operands[0]
+                if op.type != X86_OP_IMM:
+                    raise SiteError(f"{name}: indirect jump at {i.address:#x}")
+                if not (lo <= op.imm < hi) and op.imm != exit_:
+                    raise SiteError(f"{name}: {i.mnemonic} at {i.address:#x} exits to {op.imm:#x}, not {exit_:#x}")
+        entering = [(hex(s), hex(t)) for s, t in branches if lo < t < hi and not (lo <= s < hi)]
+        if entering:
+            raise SiteError(f"{name}: branches from outside land inside the region: {entering}")
+        facts.append(f"{name}: {lo:#x}-{hi - 1:#x} is single-entry, every exit goes to {exit_:#x}")
 
     for target, expected in S.EXCLUSIVE_CALLERS.items():
         callers = sorted(s for s, t in branches

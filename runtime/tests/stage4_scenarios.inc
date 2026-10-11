@@ -264,3 +264,104 @@ static void RunMenuScenarios() {
         }
     *(int *)0x568018 = 0;
 }
+
+// ------------------------------------------------------------ older_villager_mortality
+// The stock old-age statement (0x49BBBD..0x49BC46) is run from its first byte
+// to its exit (0x49BC47) with a CVillagerState in ebp and the loop pointer in
+// esi, exactly as CVillagerManager::AllVillagersRealtimePhysiologyAndProduc-
+// tivityUpkeep has them. FoodGroupsActive and SetHealth are recorders; the
+// random numbers are the harness's GetRandom. The stack is padded because the
+// stock statement keeps a local at [esp+0x20].
+static int gFgReturn, gFgCalls, gFgArg;
+static void *gFgThis;
+static int __fastcall FFoodGroupsActive(void *self, void *, int arg) {  // ret 4
+    gFgCalls++; gFgArg = arg; gFgThis = self;
+    return gFgReturn;
+}
+static int gHealthCalls, gHealthA, gHealthB;
+static void *gHealthThis;
+static void __fastcall FSetHealth(void *self, void *, int health, int cause) {  // ret 8
+    gHealthCalls++; gHealthA = health; gHealthB = cause; gHealthThis = self;
+}
+
+static __declspec(naked) void RunSpanPadded() {
+    __asm {
+        pushad
+        pushfd
+        mov gSaveEsp, esp
+        sub esp, 0x200
+        mov gArriveEsp, esp
+        push in_flags
+        popfd
+        mov eax, in_eax
+        mov ebx, in_ebx
+        mov ecx, in_ecx
+        mov edx, in_edx
+        mov esi, in_esi
+        mov edi, in_edi
+        mov ebp, in_ebp
+        jmp dword ptr [gCooldownSite]
+    }
+}
+
+static unsigned char gMortalityBuffer[0x20000];
+
+// One run of the statement. Returns 1 when SetHealth was called.
+static int RunMortalityOnce(int age, int groups, int random, unsigned *flags) {
+    unsigned char *state = gMortalityBuffer + 0x100;
+    *(int *)(state + 8) = age;
+    gFgReturn = groups;
+    gFgCalls = gHealthCalls = gRandomCalls = 0;
+    gFgArg = gHealthA = gHealthB = -7;
+    gFgThis = gHealthThis = 0;
+    gRandomValue = random;
+    gRandomLimit = 0;
+    in_eax = 0xA0A0A0A0; in_ebx = 0xB0B0B0B0; in_ecx = 0xC0C0C0C0; in_edx = 0xD0D0D0D0;
+    in_esi = (unsigned)state + 0x15094; in_edi = 0xE0E0E0E0; in_ebp = (unsigned)state; in_flags = 0x2;
+    gCooldownSite = 0x49BBBD;
+    out_esp = 0;
+    RunSpanPadded();
+    if (flags) {
+        *flags = (out_esp == gArriveEsp ? 1u : 0u) | (out_ebp == in_ebp ? 2u : 0u) | (out_esi == in_esi ? 4u : 0u) |
+                 (gHealthCalls == 0 || (gHealthThis == state && gHealthA == 0 && gHealthB == 2) ? 8u : 0u) |
+                 (gFgCalls == 0 || gFgThis == state ? 16u : 0u);
+    }
+    return gHealthCalls;
+}
+
+static void RunMortalityScenarios() {
+    WriteJmp(0x4A0A80, (void *)&FFoodGroupsActive);
+    WriteJmp(0x4A0420, (void *)&FSetHealth);
+    WriteJmp(0x49BC47, (void *)&CooldownResumeCapture);  // the statement's exit
+    static char rows[400000];
+    for (int groups = 0; groups <= 5; ++groups) {
+        int len = 0;
+        // Whole birthdays from 0 to 330 years, plus ages between birthdays.
+        for (int step = 0; step <= 331 + 6; ++step) {
+            int age = step <= 331 ? step * 20 : 1100 + (step - 332) * 7 + 1;
+            unsigned flags = 0;
+            int killedAtZero = RunMortalityOnce(age, groups, 0, &flags);
+            int calls = gRandomCalls, limit = gRandomLimit, fga = gFgCalls, fgArg = gFgArg;
+            int threshold = 0;
+            if (calls) {
+                // kill(r) is monotone: killed below a threshold, not above.
+                if (killedAtZero) {
+                    int lo = 0, hi = 1000001;  // lo kills; hi does not
+                    unsigned f2 = 0;
+                    if (RunMortalityOnce(age, groups, 1000000, &f2)) lo = 1000000;
+                    while (hi - lo > 1 && lo != 1000000) {
+                        int mid = (lo + hi) / 2;
+                        unsigned f3 = 0;
+                        if (RunMortalityOnce(age, groups, mid, &f3)) lo = mid; else hi = mid;
+                        flags &= f3;
+                    }
+                    threshold = lo + 1;
+                    flags &= f2;
+                }
+            }
+            len += _snprintf_s(rows + len, sizeof rows - len, _TRUNCATE, "%s[%d, %d, %d, %d, %d, %d, %u]",
+                               step ? ", " : "", age, calls, limit, threshold, fga, fgArg, flags);
+        }
+        Out("{\"mortality\": %d, \"rows\": [%s]}", groups, rows);
+    }
+}

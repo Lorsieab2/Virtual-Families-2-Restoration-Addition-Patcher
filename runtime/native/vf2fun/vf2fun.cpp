@@ -27,6 +27,7 @@
 //   fix_vanilla_bugs   Fix Vanilla Game Bugs (.vf2bugs): Pause Yes, title hotspot
 //   career_room_goals  career-room goals rebuilt from owned upgrades on load
 //   time_controls      "Time Controls" dialog from the store screen (new; vf2fun_time.inc)
+//   older_villager_mortality  the old-age death curve (.vf2mort; the mortality half)
 //
 // The VF2Fun_Status export is the DLL's install-status block (documented
 // below); it is part of the shipped interface. Per-call counters exist only
@@ -748,6 +749,75 @@ static void PlanCareerRoomGoals(Plan &plan) {
     plan.Retarget(VF2_TECH_LOAD_STATE_CALL, (const void *)&TechLoadStateAndReconcile);
 }
 
+// ================================================================ module: older_villager_mortality
+// B200 patch_older_villager_mortality (.vf2mort), the mortality half. In
+// CVillagerManager::AllVillagersRealtimePhysiologyAndProductivityUpkeep the
+// stock old-age statement opens with FoodGroupsActive(0) on the villager's
+// CVillagerState (ebp) and, on a whole birthday past 55 years + groups, rolls
+// GetRandom(100) against 10 * years-over-threshold. With this module on, that
+// statement is never run: the decision comes from the table below (B200's
+// annual hazard, in millionths, by effective age = displayed age - active food
+// groups clamped to 0-4), then SetHealth(0, OldAge) when it says so, and the
+// code continues after the statement. The decision is B200's
+// VF2RollOlderVillagerMortality, ported line for line; the table is generated
+// from B200's formula (vf2_runtime_sites.py) and compared with it by the tests.
+static bool OlderVillagerMortality;
+
+static int __cdecl RollOlderVillagerMortality(int internalAge, int activeFoodGroups) {
+    if (internalAge < 0 || internalAge % 20 != 0) return 0;
+    if (activeFoodGroups < 0) activeFoodGroups = 0;
+    if (activeFoodGroups > 4) activeFoodGroups = 4;
+
+    // Preserve the vanilla cumulative nutrition benefit: every active food
+    // group subtracts one effective year, capped to the native 0..4 range.
+    int nutritionShift = activeFoodGroups;
+    int effectiveAge = internalAge / 20 - nutritionShift;
+    if (effectiveAge < 55) return 0;
+
+    int hazardMillionths = 999999;
+    if (effectiveAge <= 317) {
+        hazardMillionths = VF2_OLDER_MORTALITY_HAZARDS[effectiveAge - 55];
+    }
+    return GetRandom(1000000) < hazardMillionths ? 1 : 0;
+}
+static_assert(VF2_OLDER_MORTALITY_TABLE_FIRST_AGE == 55 && VF2_OLDER_MORTALITY_TABLE_LAST_AGE == 317 &&
+                  VF2_OLDER_MORTALITY_RANDOM_LIMIT == 1000000 && VF2_OLDER_MORTALITY_HAZARD_CAP_MILLIONTHS == 999999 &&
+                  VF2_CAUSE_OF_DEATH_OLD_AGE == 2 && VF2_VILLAGER_STATE_AGE_OFFSET == 8,
+              "the mortality constants follow the sites module");
+static_assert(sizeof(VF2_OLDER_MORTALITY_HAZARDS) / sizeof(VF2_OLDER_MORTALITY_HAZARDS[0]) == 317 - 55 + 1,
+              "the hazard table covers effective ages 55..317");
+
+static const unsigned MortalityFoodGroups = VF2_FOOD_GROUPS_ACTIVE;
+static const unsigned MortalitySetHealth = VF2_SET_HEALTH;
+static const unsigned MortalityDone = VF2_OLDER_MORTALITY_DONE;
+
+// Jumped to from 0x49BBBD in place of `push 0; mov ecx,ebp; call FoodGroupsActive`
+// (ebp = the villager's CVillagerState, esi = the loop pointer). Both outcomes
+// continue at 0x49BC47, after the stock statement, which is never entered.
+static __declspec(naked) void OlderMortalityStub() {
+    __asm {
+        push 0
+        mov ecx, ebp
+        call dword ptr [MortalityFoodGroups]
+        push eax
+        push dword ptr [ebp + 8]
+        call RollOlderVillagerMortality
+        add esp, 8
+        test eax, eax
+        jz alive
+        push 2
+        push 0
+        mov ecx, ebp
+        call dword ptr [MortalitySetHealth]
+    alive:
+        jmp dword ptr [MortalityDone]
+    }
+}
+
+static void PlanOlderVillagerMortality(Plan &plan) {
+    plan.Jmp(VF2_UPKEEP_FOOD_GROUPS_CALL, VF2_UPKEEP_FOOD_GROUPS_CALL_LEN, (const void *)&OlderMortalityStub);
+}
+
 // ================================================================ module table
 struct ModuleDef {
     void (*plan)(Plan &);
@@ -760,6 +830,7 @@ static const ModuleDef Modules[] = {
     { PlanFixVanillaBugs, &FixVanillaGameBugs },       // VF2_MODULE_FIX_VANILLA_BUGS
     { PlanCareerRoomGoals, &CareerRoomGoalReconciliation },  // VF2_MODULE_CAREER_ROOM_GOALS
     { PlanTimeControls, &TimeControls },               // VF2_MODULE_TIME_CONTROLS
+    { PlanOlderVillagerMortality, &OlderVillagerMortality },  // VF2_MODULE_OLDER_VILLAGER_MORTALITY
 };
 static_assert(sizeof(Modules) / sizeof(Modules[0]) == VF2_MODULE_COUNT, "module table out of step with the sites");
 
