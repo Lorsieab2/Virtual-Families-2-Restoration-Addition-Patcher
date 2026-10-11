@@ -32,6 +32,8 @@
 #include <string.h>
 #include <stdlib.h>
 
+#pragma comment(lib, "user32.lib")
+
 static const unsigned IMAGE_BASE = 0x400000;
 
 static void Out(const char *fmt, ...) {
@@ -289,6 +291,376 @@ static int RunChild(const wchar_t *exe, const wchar_t *mode) {
     return (int)code;
 }
 
+// ------------------------------------------------------------ time_controls scenarios
+// Seams (all game start-up / runtime calls the scenarios would otherwise reach):
+// the real-time clock, the leaving-home actions, the store screen's UI
+// natives. Everything else is the copied stock code: CGameTime::SetSpeed,
+// CVillagerManager::AllVillagersTimeflowUpkeep, CVillagerBio::IncrementAge,
+// CScrollingStoreScene::HandleMessage.
+static unsigned gClock;
+static unsigned __fastcall FakeSeconds(void *, void *) { return gClock; }  // GetSecondsFromGameStart
+
+static int gCareer;
+static int __fastcall FakeCareerType(void *, void *) { return gCareer; }
+static int gForgetCalls, gLeftHomeCalls, gQueueLifeCalls, gCollegeCalls;
+static void *gLeftHomeThis;
+static void __fastcall FakeForgetPlans(void *, void *, void *, int) { gForgetCalls++; }       // ret 8
+static void __fastcall FakeSetLeftHome(void *self, void *) { gLeftHomeCalls++; gLeftHomeThis = self; }
+static void __fastcall FakeQueueLifeEvent(void *, void *, int, int, int) { gQueueLifeCalls++; }  // ret 0Ch
+static void __fastcall FakeUpdateCollege(void *, void *) { gCollegeCalls++; }
+
+static unsigned char gPool[8][0x20];
+static int gPoolUsed;
+static unsigned gNewSize;
+static void *__cdecl FakeNew(unsigned size) { gNewSize = size; return gPool[gPoolUsed++ & 7]; }
+static void *__cdecl FakeGraphicsGet() { return (void *)0x7000001; }
+static int gImage;
+static void *gImageGraphics;
+static void *__fastcall FakeGetImageGrid(void *graphics, void *, int image) {  // ret 4
+    gImage = image;
+    gImageGraphics = graphics;
+    return (void *)0x7000002;
+}
+static void *__cdecl FakeStringsGet() { return (void *)0x7000003; }
+static void *gFontStrings;
+static void *__fastcall FakeGetLargeFont(void *strings, void *) { gFontStrings = strings; return (void *)0x7000004; }
+static int gButtonCalls, gButtonId, gButtonX, gButtonY, gButtonFlag;
+static void *gButtonSelf, *gButtonGrid, *gButtonScene;
+static void *__fastcall FakeButtonCtor(void *self, void *, int id, void *grid, int x, int y, void *scene,
+                                       int flag) {  // ret 18h
+    gButtonCalls++;
+    gButtonSelf = self; gButtonId = id; gButtonGrid = grid; gButtonX = x; gButtonY = y; gButtonScene = scene;
+    gButtonFlag = flag & 0xFF;
+    return self;
+}
+static char gText[32];
+static unsigned gTextC1, gTextC2, gTextC3;
+static void *gTextSelf, *gTextFont;
+static void __fastcall FakeButtonSetText(void *self, void *, const char *text, unsigned c1, unsigned c2,
+                                         unsigned c3, void *font) {  // ret 14h
+    gTextSelf = self; gTextC1 = c1; gTextC2 = c2; gTextC3 = c3; gTextFont = font;
+    strncpy_s(gText, sizeof gText, text, _TRUNCATE);
+}
+static int gAddCalls;
+static void *gAddScene, *gAddControl;
+static void __fastcall FakeAddControl(void *scene, void *, void *control) {  // ret 4
+    gAddCalls++; gAddScene = scene; gAddControl = control;
+}
+static int gCategoryCalls, gCategoryValue, gOrder, gCategoryOrder, gAddOrder;
+static void *gCategoryScene;
+static void __fastcall FakeSetStoreCategory(void *scene, void *, int category) {  // ret 4
+    gCategoryCalls++; gCategoryScene = scene; gCategoryValue = category; gCategoryOrder = ++gOrder;
+}
+
+// ---- the dialog, driven from a second thread while the game thread is in its modal loop
+struct Driver {
+    int mode;                  // 1: read the controls and close; 2: the full script
+    char log[6000];
+    int len;
+};
+
+static void DLog(Driver *d, const char *fmt, ...) {
+    va_list a;
+    va_start(a, fmt);
+    d->len += _vsnprintf_s(d->log + d->len, sizeof d->log - d->len, _TRUNCATE, fmt, a);
+    va_end(a);
+}
+
+static void Utf8(const wchar_t *w, char *out, int n) {
+    WideCharToMultiByte(CP_UTF8, 0, w, -1, out, n, 0, 0);
+    // JSON: the texts here contain no quote or backslash.
+}
+
+static HWND WaitWindow(const wchar_t *title, int ms) {
+    for (int t = 0; t < ms; t += 5) {
+        HWND w = FindWindowW(L"#32770", title);
+        if (w) return w;
+        Sleep(5);
+    }
+    return 0;
+}
+
+static void ItemText(HWND dlg, int id, char *out, int n) {
+    wchar_t w[256] = L"";
+    GetDlgItemTextW(dlg, id, w, 256);
+    Utf8(w, out, n);
+}
+
+// Click control `id` and wait until the status line reads `expect` (or 3 s).
+static void ClickUntil(HWND dlg, int id, const char *expect, char *status) {
+    PostMessageW(GetDlgItem(dlg, id), BM_CLICK, 0, 0);
+    for (int t = 0; t < 3000; t += 5) {
+        ItemText(dlg, 560, status, 256);
+        if (strcmp(status, expect) == 0) return;
+        Sleep(5);
+    }
+}
+
+static DWORD WINAPI DriverThread(void *param) {
+    Driver *d = (Driver *)param;
+    HWND dlg = WaitWindow(L"Time Controls", 5000);
+    if (!dlg) { DLog(d, "\"no_dialog\": 1"); return 1; }
+    wchar_t title[64] = L"";
+    GetWindowTextW(dlg, title, 64);
+    char t8[128], s8[256];
+    Utf8(title, t8, sizeof t8);
+    ItemText(dlg, 560, s8, sizeof s8);
+    DLog(d, "\"title\": \"%s\", \"status\": \"%s\", \"controls\": [", t8, s8);
+    for (int id = 561; id <= 567; ++id) {
+        ItemText(dlg, id, s8, sizeof s8);
+        DLog(d, "%s[%d, \"%s\"]", id == 561 ? "" : ", ", id, s8);
+    }
+    ItemText(dlg, IDOK, s8, sizeof s8);
+    DLog(d, ", [%d, \"%s\"]]", IDOK, s8);
+    if (d->mode == 2) {
+        char status[256];
+        static const struct { int id; const char *expect; } steps[] = {
+            { 561, "Paused. Speed: normal." }, { 564, "Paused. Speed: 2x." }, { 562, "Running. Speed: 2x." },
+            { 565, "Running. Speed: 5x." }, { 566, "Running. Speed: 10x." }, { 563, "Running. Speed: normal." },
+        };
+        DLog(d, ", \"steps\": [");
+        for (int i = 0; i < 6; ++i) {
+            ClickUntil(dlg, steps[i].id, steps[i].expect, status);
+            DLog(d, "%s\"%s\"", i ? ", " : "", status);
+        }
+        DLog(d, "], \"warp\": [");
+        for (int answer = 0; answer < 2; ++answer) {
+            PostMessageW(GetDlgItem(dlg, 567), BM_CLICK, 0, 0);
+            HWND box = WaitWindow(L"Time Warp", 3000);
+            if (!box) { DLog(d, "%s{\"no_box\": 1}", answer ? ", " : ""); break; }
+            char text[300] = "";
+            for (HWND c = GetWindow(box, GW_CHILD); c; c = GetWindow(c, GW_HWNDNEXT)) {
+                wchar_t w[300] = L"";
+                GetWindowTextW(c, w, 300);
+                if (wcslen(w) > 10) Utf8(w, text, sizeof text);
+            }
+            PostMessageW(box, WM_COMMAND, answer ? IDYES : IDNO, 0);
+            const char *want = answer ? "Running. Speed: normal. A time warp is under way."
+                                      : "Running. Speed: normal.";
+            for (int t = 0; t < 3000; t += 5) {
+                ItemText(dlg, 560, status, sizeof status);
+                if (!IsWindow(box) && (answer == 0 || strcmp(status, want) == 0)) break;
+                Sleep(5);
+            }
+            DLog(d, "%s{\"text\": \"%s\", \"status\": \"%s\"}", answer ? ", " : "", text, status);
+        }
+        DLog(d, "]");
+    }
+    PostMessageW(dlg, WM_CLOSE, 0, 0);
+    return 0;
+}
+
+static void RunWithDriver(Driver *d, void (*open)(void *), void *arg) {
+    d->len = 0;
+    d->log[0] = 0;
+    HANDLE th = CreateThread(0, 0, DriverThread, d, 0, 0);
+    open(arg);
+    WaitForSingleObject(th, 20000);
+    CloseHandle(th);
+}
+
+typedef bool (__thiscall *StoreHandleFn)(void *scene, int message, long param);
+struct HandleCall { StoreHandleFn fn; void *scene; int message; long param; bool result; };
+static void CallStoreHandle(void *p) {
+    HandleCall *c = (HandleCall *)p;
+    c->result = c->fn(c->scene, c->message, c->param);
+}
+typedef void (__cdecl *ShowFn)(HWND);
+static void CallShow(void *p) { ((ShowFn)p)(0); }
+
+typedef int (__cdecl *TestTimeFn)(int op, int arg);
+typedef void (__thiscall *TimeflowFn)(void *manager, bool flag);
+
+static void SetupVillager(int i, int active, int left, int health, int age, unsigned accum, unsigned last) {
+    unsigned char *v = Villager(i);
+    v[0x1BB84] = (unsigned char)active;
+    v[0x1BB88] = (unsigned char)left;
+    *(int *)(v + 0x6B00) = health;
+    *(int *)(v + 0x6A54) = age;
+    *(unsigned *)(v + 0x6AF4) = accum;
+    *(unsigned *)(v + 0x6AF8) = last;
+}
+
+static void RunTimeScenarios(HMODULE dll, unsigned char *gameState, bool installed) {
+    // The live-probe test reads this process afterwards: put back what the
+    // scenarios touch (the villager fields, the singleton pointer, the clock).
+    struct Saved { unsigned char active, left; int health, age; unsigned accum, last; };
+    static Saved saved[30];
+    for (int i = 0; i < 30; ++i) {
+        unsigned char *v = Villager(i);
+        saved[i] = { v[0x1BB84], v[0x1BB88], *(int *)(v + 0x6B00), *(int *)(v + 0x6A54),
+                     *(unsigned *)(v + 0x6AF4), *(unsigned *)(v + 0x6AF8) };
+    }
+    TestTimeFn tc = (TestTimeFn)GetProcAddress(dll, "VF2Fun_TestTime");
+    ShowFn show = (ShowFn)GetProcAddress(dll, "VF2Fun_TestShowTime");
+    if (!tc || !show) Fail("time test exports");
+    WriteJmp(0x403FF0, (void *)&FakeSeconds);
+    WriteJmp(0x49FB90, (void *)&FakeCareerType);
+    WriteJmp(0x49C170, (void *)&FakeForgetPlans);
+    WriteJmp(0x4948F0, (void *)&FakeSetLeftHome);
+    WriteJmp(0x429AD0, (void *)&FakeQueueLifeEvent);
+    WriteJmp(0x429960, (void *)&FakeUpdateCollege);
+    *(unsigned char **)0x558FC0 = gameState;  // theGameState::Get() returns this
+    unsigned char *gameTime = (unsigned char *)0x568088;
+    *(int *)0x568080 = 0;                     // no registered CGameTimers
+    gClock = 100000;
+
+    // ---- pause and speed through the real CGameTime::SetSpeed
+    {
+        *(int *)(gameState + 0x25B18) = 10;
+        *(int *)(gameTime + 0x20) = 10;
+        *(int *)(gameTime + 0x24) = 10;
+        *(unsigned *)(gameTime + 0x28) = gClock;
+        *(unsigned *)(gameTime + 0x2C) = 0;
+        struct { int op, arg; } script[] = {
+            { 1, 0 }, { 1, 0 }, { 2, 0 }, { 2, 0 }, { 3, 5 }, { 1, 0 }, { 3, 2 }, { 2, 0 }, { 3, 1 },
+            { 1, 0 }, { 3, 10 }, { 2, 0 }, { 3, 1 }, { 3, 10 },
+        };
+        char rows[1200];
+        int len = 0;
+        for (auto &s : script) {
+            tc(s.op, s.arg);
+            len += _snprintf_s(rows + len, sizeof rows - len, _TRUNCATE, "%s[%d, %d, %d, %d]", len ? ", " : "",
+                               s.op, s.arg, *(int *)(gameState + 0x25B18), *(int *)(gameTime + 0x20));
+        }
+        // The Options dialog's paused edge: field exactly 999.
+        *(int *)(gameState + 0x25B18) = 999;
+        *(int *)(gameTime + 0x20) = 999;
+        tc(2, 0);
+        len += _snprintf_s(rows + len, sizeof rows - len, _TRUNCATE, ", [2, -1, %d, %d]",
+                           *(int *)(gameState + 0x25B18), *(int *)(gameTime + 0x20));
+        Out("{\"time_speed\": [%s]}", rows);
+    }
+
+    // ---- time warp through the real AllVillagersTimeflowUpkeep
+    for (int c = 0; c < 3; ++c) {
+        ClearVillagers();
+        *(int *)(gameState + 0x25B18) = 10;
+        *(int *)(gameTime + 0x20) = 10;
+        *(unsigned *)0x568038 = 0;
+        gCareer = 1;
+        gForgetCalls = gLeftHomeCalls = gQueueLifeCalls = gCollegeCalls = 0;
+        // 0 A: adult at home, 1300 s of native time (= 2 native ticks + 100 s over)
+        // 1 B: child at home;  2 C: left home;  3 D: not active;  4 E: dead
+        // 5 F (case 2): 19th year is 2 ticks away, no career -> leaves home when it turns 19
+        SetupVillager(0, 1, 0, 5, 400, 1300, gClock);
+        SetupVillager(1, 1, 0, 3, 100, 0, gClock);
+        SetupVillager(2, 1, 1, 5, 500, 0, gClock);
+        SetupVillager(3, 0, 0, 5, 0, 0, gClock);
+        SetupVillager(4, 1, 0, 0, 300, 0, gClock);
+        if (c == 2) {
+            SetupVillager(5, 1, 0, 3, 350, 0, gClock);
+            gCareer = 0;
+        }
+        TimeflowFn timeflow = (TimeflowFn)0x499700;
+        int pending = -1;
+        if (c >= 1) {
+            tc(4, 60);
+            pending = tc(5, 0);
+        }
+        if (c == 1) {
+            // E (not alive) and C (left home) never get ticks; D is not active.
+            // A villager who dies before the game reaches them is dropped.
+            SetupVillager(1, 1, 0, 0, 100, 0, gClock);  // B dies after the warp was queued
+        }
+        int after[2][6];
+        unsigned remainder[2];
+        int pendingAfter[2];
+        for (int pass = 0; pass < 2; ++pass) {
+            timeflow((void *)0x5B9F58, false);
+            for (int i = 0; i < 6; ++i) after[pass][i] = *(int *)(Villager(i) + 0x6A54);
+            remainder[pass] = *(unsigned *)(Villager(0) + 0x6AF4);
+            pendingAfter[pass] = tc(5, 0);
+        }
+        Out("{\"time_warp\": %d, \"pending\": %d, \"ages1\": [%d, %d, %d, %d, %d, %d], \"ages2\": [%d, %d, %d, %d, %d, %d], "
+            "\"remainder\": [%u, %u], \"pending_after\": [%d, %d], \"oldest\": %u, \"left_home_calls\": %d, "
+            "\"left_home_ok\": %d, \"forget\": %d, \"queued\": %d, \"college\": %d}",
+            c, pending, after[0][0], after[0][1], after[0][2], after[0][3], after[0][4], after[0][5],
+            after[1][0], after[1][1], after[1][2], after[1][3], after[1][4], after[1][5], remainder[0],
+            remainder[1], pendingAfter[0], pendingAfter[1], *(unsigned *)0x568038, gLeftHomeCalls,
+            gLeftHomeThis == (void *)Villager(5) ? 1 : 0, gForgetCalls, gQueueLifeCalls, gCollegeCalls);
+    }
+    // A warp with nobody eligible queues nothing.
+    ClearVillagers();
+    tc(4, 60);
+    Out("{\"time_warp_nobody\": %d}", tc(5, 0));
+
+    // ---- the store screen: constructor wrapper and HandleMessage detour
+    WriteJmp(0x4C379D, (void *)&FakeNew);
+    WriteJmp(0x448950, (void *)&FakeGraphicsGet);
+    WriteJmp(0x448710, (void *)&FakeGetImageGrid);
+    WriteJmp(0x449610, (void *)&FakeStringsGet);
+    WriteJmp(0x448E80, (void *)&FakeGetLargeFont);
+    WriteJmp(0x401A40, (void *)&FakeButtonCtor);
+    WriteJmp(0x4015E0, (void *)&FakeButtonSetText);
+    WriteJmp(0x40CF80, (void *)&FakeAddControl);
+    WriteJmp(0x432050, (void *)&FakeSetStoreCategory);
+    {
+        static unsigned char scene[0x400];
+        memset(scene, 0, sizeof scene);
+        *(int *)(scene + 0xE0) = 0x70;  // widescreen offset
+        unsigned at = 0x4332A5;
+        unsigned target = at + 5 + *(int *)(at + 1);
+        typedef void (__fastcall *CategoryFn)(void *, void *, int);
+        gOrder = 0;
+        gButtonCalls = gAddCalls = gCategoryCalls = 0;
+        ((CategoryFn)target)(scene, 0, 2);
+        Out("{\"store_ctor\": {\"target\": %u, \"category_calls\": %d, \"category\": %d, \"category_scene_ok\": %d, "
+            "\"buttons\": %d, \"id\": %d, \"image\": %d, \"graphics_ok\": %d, \"x\": %d, \"y\": %d, \"flag\": %d, "
+            "\"scene_ok\": %d, \"new_size\": %u, \"text\": \"%s\", \"colours_ok\": %d, \"font_ok\": %d, "
+            "\"added\": %d, \"added_ok\": %d, \"text_this_ok\": %d}}",
+            target, gCategoryCalls, gCategoryValue, gCategoryScene == scene ? 1 : 0, gButtonCalls, gButtonId, gImage,
+            gImageGraphics == (void *)0x7000001 ? 1 : 0, gButtonX, gButtonY, gButtonFlag,
+            gButtonScene == scene ? 1 : 0, gNewSize, gText,
+            gTextC1 == *(unsigned *)0x5347E4 && gTextC2 == gTextC1 && gTextC3 == gTextC1 ? 1 : 0,
+            gTextFont == (void *)0x7000004 && gFontStrings == (void *)0x7000003 ? 1 : 0, gAddCalls,
+            gAddScene == scene && gAddControl == gButtonSelf && gTextSelf == gButtonSelf &&
+                gButtonSelf == (void *)gPool[(gPoolUsed - 1) & 7] ? 1 : 0,
+            gTextSelf == gButtonSelf ? 1 : 0);
+
+        // HandleMessage entry: other messages reach the stock body.
+        struct { int message; long param; const char *name; } msgs[] = {
+            { 7, 1, "other_message" }, { 8, 99, "unknown_button" }, { 8, 0x5646, "time_button" },
+        };
+        Driver d = {};
+        for (auto &m : msgs) {
+            scene[0x164] = 0xAA;
+            scene[0x154] = scene[0x155] = scene[0x156] = scene[0x157] = 0;  // no scroll range
+            HandleCall call = { (StoreHandleFn)0x4322B0, scene, m.message, m.param, false };
+            d.mode = 1;
+            if (installed && m.param == 0x5646 && m.message == 8) RunWithDriver(&d, CallStoreHandle, &call);
+            else { d.len = 0; d.log[0] = 0; CallStoreHandle(&call); }
+            Out("{\"store_message\": \"%s\", \"installed\": %d, \"result\": %d, \"stock_ran\": %d, \"dialog\": {%s}}",
+                m.name, installed ? 1 : 0, call.result ? 1 : 0, scene[0x164] == 0 ? 1 : 0, d.log);
+        }
+    }
+
+    // ---- the dialog itself, scripted
+    if (installed) {
+        ClearVillagers();
+        SetupVillager(0, 1, 0, 5, 400, 0, gClock);
+        SetupVillager(1, 1, 0, 3, 100, 0, gClock);
+        *(int *)(gameState + 0x25B18) = 10;
+        *(int *)(gameTime + 0x20) = 10;
+        Driver d = {};
+        d.mode = 2;
+        RunWithDriver(&d, CallShow, (void *)show);
+        Out("{\"time_dialog_script\": {%s}, \"speed_field\": %d, \"game_speed\": %d, \"pending\": %d}", d.log,
+            *(int *)(gameState + 0x25B18), *(int *)(gameTime + 0x20), tc(5, 0));
+    }
+    for (int i = 0; i < 30; ++i) {
+        unsigned char *v = Villager(i);
+        v[0x1BB84] = saved[i].active; v[0x1BB88] = saved[i].left;
+        *(int *)(v + 0x6B00) = saved[i].health; *(int *)(v + 0x6A54) = saved[i].age;
+        *(unsigned *)(v + 0x6AF4) = saved[i].accum; *(unsigned *)(v + 0x6AF8) = saved[i].last;
+    }
+    *(unsigned char **)0x558FC0 = 0;
+    *(unsigned *)0x568038 = 0;
+    *(int *)(gameTime + 0x20) = 0;
+    *(int *)(gameTime + 0x24) = 0;
+    *(unsigned *)(gameTime + 0x28) = 0;
+}
+
 int wmain(int argc, wchar_t **argv) {
     // "--hold": keep the process for the live-probe test. "--status-only":
     // stop after the install report (the image may be deliberately corrupt).
@@ -379,7 +751,7 @@ int wmain(int argc, wchar_t **argv) {
     struct Counters {
         unsigned magic, chanceCalls, olderRolls, olderSuccesses, cooldownStores, cooldownSkips,
             nextGenerationCalls, nextGenerationOlderGrants, lastMotherAge, lastFatherAge,
-            sceneActiveWrites, sceneNullSkips;
+            sceneActiveWrites, sceneNullSkips, timeButtonsAdded, timeDialogOpens, timeWarpsApplied;
     };
     volatile Status *status = (volatile Status *)GetProcAddress(dll, "VF2Fun_Status");
     if (!status) Fail("status export");
@@ -394,8 +766,8 @@ int wmain(int argc, wchar_t **argv) {
 
     // ---- what is now at every written site
     const unsigned sites[] = { 0x4A0810, 0x49F6DF, 0x430681, 0x430DB8, 0x43C0BD, 0x4407DC, 0x40D1DA,
-                               0x4226A6, 0x44337B, 0x42A75E };
-    const unsigned lens[] = { 8, 6, 5, 5, 5, 5, 5, 10, 10, 5 };
+                               0x4226A6, 0x44337B, 0x42A75E, 0x4322B0, 0x4332A5, 0x499893 };
+    const unsigned lens[] = { 8, 6, 5, 5, 5, 5, 5, 10, 10, 5, 7, 5, 5 };
     const unsigned nSites = sizeof sites / sizeof sites[0];
     char hex[64];
     for (unsigned i = 0; i < nSites; ++i) {
@@ -638,12 +1010,15 @@ int wmain(int argc, wchar_t **argv) {
             (out_flags & 0x8D5) == (in_flags & 0x8D5) ? 1 : 0, out_esp == gArriveEsp ? 1 : 0);
     }
 
+    RunTimeScenarios(dll, gameState, (status->installedMask & (1u << 4)) != 0);
+
     Out("{\"counters\": {\"chance\": %u, \"older_rolls\": %u, \"older_successes\": %u, \"cooldown_stores\": %u, "
         "\"cooldown_skips\": %u, \"next_generation\": %u, \"older_grants\": %u, \"scene_writes\": %u, "
-        "\"scene_null_skips\": %u}}",
+        "\"scene_null_skips\": %u, \"time_buttons\": %u, \"time_dialogs\": %u, \"time_warps\": %u}}",
         counters->chanceCalls, counters->olderRolls, counters->olderSuccesses, counters->cooldownStores,
         counters->cooldownSkips, counters->nextGenerationCalls, counters->nextGenerationOlderGrants,
-        counters->sceneActiveWrites, counters->sceneNullSkips);
+        counters->sceneActiveWrites, counters->sceneNullSkips, counters->timeButtonsAdded,
+        counters->timeDialogOpens, counters->timeWarpsApplied);
     if (hold) {
         // Keep this process alive for the live-probe test until stdin closes.
         Out("{\"holding\": %lu}", GetCurrentProcessId());

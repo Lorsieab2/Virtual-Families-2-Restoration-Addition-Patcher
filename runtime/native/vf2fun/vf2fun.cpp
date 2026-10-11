@@ -26,15 +26,25 @@
 //   scene_null_guard   ldwScene::SetActive null active-flag guard
 //   fix_vanilla_bugs   Fix Vanilla Game Bugs (.vf2bugs): Pause Yes, title hotspot
 //   career_room_goals  career-room goals rebuilt from owned upgrades on load
+//   time_controls      "Time Controls" dialog from the store screen (new; vf2fun_time.inc)
 //
 // The VF2Fun_Status export is the DLL's install-status block (documented
 // below); it is part of the shipped interface. Per-call counters exist only
 // in test builds (VF2FUN_TEST_COUNTERS, never defined by native/build.bat).
 
 #define WIN32_LEAN_AND_MEAN
+// The Time Controls dialog uses modern (comctl32 v6) controls through the
+// manifest dependency below (embedded by the /MANIFEST:EMBED link option of
+// native/build.bat); ISOLATION_AWARE makes this DLL's own windows use it
+// without touching the game's.
+#define ISOLATION_AWARE_ENABLED 1
 #include <windows.h>
+#include <commctrl.h>
 #include <stdio.h>
 #include <string.h>
+
+#pragma comment(lib, "user32.lib")
+#pragma comment(linker, "/MANIFESTDEPENDENCY:\"type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' processorArchitecture='x86' publicKeyToken='6595b64144ccf1df' language='*'\"")
 
 #include "vf2fun_sites.h"
 
@@ -86,6 +96,9 @@ struct VF2FunTestCounters {
     unsigned lastFatherAge;
     unsigned sceneActiveWrites;  // SetActive with a bound flag pointer
     unsigned sceneNullSkips;     // SetActive with a null flag pointer (returned)
+    unsigned timeButtonsAdded;   // store screens given the Time Controls button
+    unsigned timeDialogOpens;    // clicks on that button
+    unsigned timeWarpsApplied;   // villagers handed the queued warp ticks
 };
 extern "C" __declspec(dllexport) volatile VF2FunTestCounters VF2Fun_TestCounters = { 0x43324656u };
 #define VF2_COUNT(field) (++VF2Fun_TestCounters.field)
@@ -265,6 +278,9 @@ static unsigned char *VillagerByIndex(int index) {
     if (index < 0 || index >= 30) return 0;
     return (unsigned char *)VF2_VILLAGER_MANAGER + VF2_VILLAGER_ARRAY_OFFSET + index * VF2_VILLAGER_STRIDE;
 }
+
+// ================================================================ module: time_controls
+#include "vf2fun_time.inc"
 
 // ================================================================ module: older_pregnancies
 // Allow Older Pregnancies (the B200 static build's .vf2preg feature)
@@ -570,6 +586,7 @@ static const ModuleDef Modules[] = {
     { PlanSceneNullGuard, &SceneNullGuard },           // VF2_MODULE_SCENE_NULL_GUARD
     { PlanFixVanillaBugs, &FixVanillaGameBugs },       // VF2_MODULE_FIX_VANILLA_BUGS
     { PlanCareerRoomGoals, &CareerRoomGoalReconciliation },  // VF2_MODULE_CAREER_ROOM_GOALS
+    { PlanTimeControls, &TimeControls },               // VF2_MODULE_TIME_CONTROLS
 };
 static_assert(sizeof(Modules) / sizeof(Modules[0]) == VF2_MODULE_COUNT, "module table out of step with the sites");
 

@@ -307,10 +307,10 @@ def built(tmp_path_factory):
         f'call "{VCVARS}" >nul || exit /b 1',
         # Test build: the per-call counters the harness reads.
         f'cl /nologo /O2 /MT /EHsc /W4 /WX /LD /GS /DVF2FUN_TEST_COUNTERS "{dll_src}" /Fo"{work}\\\\" '
-        f'/Fe"{work}\\vf2fun.dll" /link kernel32.lib /DYNAMICBASE /NXCOMPAT || exit /b 1',
+        f'/Fe"{work}\\vf2fun.dll" /link kernel32.lib /DYNAMICBASE /NXCOMPAT /MANIFEST:EMBED || exit /b 1',
         # Release build, exactly as native/build.bat makes it.
         f'cl /nologo /O2 /MT /EHsc /W4 /WX /LD /GS "{dll_src}" /Fo"{work}\\release\\\\" '
-        f'/Fe"{work}\\release\\vf2fun.dll" /link kernel32.lib /DYNAMICBASE /NXCOMPAT || exit /b 1',
+        f'/Fe"{work}\\release\\vf2fun.dll" /link kernel32.lib /DYNAMICBASE /NXCOMPAT /MANIFEST:EMBED || exit /b 1',
         f'cl /nologo /O1 /MT /W3 "{RUNTIME / "tests" / "stage1_harness.cpp"}" /Fo"{work}\\\\" '
         f'/Fe"{work}\\stage1_harness.exe" /link /BASE:0x30000000 /FIXED /DYNAMICBASE:NO kernel32.lib || exit /b 1',
     ], work)
@@ -823,3 +823,267 @@ def test_career_room_goals_rebuilt_on_load_like_b200(on, off):
     # completes all three goals (10 = the goal's target).
     assert [e for e in a[1]["events"] if e[0] == "increment" and e[1] != 0x35] == \
         [["increment", 0x36, 10], ["increment", 0x37, 10], ["increment", 0x38, 10]]
+
+
+# =============================================================== time_controls
+# NEW in the runtime build: the Virtual Families 1 patcher's Time Controls
+# dialog, opened from a button on the store screen. There is no B200 code to
+# compare with; the references are the vanilla game's own code (decoded from
+# the pinned bytes) and the stock functions the harness runs.
+TIME_DIALOG_CONTROLS = [[561, "Pause"], [562, "Resume"], [563, "Normal"], [564, "2x"], [565, "5x"],
+                        [566, "10x"], [567, "Time Warp: +3 years"], [1, "Close"]]
+TIME_WARP_QUESTION = ("Everyone at home ages at once, with every normal rule: birthdays, leaving home, "
+                      "and old age. Continue?")
+
+
+def _calls(insns):
+    return [i.operands[0].imm for i in insns if i.mnemonic == "call" and i.operands[0].type == X86_OP_IMM]
+
+
+def _decode_pin(name: str):
+    pin = S.PIN_BY_NAME[name]
+    return list(_md().disasm(pin.expected, pin.va))
+
+
+def _insn_text(insns) -> str:
+    return "\n".join(f"{i.mnemonic} {i.op_str}" for i in insns)
+
+
+def test_time_controls_module_is_registered_and_off_by_default():
+    m = S.MODULE_BY_KEY["time_controls"]
+    assert m.ini_key == "TimeControls" and m.b200_default is False
+    written = {p.name for p in S.PINS if p.role in ("detour", "replace", "retarget") and p.module == "time_controls"}
+    assert written == {"store_ctor_category_call", "store_handle_message_entry", "timeflow_ticks_site"}
+
+
+def test_time_controls_sites_are_proved_against_the_vanilla_game():
+    facts = gen_sites.validate(vanilla_bytes())
+    assert any("store_handle_message_entry: no direct branch lands in 0x4322b1-0x4322b6" in f for f in facts)
+    assert any("timeflow_ticks_site: no direct branch lands in 0x499894-0x499897" in f for f in facts)
+    assert any("store_ctor_category_call: no direct branch lands in 0x4332a6-0x4332a9" in f for f in facts)
+
+
+def test_time_controls_game_functions_are_the_ones_the_stores_constructor_calls():
+    """Every game function the module calls is called, with the same argument
+    shapes, by the stock constructor it copies the Done / Back buttons from."""
+    vanilla_bytes()
+    insns = _decode_pin("store_ctor")
+    calls = set(_calls(insns))
+    for name in ("GAME_NEW", "GRAPHICS_GET", "GRAPHICS_GET_IMAGE_GRID", "STRING_GET", "STRING_GET_LARGE_FONT",
+                 "BUTTON_CTOR", "BUTTON_SET_TEXT", "SCENE_ADD_CONTROL", "STORE_SET_CATEGORY"):
+        assert getattr(S, name) in calls, name
+    pushes = [i.operands[0].imm for i in insns if i.mnemonic == "push" and i.operands[0].type == X86_OP_IMM]
+    assert pushes.count(S.BUTTON_IMAGE) == 2                       # Done and Back use btn_orange.png
+    # Done (id 1) and Back (id 3) sit at widescreenOffset + 0x10 / + 0xBA, y 0x2DD.
+    text = _insn_text(insns)
+    assert "add eax, 0x10" in text and "add eax, 0xba" in text and "mov ecx, 0x2dd" in text
+    assert S.STORE_TIME_BUTTON_X == 0xBA + 0xAA and S.STORE_TIME_BUTTON_Y == 0x2DD
+    # The widescreen offset the scene keeps at +0xE0.
+    assert f"mov dword ptr [esi + {S.STORE_WIDESCREEN_OFFSET_FIELD:#x}], eax" in text
+    # The button id is not one the stock handler knows (it compares with 1, 2 and 3).
+    assert 0x5646 not in pushes
+    # Only the constructor's final call is retargeted: `push 2; ...; call SetStoreCategory`.
+    call = next(i for i in insns if i.address == S.STORE_CTOR_SET_CATEGORY_CALL)
+    assert call.mnemonic == "call" and call.operands[0].imm == S.STORE_SET_CATEGORY
+    k = insns.index(call)
+    assert (insns[k - 5].mnemonic, insns[k - 5].op_str) == ("push", "2") and insns[k - 4].op_str == "ecx, esi"
+    assert insns[k + 1].op_str == "eax, esi" and insns[-1].mnemonic == "ret"  # then returns `this`
+
+
+def test_time_controls_store_handler_is_vtable_slot_3_and_takes_message_8():
+    vanilla = vanilla_bytes()
+    pe = P.PE(vanilla)
+    slot = struct.unpack_from("<I", vanilla, pe.offset(S.STORE_VTABLE + 3 * 4))[0]
+    assert slot == S.STORE_HANDLE_MESSAGE
+    # RTTI: the complete object locator's type descriptor names CScrollingStoreScene.
+    col = struct.unpack_from("<I", vanilla, pe.offset(S.STORE_VTABLE - 4))[0]
+    td = struct.unpack_from("<I", vanilla, pe.offset(col + 12))[0]
+    name_at = pe.offset(td + 8)
+    assert vanilla[name_at:name_at + 27] == b".?AVCScrollingStoreScene@@\0"
+    text = _insn_text(_decode_pin("store_handle_message"))
+    assert "cmp dword ptr [esp + 0xb8], 8" in text and "cmp eax, 1" in text
+    assert S.MESSAGE_BUTTON_CLICKED == 8
+
+
+def test_time_controls_speed_model_is_the_space_keys():
+    """The Space handler's own instructions, decoded from the vanilla bytes."""
+    insns = _decode_pin("space_pause_toggle")
+    text = _insn_text(insns)
+    assert f"mov eax, dword ptr [eax + {S.PAUSE_FIELD:#x}]" in text and "cmp eax, 0x3e7" in text
+    assert "add eax, 0xfffffc19" in text                      # field - 999
+    assert text.count(f"mov ecx, {S.GAME_TIME:#x}") == 2
+    assert f"add dword ptr [esi + {S.PAUSE_FIELD:#x}], 0x3e7" in text
+    assert _calls(insns).count(S.SET_SPEED) == 2 and len(_calls(insns)) == 3  # + the pause-overlay refresh
+    assert S.PAUSE_FIELD == S.GAME_STATE_SPEED_FIELD and S.PAUSED_OFFSET == 999 and S.SPEED_NORMAL == 10
+
+
+def test_time_controls_warp_site_feeds_the_games_own_increment_age():
+    insns = _decode_pin("timeflow_ticks")
+    text = _insn_text(insns)
+    assert f"div dword ptr [ecx + {S.PAUSE_FIELD:#x}]" in text        # ticks = ... / speed
+    assert next(i for i in insns if i.address == S.WARP_SITE).mnemonic == "mov"
+    last = insns[-1]
+    assert last.address == S.WARP_RESUME and last.mnemonic == "call" and last.operands[0].imm == S.INCREMENT_AGE
+    assert S.PIN_BY_NAME["timeflow_ticks_site"].expected == bytes.fromhex("8BCF8BD853")  # mov ecx,edi; mov ebx,eax; push ebx
+    assert [f"{i.mnemonic} {i.op_str}" for i in _decode_pin("increment_age")] == \
+        ["mov eax, dword ptr [esp + 4]", "add dword ptr [ecx], eax", "ret 4"]
+    assert S.TICKS_PER_YEAR == 20 and 380 // S.TICKS_PER_YEAR == 19
+
+
+def test_time_controls_release_build_has_no_test_exports(built):
+    sys.path.insert(0, str(RUNTIME / "tools"))
+    import probe_stage1
+    for name in ("VF2Fun_TestTime", "VF2Fun_TestShowTime"):
+        assert probe_stage1.export_rva(built / "vf2fun.dll", name)
+        with pytest.raises(KeyError):
+            probe_stage1.export_rva(built / "release" / "vf2fun.dll", name)
+
+
+def test_time_controls_writes_exactly_its_three_sites(built):
+    rows = _harness(built, {k.ini_key: k.key == "time_controls" for k in S.MODULES}, tag="-time")
+    status = _one(rows, "status")
+    bit = _module_bit("time_controls")
+    assert status["installed"] == bit
+    assert status["write_masks"][[m.key for m in S.MODULES].index("time_controls")] == 0b111
+    sites = _sites(rows)
+    md = _md()
+    lo, hi = status["dll_lo"], status["dll_hi"]
+    entry = bytes.fromhex(sites[S.STORE_HANDLE_MESSAGE]["bytes"])
+    jmp = next(md.disasm(entry, S.STORE_HANDLE_MESSAGE))
+    assert jmp.mnemonic == "jmp" and lo <= jmp.operands[0].imm < hi and entry[5:] == b"\x90\x90"
+    call = next(md.disasm(bytes.fromhex(sites[S.STORE_CTOR_SET_CATEGORY_CALL]["bytes"]),
+                          S.STORE_CTOR_SET_CATEGORY_CALL))
+    assert call.mnemonic == "call" and lo <= call.operands[0].imm < hi
+    warp = next(md.disasm(bytes.fromhex(sites[S.WARP_SITE]["bytes"]), S.WARP_SITE))
+    assert warp.mnemonic == "jmp" and warp.size == 5 and lo <= warp.operands[0].imm < hi
+    for row in sites.values():
+        assert row["protect"] == "RX"
+    # The trampoline the handler's stolen prologue runs through.
+    tramp = _one(rows, "trampoline")
+    code = list(md.disasm(bytes.fromhex(tramp["bytes"])[:12], tramp["trampoline"]))
+    assert [f"{i.mnemonic} {i.op_str}" for i in code[:2]] == ["push -1", "push 0x4dbc8b"]
+    assert code[2].mnemonic == "jmp" and code[2].operands[0].imm == S.STORE_HANDLE_MESSAGE + 7
+    assert _one(rows, "wx_regions")["wx_regions"] == 0
+
+
+def _model_speed_rows():
+    """Stock behaviour: CGameTime::SetSpeed(999) stores 0 (paused), any other
+    value stores itself, and an unchanged speed returns early; Space-style
+    pause and resume on the field in theGameState."""
+    f, g = 10, 10
+
+    def set_speed(s):
+        nonlocal g
+        if s == g:
+            return
+        g = 0 if s == 999 else s
+
+    rows = []
+    script = [(1, 0), (1, 0), (2, 0), (2, 0), (3, 5), (1, 0), (3, 2), (2, 0), (3, 1), (1, 0), (3, 10), (2, 0),
+              (3, 1), (3, 10)]
+    for op, arg in script:
+        if op == 1 and f < 999:
+            set_speed(999)
+            f += 999
+        elif op == 2 and f >= 999:
+            s = f - 999 or 10
+            set_speed(s)
+            f = s
+        elif op == 3:
+            if f >= 999:
+                f = 999 + arg
+            else:
+                set_speed(arg)
+                f = arg
+        rows.append([op, arg, f, g])
+    rows.append([2, -1, 10, 10])  # the exactly-999 edge (stock Space would SetSpeed(0))
+    return rows
+
+
+def test_time_controls_pause_and_speed_follow_the_stock_rules(on):
+    assert _one(on, "time_speed") == _model_speed_rows()
+
+
+def _ages_after_warp(case: int, installed: bool):
+    """Stock aging for the harness villagers: ticks = accumulator / 60 / speed."""
+    native = 1300 // 60 // 10                                  # 2 native ticks for villager 0
+    base = [400 + native, 100, 500, 0, 300, 0]
+    warp = 60 if installed else 0
+    if case == 1:
+        base[0] += warp                                        # B died after the warp was queued
+    if case == 2:
+        base[0] += warp
+        base[1] += warp
+        base[5] = 350 + warp
+    return base
+
+
+@pytest.mark.parametrize("case", [0, 1, 2])
+def test_time_controls_warp_adds_ticks_through_the_games_own_aging(on, off, case):
+    for rows, installed in ((on, True), (off, False)):
+        row = next(r for r in rows if r.get("time_warp") == case)
+        expected = _ages_after_warp(case, installed)
+        assert row["ages1"] == expected, (case, installed, row)
+        assert row["ages2"] == expected                          # the ticks are given once
+        # The accumulator remainder uses the NATIVE ticks, never the warped ones.
+        assert row["remainder"] == [100, 100]
+        assert row["oldest"] == expected[0] // 20
+        if installed and case:
+            assert row["pending_after"] == [0, 0]
+    if case == 2:
+        on_row = next(r for r in on if r.get("time_warp") == 2)
+        off_row = next(r for r in off if r.get("time_warp") == 2)
+        # Villager 5 turns 19 only with the warp: leaving home still runs.
+        assert (on_row["left_home_calls"], on_row["left_home_ok"], on_row["forget"], on_row["queued"],
+                on_row["college"]) == (1, 1, 1, 1, 1)
+        assert off_row["left_home_calls"] == 0 and off_row["pending_after"] == [3, 3]  # queued, never used
+        assert _one(on, "time_warp_nobody")["time_warp_nobody"] == 0
+        assert _one(on, "counters")["time_warps"] == 1 + 3
+
+
+def test_time_controls_store_button_is_the_stores_own_art_next_to_back(on, off):
+    row = _one(on, "store_ctor")
+    assert row["category_calls"] == 1 and row["category"] == 2 and row["category_scene_ok"] == 1
+    assert row["buttons"] == 1 and row["id"] == 0x5646 and row["image"] == S.BUTTON_IMAGE
+    assert (row["x"], row["y"]) == (0x70 + 0x164, 0x2DD) and row["flag"] == 0 and row["scene_ok"] == 1
+    assert row["new_size"] == 0x14 and row["text"] == "Time" and row["colours_ok"] == row["font_ok"] == 1
+    assert row["graphics_ok"] == row["added"] == row["added_ok"] == row["text_this_ok"] == 1
+    assert row["target"] != S.STORE_SET_CATEGORY
+    stock = _one(off, "store_ctor")
+    assert stock["target"] == S.STORE_SET_CATEGORY and stock["category_calls"] == 1
+    assert stock["buttons"] == stock["added"] == 0
+
+
+def test_time_controls_click_opens_the_dialog_and_other_messages_go_to_the_game(on, off):
+    a = {r["store_message"]: r for r in on if "store_message" in r}
+    b = {r["store_message"]: r for r in off if "store_message" in r}
+    for name in ("other_message", "unknown_button"):
+        for rows in (a, b):
+            assert rows[name]["result"] == 1 and rows[name]["stock_ran"] == 1 and rows[name]["dialog"] == {}
+    click = a["time_button"]
+    assert click["result"] == 1 and click["stock_ran"] == 0
+    assert click["dialog"]["title"] == "Time Controls"
+    assert click["dialog"]["status"] == "Running. Speed: normal."
+    assert click["dialog"]["controls"] == TIME_DIALOG_CONTROLS
+    assert b["time_button"]["stock_ran"] == 1 and b["time_button"]["dialog"] == {}  # off: the stock handler
+    counters = _one(on, "counters")
+    assert counters["time_dialogs"] == 1 and counters["time_buttons"] == 1
+
+
+def test_time_controls_dialog_buttons_do_what_they_say(on):
+    row = next(r for r in on if "time_dialog_script" in r)
+    script = row["time_dialog_script"]
+    assert script["title"] == "Time Controls" and script["controls"] == TIME_DIALOG_CONTROLS
+    assert script["steps"] == ["Paused. Speed: normal.", "Paused. Speed: 2x.", "Running. Speed: 2x.",
+                               "Running. Speed: 5x.", "Running. Speed: 10x.", "Running. Speed: normal."]
+    no, yes = script["warp"]
+    assert no == {"text": TIME_WARP_QUESTION, "status": "Running. Speed: normal."}
+    assert yes == {"text": TIME_WARP_QUESTION, "status": "Running. Speed: normal. A time warp is under way."}
+    assert (row["speed_field"], row["game_speed"], row["pending"]) == (10, 10, 2)  # No queued nothing; Yes queued 2
+
+
+def test_time_controls_off_leaves_the_store_and_aging_stock(off):
+    status = _one(off, "status")
+    assert status["requested"] == status["installed"] == 0
+    counters = _one(off, "counters")
+    assert counters["time_buttons"] == counters["time_warps"] == counters["time_dialogs"] == 0
