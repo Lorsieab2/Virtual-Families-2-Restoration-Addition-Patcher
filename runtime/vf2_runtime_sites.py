@@ -75,6 +75,8 @@ MODULES = [
     Module("fix_vanilla_bugs", "FixVanillaGameBugs",
            "fix_vanilla_game_bugs (.vf2bugs): pause_yes_idempotent + title_menu_stale_hotspot "
            "converted; start_over_confirms + refresh_on_activate pending", True),
+    Module("career_room_goals", "CareerRoomGoalReconciliation",
+           "patch_career_room_goal_reconciliation (unconditional in B200; load hook)", True),
 ]
 MODULE_BY_KEY = {m.key: m for m in MODULES}
 CORE = "core"  # pins every module relies on: any mismatch installs nothing
@@ -378,11 +380,90 @@ PINS += [
     ),
 ]
 
+# --------------------------------------------------------------------------
+# career_room_goals -- B200 patch_career_room_goal_reconciliation (load hook;
+# its second hook, after the Cheat Upgrades "Reset Achievements" action,
+# belongs to Cheat Upgrades and has no vanilla counterpart).
+#
+# theGameState::Load (vtable 0x4E29CC; RTTI TD 0x5336C4) loads the
+# subsystems in the stock object's order: GameTime 0x4279F0, Achievement
+# (0xAA8648) 0x4B51E0, Ball, DailyEmail, FamilyTree, FoodStore, GameStats,
+# InventoryManager (0xAB3528) 0x4B9B80, CollectableItem, Money 0x427C70, then
+# `lea eax,[ebx+168C0h]; push eax; mov ecx,Tech(0x5680E4); call
+# CTech::LoadState` at 0x42A75E (0x428230 = `mov al,1; ret 4`, its only
+# caller), then ToolTray, TutorialTip, PetManager, VillagerManager -- so, as
+# B200 requires, after InventoryManager and Achievement. B200 retargets that
+# call to a wrapper that calls LoadState and, when it returns true, runs
+# CTech::Level(eTechKitchen=0), Level(eTechOffice=1), Level(eTechWorkshop=2).
+# Vanilla CTech::Level 0x428260 (thiscall, ret 4) is the stock routine:
+# tech 0 counts HaveUpgrade(0xF6..0xFF) -> goal 0x36, tech 1 (0xEB..0xF5)
+# -> 0x37, tech 2 (0x100..0x109) -> 0x38; ResetSingleAchievementProgress
+# (0x4B4D10) then IncrementProgress(goal, min(count,10)) (0x4B5300), and
+# IncrementProgress(0x35, 1) when count > 0.
+# --------------------------------------------------------------------------
+TECH = 0x5680E4
+TECH_LOAD_STATE = 0x428230
+TECH_LOAD_STATE_CALL = 0x42A75E
+TECH_LEVEL = 0x428260
+HAVE_UPGRADE = 0x4B9F40
+INVENTORY_MANAGER = 0xAB3528
+ACHIEVEMENT = 0xAA8648
+ACHIEVEMENT_RESET_SINGLE = 0x4B4D10
+ACHIEVEMENT_INCREMENT = 0x4B5300
+
+PINS += [
+    Pin(
+        "tech_load_state", TECH_LOAD_STATE, "B001C20400",
+        "context",
+        "CTech::LoadState: mov al,1; ret 4 (the stock object's body).",
+        module="career_room_goals",
+    ),
+    Pin(
+        "tech_load_state_block", 0x42A752, "8D83C068010050B9E4805600",
+        "context",
+        "theGameState::Load: lea eax,[ebx+168C0h]; push eax; mov ecx,Tech.",
+        module="career_room_goals",
+    ),
+    Pin(
+        "tech_load_state_call", TECH_LOAD_STATE_CALL, "E8CDDAFFFF",
+        "retarget",
+        "call CTech::LoadState inside theGameState::Load (B200's +0x205 site).",
+        module="career_room_goals", target=TECH_LOAD_STATE,
+    ),
+    Pin(
+        "tech_level", TECH_LEVEL,
+        "8B4424045633F62BC60F842402000083E8010F840701000083E8010F85310300006800010000B92835AB00"
+        "E8B01C090084C07405BE010000006801010000B92835AB00E8981C090084C0740383C6016802010000B928"
+        "35AB00E8821C090084C0740383C6016803010000B92835AB00E86C1C090084C0740383C6016804010000B9"
+        "2835AB00E8561C090084C0740383C6016805010000B92835AB00E8401C090084C0740383C6016806010000"
+        "B92835AB00E82A1C090084C0740383C6016807010000B92835AB00E8141C090084C0740383C6016808010000"
+        "B92835AB00E8FE1B090084C0740383C6016809010000B92835AB00E8E81B090084C0740383C6016A38B9488"
+        "6AA00E8A5C9080083FE0A8BC67C05B80A000000506A38E90D02000068EB000000B92835AB00E8B21B090084"
+        "C07405BE0100000068EC000000B92835AB00E89A1B090084C0740383C60168ED000000B92835AB00E8841B09"
+        "0084C0740383C60168EE000000B92835AB00E86E1B090084C0740383C60168EF000000B92835AB00E8581B09"
+        "0084C0740383C60168F0000000B92835AB00E8421B090084C0740383C60168F1000000B92835AB00E82C1B09"
+        "0084C0740383C60168F2000000B92835AB00E8161B090084C0740383C60168F3000000B92835AB00E8001B09"
+        "0084C0740383C60168F4000000B92835AB00E8EA1A090084C0740383C60168F5000000B92835AB00E8D41A09"
+        "0084C0740383C6016A37B94886AA00E891C8080083FE0A8BC67C05B80A000000506A37E9F900000068F60000"
+        "00B92835AB00E89E1A090084C07405BE0100000068F7000000B92835AB00E8861A090084C0740383C60168F8"
+        "000000B92835AB00E8701A090084C0740383C60168F9000000B92835AB00E85A1A090084C0740383C60168FA"
+        "000000B92835AB00E8441A090084C0740383C60168FB000000B92835AB00E82E1A090084C0740383C60168FC"
+        "000000B92835AB00E8181A090084C0740383C60168FD000000B92835AB00E8021A090084C0740383C60168FE"
+        "000000B92835AB00E8EC19090084C0740383C60168FF000000B92835AB00E8D619090084C0740383C6016A36"
+        "B94886AA00E893C7080083FE0A8BC67C05B80A000000506A36B94886AA00E86ACD080085F674186A016A35B9"
+        "4886AA00E858CD080085F67D0633C05EC2040083FE0CB80C0000007F028BC65EC20400",
+        "context",
+        "Whole vanilla CTech::Level(ETech): the stock routine B200 calls.",
+        module="career_room_goals",
+    ),
+]
+
 # Every direct caller of these functions must be exactly the listed sites
 # (gen_sites refuses if .text has any other).
 EXCLUSIVE_CALLERS = {
     CAN_START_NEXT_GENERATION: NEXT_GENERATION_CALLSITES,
     CHANCE_OF_PREGNANCY: (0x49F5FA,),
+    TECH_LOAD_STATE: (TECH_LOAD_STATE_CALL,),
 }
 # Functions that must have no absolute (pointer) reference anywhere in the file.
 NO_ABSOLUTE_REFERENCES = (CAN_START_NEXT_GENERATION, CHANCE_OF_PREGNANCY)

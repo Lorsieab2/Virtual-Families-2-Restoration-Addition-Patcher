@@ -764,3 +764,62 @@ def test_title_hotspot_rect_is_empty_like_b200(on, off):
     assert a["top"] == S.TITLE_HOTSPOT_BOTTOM + 1 and a["inside"] == 0  # B200's empty rect
     for row in (a, b):
         assert row["regs_same"] == row["flags_same"] == row["esp_same"] == 1
+
+
+# =============================================================== career_room_goals
+# The stock CTech::Level (Tech.obj, which B200 links): per tech, the
+# upgrade items it counts and the goal it rebuilds.
+TECH_ITEMS = {0: (range(0xF6, 0x100), 0x36), 1: (range(0xEB, 0xF6), 0x37), 2: (range(0x100, 0x10A), 0x38)}
+
+
+def _owned(case: int) -> set[int]:
+    items = range(0xEB, 0x10A)
+    return {
+        0: set(),
+        1: set(items),
+        2: {0xF6},
+        3: {i for i in items if i <= 0xEE or 0x100 <= i <= 0x105},
+        4: {i for i in items if (i * 7 + 3) % 5 < 2},
+        5: set(items),
+    }[case]
+
+
+def b200_reconcile_events(owned: set[int]) -> list[list]:
+    """B200 VF2ReconcileCareerRoomGoals: Level(kitchen), Level(office),
+    Level(workshop), each the stock routine's achievement calls."""
+    out = []
+    for tech in (0, 1, 2):  # eTechKitchen, eTechOffice, eTechWorkshop
+        items, goal = TECH_ITEMS[tech]
+        count = sum(1 for i in items if i in owned)
+        out.append(["reset", goal, 1])
+        out.append(["increment", goal, min(count, 10)])
+        if count:
+            out.append(["increment", 0x35, 1])
+    return out
+
+
+def test_career_room_wrapper_is_b200s():
+    b200 = GENERATOR.read_text(encoding="utf-8")
+    src = DLL_SOURCE.read_text(encoding="utf-8")
+    original = _normalise(_c_function(b200, r"static void VF2ReconcileCareerRoomGoals\("))
+    mine = _normalise(_c_function(src, r"static void ReconcileCareerRoomGoals\("))
+    assert mine.replace("TechLevel(Tech,", "Tech.Level(") == original
+    original = _normalise(_c_function(b200, r'extern "C" bool __fastcall VF2TechLoadStateAndReconcile\('))
+    mine = _normalise(_c_function(src, r"static bool __fastcall TechLoadStateAndReconcile\("))
+    assert mine.replace("NativeTechLoadState(tech,state)", "tech->LoadState(state)") == original
+
+
+def test_career_room_goals_rebuilt_on_load_like_b200(on, off):
+    a = {r["tech_load"]: r for r in on if "tech_load" in r}
+    b = {r["tech_load"]: r for r in off if "tech_load" in r}
+    assert len(a) == len(b) == 6
+    for case in range(6):
+        assert b[case]["target"] == S.TECH_LOAD_STATE and b[case]["events"] == []  # stock: load only
+        assert a[case]["target"] != S.TECH_LOAD_STATE
+        assert a[case]["loaded"] == b[case]["loaded"] == (0 if case == 5 else 1)
+        expected = [] if case == 5 else b200_reconcile_events(_owned(case))
+        assert a[case]["events"] == expected, (case, a[case]["events"])
+    # The office of the future case from the owner's report: everything owned
+    # completes all three goals (10 = the goal's target).
+    assert [e for e in a[1]["events"] if e[0] == "increment" and e[1] != 0x35] == \
+        [["increment", 0x36, 10], ["increment", 0x37, 10], ["increment", 0x38, 10]]

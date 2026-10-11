@@ -190,6 +190,29 @@ static __declspec(naked) void RunCooldown() {
     }
 }
 
+// ------------------------------------------------------------ CTech::Level recorders
+static unsigned char gOwned[0x200];
+static char gEvents[4096];
+static int gEventLen;
+static void Event(const char *fmt, int a, int b) {
+    gEventLen += _snprintf_s(gEvents + gEventLen, sizeof gEvents - gEventLen, _TRUNCATE,
+                             gEventLen ? fmt + 0 : fmt + 1, a, b);
+}
+static bool __fastcall FakeHaveUpgrade(void *self, void *, int item) {  // ret 4
+    if (self != (void *)0xAB3528) Event(",[\"bad_inventory_this\", %d, %d]", item, 0);
+    return item >= 0 && item < 0x200 && gOwned[item];
+}
+static void __fastcall FakeResetSingle(void *self, void *, int id) {  // ret 4
+    Event(",[\"reset\", %d, %d]", id, self == (void *)0xAA8648);
+}
+static void __fastcall FakeIncrement(void *self, void *, int id, int amount) {  // ret 8
+    Event(",[\"increment\", %d, %d]", id, self == (void *)0xAA8648 ? amount : -9999);
+}
+static int gLoadResult = 1;
+static bool __fastcall FakeTechLoadState(void *, void *, const void *) {  // ret 4
+    return gLoadResult != 0;
+}
+
 // Runs copied game code from `entry` with the in_* registers until it
 // reaches `resume` (where a capture jmp is planted), then returns here.
 static void RunSpan(unsigned entry, unsigned resume) {
@@ -371,8 +394,8 @@ int wmain(int argc, wchar_t **argv) {
 
     // ---- what is now at every written site
     const unsigned sites[] = { 0x4A0810, 0x49F6DF, 0x430681, 0x430DB8, 0x43C0BD, 0x4407DC, 0x40D1DA,
-                               0x4226A6, 0x44337B };
-    const unsigned lens[] = { 8, 6, 5, 5, 5, 5, 5, 10, 10 };
+                               0x4226A6, 0x44337B, 0x42A75E };
+    const unsigned lens[] = { 8, 6, 5, 5, 5, 5, 5, 10, 10, 5 };
     const unsigned nSites = sizeof sites / sizeof sites[0];
     char hex[64];
     for (unsigned i = 0; i < nSites; ++i) {
@@ -550,6 +573,40 @@ int wmain(int argc, wchar_t **argv) {
                 out_eax == in_eax && out_ebx == in_ebx && out_ecx == in_ecx && out_edx == in_edx &&
                     out_esi == in_esi && out_edi == in_edi && out_ebp == in_ebp ? 1 : 0,
                 out_esp == gArriveEsp ? 1 : 0);
+        }
+    }
+
+    // ---- theGameState::Load's CTech::LoadState call (0x42A75E), through its rel32
+    {
+        WriteJmp(0x4B9F40, (void *)&FakeHaveUpgrade);
+        WriteJmp(0x4B4D10, (void *)&FakeResetSingle);
+        WriteJmp(0x4B5300, (void *)&FakeIncrement);
+        typedef bool (__fastcall *TechLoadFn)(void *, void *, const void *);
+        unsigned at = 0x42A75E;
+        unsigned target = at + 5 + *(int *)(at + 1);
+        unsigned char saveState[16] = {};
+        for (int c = 0; c < 6; ++c) {
+            memset(gOwned, 0, sizeof gOwned);
+            for (int item = 0xEB; item <= 0x109; ++item) {
+                switch (c) {
+                case 0: break;                                            // nothing owned
+                case 1: gOwned[item] = 1; break;                          // everything
+                case 2: gOwned[item] = item == 0xF6; break;               // one kitchen item
+                case 3: gOwned[item] = item <= 0xEE || (item >= 0x100 && item <= 0x105); break;
+                case 4: gOwned[item] = (item * 7 + 3) % 5 < 2; break;     // scattered
+                case 5: gOwned[item] = 1; break;                          // everything, load fails
+                }
+            }
+            if (c == 5) {
+                gLoadResult = 0;
+                WriteJmp(0x428230, (void *)&FakeTechLoadState);  // a failed native load
+            }
+            gEventLen = 0;
+            gEvents[0] = 0;
+            TechLoadFn fn = (TechLoadFn)target;
+            bool loaded = fn((void *)0x5680E4, 0, saveState);
+            Out("{\"tech_load\": %d, \"target\": %u, \"loaded\": %d, \"events\": [%s]}", c, target,
+                loaded ? 1 : 0, gEvents);
         }
     }
 

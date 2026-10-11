@@ -25,6 +25,7 @@
 //   older_pregnancies  Allow Older Pregnancies (.vf2preg)
 //   scene_null_guard   ldwScene::SetActive null active-flag guard
 //   fix_vanilla_bugs   Fix Vanilla Game Bugs (.vf2bugs): Pause Yes, title hotspot
+//   career_room_goals  career-room goals rebuilt from owned upgrades on load
 //
 // The VF2Fun_Status export is the DLL's install-status block (documented
 // below); it is part of the shipped interface. Per-call counters exist only
@@ -525,6 +526,39 @@ static void PlanFixVanillaBugs(Plan &plan) {
     plan.Jmp(VF2_TITLE_HOTSPOT_TOP_STORE, VF2_TITLE_HOTSPOT_TOP_STORE_LEN, (const void *)&TitleHotspotStub);
 }
 
+// ================================================================ module: career_room_goals
+// B200 patch_career_room_goal_reconciliation, load hook: the call to
+// CTech::LoadState inside theGameState::Load (0x42A75E) goes to this
+// wrapper, which runs the native load and then the game's own CTech::Level
+// for the three career rooms, so goals 0x36-0x38 are rebuilt from the
+// upgrades this save owns. Port of B200's VF2TechLoadStateAndReconcile and
+// VF2ReconcileCareerRoomGoals. (B200's second call, after the Cheat
+// Upgrades "Reset Achievements" action, has no vanilla counterpart.)
+static bool CareerRoomGoalReconciliation;
+
+typedef bool (__thiscall *TechLoadStateFn)(void *tech, const void *state);
+typedef int (__thiscall *TechLevelFn)(void *tech, int tech_);
+static const TechLoadStateFn NativeTechLoadState = (TechLoadStateFn)VF2_TECH_LOAD_STATE;
+static const TechLevelFn TechLevel = (TechLevelFn)VF2_TECH_LEVEL;
+static void *const Tech = (void *)VF2_TECH;
+enum { eTechKitchen = 0, eTechOffice = 1, eTechWorkshop = 2 };
+
+static void ReconcileCareerRoomGoals() {
+    TechLevel(Tech, eTechKitchen);
+    TechLevel(Tech, eTechOffice);
+    TechLevel(Tech, eTechWorkshop);
+}
+
+static bool __fastcall TechLoadStateAndReconcile(void *tech, void *, const void *state) {
+    bool loaded = NativeTechLoadState(tech, state);
+    if (loaded) ReconcileCareerRoomGoals();
+    return loaded;
+}
+
+static void PlanCareerRoomGoals(Plan &plan) {
+    plan.Retarget(VF2_TECH_LOAD_STATE_CALL, (const void *)&TechLoadStateAndReconcile);
+}
+
 // ================================================================ module table
 struct ModuleDef {
     void (*plan)(Plan &);
@@ -535,6 +569,7 @@ static const ModuleDef Modules[] = {
     { PlanOlderPregnancies, &AllowOlderPregnancies },  // VF2_MODULE_OLDER_PREGNANCIES
     { PlanSceneNullGuard, &SceneNullGuard },           // VF2_MODULE_SCENE_NULL_GUARD
     { PlanFixVanillaBugs, &FixVanillaGameBugs },       // VF2_MODULE_FIX_VANILLA_BUGS
+    { PlanCareerRoomGoals, &CareerRoomGoalReconciliation },  // VF2_MODULE_CAREER_ROOM_GOALS
 };
 static_assert(sizeof(Modules) / sizeof(Modules[0]) == VF2_MODULE_COUNT, "module table out of step with the sites");
 
