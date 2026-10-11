@@ -24,6 +24,7 @@
 // work/patch_mobile_furniture_pack.py; see the per-module comments):
 //   older_pregnancies  Allow Older Pregnancies (.vf2preg)
 //   scene_null_guard   ldwScene::SetActive null active-flag guard
+//   fix_vanilla_bugs   Fix Vanilla Game Bugs (.vf2bugs): Pause Yes, title hotspot
 //
 // The VF2Fun_Status export is the DLL's install-status block (documented
 // below); it is part of the shipped interface. Per-call counters exist only
@@ -484,6 +485,46 @@ static void PlanSceneNullGuard(Plan &plan) {
     plan.Jmp(VF2_SCENE_ACTIVE_WRITE, VF2_SCENE_ACTIVE_WRITE_LEN, (const void *)&SceneActiveWriteStub);
 }
 
+// ================================================================ module: fix_vanilla_bugs
+// B200 "Fix Vanilla Game Bugs" (.vf2bugs). B200's stubs test the flag byte
+// first and run the stock instruction when it is zero; here "off" installs
+// nothing, which is the same stock instruction.
+static bool FixVanillaGameBugs;
+
+// (a) patch_options_pause_yes_idempotent. Settings "Pause Game: Yes" adds
+// 999 to options[+25B18h] unconditionally, so Yes while already paused
+// stored 2008 and one Space left the game at 1009 (still paused). B200:
+// cmp [field],3E7h; jge skip; add [field],3E7h. Vanilla's register is esi.
+static unsigned PauseYesResume = VF2_PAUSE_YES_RESUME;
+
+static __declspec(naked) void PauseYesStub() {
+    __asm {
+        cmp dword ptr [esi + 0x25B18], 0x3E7
+        jge already_paused
+        add dword ptr [esi + 0x25B18], 0x3E7
+    already_paused:
+        jmp dword ptr [PauseYesResume]
+    }
+}
+
+// (b) patch_title_menu_stale_hotspot. The constructor's old Change Player
+// rect gets top = bottom + 1 (0x118), an empty inclusive rect, so neither
+// the click test nor the hover PtInRect in HandleMouse can match it.
+static unsigned TitleHotspotResume = VF2_TITLE_HOTSPOT_RESUME;
+
+static __declspec(naked) void TitleHotspotStub() {
+    __asm {
+        mov dword ptr [esi + 0xA0], 0x118
+        jmp dword ptr [TitleHotspotResume]
+    }
+}
+static_assert(VF2_TITLE_HOTSPOT_BOTTOM + 1 == 0x118, "empty-rect top");
+
+static void PlanFixVanillaBugs(Plan &plan) {
+    plan.Jmp(VF2_PAUSE_YES_ADD, VF2_PAUSE_YES_ADD_LEN, (const void *)&PauseYesStub);
+    plan.Jmp(VF2_TITLE_HOTSPOT_TOP_STORE, VF2_TITLE_HOTSPOT_TOP_STORE_LEN, (const void *)&TitleHotspotStub);
+}
+
 // ================================================================ module table
 struct ModuleDef {
     void (*plan)(Plan &);
@@ -493,6 +534,7 @@ struct ModuleDef {
 static const ModuleDef Modules[] = {
     { PlanOlderPregnancies, &AllowOlderPregnancies },  // VF2_MODULE_OLDER_PREGNANCIES
     { PlanSceneNullGuard, &SceneNullGuard },           // VF2_MODULE_SCENE_NULL_GUARD
+    { PlanFixVanillaBugs, &FixVanillaGameBugs },       // VF2_MODULE_FIX_VANILLA_BUGS
 };
 static_assert(sizeof(Modules) / sizeof(Modules[0]) == VF2_MODULE_COUNT, "module table out of step with the sites");
 

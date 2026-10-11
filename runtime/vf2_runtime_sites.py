@@ -72,6 +72,9 @@ MODULES = [
            "patch_allow_older_pregnancies + patch_next_generation_age_gate (.vf2preg)", False),
     Module("scene_null_guard", "SceneSetActiveNullGuard",
            "patch_ldwscene_setactive_null_guard (unconditional in B200)", True),
+    Module("fix_vanilla_bugs", "FixVanillaGameBugs",
+           "fix_vanilla_game_bugs (.vf2bugs): pause_yes_idempotent + title_menu_stale_hotspot "
+           "converted; start_over_confirms + refresh_on_activate pending", True),
 ]
 MODULE_BY_KEY = {m.key: m for m in MODULES}
 CORE = "core"  # pins every module relies on: any mismatch installs nothing
@@ -271,6 +274,107 @@ PINS += [
         "bound active-flag pointer (B200's hook bytes, same two instructions). "
         "Neither is relative; no branch in .text lands in 0x40D1DB-0x40D1DE.",
         module="scene_null_guard",
+    ),
+]
+
+# --------------------------------------------------------------------------
+# fix_vanilla_bugs -- B200 "Fix Vanilla Game Bugs" (.vf2bugs), the parts
+# converted so far (see the study, section 11, for the rest):
+#
+# (a) patch_options_pause_yes_idempotent. theOptionsDialog vtable 0x4E2704
+#     (RTTI ".?AVtheOptionsDialog@@" TD 0x52EF40), slot 1 HandleMouse =
+#     0x422420. Its "Yes" branch: PtInRect(0x4016A0) on the Yes rect,
+#     theRealtimeManager::Get/UpdateAll (0x42AD00/0x42ACB0),
+#     GameTime(0x568088).SetSpeed(999) (0x427A50), esi = [esi+80h] (the game
+#     state), then `add dword ptr [esi+25B18h],3E7h` (0x4226A6, 10 bytes)
+#     and UpdateAll again. "No" stores 10. These are the only two writes of
+#     999/10 in the function, as in the stock object. B200 adds 999 only
+#     while the field is below 999 (signed `jge` skip).
+# (b) patch_title_menu_stale_hotspot. theMenuScene vtable 0x4E3AB8 (TD
+#     0x534BD4); its constructor 0x443180 (one caller, 0x428F77) stores the
+#     old Change Player rect at this+9Ch..A8h = (ws+146h, F9h, ws+204h, 117h);
+#     the top store is `mov dword ptr [esi+0A0h],0F9h` at 0x44337B (10 bytes).
+#     Its only readers are theMenuScene::HandleMouse (slot 1, 0x443C70): the
+#     inclusive compare block at 0x443CF6 (x<left, x>right, y<top, y>bottom
+#     -> skip) and the hover PtInRect([esi+9Ch]) at 0x443E6D. PtInRect
+#     (0x4016A0) is inclusive on all four sides, so top = bottom + 1 (0x118)
+#     is a rect no point is in, exactly as B200 stores.
+# --------------------------------------------------------------------------
+PAUSE_YES_ADD = 0x4226A6
+PAUSE_YES_ADD_LEN = 10
+PAUSE_YES_RESUME = 0x4226B0
+PAUSE_FIELD = 0x25B18
+PAUSED_OFFSET = 999
+TITLE_HOTSPOT_TOP_STORE = 0x44337B
+TITLE_HOTSPOT_TOP_STORE_LEN = 10
+TITLE_HOTSPOT_RESUME = 0x443385
+TITLE_HOTSPOT_STOCK_TOP = 0xF9
+TITLE_HOTSPOT_BOTTOM = 0x117
+PT_IN_RECT = 0x4016A0
+
+PINS += [
+    Pin(
+        "pause_yes_block", 0x422691,
+        "68E7030000B988805600E8B05300008BB6800000008186185B0200E7030000E84B8600008BC8"
+        "E8F48500005F5E5D32C05B83C47CC20C00",
+        "context",
+        "theOptionsDialog::HandleMouse 'Yes': push 3E7h; mov ecx,GameTime; call "
+        "SetSpeed; mov esi,[esi+80h]; add [esi+25B18h],3E7h; call Get; mov ecx,eax; "
+        "call UpdateAll; return false. esi holds the game state at the add.",
+        module="fix_vanilla_bugs",
+    ),
+    Pin(
+        "pause_no_block", 0x4226E3,
+        "6A0AB988805600E8615300008B9680000000C782185B02000A000000",
+        "context",
+        "The 'No' branch: SetSpeed(10); [state+25B18h] = 10 (unchanged by the fix).",
+        module="fix_vanilla_bugs",
+    ),
+    Pin(
+        "pause_yes_add", PAUSE_YES_ADD, "8186185B0200E7030000",
+        "replace",
+        "add dword ptr [esi+25B18h],3E7h -- one instruction, 10 bytes, not "
+        "relative; no branch lands inside it. The flags it leaves are dead (the "
+        "next instruction is a call).",
+        module="fix_vanilla_bugs",
+    ),
+    Pin(
+        "title_ctor_rect", 0x443352,
+        "89869C00000005BE0000008986A400000033C081C1BE000000898E94000000C7869800000019020000"
+        "C786A0000000F9000000C786A800000017010000",
+        "context",
+        "theMenuScene ctor: [esi+9Ch]=ws+146h; [esi+0A4h]=+0BEh; ...; "
+        "[esi+0A0h]=0F9h (top); [esi+0A8h]=117h (bottom).",
+        module="fix_vanilla_bugs",
+    ),
+    Pin(
+        "title_hotspot_top", TITLE_HOTSPOT_TOP_STORE, "C786A0000000F9000000",
+        "replace",
+        "mov dword ptr [esi+0A0h],0F9h -- the rect's top; one 10-byte "
+        "instruction, not relative; no branch lands inside it.",
+        module="fix_vanilla_bugs",
+    ),
+    Pin(
+        "title_mouse_rect_test", 0x443CF6,
+        "3BBE9C0000000F8CC50100003BBEA40000000F8FB90100003BAEA00000000F8CAD010000"
+        "3BAEA80000000F8FA1010000",
+        "context",
+        "theMenuScene::HandleMouse click test on the rect: x<left, x>right, "
+        "y<top, y>bottom each skip (inclusive rect).",
+        module="fix_vanilla_bugs",
+    ),
+    Pin(
+        "title_mouse_hover", 0x443E6D, "8D8E9C000000E828D8FBFF",
+        "context",
+        "theMenuScene::HandleMouse hover: lea ecx,[esi+9Ch]; call PtInRect.",
+        module="fix_vanilla_bugs",
+    ),
+    Pin(
+        "pt_in_rect", PT_IN_RECT,
+        "8B4424043B017C1B3B41087F168B4424083B41047C0D3B410C7F08B801000000C2080033C0C20800",
+        "context",
+        "ldwRect::PtInRect(x, y): inclusive on all four sides.",
+        module="fix_vanilla_bugs",
     ),
 ]
 

@@ -388,7 +388,7 @@ def test_setting_off_writes_nothing(off):
     status = _one(off, "status")
     assert status["magic"] == 0x53324656 and status["version"] == 2 and status["modules"] == len(S.MODULES)
     assert status["requested"] == 0 and status["installed"] == 0 and status["trampoline"] == 0
-    assert status["write_masks"] == [0, 0]
+    assert not any(status["write_masks"])
     for va, row in _sites(off).items():
         pin = next(p for p in S.PINS if p.va == va and p.role != "context")
         assert bytes.fromhex(row["bytes"]) == pin.expected
@@ -720,3 +720,47 @@ def test_scene_null_guard_null_flag_returns_instead_of_crashing(on, off):
         assert row["last_cleared"] == 0
     counters = _one(on, "counters")
     assert counters["scene_null_skips"] == 2 and counters["scene_writes"] == 2
+
+
+# =============================================================== fix_vanilla_bugs
+def _b200_constant(name: str) -> int:
+    m = re.search(rf"^{name}\s*=\s*(0x[0-9A-Fa-f]+|\d+)", GENERATOR.read_text(encoding="utf-8"), re.M)
+    assert m, name
+    return int(m.group(1), 0)
+
+
+def test_pause_yes_rule_is_b200s():
+    """B200's stub: cmp [eax+25B18h],3E7h; jge resume; add [eax+25B18h],3E7h."""
+    body = _python_function(GENERATOR.read_text(encoding="utf-8"), "patch_options_pause_yes_idempotent")
+    assert '"\\x81\\xB8\\x18\\x5B\\x02\\x00\\xE7\\x03\\x00\\x00"' in body  # cmp [eax+25B18h],3E7h
+    assert '"\\x0F\\x8D" + disp(0x13, 6, PAUSE_YES_RESUME_OFFSET)' in body  # jge (signed) past the add
+    assert '"\\x81\\x80\\x18\\x5B\\x02\\x00\\xE7\\x03\\x00\\x00"' in body  # add [eax+25B18h],3E7h
+    src = DLL_SOURCE.read_text(encoding="utf-8")
+    stub = src[src.index("static __declspec(naked) void PauseYesStub()"):]
+    stub = stub[:stub.index("}\n}") + 3]
+    assert "cmp dword ptr [esi + 0x25B18], 0x3E7" in stub and "jge already_paused" in stub
+    assert "add dword ptr [esi + 0x25B18], 0x3E7" in stub
+
+
+def test_pause_yes_adds_999_only_when_not_paused(on, off):
+    a = {r["pause_yes"]: r for r in on if "pause_yes" in r}
+    b = {r["pause_yes"]: r for r in off if "pause_yes" in r}
+    assert len(a) == len(b) == 8
+    for value in a:
+        assert b[value]["after"] == value + 999                     # stock: always adds
+        expected = value if value >= 999 else value + 999          # B200 rule (signed)
+        assert a[value]["after"] == expected, (value, a[value])
+        assert a[value]["regs_same"] == a[value]["esp_same"] == 1
+    assert a[2008]["after"] == 2008 and b[1009]["after"] == 2008  # the reported defect
+
+
+def test_title_hotspot_rect_is_empty_like_b200(on, off):
+    assert _b200_constant("TITLE_HOTSPOT_STOCK_TOP") == S.TITLE_HOTSPOT_STOCK_TOP
+    assert _b200_constant("TITLE_HOTSPOT_BOTTOM") == S.TITLE_HOTSPOT_BOTTOM
+    a = next(r for r in on if "title_hotspot" in r)
+    b = next(r for r in off if "title_hotspot" in r)
+    assert b["top"] == S.TITLE_HOTSPOT_STOCK_TOP and b["inside"] > 0
+    assert (b["first_y"], b["last_y"]) == (S.TITLE_HOTSPOT_STOCK_TOP, S.TITLE_HOTSPOT_BOTTOM)
+    assert a["top"] == S.TITLE_HOTSPOT_BOTTOM + 1 and a["inside"] == 0  # B200's empty rect
+    for row in (a, b):
+        assert row["regs_same"] == row["flags_same"] == row["esp_same"] == 1

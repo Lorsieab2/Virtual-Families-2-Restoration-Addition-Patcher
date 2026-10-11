@@ -190,6 +190,15 @@ static __declspec(naked) void RunCooldown() {
     }
 }
 
+// Runs copied game code from `entry` with the in_* registers until it
+// reaches `resume` (where a capture jmp is planted), then returns here.
+static void RunSpan(unsigned entry, unsigned resume) {
+    gCooldownSite = entry;
+    WriteJmp(resume, (void *)&CooldownResumeCapture);
+    out_esp = 0;
+    RunCooldown();
+}
+
 // ------------------------------------------------------------ helpers
 static unsigned char *Villager(int i) {
     return (unsigned char *)0x5B9F58 + 0x1CC70 + i * 0x1CC0C;
@@ -361,8 +370,9 @@ int wmain(int argc, wchar_t **argv) {
     unsigned dllLo = (unsigned)dll, dllHi = dllLo + dnt->OptionalHeader.SizeOfImage;
 
     // ---- what is now at every written site
-    const unsigned sites[] = { 0x4A0810, 0x49F6DF, 0x430681, 0x430DB8, 0x43C0BD, 0x4407DC, 0x40D1DA };
-    const unsigned lens[] = { 8, 6, 5, 5, 5, 5, 5 };
+    const unsigned sites[] = { 0x4A0810, 0x49F6DF, 0x430681, 0x430DB8, 0x43C0BD, 0x4407DC, 0x40D1DA,
+                               0x4226A6, 0x44337B };
+    const unsigned lens[] = { 8, 6, 5, 5, 5, 5, 5, 10, 10 };
     const unsigned nSites = sizeof sites / sizeof sites[0];
     char hex[64];
     for (unsigned i = 0; i < nSites; ++i) {
@@ -370,11 +380,12 @@ int wmain(int argc, wchar_t **argv) {
         Out("{\"site\": %u, \"bytes\": \"%s\", \"protect\": \"%s\"}", sites[i], hex, ProtAt(sites[i]));
     }
     Out("{\"status\": {\"magic\": %u, \"version\": %u, \"modules\": %u, \"requested\": %u, \"pins_ok\": %u, "
-        "\"installed\": %u, \"refused\": %u, \"trampoline\": %u, \"write_masks\": [%u, %u], "
+        "\"installed\": %u, \"refused\": %u, \"trampoline\": %u, \"write_masks\": [%u, %u, %u, %u, %u, %u, %u, %u], "
         "\"dll_lo\": %u, \"dll_hi\": %u, \"status_va\": %u}}",
         status->magic, status->version, status->moduleCount, status->requestedMask, status->pinsOkMask,
         status->installedMask, status->refusedMask, status->trampolinePage, status->writeMasks[0],
-        status->writeMasks[1], dllLo, dllHi, (unsigned)status);
+        status->writeMasks[1], status->writeMasks[2], status->writeMasks[3], status->writeMasks[4],
+        status->writeMasks[5], status->writeMasks[6], status->writeMasks[7], dllLo, dllHi, (unsigned)status);
     if (status->trampolinePage) {
         Hex(hex, (const unsigned char *)status->trampolinePage, 16);
         Out("{\"trampoline\": %u, \"bytes\": \"%s\", \"protect\": \"%s\"}", status->trampolinePage, hex,
@@ -525,6 +536,50 @@ int wmain(int argc, wchar_t **argv) {
                 gHandler == &scene ? 1 : 0, gSubscribeThis == gFakeEventManager ? 1 : 0, gActivateCalls,
                 gActivateArg, gVirtualCalls, gVirtualArg, *(void **)0x5595F8 == 0 ? 1 : 0, espDelta);
         }
+
+    // ---- Settings "Pause Game: Yes": the add at 0x4226A6 (esi = game state)
+    {
+        const int values[] = { 0, 10, 998, 999, 1000, 1009, 2008, -1 };
+        for (int v = 0; v < 8; ++v) {
+            *(int *)(gameState + 0x25B18) = values[v];
+            in_eax = 0xA0A0A0A0; in_ebx = 0xB0B0B0B0; in_ecx = 0xC0C0C0C0; in_edx = 0xD0D0D0D0;
+            in_esi = (unsigned)gameState; in_edi = 0xE0E0E0E0; in_ebp = 0xEBEBEBEB; in_flags = 0x2;
+            RunSpan(0x4226A6, 0x4226B0);
+            Out("{\"pause_yes\": %d, \"after\": %d, \"regs_same\": %d, \"esp_same\": %d}", values[v],
+                *(int *)(gameState + 0x25B18),
+                out_eax == in_eax && out_ebx == in_ebx && out_ecx == in_ecx && out_edx == in_edx &&
+                    out_esi == in_esi && out_edi == in_edi && out_ebp == in_ebp ? 1 : 0,
+                out_esp == gArriveEsp ? 1 : 0);
+        }
+    }
+
+    // ---- theMenuScene ctor's old Change Player rect (top store at 0x44337B)
+    {
+        static unsigned char menu[0x200];
+        *(int *)(menu + 0x9C) = 0x146;          // left (widescreen offset 0)
+        *(int *)(menu + 0xA0) = 0x55555555;     // top: written by the code under test
+        *(int *)(menu + 0xA4) = 0x146 + 0xBE;   // right
+        *(int *)(menu + 0xA8) = 0x117;          // bottom
+        in_eax = 0xA0A0A0A0; in_ebx = 0xB0B0B0B0; in_ecx = 0xC0C0C0C0; in_edx = 0xD0D0D0D0;
+        in_esi = (unsigned)menu; in_edi = 0xE0E0E0E0; in_ebp = 0xEBEBEBEB; in_flags = 0x2 | 0x40;
+        RunSpan(0x44337B, 0x443385);
+        typedef bool (__thiscall *PtInRectFn)(void *, int, int);
+        PtInRectFn ptInRect = (PtInRectFn)0x4016A0;
+        int inside = 0, firstY = -1, lastY = -1;
+        for (int y = 0xE0; y <= 0x130; ++y)
+            for (int x = 0x140; x <= 0x210; x += 4)
+                if (ptInRect(menu + 0x9C, x, y)) {
+                    inside++;
+                    if (firstY < 0) firstY = y;
+                    lastY = y;
+                }
+        Out("{\"title_hotspot\": 1, \"top\": %d, \"inside\": %d, \"first_y\": %d, \"last_y\": %d, "
+            "\"regs_same\": %d, \"flags_same\": %d, \"esp_same\": %d}",
+            *(int *)(menu + 0xA0), inside, firstY, lastY,
+            out_eax == in_eax && out_ebx == in_ebx && out_ecx == in_ecx && out_edx == in_edx &&
+                out_esi == in_esi && out_edi == in_edi && out_ebp == in_ebp ? 1 : 0,
+            (out_flags & 0x8D5) == (in_flags & 0x8D5) ? 1 : 0, out_esp == gArriveEsp ? 1 : 0);
+    }
 
     Out("{\"counters\": {\"chance\": %u, \"older_rolls\": %u, \"older_successes\": %u, \"cooldown_stores\": %u, "
         "\"cooldown_skips\": %u, \"next_generation\": %u, \"older_grants\": %u, \"scene_writes\": %u, "
