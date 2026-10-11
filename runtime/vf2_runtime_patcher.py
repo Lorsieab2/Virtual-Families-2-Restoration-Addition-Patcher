@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Stage 1 runtime-hook patcher: build a patched COPY of vanilla Virtual Families 2.
+"""Runtime-hook patcher: build a patched COPY of vanilla Virtual Families 2.
 
     vf2_runtime_patcher.py apply --game-dir VANILLA --output-dir NEW
         [--dll runtime/build/vf2fun.dll] [--allow-older-pregnancies]
-        [--exe-name "VF2 Runtime Test.exe"]
+        [--set KEY=0|1 ...] [--exe-name "VF2 Runtime Test.exe"]
 
 The source game folder is only read. Everything is written to a new, empty
 output folder outside it. The executable gets the minimal bootstrap and
@@ -19,8 +19,9 @@ nothing else:
 No code cave is added to any existing section and no other byte of the
 executable changes. Every trampoline, detour and all feature logic is in
 "<output>\\Virtual Families 2 Patcher Files\\vf2fun.dll", which installs its
-hooks at runtime. vf2fun.ini beside it holds the setting
-([Patches] AllowOlderPregnancies=0/1). A missing DLL, ini or setting is the
+hooks at runtime. vf2fun.ini beside it holds one [Patches] key per module
+(vf2_runtime_sites.MODULES), written explicitly; the defaults are each
+feature's state in a default B200 build. A missing DLL, ini or setting is the
 stock game.
 """
 from __future__ import annotations
@@ -158,16 +159,34 @@ def patch_executable(vanilla: bytes) -> bytes:
     return bytes(pe.data)
 
 
-def write_settings(path: Path, allow_older_pregnancies: bool) -> None:
-    path.write_text(
-        "; Virtual Families 2 runtime add-ons (Stage 1). 1 = on, anything else = off.\n"
-        "[Patches]\n"
-        f"AllowOlderPregnancies={1 if allow_older_pregnancies else 0}\n",
-        encoding="utf-16",
-    )
+def default_settings() -> dict[str, bool]:
+    """Every module at its state in a default B200 build."""
+    return {m.ini_key: m.b200_default for m in S.MODULES}
 
 
-def apply(game_dir: Path, output_dir: Path, dll: Path, allow_older_pregnancies: bool,
+def resolve_settings(settings: dict[str, bool] | bool | None) -> dict[str, bool]:
+    """A full {ini_key: on} map. A bare bool is Stage 1's form: the default
+    B200 settings with Allow Older Pregnancies set to it."""
+    out = default_settings()
+    if isinstance(settings, bool):
+        out["AllowOlderPregnancies"] = settings
+    elif settings:
+        unknown = set(settings) - set(out)
+        if unknown:
+            raise PatchError(f"unknown settings: {sorted(unknown)}")
+        out.update(settings)
+    return out
+
+
+def write_settings(path: Path, settings: dict[str, bool] | bool | None) -> None:
+    lines = ["; Virtual Families 2 runtime add-ons. 1 = on; anything else, or a missing",
+             "; line, = off (the stock game for that feature).", "[Patches]"]
+    for key, on in resolve_settings(settings).items():
+        lines.append(f"{key}={1 if on else 0}")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-16")
+
+
+def apply(game_dir: Path, output_dir: Path, dll: Path, settings: dict[str, bool] | bool | None,
           exe_name: str | None = None) -> Path:
     game_dir, output_dir = game_dir.resolve(), output_dir.resolve()
     if output_dir == game_dir or game_dir in output_dir.parents or output_dir in game_dir.parents:
@@ -186,7 +205,7 @@ def apply(game_dir: Path, output_dir: Path, dll: Path, allow_older_pregnancies: 
     files = output_dir / S.PATCHER_FOLDER
     files.mkdir(exist_ok=True)
     shutil.copy2(dll, files / S.DLL_NAME)
-    write_settings(files / S.INI_NAME, allow_older_pregnancies)
+    write_settings(files / S.INI_NAME, settings)
     return target
 
 
@@ -198,10 +217,21 @@ def main() -> int:
     a.add_argument("--output-dir", required=True, type=Path)
     a.add_argument("--dll", type=Path, default=DEFAULT_DLL)
     a.add_argument("--allow-older-pregnancies", action="store_true")
+    a.add_argument("--set", action="append", default=[], metavar="KEY=0|1",
+                   help="override one [Patches] setting (default: the B200 default build's state); "
+                        "keys: " + ", ".join(m.ini_key for m in S.MODULES))
     a.add_argument("--exe-name", help="name for the patched executable (test builds get their own save folder)")
     args = ap.parse_args()
     try:
-        exe = apply(args.game_dir, args.output_dir, args.dll, args.allow_older_pregnancies, args.exe_name)
+        overrides = {}
+        if args.allow_older_pregnancies:
+            overrides["AllowOlderPregnancies"] = True
+        for item in args.set:
+            key, _, value = item.partition("=")
+            if value not in ("0", "1"):
+                raise PatchError(f"--set {item}: value must be 0 or 1")
+            overrides[key] = value == "1"
+        exe = apply(args.game_dir, args.output_dir, args.dll, overrides, args.exe_name)
     except PatchError as e:
         print(f"error: {e}", file=sys.stderr)
         return 1

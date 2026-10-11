@@ -100,6 +100,52 @@ static int __fastcall FakeSelectRandomLivingVillager(void *, void *, int) {
     return gSelectResult;
 }
 
+// ------------------------------------------------------------ ldwScene::SetActive run
+static unsigned char gFakeEventManager[16];
+static void *gFakeSceneVtable[16];
+struct FakeScene { void **vtable; unsigned char *flag; };
+static void *__cdecl FakeEventManagerGet() { return gFakeEventManager; }
+static int gSubscribeCalls, gUnsubscribeCalls, gActivateCalls, gActivateArg, gVirtualCalls, gVirtualArg;
+static void *gSubscribeThis, *gHandler;
+static void __fastcall FakeSubscribe(void *self, void *, void *handler, int, int) {  // ret 0Ch
+    gSubscribeThis = self;
+    gHandler = handler;
+    gSubscribeCalls++;
+}
+static void __fastcall FakeUnsubscribe(void *self, void *, void *handler, int) {  // ret 8
+    gSubscribeThis = self;
+    gHandler = handler;
+    gUnsubscribeCalls++;
+}
+static void __fastcall FakeActivateControls(void *, void *, int arg) {  // ret 4
+    gActivateCalls++;
+    gActivateArg = arg & 0xFF;
+}
+static void __fastcall FakeSceneVirtual(void *, void *, int arg) {  // ret 4
+    gVirtualCalls++;
+    gVirtualArg = arg & 0xFF;
+}
+
+// Calls ldwScene::SetActive(arg) on `scene` exactly as a game caller does
+// (push the bool, ecx = this). Returns 1 if it faulted (stock, null flag).
+static int CallSetActive(void *scene, int arg, int *espDelta) {
+    unsigned before = 0, after = 0;
+    __try {
+        __asm {
+            mov before, esp
+            push arg
+            mov ecx, scene
+            mov eax, 0x40D1D0
+            call eax
+            mov after, esp
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return 1;
+    }
+    *espDelta = (int)(before - after);
+    return 0;
+}
+
 // ------------------------------------------------------------ cooldown run
 static unsigned in_eax, in_ebx, in_ecx, in_edx, in_esi, in_edi, in_ebp, in_flags;
 static unsigned out_eax, out_ebx, out_ecx, out_edx, out_esi, out_edi, out_ebp, out_esp, out_flags;
@@ -185,11 +231,11 @@ static const char *ProtAt(unsigned va) {
 // Process start-up maps heaps and locale data in the 0x400000-0xB3D000 range,
 // so the harness re-launches itself suspended and reserves that range in the
 // child before any of its start-up code runs.
-static int RunChild(const wchar_t *exe, bool hold) {
+static int RunChild(const wchar_t *exe, const wchar_t *mode) {
     wchar_t self[MAX_PATH];
     GetModuleFileNameW(0, self, MAX_PATH);
     wchar_t cmd[MAX_PATH * 3];
-    _snwprintf_s(cmd, _countof(cmd), _TRUNCATE, L"\"%s\" \"%s\" %s", self, exe, hold ? L"hold" : L"child");
+    _snwprintf_s(cmd, _countof(cmd), _TRUNCATE, L"\"%s\" \"%s\" %s", self, exe, mode);
     STARTUPINFOW si = { sizeof si };
     si.dwFlags = STARTF_USESTDHANDLES;
     si.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
@@ -212,12 +258,17 @@ static int RunChild(const wchar_t *exe, bool hold) {
 }
 
 int wmain(int argc, wchar_t **argv) {
+    // "--hold": keep the process for the live-probe test. "--status-only":
+    // stop after the install report (the image may be deliberately corrupt).
     if (argc == 2)
-        return RunChild(argv[1], false);
+        return RunChild(argv[1], L"child");
     if (argc == 3 && wcscmp(argv[2], L"--hold") == 0)
-        return RunChild(argv[1], true);
+        return RunChild(argv[1], L"hold");
+    if (argc == 3 && wcscmp(argv[2], L"--status-only") == 0)
+        return RunChild(argv[1], L"status");
     bool hold = argc == 3 && wcscmp(argv[2], L"hold") == 0;
-    if (argc != 3 || (!hold && wcscmp(argv[2], L"child") != 0)) {
+    bool statusOnly = argc == 3 && wcscmp(argv[2], L"status") == 0;
+    if (argc != 3 || (!hold && !statusOnly && wcscmp(argv[2], L"child") != 0)) {
         Out("{\"fatal\": \"usage\"}");
         return 2;
     }
@@ -288,32 +339,46 @@ int wmain(int argc, wchar_t **argv) {
         dll ? 1 : 0, dllPathA);
     if (!dll) return 0;
 
+    // vf2fun.cpp's status block (layout version 2) and test-build counters.
     struct Status {
-        unsigned magic, version, allowOlderPregnancies, pinsMatched, installedMask, trampoline,
-            chanceCalls, olderRolls, olderSuccesses, cooldownStores, cooldownSkips,
-            nextGenerationCalls, nextGenerationOlderGrants, lastMotherAge, lastFatherAge;
+        unsigned magic, version, moduleCount, requestedMask, pinsOkMask, installedMask, refusedMask,
+            trampolinePage, writeMasks[16];
+    };
+    struct Counters {
+        unsigned magic, chanceCalls, olderRolls, olderSuccesses, cooldownStores, cooldownSkips,
+            nextGenerationCalls, nextGenerationOlderGrants, lastMotherAge, lastFatherAge,
+            sceneActiveWrites, sceneNullSkips;
     };
     volatile Status *status = (volatile Status *)GetProcAddress(dll, "VF2Fun_Status");
     if (!status) Fail("status export");
+    volatile Counters *counters = (volatile Counters *)GetProcAddress(dll, "VF2Fun_TestCounters");
+    if (!counters) {
+        // A release build: report the install, skip the counted scenarios.
+        Out("{\"counters_absent\": 1}");
+        statusOnly = true;
+    }
     IMAGE_NT_HEADERS32 *dnt = (IMAGE_NT_HEADERS32 *)((unsigned char *)dll + ((IMAGE_DOS_HEADER *)dll)->e_lfanew);
     unsigned dllLo = (unsigned)dll, dllHi = dllLo + dnt->OptionalHeader.SizeOfImage;
 
-    // ---- what is now at every site
-    const unsigned sites[] = { 0x4A0810, 0x49F6DF, 0x430681, 0x430DB8, 0x43C0BD, 0x4407DC };
-    const unsigned lens[] = { 8, 6, 5, 5, 5, 5 };
+    // ---- what is now at every written site
+    const unsigned sites[] = { 0x4A0810, 0x49F6DF, 0x430681, 0x430DB8, 0x43C0BD, 0x4407DC, 0x40D1DA };
+    const unsigned lens[] = { 8, 6, 5, 5, 5, 5, 5 };
+    const unsigned nSites = sizeof sites / sizeof sites[0];
     char hex[64];
-    for (int i = 0; i < 6; ++i) {
+    for (unsigned i = 0; i < nSites; ++i) {
         Hex(hex, (const unsigned char *)sites[i], lens[i]);
         Out("{\"site\": %u, \"bytes\": \"%s\", \"protect\": \"%s\"}", sites[i], hex, ProtAt(sites[i]));
     }
-    Out("{\"status\": {\"magic\": %u, \"allow\": %u, \"pins\": %u, \"mask\": %u, \"trampoline\": %u, "
+    Out("{\"status\": {\"magic\": %u, \"version\": %u, \"modules\": %u, \"requested\": %u, \"pins_ok\": %u, "
+        "\"installed\": %u, \"refused\": %u, \"trampoline\": %u, \"write_masks\": [%u, %u], "
         "\"dll_lo\": %u, \"dll_hi\": %u, \"status_va\": %u}}",
-        status->magic, status->allowOlderPregnancies, status->pinsMatched, status->installedMask,
-        status->trampoline, dllLo, dllHi, (unsigned)status);
-    if (status->trampoline) {
-        Hex(hex, (const unsigned char *)status->trampoline, 16);
-        Out("{\"trampoline\": %u, \"bytes\": \"%s\", \"protect\": \"%s\"}", status->trampoline, hex,
-            ProtAt(status->trampoline));
+        status->magic, status->version, status->moduleCount, status->requestedMask, status->pinsOkMask,
+        status->installedMask, status->refusedMask, status->trampolinePage, status->writeMasks[0],
+        status->writeMasks[1], dllLo, dllHi, (unsigned)status);
+    if (status->trampolinePage) {
+        Hex(hex, (const unsigned char *)status->trampolinePage, 16);
+        Out("{\"trampoline\": %u, \"bytes\": \"%s\", \"protect\": \"%s\"}", status->trampolinePage, hex,
+            ProtAt(status->trampolinePage));
     }
 
     // ---- no page anywhere in the process is writable and executable
@@ -329,6 +394,10 @@ int wmain(int argc, wchar_t **argv) {
             addr = (unsigned)m.BaseAddress + (unsigned)m.RegionSize;
         }
         Out("{\"wx_regions\": %u}", wx);
+    }
+    if (statusOnly) {
+        Out("{\"done\": 1}");
+        return 0;
     }
 
     // ---- recorders for the game calls the scenarios reach
@@ -433,10 +502,36 @@ int wmain(int argc, wchar_t **argv) {
                 k.name, at, target, r ? 1 : 0, gSelectCalls);
         }
     }
+    // ---- ldwScene::SetActive (0x40D1D0) through the copied stock body
+    WriteJmp(0x402A40, (void *)&FakeEventManagerGet);
+    WriteJmp(0x402AC0, (void *)&FakeSubscribe);
+    WriteJmp(0x402740, (void *)&FakeUnsubscribe);
+    WriteJmp(0x40D060, (void *)&FakeActivateControls);
+    gFakeSceneVtable[0x24 / 4] = (void *)&FakeSceneVirtual;
+    for (int bound = 1; bound >= 0; --bound)
+        for (int arg = 1; arg >= 0; --arg) {
+            unsigned char flagByte = 0xAA;
+            FakeScene scene = { gFakeSceneVtable, bound ? &flagByte : 0 };
+            *(void **)0x5595F8 = &scene;  // ldwScene::mLastUpdatedScene
+            gSubscribeCalls = gUnsubscribeCalls = gActivateCalls = gVirtualCalls = 0;
+            gActivateArg = gVirtualArg = -1;
+            gSubscribeThis = gHandler = 0;
+            int espDelta = 0;
+            int crashed = CallSetActive(&scene, arg, &espDelta);
+            Out("{\"set_active\": [%d, %d], \"crashed\": %d, \"flag\": %d, \"subscribe\": %d, \"unsubscribe\": %d, "
+                "\"handler_ok\": %d, \"manager_ok\": %d, \"activate_controls\": %d, \"activate_arg\": %d, "
+                "\"virtual\": %d, \"virtual_arg\": %d, \"last_cleared\": %d, \"esp_delta\": %d}",
+                bound, arg, crashed, flagByte, gSubscribeCalls, gUnsubscribeCalls,
+                gHandler == &scene ? 1 : 0, gSubscribeThis == gFakeEventManager ? 1 : 0, gActivateCalls,
+                gActivateArg, gVirtualCalls, gVirtualArg, *(void **)0x5595F8 == 0 ? 1 : 0, espDelta);
+        }
+
     Out("{\"counters\": {\"chance\": %u, \"older_rolls\": %u, \"older_successes\": %u, \"cooldown_stores\": %u, "
-        "\"cooldown_skips\": %u, \"next_generation\": %u, \"older_grants\": %u}}",
-        status->chanceCalls, status->olderRolls, status->olderSuccesses, status->cooldownStores,
-        status->cooldownSkips, status->nextGenerationCalls, status->nextGenerationOlderGrants);
+        "\"cooldown_skips\": %u, \"next_generation\": %u, \"older_grants\": %u, \"scene_writes\": %u, "
+        "\"scene_null_skips\": %u}}",
+        counters->chanceCalls, counters->olderRolls, counters->olderSuccesses, counters->cooldownStores,
+        counters->cooldownSkips, counters->nextGenerationCalls, counters->nextGenerationOlderGrants,
+        counters->sceneActiveWrites, counters->sceneNullSkips);
     if (hold) {
         // Keep this process alive for the live-probe test until stdin closes.
         Out("{\"holding\": %lu}", GetCurrentProcessId());

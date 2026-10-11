@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prove the Stage 1 hook sites against the vanilla executable and emit the
+"""Prove every runtime-hook site against the vanilla executable and emit the
 companion DLL's site header.
 
     gen_sites.py --vanilla "<vanilla game folder>\\Virtual Families 2.exe"
@@ -8,20 +8,24 @@ Two separate jobs:
 
 * validate(): decodes every pinned run in the VANILLA executable with capstone
   and refuses (SiteError) unless
-    - the bytes are exactly the pinned bytes;
+    - the bytes are exactly the pinned bytes and the pin names a known module
+      (or "core");
     - a "detour" pin is a whole number of instructions, at least 5 bytes, the
       shortest such run, and none of its instructions is relative (no
       branch/call/ret/int, nothing position-dependent), so the stolen copy
       runs unchanged from the trampoline;
-    - a "replace" pin is exactly one instruction of at least 5 bytes;
-    - a "retarget" pin is exactly one `call rel32` to CanStartNextGeneration;
+    - a "replace" pin is whole, non-relative instructions of at least 5 bytes;
+    - a "retarget" pin is exactly one `call rel32` / `jmp rel32` to its target;
     - a "context" pin ends on an instruction boundary;
+    - no two written runs overlap, in any module;
     - no direct branch anywhere in .text lands inside the bytes the DLL
       overwrites (it may land on their first byte);
-    - the CanStartNextGeneration callers are exactly the pinned four, and
-      nothing references 0x48FF70 or 0x4A0810 by absolute address.
-* render_header(): the C header, a pure function of vf2_runtime_sites.PINS.
-  The DLL refuses to install anything unless every pin matches live memory.
+    - every function in EXCLUSIVE_CALLERS has exactly the pinned direct
+      callers, and nothing in NO_ABSOLUTE_REFERENCES is referenced by
+      absolute address.
+* render_header(): the C header, a pure function of vf2_runtime_sites. The
+  DLL installs a module only if every core pin and every pin of that module
+  matches live memory.
 """
 from __future__ import annotations
 
@@ -144,24 +148,33 @@ def validate(data: bytes) -> list[str]:
             raise SiteError(f"{pin.name} at {pin.va:#x}: expected {pin.expected.hex()} found {live.hex()}")
         insns = decode_run(md, live, pin.va)
         text = "; ".join(f"{i.mnemonic} {i.op_str}".strip() for i in insns)
+        if pin.module != S.CORE and pin.module not in S.MODULE_BY_KEY:
+            raise SiteError(f"{pin.name}: unknown module {pin.module}")
         if pin.role == "detour":
             n = steal_length(md, img.read(pin.va, 16), pin.va)
-            if n != len(pin.expected) or pin.va != S.CHANCE_OF_PREGNANCY or n != S.CHANCE_OF_PREGNANCY_STEAL:
+            if n != len(pin.expected):
                 raise SiteError(f"{pin.name}: steal length {n} does not match the pin ({len(pin.expected)})")
             overwritten.append((pin.name, pin.va, n))
         elif pin.role == "replace":
-            if len(insns) != 1 or insns[0].size < 5 or is_relative(insns[0]):
-                raise SiteError(f"{pin.name}: must be one non-relative instruction of 5+ bytes")
-            overwritten.append((pin.name, pin.va, insns[0].size))
+            if sum(i.size for i in insns) < 5 or any(is_relative(i) for i in insns):
+                raise SiteError(f"{pin.name}: must be whole non-relative instructions of 5+ bytes")
+            overwritten.append((pin.name, pin.va, len(pin.expected)))
         elif pin.role == "retarget":
             i = insns[0]
-            if (len(insns) != 1 or i.mnemonic != "call" or i.size != 5 or i.bytes[0] != 0xE8
-                    or i.operands[0].type != X86_OP_IMM or i.operands[0].imm != S.CAN_START_NEXT_GENERATION):
-                raise SiteError(f"{pin.name}: not `call {S.CAN_START_NEXT_GENERATION:#x}`")
+            if (len(insns) != 1 or i.mnemonic not in ("call", "jmp") or i.size != 5
+                    or i.bytes[0] not in (0xE8, 0xE9) or pin.target is None
+                    or i.operands[0].type != X86_OP_IMM or i.operands[0].imm != pin.target):
+                raise SiteError(f"{pin.name}: not `call/jmp {pin.target}`")
             overwritten.append((pin.name, pin.va, 5))
         elif pin.role != "context":
             raise SiteError(f"{pin.name}: unknown role {pin.role}")
         facts.append(f"{pin.name} {pin.va:#x} [{pin.role}] {text}")
+
+    # No two written runs may overlap, in any module.
+    spans = sorted(overwritten, key=lambda o: o[1])
+    for (a, a_va, a_n), (b, b_va, _b_n) in zip(spans, spans[1:]):
+        if a_va + a_n > b_va:
+            raise SiteError(f"{a} overlaps {b}")
 
     # The DLL overwrites [va, va+n). A branch to va itself is fine (it hits the
     # new jmp/call); a branch to any later byte would execute half an
@@ -173,20 +186,16 @@ def validate(data: bytes) -> list[str]:
             raise SiteError(f"{name}: branches land inside the overwritten bytes: {inside}")
         facts.append(f"{name}: no direct branch lands in {va + 1:#x}-{va + n - 1:#x}")
 
-    callers = sorted(s for s, t in branches
-                     if t == S.CAN_START_NEXT_GENERATION and img.read(s, 1)[0] in (0xE8, 0xE9)
-                     and decode_run(md, img.read(s, 5), s))
-    if tuple(callers) != tuple(sorted(S.NEXT_GENERATION_CALLSITES)):
-        raise SiteError(f"CanStartNextGeneration callers changed: {[hex(c) for c in callers]}")
-    chance_callers = sorted(s for s, t in branches
-                            if t == S.CHANCE_OF_PREGNANCY and img.read(s, 1)[0] in (0xE8, 0xE9))
-    if chance_callers != [0x49F5FA]:
-        raise SiteError(f"ChanceOfPregnancy callers changed: {[hex(c) for c in chance_callers]}")
-    for target in (S.CAN_START_NEXT_GENERATION, S.CHANCE_OF_PREGNANCY):
+    for target, expected in S.EXCLUSIVE_CALLERS.items():
+        callers = sorted(s for s, t in branches
+                         if t == target and img.read(s, 1)[0] in (0xE8, 0xE9)
+                         and decode_run(md, img.read(s, 5), s))
+        if tuple(callers) != tuple(sorted(expected)):
+            raise SiteError(f"direct callers of {target:#x} changed: {[hex(c) for c in callers]}")
+        facts.append(f"direct callers of {target:#x}: " + ", ".join(hex(c) for c in callers))
+    for target in S.NO_ABSOLUTE_REFERENCES:
         if struct.pack("<I", target) in data:
             raise SiteError(f"{target:#x} is referenced by absolute address somewhere")
-    facts.append("CanStartNextGeneration direct callers: " + ", ".join(hex(c) for c in callers))
-    facts.append("ChanceOfPregnancy direct callers: 0x49f5fa")
 
     slot = struct.unpack("<I", img.read(S.INIT_SLOT, 4))[0]
     if slot != S.INIT_SLOT_EXPECTED:
@@ -202,38 +211,39 @@ def render_header() -> str:
         "// installs nothing unless all of them match live memory.",
         "#pragma once",
         "",
-        "struct VF2Pin { const char *name; unsigned va; unsigned len; const unsigned char *bytes; };",
+        "struct VF2Pin { const char *name; unsigned va; unsigned len; const unsigned char *bytes; unsigned module; };",
         "",
     ]
-    consts = {
-        "CHANCE_OF_PREGNANCY": S.CHANCE_OF_PREGNANCY,
-        "CHANCE_OF_PREGNANCY_STEAL": S.CHANCE_OF_PREGNANCY_STEAL,
-        "COOLDOWN_STORE": S.COOLDOWN_STORE,
-        "COOLDOWN_STORE_LEN": S.COOLDOWN_STORE_LEN,
-        "COOLDOWN_RESUME": S.COOLDOWN_RESUME,
-        "CAN_START_NEXT_GENERATION": S.CAN_START_NEXT_GENERATION,
-        "COUNT_SURVIVING_CHILDREN": S.COUNT_SURVIVING_CHILDREN,
-        "GET_RANDOM": S.GET_RANDOM,
-        "TUTORIAL_TIP": S.TUTORIAL_TIP,
-        "TUTORIAL_QUEUE": S.TUTORIAL_QUEUE,
-        "VILLAGER_MANAGER": S.VILLAGER_MANAGER,
-        "VILLAGER_ARRAY_OFFSET": S.VILLAGER_ARRAY_OFFSET,
-        "VILLAGER_STRIDE": S.VILLAGER_STRIDE,
-        "GAME_STATE_TRY_FOR_BABY_DEADLINE": S.GAME_STATE_TRY_FOR_BABY_DEADLINE,
-    }
-    for k, v in consts.items():
-        lines.append(f"#define VF2_{k} 0x{v:X}u")
+    # Every upper-case integer (or tuple of integers) in the sites module.
+    skip = {"IMAGE_BASE"}
+    for k, v in vars(S).items():
+        if not k.isupper() or k in skip or k.startswith("_"):
+            continue
+        if isinstance(v, int) and not isinstance(v, bool):
+            lines.append(f"#define VF2_{k} 0x{v:X}u")
+        elif isinstance(v, tuple) and v and all(isinstance(x, int) for x in v):
+            lines.append(f"static const unsigned VF2_{k}[] = {{ " + ", ".join(f"0x{c:X}u" for c in v) + " };")
     lines.append("")
-    lines.append("static const unsigned VF2_NEXT_GENERATION_CALLSITES[] = { "
-                 + ", ".join(f"0x{c:X}u" for c in S.NEXT_GENERATION_CALLSITES) + " };")
+    lines.append("// Modules: install order and status-block bit index.")
+    for i, m in enumerate(S.MODULES):
+        lines.append(f"#define VF2_MODULE_{m.key.upper()} {i}u")
+    lines.append(f"#define VF2_MODULE_COUNT {len(S.MODULES)}u")
+    lines.append("#define VF2_MODULE_CORE 0xFFFFFFFFu")
+    lines.append("static const wchar_t *const VF2_MODULE_INI_KEYS[] = { "
+                 + ", ".join(f'L"{m.ini_key}"' for m in S.MODULES) + " };")
+    lines.append("static const char *const VF2_MODULE_NAMES[] = { "
+                 + ", ".join(f'"{m.key}"' for m in S.MODULES) + " };")
     lines.append("")
+    index = {m.key: i for i, m in enumerate(S.MODULES)}
     for pin in S.PINS:
         body = ", ".join(f"0x{b:02X}" for b in pin.expected)
         lines.append(f"static const unsigned char kPin_{pin.name}[] = {{ {body} }};")
     lines.append("")
     lines.append("static const VF2Pin VF2_PINS[] = {")
     for pin in S.PINS:
-        lines.append(f'    {{ "{pin.name}", 0x{pin.va:X}u, {len(pin.expected)}u, kPin_{pin.name} }},')
+        mod = "VF2_MODULE_CORE" if pin.module == S.CORE else f"VF2_MODULE_{pin.module.upper()}"
+        assert pin.module == S.CORE or pin.module in index
+        lines.append(f'    {{ "{pin.name}", 0x{pin.va:X}u, {len(pin.expected)}u, kPin_{pin.name}, {mod} }},')
     lines.append("};")
     lines.append("")
     return "\n".join(lines)

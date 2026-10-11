@@ -1,7 +1,8 @@
-"""Stage 1 runtime-hook sites in the VANILLA Virtual Families 2 executable.
+"""Runtime-hook sites in the VANILLA Virtual Families 2 executable.
 
-Single source of truth for every address the Stage 1 runtime module touches or
-relies on. Every entry pins the exact vanilla bytes, so the patcher, the
+Single source of truth for every address the companion DLL's modules touch or
+rely on (Stage 1 began with Allow Older Pregnancies; each later module adds
+its own section below). Every entry pins the exact vanilla bytes, so the patcher, the
 companion DLL (through the generated header) and the tests all refuse an
 executable that is not byte-for-byte the vanilla game at these places.
 
@@ -49,15 +50,51 @@ STUB_CODE_VA = 0xB3B000
 STUB_DATA_VA = 0xB3C000
 
 
-class Pin:
-    """Exact vanilla bytes at an address. `role` says why the module needs it."""
+class Module:
+    """One runtime feature module of vf2fun.dll.
 
-    def __init__(self, name: str, va: int, hex_bytes: str, role: str, why: str):
+    `ini_key` is its setting under [Patches] in vf2fun.ini (1 = on; anything
+    else, or missing, = off = the stock game). `b200` names the static B200
+    feature it reproduces and `b200_default` is that feature's state in a
+    default B200 build (the patcher writes every key explicitly).
+    """
+
+    def __init__(self, key: str, ini_key: str, b200: str, b200_default: bool):
+        self.key = key
+        self.ini_key = ini_key
+        self.b200 = b200
+        self.b200_default = b200_default
+
+
+# Order = install order = bit index in the status block masks.
+MODULES = [
+    Module("older_pregnancies", "AllowOlderPregnancies",
+           "patch_allow_older_pregnancies + patch_next_generation_age_gate (.vf2preg)", False),
+    Module("scene_null_guard", "SceneSetActiveNullGuard",
+           "patch_ldwscene_setactive_null_guard (unconditional in B200)", True),
+]
+MODULE_BY_KEY = {m.key: m for m in MODULES}
+CORE = "core"  # pins every module relies on: any mismatch installs nothing
+
+
+class Pin:
+    """Exact vanilla bytes at an address. `role` says why the module needs it:
+
+    detour   -- a function-entry prologue stolen into a trampoline;
+    replace  -- whole non-relative instructions (5+ bytes) the DLL re-does;
+    retarget -- one `call rel32` / `jmp rel32` to `target`, redirected;
+    context  -- bytes the module's logic relies on; never written.
+    """
+
+    def __init__(self, name: str, va: int, hex_bytes: str, role: str, why: str,
+                 module: str = "older_pregnancies", target: int | None = None):
         self.name = name
         self.va = va
         self.expected = bytes.fromhex(hex_bytes)
         self.role = role
         self.why = why
+        self.module = module
+        self.target = target
 
     @property
     def end(self) -> int:
@@ -172,6 +209,7 @@ PINS = [
         "context",
         "theGameState::Get reads its singleton from 0x558FC0 (used only by the "
         "read-only live probe).",
+        module=CORE,
     ),
 ]
 
@@ -188,7 +226,61 @@ for _site in NEXT_GENERATION_CALLSITES:
             "CFamilyTreeScene::Activate (slot 9, +0xA8), theMainScene::"
             "HandleVillagerDetailsButton (0x43BEE0, +0x1DD) and theMainScene::"
             "UpdateScene (0x4400F0, +0x6EC) -- the same four B200 retargets.",
+            target=CAN_START_NEXT_GENERATION,
         )
     )
+
+# --------------------------------------------------------------------------
+# scene_null_guard -- B200 patch_ldwscene_setactive_null_guard.
+#
+# ldwScene::SetActive(bool) 0x40D1D0 (thiscall, ret 4), 59 direct callers.
+# Located as the only function in .text with the stock body's
+# `push 0; push 0Fh; push esi; call ldwEventManager::Get` (Subscribe) and
+# `push 0Fh; push esi; call Get` (Unsubscribe) around a write through
+# [esi+4]; like the stock object it then clears ldwScene::mLastUpdatedScene
+# (0x5595F8) when it is this scene, calls ActivateControls (0x40D060) and the
+# virtual at vtable+24h. Vanilla's code generation tests the argument BEFORE
+# the write (`test bl,bl` at 0x40D1D5) and branches on it AFTER (`je` at
+# 0x40D1DF), so the replacement must preserve the flags.
+# --------------------------------------------------------------------------
+SCENE_SET_ACTIVE = 0x40D1D0
+SCENE_ACTIVE_WRITE = 0x40D1DA        # mov eax,[esi+4]; mov [eax],bl
+SCENE_ACTIVE_WRITE_LEN = 5
+SCENE_ACTIVE_RESUME = 0x40D1DF       # je 0x40D1F4 (flags still from test bl,bl)
+
+PINS += [
+    Pin(
+        "scene_set_active", SCENE_SET_ACTIVE,
+        "538B5C240884DB568BF18B4604881874136A006A0F56E85558FFFF8BC8E8CE58FFFFEB21"
+        "6A0F56E84458FFFF8BC8E83D55FFFF3935F8955500750AC705F895550000000000538BCE"
+        "E843FEFFFF8B168B4224538BCEFFD05E5BC20400",
+        "context",
+        "Whole ldwScene::SetActive: push ebx; mov ebx,[esp+8]; test bl,bl; "
+        "push esi; mov esi,ecx; mov eax,[esi+4]; mov [eax],bl; je; "
+        "Subscribe(this,0Fh,0) or Unsubscribe(this,0Fh) through "
+        "ldwEventManager::Get 0x402A40; clear mLastUpdatedScene 0x5595F8 if it is "
+        "this; ActivateControls 0x40D060; call [vtable+24h]; pop esi; pop ebx; "
+        "ret 4. The guard's early return is exactly this epilogue (B200 returns "
+        "through the function's own epilogue too).",
+        module="scene_null_guard",
+    ),
+    Pin(
+        "scene_active_write", SCENE_ACTIVE_WRITE, "8B46048818",
+        "replace",
+        "mov eax,[esi+4]; mov [eax],bl -- the unconditional write through the "
+        "bound active-flag pointer (B200's hook bytes, same two instructions). "
+        "Neither is relative; no branch in .text lands in 0x40D1DB-0x40D1DE.",
+        module="scene_null_guard",
+    ),
+]
+
+# Every direct caller of these functions must be exactly the listed sites
+# (gen_sites refuses if .text has any other).
+EXCLUSIVE_CALLERS = {
+    CAN_START_NEXT_GENERATION: NEXT_GENERATION_CALLSITES,
+    CHANCE_OF_PREGNANCY: (0x49F5FA,),
+}
+# Functions that must have no absolute (pointer) reference anywhere in the file.
+NO_ABSOLUTE_REFERENCES = (CAN_START_NEXT_GENERATION, CHANCE_OF_PREGNANCY)
 
 PIN_BY_NAME = {pin.name: pin for pin in PINS}

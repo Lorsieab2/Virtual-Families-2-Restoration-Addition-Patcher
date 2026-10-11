@@ -98,9 +98,13 @@ class Process:
             raise OSError(f"write {va:#x} failed ({ctypes.get_last_error()})")
 
 
-STATUS_FIELDS = ("magic", "version", "allowOlderPregnancies", "pinsMatched", "installedMask", "trampoline",
-                 "chanceCalls", "olderRolls", "olderSuccesses", "cooldownStores", "cooldownSkips",
-                 "nextGenerationCalls", "nextGenerationOlderGrants", "lastMotherAge", "lastFatherAge")
+# vf2fun.cpp's VF2Fun_Status block, layout version 2 (then writeMasks[16]).
+STATUS_FIELDS = ("magic", "version", "moduleCount", "requestedMask", "pinsOkMask", "installedMask",
+                 "refusedMask", "trampolinePage")
+# VF2Fun_TestCounters: exported by TEST builds only (VF2FUN_TEST_COUNTERS).
+COUNTER_FIELDS = ("magic", "chanceCalls", "olderRolls", "olderSuccesses", "cooldownStores", "cooldownSkips",
+                  "nextGenerationCalls", "nextGenerationOlderGrants", "lastMotherAge", "lastFatherAge",
+                  "sceneActiveWrites", "sceneNullSkips")
 
 
 def export_rva(dll_path: Path, name: str) -> int:
@@ -149,8 +153,25 @@ def snapshot(p: Process) -> dict:
     out["sites"] = sites
     if module and path:
         rva = export_rva(Path(path), "VF2Fun_Status")
-        raw = p.read(module + rva, 4 * len(STATUS_FIELDS))
-        out["status"] = dict(zip(STATUS_FIELDS, struct.unpack(f"<{len(STATUS_FIELDS)}I", raw)))
+        raw = p.read(module + rva, 4 * (len(STATUS_FIELDS) + 16))
+        values = struct.unpack(f"<{len(STATUS_FIELDS) + 16}I", raw)
+        status = dict(zip(STATUS_FIELDS, values))
+        status["writeMasks"] = list(values[len(STATUS_FIELDS):len(STATUS_FIELDS) + len(S.MODULES)])
+        modules = {}
+        for i, m in enumerate(S.MODULES):
+            bit = 1 << i
+            modules[m.key] = ("installed" if status["installedMask"] & bit else
+                              "REFUSED" if status["refusedMask"] & bit else
+                              "off" if not status["requestedMask"] & bit else "?")
+        status["modules"] = modules
+        out["status"] = status
+        try:
+            crva = export_rva(Path(path), "VF2Fun_TestCounters")
+        except KeyError:
+            pass  # a release build: no counters
+        else:
+            raw = p.read(module + crva, 4 * len(COUNTER_FIELDS))
+            out["counters"] = dict(zip(COUNTER_FIELDS, struct.unpack(f"<{len(COUNTER_FIELDS)}I", raw)))
     villagers = []
     for i in range(30):
         v = S.VILLAGER_MANAGER + S.VILLAGER_ARRAY_OFFSET + i * S.VILLAGER_STRIDE
@@ -183,7 +204,12 @@ def show(snap: dict) -> None:
         print(f"  {name:32} {line}")
     if "status" in snap:
         s = snap["status"]
-        print("status: " + ", ".join(f"{k}={hex(v) if k in ('magic', 'trampoline') else v}" for k, v in s.items()))
+        print("status: " + ", ".join(f"{k}={hex(v) if k in ('magic', 'trampolinePage') else v}"
+                                     for k, v in s.items() if k != "modules"))
+        for key, state in s["modules"].items():
+            print(f"  module {key:24} {state}")
+    if "counters" in snap:
+        print("test counters: " + ", ".join(f"{k}={v}" for k, v in snap["counters"].items() if k != "magic"))
     for v in snap["villagers"]:
         print(f"  villager {v['index']:2}: {v['gender']:6} age {v['years']:3} ({v['internal_age']}) "
               f"health {v['health']} fertility {v['fertility']} departed {v['departed']}")

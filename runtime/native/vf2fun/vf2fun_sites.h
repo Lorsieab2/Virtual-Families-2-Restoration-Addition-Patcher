@@ -3,24 +3,44 @@
 // installs nothing unless all of them match live memory.
 #pragma once
 
-struct VF2Pin { const char *name; unsigned va; unsigned len; const unsigned char *bytes; };
+struct VF2Pin { const char *name; unsigned va; unsigned len; const unsigned char *bytes; unsigned module; };
 
+#define VF2_INIT_SLOT 0x4E29A8u
+#define VF2_INIT_SLOT_EXPECTED 0x428620u
+#define VF2_IAT_GET_MODULE_HANDLE_A 0x4DE1E4u
+#define VF2_IAT_GET_PROC_ADDRESS 0x4DE1E8u
+#define VF2_STUB_CODE_VA 0xB3B000u
+#define VF2_STUB_DATA_VA 0xB3C000u
 #define VF2_CHANCE_OF_PREGNANCY 0x4A0810u
 #define VF2_CHANCE_OF_PREGNANCY_STEAL 0x8u
 #define VF2_COOLDOWN_STORE 0x49F6DFu
 #define VF2_COOLDOWN_STORE_LEN 0x6u
 #define VF2_COOLDOWN_RESUME 0x49F6E5u
 #define VF2_CAN_START_NEXT_GENERATION 0x48FF70u
+static const unsigned VF2_NEXT_GENERATION_CALLSITES[] = { 0x430681u, 0x430DB8u, 0x43C0BDu, 0x4407DCu };
 #define VF2_COUNT_SURVIVING_CHILDREN 0x490080u
 #define VF2_GET_RANDOM 0x403F70u
 #define VF2_TUTORIAL_TIP 0xAA7E98u
 #define VF2_TUTORIAL_QUEUE 0x4AA020u
 #define VF2_VILLAGER_MANAGER 0x5B9F58u
+#define VF2_FAMILY_TREE 0x5ACFC8u
+#define VF2_GAME_STATE_INSTANCE_PTR 0x558FC0u
 #define VF2_VILLAGER_ARRAY_OFFSET 0x1CC70u
 #define VF2_VILLAGER_STRIDE 0x1CC0Cu
 #define VF2_GAME_STATE_TRY_FOR_BABY_DEADLINE 0x25AE0u
+#define VF2_SCENE_SET_ACTIVE 0x40D1D0u
+#define VF2_SCENE_ACTIVE_WRITE 0x40D1DAu
+#define VF2_SCENE_ACTIVE_WRITE_LEN 0x5u
+#define VF2_SCENE_ACTIVE_RESUME 0x40D1DFu
+static const unsigned VF2_NO_ABSOLUTE_REFERENCES[] = { 0x48FF70u, 0x4A0810u };
 
-static const unsigned VF2_NEXT_GENERATION_CALLSITES[] = { 0x430681u, 0x430DB8u, 0x43C0BDu, 0x4407DCu };
+// Modules: install order and status-block bit index.
+#define VF2_MODULE_OLDER_PREGNANCIES 0u
+#define VF2_MODULE_SCENE_NULL_GUARD 1u
+#define VF2_MODULE_COUNT 2u
+#define VF2_MODULE_CORE 0xFFFFFFFFu
+static const wchar_t *const VF2_MODULE_INI_KEYS[] = { L"AllowOlderPregnancies", L"SceneSetActiveNullGuard" };
+static const char *const VF2_MODULE_NAMES[] = { "older_pregnancies", "scene_null_guard" };
 
 static const unsigned char kPin_chance_entry[] = { 0x53, 0x55, 0x56, 0x57, 0x8B, 0x54, 0x24, 0x14 };
 static const unsigned char kPin_chance_tail[] = { 0x6A, 0x64, 0xE8, 0xBF, 0x36, 0xF6, 0xFF, 0x83, 0xC4, 0x04, 0x3B, 0xC7, 0xB9, 0x98, 0x7E, 0xAA, 0x00, 0x7D, 0x17, 0x6A, 0x00, 0x6A, 0x00, 0x68, 0x68, 0x08, 0x00, 0x00, 0xE8, 0x55, 0x97, 0x00, 0x00 };
@@ -37,21 +57,25 @@ static const unsigned char kPin_next_generation_call_430681[] = { 0xE8, 0xEA, 0x
 static const unsigned char kPin_next_generation_call_430db8[] = { 0xE8, 0xB3, 0xF1, 0x05, 0x00 };
 static const unsigned char kPin_next_generation_call_43c0bd[] = { 0xE8, 0xAE, 0x3E, 0x05, 0x00 };
 static const unsigned char kPin_next_generation_call_4407dc[] = { 0xE8, 0x8F, 0xF7, 0x04, 0x00 };
+static const unsigned char kPin_scene_set_active[] = { 0x53, 0x8B, 0x5C, 0x24, 0x08, 0x84, 0xDB, 0x56, 0x8B, 0xF1, 0x8B, 0x46, 0x04, 0x88, 0x18, 0x74, 0x13, 0x6A, 0x00, 0x6A, 0x0F, 0x56, 0xE8, 0x55, 0x58, 0xFF, 0xFF, 0x8B, 0xC8, 0xE8, 0xCE, 0x58, 0xFF, 0xFF, 0xEB, 0x21, 0x6A, 0x0F, 0x56, 0xE8, 0x44, 0x58, 0xFF, 0xFF, 0x8B, 0xC8, 0xE8, 0x3D, 0x55, 0xFF, 0xFF, 0x39, 0x35, 0xF8, 0x95, 0x55, 0x00, 0x75, 0x0A, 0xC7, 0x05, 0xF8, 0x95, 0x55, 0x00, 0x00, 0x00, 0x00, 0x00, 0x53, 0x8B, 0xCE, 0xE8, 0x43, 0xFE, 0xFF, 0xFF, 0x8B, 0x16, 0x8B, 0x42, 0x24, 0x53, 0x8B, 0xCE, 0xFF, 0xD0, 0x5E, 0x5B, 0xC2, 0x04, 0x00 };
+static const unsigned char kPin_scene_active_write[] = { 0x8B, 0x46, 0x04, 0x88, 0x18 };
 
 static const VF2Pin VF2_PINS[] = {
-    { "chance_entry", 0x4A0810u, 8u, kPin_chance_entry },
-    { "chance_tail", 0x4A08AAu, 33u, kPin_chance_tail },
-    { "chance_caller", 0x49F5DDu, 36u, kPin_chance_caller },
-    { "chance_failed_branch", 0x49F601u, 6u, kPin_chance_failed_branch },
-    { "cooldown_block", 0x49F6C4u, 33u, kPin_cooldown_block },
-    { "cooldown_store", 0x49F6DFu, 6u, kPin_cooldown_store },
-    { "next_generation", 0x48FF70u, 66u, kPin_next_generation },
-    { "count_surviving_children", 0x490080u, 102u, kPin_count_surviving_children },
-    { "get_villager", 0x498CB0u, 29u, kPin_get_villager },
-    { "get_random", 0x403F70u, 16u, kPin_get_random },
-    { "game_state_get", 0x42AC41u, 7u, kPin_game_state_get },
-    { "next_generation_call_430681", 0x430681u, 5u, kPin_next_generation_call_430681 },
-    { "next_generation_call_430db8", 0x430DB8u, 5u, kPin_next_generation_call_430db8 },
-    { "next_generation_call_43c0bd", 0x43C0BDu, 5u, kPin_next_generation_call_43c0bd },
-    { "next_generation_call_4407dc", 0x4407DCu, 5u, kPin_next_generation_call_4407dc },
+    { "chance_entry", 0x4A0810u, 8u, kPin_chance_entry, VF2_MODULE_OLDER_PREGNANCIES },
+    { "chance_tail", 0x4A08AAu, 33u, kPin_chance_tail, VF2_MODULE_OLDER_PREGNANCIES },
+    { "chance_caller", 0x49F5DDu, 36u, kPin_chance_caller, VF2_MODULE_OLDER_PREGNANCIES },
+    { "chance_failed_branch", 0x49F601u, 6u, kPin_chance_failed_branch, VF2_MODULE_OLDER_PREGNANCIES },
+    { "cooldown_block", 0x49F6C4u, 33u, kPin_cooldown_block, VF2_MODULE_OLDER_PREGNANCIES },
+    { "cooldown_store", 0x49F6DFu, 6u, kPin_cooldown_store, VF2_MODULE_OLDER_PREGNANCIES },
+    { "next_generation", 0x48FF70u, 66u, kPin_next_generation, VF2_MODULE_OLDER_PREGNANCIES },
+    { "count_surviving_children", 0x490080u, 102u, kPin_count_surviving_children, VF2_MODULE_OLDER_PREGNANCIES },
+    { "get_villager", 0x498CB0u, 29u, kPin_get_villager, VF2_MODULE_OLDER_PREGNANCIES },
+    { "get_random", 0x403F70u, 16u, kPin_get_random, VF2_MODULE_OLDER_PREGNANCIES },
+    { "game_state_get", 0x42AC41u, 7u, kPin_game_state_get, VF2_MODULE_CORE },
+    { "next_generation_call_430681", 0x430681u, 5u, kPin_next_generation_call_430681, VF2_MODULE_OLDER_PREGNANCIES },
+    { "next_generation_call_430db8", 0x430DB8u, 5u, kPin_next_generation_call_430db8, VF2_MODULE_OLDER_PREGNANCIES },
+    { "next_generation_call_43c0bd", 0x43C0BDu, 5u, kPin_next_generation_call_43c0bd, VF2_MODULE_OLDER_PREGNANCIES },
+    { "next_generation_call_4407dc", 0x4407DCu, 5u, kPin_next_generation_call_4407dc, VF2_MODULE_OLDER_PREGNANCIES },
+    { "scene_set_active", 0x40D1D0u, 92u, kPin_scene_set_active, VF2_MODULE_SCENE_NULL_GUARD },
+    { "scene_active_write", 0x40D1DAu, 5u, kPin_scene_active_write, VF2_MODULE_SCENE_NULL_GUARD },
 };
