@@ -365,3 +365,219 @@ static void RunMortalityScenarios() {
         Out("{\"mortality\": %d, \"rows\": [%s]}", groups, rows);
     }
 }
+
+// ------------------------------------------------------------ event_collectable_slot_replacement
+// The three patched `call Add` sites are reached through the copied stock
+// event code (CEventTheNeighborCollectible::ImpactGame, CEventTheBugWhisperer::
+// ImpactGame) and through the thunk each rel32 now points at. The native Add
+// runs for real when the carrying is explicit (the Bug Whisperer path) and is
+// a recorder for the random-carrying path (Neighbor Collectible), which needs
+// the game world; the recorder either activates a slot the way the native tail
+// does or gives up like the native random path can.
+static unsigned char gOriginalAdd[5];
+static int gAddMode;   // 0: the real native Add; 1: recorder that activates; 2: recorder that gives up
+static int gAddFakeCalls;
+static void __fastcall FakeCollectableAdd(void *item, void *, int carrying, int x, int y, int force) {  // ret 10h
+    gAddFakeCalls++;
+    if (gAddMode != 1) return;
+    unsigned char *base = (unsigned char *)0x55A620 + 0x34C;
+    int slot = 0;
+    while (slot < 2 && base[slot * 0x1C] && !(force & 0xFF)) slot++;
+    if (slot == 2) return;
+    unsigned char *s = base + slot * 0x1C;
+    s[0] = 1;
+    *(int *)(s + 4) = carrying;
+    *(unsigned *)(s + 8) = gClock + 0x78;
+    *(int *)(s + 0xC) = x;
+    *(int *)(s + 0x10) = y;
+    *(int *)(s + 0x14) = -1;
+}
+static void __fastcall FakeBugWhispererTimer(void *, void *, float, int) {}  // 0x428050, ret 8
+
+static void CollectableSelectMode(int mode) {
+    DWORD old;
+    if (mode == 0) {
+        VirtualProtect((void *)0x415090, 5, PAGE_EXECUTE_READWRITE, &old);
+        memcpy((void *)0x415090, gOriginalAdd, 5);
+        VirtualProtect((void *)0x415090, 5, old, &old);
+        FlushInstructionCache(GetCurrentProcess(), (void *)0x415090, 5);
+    } else {
+        WriteJmp(0x415090, (void *)&FakeCollectableAdd);
+    }
+    gAddMode = mode;
+}
+
+struct CSlot { int active; int carrying; unsigned stamp; int x; int y; int picked; };
+
+static void SetCollectSlot(int slot, const CSlot &c) {
+    unsigned char *s = (unsigned char *)0x55A620 + 0x34C + slot * 0x1C;
+    memset(s, 0, 0x1C);
+    s[0] = (unsigned char)c.active;
+    *(int *)(s + 4) = c.carrying;
+    *(unsigned *)(s + 8) = c.stamp;
+    *(int *)(s + 0xC) = c.x;
+    *(int *)(s + 0x10) = c.y;
+    *(int *)(s + 0x14) = c.picked;
+}
+
+static int SlotsJson(char *dst, int cap) {
+    int len = 0;
+    len += _snprintf_s(dst + len, cap - len, _TRUNCATE, "[");
+    for (int slot = 0; slot < 2; ++slot) {
+        unsigned char *s = (unsigned char *)0x55A620 + 0x34C + slot * 0x1C;
+        len += _snprintf_s(dst + len, cap - len, _TRUNCATE, "%s[%d, %d, %u, %d, %d, %d]", slot ? ", " : "", s[0],
+                           *(int *)(s + 4), *(unsigned *)(s + 8), *(int *)(s + 0xC), *(int *)(s + 0x10),
+                           *(int *)(s + 0x14));
+    }
+    len += _snprintf_s(dst + len, cap - len, _TRUNCATE, "]");
+    return len;
+}
+
+static int CallAddThunk(unsigned thunk, int carrying, int x, int y, int force) {
+    unsigned before = 0, after = 0;
+    __asm {
+        mov before, esp
+        push force
+        push y
+        push x
+        push carrying
+        mov ecx, 0x55A620
+        mov eax, thunk
+        call eax
+        mov after, esp
+    }
+    return before == after ? 1 : 0;
+}
+
+static void PrintCollectRow(const char *kind, const char *name, int clock, const char *in, int a, int b, int c, int d,
+                            int espOk) {
+    char out[400];
+    SlotsJson(out, sizeof out);
+    Out("{\"collect\": \"%s:%s\", \"mode\": %d, \"clock\": %d, \"op\": [%d, %d, %d, %d], \"in\": %s, \"out\": %s, "
+        "\"esp_ok\": %d, \"fake_calls\": %d}",
+        kind, name, gAddMode, clock, a, b, c, d, in, out, espOk, gAddFakeCalls);
+}
+
+static CSlot CollectKind(int slot, int kind, unsigned now) {
+    unsigned stamp = now + 0x78;
+    CSlot c = { 1, 0x60 + slot * 8 + kind, 0, 11 + slot, 22 + slot, -1 };
+    switch (kind) {
+    case 0: c.active = 0; c.carrying = 0; c.x = c.y = 0; break;               // free
+    case 1: c.stamp = stamp - 50; break;                                      // unpicked, older
+    case 2: c.stamp = stamp - 10; break;                                      // unpicked, newer
+    case 3: c.stamp = stamp - 50; c.picked = 5; break;                        // picked, older
+    case 4: c.stamp = stamp - 10; c.picked = 5; break;                        // picked, newer
+    case 5: c.stamp = stamp; break;                                           // unpicked, stamped this very second
+    }
+    return c;
+}
+
+static void RunCollectableScenarios() {
+    memcpy(gOriginalAdd, (void *)0x415090, 5);
+    static unsigned char scratchState[0x26000];
+    *(unsigned char **)0x558FC0 = scratchState;   // theGameState::Get()
+    WriteJmp(0x403FF0, (void *)&FakeSeconds);     // the game clock
+    WriteJmp(0x428050, (void *)&FakeBugWhispererTimer);
+    unsigned thunk = 0x41AF0E + 5 + *(int *)(0x41AF0E + 1);
+    unsigned thunkNeighbor = 0x419A2F + 5 + *(int *)(0x419A2F + 1);
+    unsigned thunk2 = 0x41AF4B + 5 + *(int *)(0x41AF4B + 1);
+    Out("{\"collect_targets\": [%u, %u, %u]}", thunkNeighbor, thunk, thunk2);
+    char in[400];
+    const int T = 5000;
+
+    // ---- plain (explicit carrying) adds through the thunk, the real native Add
+    CollectableSelectMode(0);
+    for (int prior = 0; prior < 3; ++prior)
+        for (int k0 = 0; k0 < 6; ++k0)
+            for (int k1 = 0; k1 < 6; ++k1)
+                for (int force = 0; force < 2; ++force) {
+                    gClock = T;
+                    SetCollectSlot(0, CollectKind(0, 0, T));
+                    SetCollectSlot(1, CollectKind(1, 0, T));
+                    if (prior == 2) SetCollectSlot(0, CollectKind(0, 1, T));
+                    if (prior) {
+                        SlotsJson(in, sizeof in);
+                        int ok = CallAddThunk(thunk, 0x70 + prior, 5, 6, 0);
+                        PrintCollectRow("prior", "burst", T, in, 0x70 + prior, 5, 6, 0, ok);
+                    }
+                    // Keep the slot the prior spawn landed in when its kind is "stamped this second".
+                    unsigned char saved[2][0x1C];
+                    memcpy(saved[0], (void *)(0x55A620 + 0x34C), 0x1C);
+                    memcpy(saved[1], (void *)(0x55A620 + 0x34C + 0x1C), 0x1C);
+                    int landed = prior == 1 ? 0 : prior == 2 ? 1 : -1;
+                    if (!(landed == 0 && k0 == 5)) SetCollectSlot(0, CollectKind(0, k0, T));
+                    else memcpy((void *)(0x55A620 + 0x34C), saved[0], 0x1C);
+                    if (!(landed == 1 && k1 == 5)) SetCollectSlot(1, CollectKind(1, k1, T));
+                    else memcpy((void *)(0x55A620 + 0x34C + 0x1C), saved[1], 0x1C);
+                    SlotsJson(in, sizeof in);
+                    int ok = CallAddThunk(thunk, 0x55, 7, 9, force);
+                    char name[64];
+                    _snprintf_s(name, sizeof name, _TRUNCATE, "p%d_k%d%d_f%d", prior, k0, k1, force);
+                    PrintCollectRow("add", name, T, in, 0x55, 7, 9, force, ok);
+                }
+
+    // ---- a burst whose stamp is no longer "this second"
+    {
+        gClock = T;
+        SetCollectSlot(0, CollectKind(0, 0, T));
+        SetCollectSlot(1, CollectKind(1, 0, T));
+        SlotsJson(in, sizeof in);
+        int ok = CallAddThunk(thunk, 0x71, 1, 2, 0);
+        PrintCollectRow("prior", "stale_burst", T, in, 0x71, 1, 2, 0, ok);
+        SetCollectSlot(1, CollectKind(1, 1, T));
+        gClock = T + 200;                                       // the burst is over
+        SlotsJson(in, sizeof in);
+        ok = CallAddThunk(thunk, 0x72, 3, 4, 0);
+        PrintCollectRow("add", "stale_burst", T + 200, in, 0x72, 3, 4, 0, ok);
+    }
+
+    // ---- the Bug Whisperer event itself (two Adds, explicit carrying, the real native Add)
+    for (int arg = 0; arg < 2; ++arg)
+        for (int k0 = 0; k0 < 5; ++k0)
+            for (int k1 = 0; k1 < 5; k1 += (k0 == 0 ? 1 : 2)) {
+                gClock = T;
+                gRandomValue = 3;
+                SetCollectSlot(0, CollectKind(0, k0, T));
+                SetCollectSlot(1, CollectKind(1, k1, T));
+                SlotsJson(in, sizeof in);
+                unsigned before = 0, after = 0;
+                __asm {
+                    mov before, esp
+                    push arg
+                    mov ecx, 0x5680C8
+                    mov eax, 0x41AE90
+                    call eax
+                    mov after, esp
+                }
+                char name[64];
+                _snprintf_s(name, sizeof name, _TRUNCATE, "arg%d_k%d%d", arg, k0, k1);
+                PrintCollectRow("bug_whisperer", name, T, in, 3, 0, 0, arg, before == after ? 1 : 0);
+            }
+
+    // ---- the Neighbor Collectible event (random carrying, forced): a recorder as the native Add
+    for (int mode = 1; mode <= 2; ++mode) {
+        CollectableSelectMode(mode);
+        for (int k0 = 0; k0 < 6; ++k0)
+            for (int k1 = 0; k1 < 6; ++k1) {
+                gClock = T;
+                gAddFakeCalls = 0;
+                SetCollectSlot(0, CollectKind(0, k0, T));
+                SetCollectSlot(1, CollectKind(1, k1, T));
+                SlotsJson(in, sizeof in);
+                unsigned before = 0, after = 0;
+                __asm {
+                    mov before, esp
+                    mov ecx, offset gMenu
+                    mov eax, 0x419A20
+                    call eax
+                    mov after, esp
+                }
+                char name[64];
+                _snprintf_s(name, sizeof name, _TRUNCATE, "m%d_k%d%d", mode, k0, k1);
+                PrintCollectRow("neighbor", name, T, in, -1, 0, 0, 1, before == after ? 1 : 0);
+            }
+    }
+    CollectableSelectMode(0);
+    for (int slot = 0; slot < 2; ++slot) SetCollectSlot(slot, CollectKind(slot, 0, T));
+    *(unsigned char **)0x558FC0 = 0;
+}

@@ -27,6 +27,7 @@
 //   fix_vanilla_bugs   Fix Vanilla Game Bugs (.vf2bugs): Pause Yes, title hotspot
 //   career_room_goals  career-room goals rebuilt from owned upgrades on load
 //   time_controls      "Time Controls" dialog from the store screen (new; vf2fun_time.inc)
+//   event_collectable_slot_replacement  island events replace the oldest unpicked collectable
 //   older_villager_mortality  the old-age death curve (.vf2mort; the mortality half)
 //
 // The VF2Fun_Status export is the DLL's install-status block (documented
@@ -749,6 +750,164 @@ static void PlanCareerRoomGoals(Plan &plan) {
     plan.Retarget(VF2_TECH_LOAD_STATE_CALL, (const void *)&TechLoadStateAndReconcile);
 }
 
+// ================================================================ module: event_collectable_slot_replacement
+// B200 patch_event_collectable_slot_replacement. CCollectableItem keeps exactly
+// two event slots, at +34Ch and +368h (1Ch apart: +0 active, +8 spawn stamp,
+// +14h the villager walking to it, -1 none). Add(carrying, point, false) takes
+// the first free slot and RETURNS WITHOUT SPAWNING when both are busy;
+// Add(.., true) always writes slot 0. Natural spawns keep the pair busy most of
+// the time, so the native events that spawn collectables (Bug Whisperer twice,
+// Neighbor Collectible once) mostly spawned nothing. Owner decision: an EVENT
+// spawn replaces the oldest unpicked collectable. The three native call sites
+// go through the thunk below; everything else (Update's natural spawns, the
+// native Add itself) is untouched. This is B200's VF2EventCollectableAddImpl
+// and helpers, ported function for function (the tests compare their text).
+static bool EventCollectableSlotReplacement;
+
+typedef void (__thiscall *CollectableAddFn)(void *item, int carrying, int x, int y, int force);
+typedef void (__thiscall *CollectableRemoveFn)(void *item, int slot);
+typedef void *(__cdecl *GameStateGetFn)();
+typedef unsigned (__thiscall *SecondsFromGameStartFn)(void *gameState);
+static const CollectableAddFn NativeCollectableAdd = (CollectableAddFn)VF2_COLLECTABLE_ADD;
+static const CollectableRemoveFn NativeCollectableRemove = (CollectableRemoveFn)VF2_COLLECTABLE_REMOVE;
+static const GameStateGetFn NativeGameStateGet = (GameStateGetFn)VF2_GAME_STATE_GET;
+static const SecondsFromGameStartFn NativeSecondsFromGameStart = (SecondsFromGameStartFn)VF2_GAME_SECONDS_FROM_START;
+static_assert(VF2_COLLECTABLE_SLOT_BASE == 0x34C && VF2_COLLECTABLE_SLOT_STRIDE == 0x1C &&
+                  VF2_COLLECTABLE_STAMP_OFFSET == 8 && VF2_COLLECTABLE_PICKED_OFFSET == 0x14 &&
+                  VF2_COLLECTABLE_STAMP_DELAY == 0x78,
+              "the collectable slot layout follows the sites module");
+
+static unsigned char *EventCollectableSlot(int slot) {
+    return (unsigned char *)VF2_COLLECTABLE_ITEM + 0x34C + slot * 0x1C;
+}
+
+static bool EventCollectableSlotBusy(int slot) {
+    return EventCollectableSlot(slot)[0] != 0;
+}
+
+static bool EventCollectableSlotPicked(int slot) {
+    return *(int *)(EventCollectableSlot(slot) + 0x14) != -1;
+}
+
+static unsigned int EventCollectableSlotStamp(int slot) {
+    return *(unsigned int *)(EventCollectableSlot(slot) + 0x08);
+}
+
+// The slot and spawn stamp of the item the previous event spawn produced.
+// The Bug Whisperer spawns TWICE back to back; an item this burst just spawned
+// is never sacrificed. "This burst" is bounded by the game clock: the record
+// must still carry the stamp of the CURRENT game second (Add writes seconds +
+// 0x78 at activation).
+static int gLastEventSpawnSlot = -1;
+static unsigned int gLastEventSpawnStamp = 0;
+
+static unsigned int EventCollectableStampNow() {
+    void *clock = NativeGameStateGet();
+    return clock ? NativeSecondsFromGameStart(clock) + 0x78 : 0;
+}
+
+static bool EventCollectableSlotFreshFromBurst(int slot) {
+    if (gLastEventSpawnSlot != slot || !EventCollectableSlotBusy(slot)) return false;
+    unsigned int const stamp = EventCollectableSlotStamp(slot);
+    return stamp == gLastEventSpawnStamp && stamp == EventCollectableStampNow();
+}
+
+// The slot an event spawn may take over when both are busy: never the item
+// this burst just spawned, else the one nobody is walking to, else the older
+// of the two.
+static int EventCollectableVictim() {
+    bool const fresh0 = EventCollectableSlotFreshFromBurst(0);
+    bool const fresh1 = EventCollectableSlotFreshFromBurst(1);
+    if (fresh0 != fresh1) return fresh0 ? 1 : 0;
+    bool const picked0 = EventCollectableSlotPicked(0);
+    bool const picked1 = EventCollectableSlotPicked(1);
+    if (picked0 != picked1) return picked0 ? 1 : 0;
+    return EventCollectableSlotStamp(1) < EventCollectableSlotStamp(0) ? 1 : 0;
+}
+
+// The native force path only ever writes slot 0, so when slot 0 must survive
+// its record is moved to slot 1 first.
+static void MoveEventCollectableSlot(int from, int to) {
+    unsigned char *source = EventCollectableSlot(from);
+    unsigned char *dest = EventCollectableSlot(to);
+    for (int i = 0; i < 0x1C; ++i) dest[i] = source[i];
+    source[0] = 0;
+}
+
+// A sacrificed record is kept aside until the native spawn has actually
+// activated: the forced RANDOM path (Neighbor Collectible) can give up after a
+// thousand invalid spawn positions and return without activating, and losing a
+// collectable for nothing is exactly what this helper exists to end.
+static void CopyEventCollectableSlot(int slot, unsigned char *dest) {
+    unsigned char *source = EventCollectableSlot(slot);
+    for (int i = 0; i < 0x1C; ++i) dest[i] = source[i];
+}
+
+static void RestoreEventCollectableSlot(int slot, unsigned char const *source) {
+    unsigned char *dest = EventCollectableSlot(slot);
+    for (int i = 0; i < 0x1C; ++i) dest[i] = source[i];
+}
+
+static void __cdecl EventCollectableAddImpl(void *item, int carrying, int x, int y, int force) {
+    bool const busy0 = EventCollectableSlotBusy(0);
+    bool const busy1 = EventCollectableSlotBusy(1);
+    // The slot that must hold the new item afterwards, and the record that
+    // was sacrificed to make room (none when a slot was free).
+    int freed = -1;
+    unsigned char sacrificed[0x1C];
+    if (force) {
+        if (busy0 && !busy1) {
+            MoveEventCollectableSlot(0, 1);
+        } else if (busy0 && busy1) {
+            int const victim = EventCollectableVictim();
+            CopyEventCollectableSlot(victim, sacrificed);
+            freed = 0;
+            if (victim == 1) {
+                MoveEventCollectableSlot(0, 1);
+            } else {
+                NativeCollectableRemove(item, 0);
+            }
+        }
+    } else if (busy0 && busy1) {
+        freed = EventCollectableVictim();
+        CopyEventCollectableSlot(freed, sacrificed);
+        NativeCollectableRemove(item, freed);
+    }
+    // Where the native spawn lands: the force path always writes slot 0; the
+    // plain path takes the first free slot, which is the one just freed or,
+    // when nothing was sacrificed, the first slot that was free.
+    int const landed = force ? 0 : (freed >= 0 ? freed : (busy0 ? 1 : 0));
+    NativeCollectableAdd(item, carrying, x, y, force != 0);
+    if (EventCollectableSlotBusy(landed)) {
+        gLastEventSpawnSlot = landed;
+        gLastEventSpawnStamp = EventCollectableSlotStamp(landed);
+    } else if (freed >= 0) {
+        RestoreEventCollectableSlot(freed, sacrificed);
+    }
+}
+
+// The __thiscall shape the three native call sites already use: ecx = the
+// CollectableItem, then carrying, point.x, point.y, force on the stack (the
+// point is two words). Forwards ecx and the four words to the cdecl body and
+// pops the caller's 16 bytes exactly as Add does.
+static __declspec(naked) void EventCollectableAddThunk() {
+    __asm {
+        push dword ptr [esp + 16]
+        push dword ptr [esp + 16]
+        push dword ptr [esp + 16]
+        push dword ptr [esp + 16]
+        push ecx
+        call EventCollectableAddImpl
+        add esp, 20
+        ret 16
+    }
+}
+
+static void PlanEventCollectables(Plan &plan) {
+    for (size_t i = 0; i < sizeof(VF2_EVENT_COLLECTABLE_ADD_CALLSITES) / sizeof(unsigned); ++i)
+        plan.Retarget(VF2_EVENT_COLLECTABLE_ADD_CALLSITES[i], (const void *)&EventCollectableAddThunk);
+}
+
 // ================================================================ module: older_villager_mortality
 // B200 patch_older_villager_mortality (.vf2mort), the mortality half. In
 // CVillagerManager::AllVillagersRealtimePhysiologyAndProductivityUpkeep the
@@ -830,6 +989,7 @@ static const ModuleDef Modules[] = {
     { PlanFixVanillaBugs, &FixVanillaGameBugs },       // VF2_MODULE_FIX_VANILLA_BUGS
     { PlanCareerRoomGoals, &CareerRoomGoalReconciliation },  // VF2_MODULE_CAREER_ROOM_GOALS
     { PlanTimeControls, &TimeControls },               // VF2_MODULE_TIME_CONTROLS
+    { PlanEventCollectables, &EventCollectableSlotReplacement },  // VF2_MODULE_EVENT_COLLECTABLE_SLOT_REPLACEMENT
     { PlanOlderVillagerMortality, &OlderVillagerMortality },  // VF2_MODULE_OLDER_VILLAGER_MORTALITY
 };
 static_assert(sizeof(Modules) / sizeof(Modules[0]) == VF2_MODULE_COUNT, "module table out of step with the sites");

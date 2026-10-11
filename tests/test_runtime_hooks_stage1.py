@@ -1455,3 +1455,215 @@ def test_older_mortality_writes_one_site_and_is_independent(built):
     assert jmp.mnemonic == "jmp" and status["dll_lo"] <= jmp.operands[0].imm < status["dll_hi"]
     assert raw[5:] == b"\x90" * 4
     assert _one(rows, "wx_regions")["wx_regions"] == 0
+
+
+# =============================================================== event_collectable_slot_replacement
+def _collect_rows(rows):
+    return [r for r in rows if "collect" in r]
+
+
+class _CollectModel:
+    """B200's VF2EventCollectableAddImpl (work/patch_mobile_furniture_pack.py),
+    re-written independently, on top of a model of the native Add. Slots are
+    [active, carrying, stamp, x, y, picked]; state persists across calls like
+    the DLL's globals do, so rows are replayed in the order the harness made them."""
+
+    def __init__(self):
+        self.last_slot, self.last_stamp = -1, 0
+
+    @staticmethod
+    def native_add(slots, now, mode, carrying, x, y, force):
+        if mode == 2:
+            return  # the native random path gave up
+        i = 0
+        while i < 2 and slots[i][0] and not force:
+            i += 1
+        if i == 2:
+            return  # both busy, not forced: the native Add spawns nothing
+        slots[i] = [1, carrying, now + 0x78, x, y, -1]
+
+    def impl(self, slots, now, mode, carrying, x, y, force):
+        busy = [bool(slots[0][0]), bool(slots[1][0])]
+
+        def fresh(i):
+            if self.last_slot != i or not slots[i][0]:
+                return False
+            return slots[i][2] == self.last_stamp and slots[i][2] == now + 0x78
+
+        def victim():
+            f0, f1 = fresh(0), fresh(1)
+            if f0 != f1:
+                return 1 if f0 else 0
+            p0, p1 = slots[0][5] != -1, slots[1][5] != -1
+            if p0 != p1:
+                return 1 if p0 else 0
+            return 1 if slots[1][2] < slots[0][2] else 0
+
+        def move(src, dst):
+            slots[dst] = list(slots[src])
+            slots[src][0] = 0
+
+        freed, sacrificed = -1, None
+        if force:
+            if busy[0] and not busy[1]:
+                move(0, 1)
+            elif busy[0] and busy[1]:
+                v = victim()
+                sacrificed = list(slots[v])
+                freed = 0
+                if v == 1:
+                    move(0, 1)
+                else:
+                    slots[0][0] = 0
+        elif busy[0] and busy[1]:
+            freed = victim()
+            sacrificed = list(slots[freed])
+            slots[freed][0] = 0
+        landed = 0 if force else (freed if freed >= 0 else (1 if busy[0] else 0))
+        self.native_add(slots, now, mode, carrying, x, y, force)
+        if slots[landed][0]:
+            self.last_slot, self.last_stamp = landed, slots[landed][2]
+        elif freed >= 0:
+            slots[freed] = sacrificed
+
+    def expected(self, row, installed):
+        slots = [list(s) for s in row["in"]]
+        kind = row["collect"].split(":")[0]
+        a, b, c, d = row["op"]
+        if kind in ("add", "prior"):
+            ops = [(a, b, c, d)]
+        elif kind == "bug_whisperer":
+            ops = [(0x4F + a, 0x4BC + a, 0x725 + a, 0)] * 2 if d == 0 else []  # every GetRandom returns `a`
+        else:
+            ops = [(-1, 0, 0, 1)]  # Neighbor Collectible: random carrying, forced
+        for op in ops:
+            if installed:
+                self.impl(slots, row["clock"], row["mode"], *op)
+            else:
+                self.native_add(slots, row["clock"], row["mode"], *op)
+        return slots
+
+
+def test_collectable_replay_helpers_are_b200s_text():
+    b200 = GENERATOR.read_text(encoding="utf-8")
+    dll = DLL_SOURCE.read_text(encoding="utf-8")
+
+    def norm(text):
+        text = re.sub(r"reinterpret_cast<([^>]*)>", r"(\1)", text)
+        text = re.sub(r"CCollectableItem \*collectables = [^;]*;", "", text)
+        text = re.sub(r"collectables->Remove\(", "NativeCollectableRemove(item,", text)
+        text = text.replace("ldwPoint point = {x, y};", "")
+        text = text.replace("collectables->Add((ECarrying)carrying, point, force != 0);",
+                            "NativeCollectableAdd(item, carrying, x, y, force != 0);")
+        text = text.replace("kVF2", "k").replace("gVF2", "g").replace("VF2", "")
+        return _normalise(text)
+
+    for name, b_sig, d_sig in (
+        ("busy", r"static bool VF2EventCollectableSlotBusy\(", r"static bool EventCollectableSlotBusy\("),
+        ("picked", r"static bool VF2EventCollectableSlotPicked\(", r"static bool EventCollectableSlotPicked\("),
+        ("stamp", r"static unsigned int VF2EventCollectableSlotStamp\(", r"static unsigned int EventCollectableSlotStamp\("),
+        ("fresh", r"static bool VF2EventCollectableSlotFreshFromBurst\(", r"static bool EventCollectableSlotFreshFromBurst\("),
+        ("victim", r"static int VF2EventCollectableVictim\(", r"static int EventCollectableVictim\("),
+        ("move", r"static void VF2MoveEventCollectableSlot\(", r"static void MoveEventCollectableSlot\("),
+        ("copy", r"static void VF2CopyEventCollectableSlot\(", r"static void CopyEventCollectableSlot\("),
+        ("restore", r"static void VF2RestoreEventCollectableSlot\(", r"static void RestoreEventCollectableSlot\("),
+        ("impl", r'extern "C" void __cdecl VF2EventCollectableAddImpl\(', r"static void __cdecl EventCollectableAddImpl\("),
+    ):
+        assert norm(_c_function(b200, b_sig)) == norm(_c_function(dll, d_sig)), name
+    # The slot address and the clock stamp (written with casts in B200).
+    slot = _normalise(_c_function(b200, r"static unsigned char \*VF2EventCollectableSlot\("))
+    assert "+0x34C+slot*0x1C" in slot
+    assert "+0x34C+slot*0x1C" in _normalise(_c_function(dll, r"static unsigned char \*EventCollectableSlot\("))
+    now = _normalise(_c_function(b200, r"static unsigned int VF2EventCollectableStampNow\("))
+    assert "GetSecondsFromGameStart()+0x78:0" in now
+    assert "NativeSecondsFromGameStart(clock)+0x78:0" in _normalise(
+        _c_function(dll, r"static unsigned int EventCollectableStampNow\("))
+    # The thunk: ecx and the four stack words forwarded, 16 bytes popped.
+    b200_thunk = _normalise(_c_function(b200, r'extern "C" __declspec\(naked\) void VF2EventCollectableAdd\(\)'))
+    dll_thunk = _normalise(_c_function(dll, r"static __declspec\(naked\) void EventCollectableAddThunk\(\)"))
+    assert b200_thunk == dll_thunk
+    assert dll_thunk.count("pushdwordptr[esp+16]") == 4
+
+
+def test_collectable_sites_are_proved_and_the_events_are_the_rtti_named_classes():
+    facts = gen_sites.validate(vanilla_bytes())
+    assert any("direct callers of 0x415090: 0x41554d, 0x419a2f, 0x41af0e, 0x41af4b" in f for f in facts)
+    vanilla = vanilla_bytes()
+    pe = P.PE(vanilla)
+
+    def class_of(vtable):
+        col = struct.unpack_from("<I", vanilla, pe.offset(vtable - 4))[0]
+        td = struct.unpack_from("<I", vanilla, pe.offset(col + 12))[0]
+        at = pe.offset(td + 8)
+        return vanilla[at:vanilla.index(b"\0", at)]
+
+    def slot(vtable, index):
+        return struct.unpack_from("<I", vanilla, pe.offset(vtable + 4 * index))[0]
+
+    assert class_of(0x4E1C6C) == b".?AVCEventTheBugWhisperer@@" and slot(0x4E1C6C, 12) == 0x41AE90
+    assert class_of(0x4E0FF4) == b".?AVCEventTheNeighborCollectible@@" and slot(0x4E0FF4, 13) == 0x419A20
+    # The three retargeted calls are inside those two ImpactGame bodies; the fourth caller
+    # (0x41554D) is CCollectableItem::Update's natural spawn and stays alone, as in B200.
+    assert sorted(S.EVENT_COLLECTABLE_ADD_CALLSITES) == [0x419A2F, 0x41AF0E, 0x41AF4B]
+    assert S.COLLECTABLE_UPDATE_ADD_CALL not in S.EVENT_COLLECTABLE_ADD_CALLSITES
+    b200 = GENERATOR.read_text(encoding="utf-8")
+    assert re.search(r'\("\?ImpactGame@CEventTheBugWhisperer@@UAEXH@Z", 0x7D\),\s*\("\?ImpactGame@CEventTheBugWhisperer@@UAEXH@Z", 0xB8\),\s*'
+                     r'\("\?ImpactGame@CEventTheNeighborCollectible@@UAEXXZ", 0x0E\)', b200)
+
+
+def test_collectable_hooks_follow_the_b200_policy(on, off):
+    for rows, installed in ((on, True), (off, False)):
+        model = _CollectModel()
+        table = _collect_rows(rows)
+        assert len(table) > 400
+        changed = 0
+        for row in table:
+            assert row["esp_ok"] == 1, row["collect"]
+            assert model.expected(row, installed) == row["out"], (installed, row)
+            changed += row["out"] != row["in"]
+        assert changed > 100
+    # Installed, an event spawn with both slots busy replaces something; stock does nothing.
+    a = {r["collect"]: r for r in _collect_rows(on)}
+    b = {r["collect"]: r for r in _collect_rows(off)}
+    both_busy = [k for k in a if k.startswith("add:p0_k") and k.endswith("_f0") and a[k]["in"][0][0] and a[k]["in"][1][0]]
+    assert both_busy and all(b[k]["out"] == b[k]["in"] and a[k]["out"] != a[k]["in"] for k in both_busy)
+    # Nothing but the three event call sites changed: with a free slot both builds spawn the same.
+    free = [k for k in a if k.startswith("add:p0_k") and k.endswith("_f0") and not (a[k]["in"][0][0] and a[k]["in"][1][0])]
+    assert free and all(a[k]["out"] == b[k]["out"] for k in free)
+    # The Bug Whisperer's second spawn never sacrifices its first (a fresh item is protected).
+    bw = a["bug_whisperer:arg0_k22"]  # both busy, unpicked: the event nets two new items
+    assert sorted(s[1] for s in bw["out"]) == [0x4F + 3, 0x4F + 3]
+    assert b["bug_whisperer:arg0_k22"]["out"] == b["bug_whisperer:arg0_k22"]["in"]  # stock: nothing spawns
+    assert a["bug_whisperer:arg1_k22"]["out"] == a["bug_whisperer:arg1_k22"]["in"]  # another event argument: untouched
+    # The call-site targets: the DLL's thunk when installed, the native Add when not.
+    t_on = _one(on, "collect_targets")
+    t_off = _one(off, "collect_targets")
+    assert t_off == [S.COLLECTABLE_ADD] * 3 and len(set(t_on)) == 1 and t_on[0] != S.COLLECTABLE_ADD
+
+
+def test_collectable_sacrificed_record_comes_back_when_the_native_spawn_gives_up(on):
+    rows = {r["collect"]: r for r in _collect_rows(on)}
+    # Native random path gave up (mode 2), both slots busy, forced: nothing may be lost.
+    for k0 in range(6):
+        for k1 in range(6):
+            r = rows[f"neighbor:m2_k{k0}{k1}"]
+            if r["in"][0][0] and r["in"][1][0]:
+                assert sorted(map(tuple, r["out"])) == sorted(map(tuple, r["in"])), r
+    # And when it activates (mode 1) the new item is in slot 0 with one old record kept.
+    r = rows["neighbor:m1_k11"]
+    assert r["out"][0][1] == -1 and r["out"][0][0] == 1 and r["out"][1][1] in (0x61, 0x69)
+
+
+def test_collectable_module_writes_exactly_its_three_calls(built):
+    rows = _harness(built, {k.ini_key: k.key == "event_collectable_slot_replacement" for k in S.MODULES}, tag="-coll")
+    status = _one(rows, "status")
+    idx = [m.key for m in S.MODULES].index("event_collectable_slot_replacement")
+    assert status["installed"] == _module_bit("event_collectable_slot_replacement")
+    assert status["write_masks"][idx] == 0b111
+    sites = _sites(rows)
+    md = _md()
+    for va in S.EVENT_COLLECTABLE_ADD_CALLSITES:
+        c = next(md.disasm(bytes.fromhex(sites[va]["bytes"]), va))
+        assert c.mnemonic == "call" and status["dll_lo"] <= c.operands[0].imm < status["dll_hi"]
+    assert S.COLLECTABLE_UPDATE_ADD_CALL not in sites  # the natural spawn is never touched
+    assert _one(rows, "wx_regions")["wx_regions"] == 0

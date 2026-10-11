@@ -80,6 +80,9 @@ MODULES = [
     Module("time_controls", "TimeControls",
            "none: new in the runtime build (the Virtual Families 1 patcher's Time Controls "
            "dialog; B200 has no equivalent, so the default is off)", False),
+    Module("event_collectable_slot_replacement", "EventCollectableSlotReplacement",
+           "patch_event_collectable_slot_replacement (unconditional in B200; the three native "
+           "sites. The fossil email is a mobile island event: static)", True),
     Module("older_villager_mortality", "OlderVillagerMortality",
            "patch_older_villager_mortality (.vf2mort; the mortality half: the longevity-"
            "achievement observer is the static custom-achievements feature)", False),
@@ -1044,6 +1047,118 @@ PINS += [
     ),
 ]
 
+# --------------------------------------------------------------------------
+# event_collectable_slot_replacement -- B200 patch_event_collectable_slot_replacement
+# (unconditional in B200). CCollectableItem keeps two event slots; Add returns
+# without spawning when both are busy (force clear) and the native events
+# (Bug Whisperer x2, Neighbor Collectible) therefore often spawned nothing.
+# B200 retargets those three `call Add` sites to a thunk that frees the oldest
+# unpicked slot first (owner decision) and then calls the native Add. The
+# fourth caller, CCollectableItem::Update's natural spawn (0x41554D), is left
+# alone, as in B200. The fossil email is a mobile island event: static.
+# --------------------------------------------------------------------------
+COLLECTABLE_ITEM = 0x55A620           # global CollectableItem
+COLLECTABLE_ADD = 0x415090            # CCollectableItem::Add(ECarrying, ldwPoint, bool) thiscall, ret 10h
+COLLECTABLE_REMOVE = 0x413F80         # CCollectableItem::Remove(int slot) thiscall, ret 4
+COLLECTABLE_UPDATE_ADD_CALL = 0x41554D  # the natural spawn in CCollectableItem::Update (not touched)
+EVENT_COLLECTABLE_ADD_CALLSITES = (0x419A2F, 0x41AF0E, 0x41AF4B)
+COLLECTABLE_SLOT_BASE = 0x34C         # two slots, 1Ch apart: +0 active, +8 stamp, +14h picked-by (-1 none)
+COLLECTABLE_SLOT_STRIDE = 0x1C
+COLLECTABLE_STAMP_OFFSET = 8
+COLLECTABLE_PICKED_OFFSET = 0x14
+COLLECTABLE_STAMP_DELAY = 0x78
+GAME_STATE_GET = 0x42AC20             # theGameState::Get() cdecl
+GAME_SECONDS_FROM_START = 0x403FF0    # ldwGameState::GetSecondsFromGameStart() thiscall
+
+PINS += [
+    Pin(
+        "collectable_add_head", 0x415090,
+        "83EC14538BD95633F68D834C03000090803800741A807C242C00751383C60183C01C83FE027CE95E5B83"
+        "C414C210008B44242083F8FF5557742B8B54242C8D0CF5000000002BCE8D3C8B8987500300008B442430"
+        "89975803000089875C030000E9E9010000",
+        "context",
+        "Head of CCollectableItem::Add(ECarrying, ldwPoint, bool) (thiscall, ret 10h; "
+        "the global CollectableItem is 0x55A620): two event slots at this+34Ch and "
+        "+368h (1Ch apart; byte 0 = active). The slot loop takes slot i when it is "
+        "free, OR when `force` (stack arg [esp+2Ch], the 4th) is set -- so force "
+        "always writes slot 0 -- and RETURNS WITHOUT SPAWNING when both are busy and "
+        "force is clear. An explicit carrying (not -1) stores carrying (+350h), x "
+        "(+358h), y (+35Ch) and jumps to the activation at 0x4152DE.",
+        module="event_collectable_slot_replacement",
+    ),
+    Pin(
+        "collectable_add_activate", 0x4152DE,
+        "C6874C03000001E8365901008BC8E8FFECFEFF83C078898754030000C78760030000FFFFFFFF5F5D5E5B"
+        "83C414C21000",
+        "context",
+        "The activation: slot[+0] = 1; stamp [slot+8] = "
+        "theGameState::Get()->GetSecondsFromGameStart() + 78h; picked [slot+14h] = "
+        "-1; ret 10h.",
+        module="event_collectable_slot_replacement",
+    ),
+    Pin(
+        "collectable_remove", 0x413F80,
+        "8B4424048D14C5000000002BD083F8027D0BC684914C03000000C20400C64491CC00C20400",
+        "context",
+        "Whole CCollectableItem::Remove(int slot) (thiscall, ret 4): for slot < 2 "
+        "clears the active byte at this+34Ch + slot*1Ch.",
+        module="event_collectable_slot_replacement",
+    ),
+    Pin(
+        "neighbor_collectible_impact", 0x419A20,
+        "6A0133C95133C0506AFFB920A65500E85CB6FFFFC3",
+        "context",
+        "CEventTheNeighborCollectible::ImpactGame() (vtable 0x4E0FF4 slot 13; RTTI "
+        ".?AVCEventTheNeighborCollectible@@): push 1 (force); push 0; push 0; push -1 "
+        "(random carrying); mov ecx,CollectableItem; call Add; ret.",
+        module="event_collectable_slot_replacement",
+    ),
+    Pin(
+        "neighbor_collectible_add_call", 0x419A2F,
+        "E85CB6FFFF",
+        "retarget",
+        "call CCollectableItem::Add in CEventTheNeighborCollectible::ImpactGame.",
+        module="event_collectable_slot_replacement", target=COLLECTABLE_ADD,
+    ),
+    Pin(
+        "bug_whisperer_impact", 0x41AE90,
+        "837C2404000F85B6000000D905B01C4E00566A0151B9C8805600D91C24E89ED100006A00B9B09D5600E8"
+        "02BD02006A05B9B09D5600E8F6BC02006A07B9B09D5600E8EABC02006A7EE89390FEFF8BF06804010000"
+        "81C625070000E88190FEFF83C4086A0005BC04000056506A0CE86E90FEFF83C40483C04F50B920A65500"
+        "E87DA1FFFF6A7EE85690FEFF8BF0680401000081C625070000E84490FEFF83C4086A0005BC0400005650"
+        "6A0CE83190FEFF83C40483C04F50B920A65500E840A1FFFF5EC20400",
+        "context",
+        "CEventTheBugWhisperer::ImpactGame(int) (vtable 0x4E1C6C slot 12; RTTI "
+        ".?AVCEventTheBugWhisperer@@): for argument 0, sounds, then TWO Add(0x4F + "
+        "GetRandom(12), point, false) calls on CollectableItem (0x41AF0E and "
+        "0x41AF4B).",
+        module="event_collectable_slot_replacement",
+    ),
+    Pin(
+        "bug_whisperer_add_call_1", 0x41AF0E,
+        "E87DA1FFFF",
+        "retarget",
+        "the first Add call in CEventTheBugWhisperer::ImpactGame.",
+        module="event_collectable_slot_replacement", target=COLLECTABLE_ADD,
+    ),
+    Pin(
+        "bug_whisperer_add_call_2", 0x41AF4B,
+        "E840A1FFFF",
+        "retarget",
+        "the second Add call in CEventTheBugWhisperer::ImpactGame.",
+        module="event_collectable_slot_replacement", target=COLLECTABLE_ADD,
+    ),
+    Pin(
+        "game_seconds_from_start", 0x403FF0,
+        "8D4424F883EC0C50E851050C008B0D6CD252008B1568D252008B44240C51",
+        "context",
+        "ldwGameState::GetSecondsFromGameStart() entry (thiscall, no arguments, "
+        "returns the elapsed game seconds in eax): the call Add's activation makes "
+        "after theGameState::Get().",
+        module="event_collectable_slot_replacement",
+    ),
+]
+
 # Byte offsets the branch scan (deliberately over-approximate: every offset
 # counts as an opcode) reports but which are inside another instruction;
 # source -> the start of the function containing it. gen_sites proves each by
@@ -1062,6 +1177,7 @@ EXCLUSIVE_CALLERS = {
     CHANCE_OF_PREGNANCY: (0x49F5FA,),
     TECH_LOAD_STATE: (TECH_LOAD_STATE_CALL,),
     MENU_ACTIVATE_TAIL_TARGET: (MENU_ACTIVATE_TAIL_CALL,),
+    COLLECTABLE_ADD: (COLLECTABLE_UPDATE_ADD_CALL,) + EVENT_COLLECTABLE_ADD_CALLSITES,
 }
 # Functions that must have no absolute (pointer) reference anywhere in the file.
 NO_ABSOLUTE_REFERENCES = (CAN_START_NEXT_GENERATION, CHANCE_OF_PREGNANCY)
