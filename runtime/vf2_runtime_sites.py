@@ -83,14 +83,23 @@ MODULES = [
     Module("scene_null_guard", "SceneSetActiveNullGuard",
            "patch_ldwscene_setactive_null_guard (unconditional in B200)", True),
     Module("fix_vanilla_bugs", "FixVanillaGameBugs",
-           "fix_vanilla_game_bugs (.vf2bugs): pause_yes_idempotent + title_menu_stale_hotspot "
-           "converted; start_over_confirms + refresh_on_activate pending", True),
+           "fix_vanilla_game_bugs (.vf2bugs): pause_yes_idempotent + title_menu_stale_hotspot + "
+           "title_menu_start_over_confirms + title_menu_refresh_on_activate (all four)", True),
     Module("career_room_goals", "CareerRoomGoalReconciliation",
            "patch_career_room_goal_reconciliation (unconditional in B200; load hook)", True),
     Module("time_controls", "TimeControls",
            "none: new in the runtime build (the Virtual Families 1 patcher's Time Controls "
            "dialog; B200 has no equivalent, so the default is off)", False),
-    # ---- ID reservation experiment (branch runtime-id-reservation), study section 14 ----
+    Module("event_collectable_slot_replacement", "EventCollectableSlotReplacement",
+           "patch_event_collectable_slot_replacement (unconditional in B200; the three native "
+           "sites. The fossil email is a mobile island event: static)", True),
+    Module("power_failure_event", "PowerFailureEvent",
+           "patch_power_failure_event (B200 installs it in builds with island events, "
+           "VF2_ENABLE_ISLAND_EVENTS, on by default; it only changes stock Power Failure)", True),
+    Module("older_villager_mortality", "OlderVillagerMortality",
+           "patch_older_villager_mortality (.vf2mort; the mortality half: the longevity-"
+           "achievement observer is the static custom-achievements feature)", False),
+    # ---- ID reservation experiment (branch runtime-id-reservation), study section 15 ----
     Module("achievement_records", "AchievementReservedRecords",
            "patch_custom_achievements: CAchievement::LoadState keeps the saved rows below the "
            "reserved tail (unconditional in B200)", True),
@@ -113,10 +122,15 @@ class Pin:
     """Exact vanilla bytes at an address. `role` says why the module needs it:
 
     detour   -- a function-entry prologue stolen into a trampoline;
-    replace  -- whole non-relative instructions (5+ bytes) the DLL re-does;
-    retarget -- one `call rel32` / `jmp rel32` to `target`, redirected;
+    replace  -- whole non-relative instructions (5+ bytes) the DLL re-does
+                (a run may end in one `call rel32` when `target` names it:
+                the DLL then issues that call itself);
+    retarget -- one `call rel32` / `jmp rel32` / `jcc rel32` to `target`, redirected;
     context  -- bytes the module's logic relies on; never written;
-    data     -- the bytes of a data table (not code, so not decoded); never written;
+    data     -- non-code bytes (a table record, a text, the bytes of a data table) the
+                module relies on; never written;
+    vtable_slot -- a 4-byte function pointer in a vtable (data) that the module replaces;
+                `target` is the stock function it holds.
     field    -- one whole instruction of which the DLL rewrites ONLY the
                 displacement or immediate field `field` = (offset, size) in
                 place: same instruction, same length, no jump. gen_sites proves
@@ -420,6 +434,254 @@ PINS += [
     ),
 ]
 
+
+MENU_HANDLE_MESSAGE = 0x443EF0
+START_OVER_BRANCH = 0x443F5C
+START_OVER_SHARED_PATH = 0x443FFD     # stock Play / Start Over handler (click sound first)
+START_OVER_RETURN_TRUE = 0x443FF6     # mov al,1; jmp epilogue
+START_OVER_AFTER_SOUND = 0x44400C     # the shared handler after its click sound
+START_OVER_CONFIRM_STRING_ID = 0x744  # eSayConfirmRestart
+SHOW_MESSAGE_BOX = 0x421410           # cdecl (ldwScene*, StringId, int, bool); 0 = Yes
+GAME_STATS = 0x568018                 # GameStats[0] (a village exists when non-zero)
+SOUND_OBJECT = 0x569DB0
+SOUND_PLAY = 0x446BC0                 # CSound::Play(ESound) thiscall, ret 4
+SOUND_CLICK = 0xB9
+GAME_STATE_INIT = 0x429DD0            # theGameState::Init() thiscall
+GAME_STATE_SAVE_CURRENT = 0x429660    # theGameState::SaveCurrentGame() thiscall
+MENU_GAME_STATE_FIELD = 0xC           # theMenuScene + 0Ch = theGameState*
+GAME_STATE_NAME_FIRST = 0x25ABC       # six name dwords +25ABCh .. +25AD0h (24 bytes)
+GAME_STATE_NAME_LAST = 0x25AD0
+UPDATE_SHOW_PLAYER = 0x443B80         # theMenuScene::UpdateShowPlayer() thiscall
+UPDATE_SHOW_PLAYER_STEAL = 8
+SHOW_PLAYER_ADD_NAME = 0x443C00
+SHOW_PLAYER_ADD_NAME_LEN = 7
+SHOW_PLAYER_ADD_NAME_RESUME = 0x443C07
+SCENE_GET_CONTROL = 0x40CFD0          # ldwScene::GetControl(int id) thiscall, ret 4
+SCENE_ADD_CONTROL = 0x40CF80          # ldwScene::AddControl(ctrl) thiscall, ret 4
+MENU_STRING_MANAGER_FIELD = 0x14
+MENU_PLAY_BUTTON_FIELD = 0xD8
+MENU_MANAGE_GAMES_ID_FIELD = 0xC4
+MENU_MANAGE_GAMES_BUTTON_FIELD = 0xE4
+MENU_NAME_BUTTON_FIELD = 0xF0
+STRING_GET_STRING = 0x448E90          # theStringManager::GetString(StringId) thiscall, ret 4
+STRING_GET_LARGE_FONT = 0x448E80      # theStringManager::GetLargeFont() thiscall
+BUTTON_SET_TEXT = 0x4015E0            # ldwButton::SetText(text, c1, c2, c3, font) thiscall, ret 14h
+TITLE_TEXT_COLOUR = 0x534BF4          # cLdwWhite as the title constructor reads it
+TITLE_PLAY_STRING_ID = 0x775          # "Play"
+TITLE_CONTINUE_STRING_ID = 0x280      # "Continue"
+MENU_ACTIVATE = 0x4439F0
+MENU_ACTIVATE_TAIL_TARGET = 0x42C020  # the floating-animation reset Activate(true) ends with
+MENU_ACTIVATE_TAIL_CALL = 0x443A07
+NICKNAME_DIALOG_DTOR = 0x41F970
+NICKNAME_CANCEL_DTOR_CALL = 0x444073
+
+
+# ---- fix_vanilla_bugs, part 2: title_menu_start_over_confirms and
+# title_menu_refresh_on_activate (the rest of B200's .vf2bugs).
+#
+# (c) patch_title_menu_start_over_confirms. theMenuScene::HandleMessage
+#     (vtable 0x4E3AB8 slot 3 = 0x443EF0; RTTI ".?AVtheMenuScene@@") tests a
+#     clicked button id against Play ([this+0C0h]) and Start Over ([this+0C8h]);
+#     both `je` rel32 land on the shared handler 0x443FFD: click sound, then
+#     the GameStats[0] test, and with a village in progress it just rolls the
+#     current story slot over and returns (the owner-reported defect: Start
+#     Over keeps going into the current game). B200 re-points Start Over's
+#     `je` (0x443F5C) at a stub: no village yet -> the stock path; else the
+#     click sound, ShowMessageBox(this, eSayConfirmRestart 0x744, 0, true),
+#     No (non-zero) -> the function's own `mov al,1` return at 0x443FF6, Yes
+#     -> the live new-player sequence on the game state [this+0Ch] (clamp the
+#     speed field, theGameState::Init with the 6 name dwords at +25ABCh..
+#     +25AD0h kept, SaveCurrentGame), then the stock story/scene-9 path just
+#     after its click sound (0x44400C). ShowMessageBox 0x421410 (cdecl, 4
+#     args, returns 0 for Yes) is the function behind 4 callers whose
+#     argument shape is proved by the Options dialog's Evict confirmation
+#     (0x4229D9: push 1; push 0; push 11h; push esi; call; add esp,10h; test
+#     eax,eax; jne skip; call EvictFamily). theGameState::Init 0x429DD0 and
+#     SaveCurrentGame 0x429660 are the calls the stock theCreateNickNameDlg
+#     (vtable 0x4E24F4, HandleMessage 0x41F980) makes for a new player, in the
+#     same order and with the same speed clamp.
+PINS += [
+    Pin(
+        "start_over_dispatch", 0x443F1B,
+        "8BF183BC24F4000000080F85890100008B8424F80000003B86CC0000000F846A0100003B86D40000000F"
+        "845E0100003B86C00000000F84A70000003B86C80000000F849B0000003B86C4000000",
+        "context",
+        "theMenuScene::HandleMessage: esi = this; message 8 (button clicked); the "
+        "button id [esp+0F8h] is compared with [esi+0CCh] and [esi+0D4h] (other "
+        "buttons), Play [esi+0C0h] (je 0x443FFD), Start Over [esi+0C8h] (je 0x443FFD, "
+        "the branch B200 re-points) and Manage Games [esi+0C4h].",
+        module="fix_vanilla_bugs",
+    ),
+    Pin(
+        "start_over_branch", 0x443F5C,
+        "0F849B000000",
+        "retarget",
+        "je rel32 taken when the clicked id is Start Over's: the one branch the fix "
+        "re-points (B200: the je at theMenuScene::HandleMessage+0x64). Play's own je "
+        "at 0x443F50 stays.",
+        module="fix_vanilla_bugs", target=START_OVER_SHARED_PATH,
+    ),
+    Pin(
+        "start_over_paths", 0x443FF6,
+        "B001E9B900000068B9000000B9B09D5600E8B42B0000833D1880560000741E8B760C8B86B85C02008986"
+        "BC5C0200C786B85C020000000000E9810000008B4E0C83B9205B02000075426A008D4C2410E8F6B5FDFF"
+        "6A00568D4C2414C78424F400000000000000E8FFDAFBFF83C9FF898C24EC0000003BC18D4C240C7509E8"
+        "F8B8FDFFB001EB3AE8EFB8FDFF6A00B9A095AA00E8031D07008B760C8B96B85C02008996BC5C0200C786"
+        "B85C020009000000EB0CE84349FCFF8BC8E84C49FCFF32C08B8C24E400000064890D00000000595E5B81"
+        "C4E4000000C20800",
+        "context",
+        "The tail of HandleMessage: return-true at 0x443FF6 (mov al,1; jmp epilogue); "
+        "the shared Play/Start Over handler 0x443FFD (push 0B9h; mov ecx,Sound "
+        "0x569DB0; call CSound::Play 0x446BC0; cmp GameStats[0] 0x568018,0; je "
+        "0x444033; rollover that keeps the current game); 0x444033 (slot "
+        "[state+25B20h] zero -> the name prompt theCreateNickNameDlg: DoModal -1 = "
+        "cancel -> dtor + return true, via the call at 0x444073); 0x444081 "
+        "(SetStory(0), story slot [state+25CB8h] = 9, return false); the epilogue.",
+        module="fix_vanilla_bugs",
+    ),
+    Pin(
+        "show_message_box", 0x421410,
+        "6AFF6808B14D0064A1000000005083EC7056A1447A550033C4508D44247864A3000000008B8424940000"
+        "008B8C24900000008B94248C0000005051528D4C2414E87BFDFFFF8B8424880000006A00508D4C2410C7"
+        "84248800000000000000E8ED06FEFF8D4C24088BF0C7842480000000FFFFFFFFE8F7FBFFFF8BC68B4C24"
+        "7864890D00000000595E83C47CC3",
+        "context",
+        "Whole ShowMessageBox(ldwScene*, StringId, int, bool) (cdecl, 4 stack "
+        "arguments, the caller pops): builds the message dialog, DoModal(scene, 0), "
+        "returns its result.",
+        module="fix_vanilla_bugs",
+    ),
+    Pin(
+        "show_message_box_caller", 0x4229D4,
+        "3B7E7C75216A016A006A1156E82BEAFFFF83C41085C075078BCEE87DFEFFFF",
+        "context",
+        "theOptionsDialog::HandleMouse, Evict: push 1; push 0; push 11h; push esi; "
+        "call ShowMessageBox; add esp,10h; test eax,eax; jne past; mov ecx,esi; call "
+        "EvictFamily. Result 0 = Yes: the argument order the Start Over stub uses.",
+        module="fix_vanilla_bugs",
+    ),
+    Pin(
+        "new_player_sequence", 0x41F9B1,
+        "81BE185B0200E70300007C0AC786185B02000A000000578BCEE801A400008B4D4C6A148DBEBC5A020057"
+        "E830E8FEFF8D96305B02008BC72BD75FEB038D49008A08880C0283C00184C975F48BCEC686995B020001"
+        "C786205B020001000000E84C9C00005E8BCD",
+        "context",
+        "theCreateNickNameDlg::HandleMessage (vtable 0x4E24F4 slot 3), OK branch: "
+        "[state+25B18h] >= 999 -> 10; theGameState::Init(0x429DD0); the typed name "
+        "copied to +25ABCh; slot [state+25B20h] = 1; theGameState::SaveCurrentGame "
+        "(0x429660). The live sequence B200's Yes repeats.",
+        module="fix_vanilla_bugs",
+    ),
+    Pin(
+        "game_state_init", 0x429DD0,
+        "53568BF133DB57B988805600C686CC5C020001889EBC5A0200899ED45A0200E88CDAFFFF",
+        "context",
+        "theGameState::Init entry: first byte of the player name [esi+25ABCh] cleared "
+        "(so the stub keeps the name dwords around the call) and the start of the "
+        "subsystem resets.",
+        module="fix_vanilla_bugs",
+    ),
+    Pin(
+        "save_current_game", 0x429660,
+        "53568BF18B068B50386A00FFD28AD88B86205B020085C0741A8B16508B42388BCEFFD022D8E89691FDFF"
+        "83C0788986E45C02005E8AC35BC3",
+        "context",
+        "Whole theGameState::SaveCurrentGame (thiscall, no arguments, returns bool in "
+        "al).",
+        module="fix_vanilla_bugs",
+    ),
+
+# (d) patch_title_menu_refresh_on_activate. The title screen is built once
+#     while loading. theMenuScene::UpdateShowPlayer (0x443B80, thiscall, no
+#     arguments; callers 0x443DA9 and 0x443FF1) keeps the player-name label
+#     (control id [this+0D0h], object [this+0F0h]) and Manage Games
+#     (id [this+0C4h], object [this+0E4h]) in step with the current player,
+#     but it only ever re-adds the name, so Manage Games is gone for the
+#     session once a player is removed, and nothing calls it on Activate or
+#     after a cancelled name prompt. B200 makes it the one refresh point:
+#     (1) on entry it repeats the constructor's Play/Continue label choice;
+#     (2) when it re-adds the name it re-adds Manage Games unless a control
+#     with Manage Games' id is already in the scene; (3) Activate(true) calls
+#     it; (4) the name prompt's cancel path calls it before returning true.
+#     The constructor's label choice is at 0x4433F5..0x44346C: GetLargeFont
+#     (0x448E80) of the string manager [this+14h], cLdwWhite x3 (the copy at
+#     0x534BF4), the string 0x775 ("Play") or, with GameStats[0] != 0, 0x280
+#     ("Continue") through GetString (0x448E90), ldwButton::SetText (0x4015E0)
+#     on [this+0D8h].
+    Pin(
+        "title_ctor_label", 0x4433F5,
+        "8B4E14889C24480100008986D8000000E8765A00008B4E1450A1F44B53005050506875070000E8705A00"
+        "008B8ED800000050E8B4E1FBFF8B8ED8000000518BCEE8469BFCFF391D18805600742A8B4E14E8365A00"
+        "008B4E1450A1F44B53005050506880020000E8305A00008B8ED800000050E874E1FBFF",
+        "context",
+        "theMenuScene constructor: the Play button [esi+0D8h] gets its label: ecx = "
+        "[esi+14h]; GetLargeFont; push cLdwWhite (0x534BF4) three times; "
+        "GetString(0x775); SetText; AddControl; cmp GameStats[0],ebx; je; the same "
+        "with 0x280.",
+        module="fix_vanilla_bugs",
+    ),
+    Pin(
+        "show_player_body", 0x443B80,
+        "83EC68A1447A550033C489442464538BD98B83D00000005550E83294FCFF8BE88B430C83B8205B020000"
+        "747305BC5A0200C6442408008BD08A0883C00184C975F756578D7C24102BC283C7FF8D6424008A4F0183"
+        "C70184C975F68BC8C1E9028BF2F3A58BC883E103F3A48D4C2410518B8BF0000000E8D6A5FCFF85ED5F5E"
+        "753F8B93F0000000528BCBE87293FCFF5D5B8B4C246433CCE8B3FF070083C468C385ED741C8B83E40000"
+        "00508BCBE8CF93FCFF8B8BF0000000518BCBE8C193FCFF8B4C246C5D5B33CCE882FF070083C468C3",
+        "context",
+        "Whole theMenuScene::UpdateShowPlayer: ebx = this; ebp = GetControl(0x40CFD0) "
+        "of the name id [ebx+0D0h]; a player exists when [state+25B20h] != 0: the "
+        "name is copied and SetText'd on [ebx+0F0h], and when ebp is 0 "
+        "AddControl([ebx+0F0h]) (0x443C00); no player: Manage Games [ebx+0E4h] and "
+        "the name are RemoveControl'd (0x40D000) when the name is shown.",
+        module="fix_vanilla_bugs",
+    ),
+    Pin(
+        "show_player_entry", 0x443B80,
+        "83EC68A1447A5500",
+        "detour",
+        "sub esp,68h; mov eax,[0x557A44]: whole non-relative instructions at the "
+        "function's entry; the trampoline resumes at 0x443B88. B200 detours the "
+        "6-byte prologue of its own build the same way.",
+        module="fix_vanilla_bugs",
+    ),
+    Pin(
+        "show_player_add_name", 0x443C00,
+        "8B93F000000052",
+        "replace",
+        "mov edx,[ebx+0F0h]; push edx -- the argument of the name's AddControl at "
+        "0x443C09. Not relative; the stub adds Manage Games first and then redoes "
+        "these two instructions and resumes at 0x443C07.",
+        module="fix_vanilla_bugs",
+    ),
+    Pin(
+        "menu_activate", 0x4439F0,
+        "807C240400568BF17412B998F55500E8CC31FEFF8B4E10E81486FEFF5EC20400",
+        "context",
+        "theMenuScene::Activate(bool) (vtable 0x4E3AB8 slot 9, ret 4): when the "
+        "argument is non-zero, SpawnButterflies (0x426BD0) and the floating animation "
+        "reset 0x42C020 on [this+10h]; esi = this throughout.",
+        module="fix_vanilla_bugs",
+    ),
+    Pin(
+        "menu_activate_tail", 0x443A07,
+        "E81486FEFF",
+        "retarget",
+        "call 0x42C020, the last act of Activate(true) (its only caller): the wrapper "
+        "makes the call and then UpdateShowPlayer(this) with esi.",
+        module="fix_vanilla_bugs", target=MENU_ACTIVATE_TAIL_TARGET,
+    ),
+    Pin(
+        "nickname_cancel_dtor", 0x444073,
+        "E8F8B8FDFF",
+        "retarget",
+        "call theCreateNickNameDlg's destructor (0x41F970) on the cancel path only "
+        "(DoModal returned -1: `jne 0x44407C` is not taken). The wrapper makes the "
+        "call and then UpdateShowPlayer(esi = this), then the stock `mov al,1` "
+        "return.",
+        module="fix_vanilla_bugs", target=NICKNAME_DIALOG_DTOR,
+    ),
+]
+
 # --------------------------------------------------------------------------
 # career_room_goals -- B200 patch_career_room_goal_reconciliation (load hook;
 # its second hook, after the Cheat Upgrades "Reset Achievements" action,
@@ -566,10 +828,8 @@ GAME_NEW = 0x4C379D                   # operator new (cdecl)
 GRAPHICS_GET = 0x448950               # theGraphicsManager::Get()
 GRAPHICS_GET_IMAGE_GRID = 0x448710    # (EImage) thiscall, ret 4
 STRING_GET = 0x449610                 # theStringManager::Get()
-STRING_GET_LARGE_FONT = 0x448E80      # thiscall
 BUTTON_CTOR = 0x401A40                # ldwButton(id, grid, ldwPoint, scene, bool) thiscall, ret 18h
-BUTTON_SET_TEXT = 0x4015E0            # (text, c1, c2, c3, font) thiscall, ret 14h
-SCENE_ADD_CONTROL = 0x40CF80          # ldwScene::AddControl(ctrl) thiscall, ret 4
+# (BUTTON_SET_TEXT, STRING_GET_LARGE_FONT and SCENE_ADD_CONTROL are defined with fix_vanilla_bugs above.)
 WARP_SITE = 0x499893                  # mov ecx,edi; mov ebx,eax; push ebx
 WARP_SITE_LEN = 5
 WARP_RESUME = 0x499898                # call CVillagerBio::IncrementAge
@@ -698,7 +958,7 @@ PINS += [
 ]
 
 # --------------------------------------------------------------------------
-# ID reservation experiment (study section 14): achievement rows, the
+# ID reservation experiment (study section 15): achievement rows, the
 # Achievements-screen order, and string ids, appended at RUNTIME instead of by
 # growing stock tables at link time. Everything below was located in the
 # vanilla image and is re-proved by gen_sites (every reader of each table is
@@ -899,12 +1159,429 @@ RAW_REFERENCE_CENSUS = {
                          (SCENE_DRAW_ORDER_BASE_FIELD, SCENE_DRAW_ORDER_END_FIELD)),
 }
 
+# older_villager_mortality -- B200 patch_older_villager_mortality, the
+# mortality half. B200 hooks CVillagerManager::
+# AllVillagersRealtimePhysiologyAndProductivityUpkeep (here 0x49B840) at the
+# `push 0; mov ecx,state; call FoodGroupsActive` that opens the stock old-age
+# statement. With its flag on, B200 never runs the stock statement: it asks
+# VF2RollOlderVillagerMortality(internal age, active food groups) and, when
+# that says so, SetHealth(0, OldAge = 2), then rejoins after the statement
+# (+0x3C8). Its flag-off path calls the longevity-achievement observer
+# (custom achievements 0x85-0x89) in place of FoodGroupsActive; that observer
+# belongs to the static custom-achievements feature and has no vanilla
+# counterpart, so the runtime module carries the mortality decision only.
+#
+# The stock statement is 0x49BBC6..0x49BC46 (see the pins); gen_sites proves it
+# is single-entry and that every exit of it is 0x49BC47.
+# --------------------------------------------------------------------------
+UPKEEP_FOOD_GROUPS_CALL = 0x49BBBD
+UPKEEP_FOOD_GROUPS_CALL_LEN = 9
+UPKEEP_FOOD_GROUPS_RESUME = 0x49BBC6
+OLDER_MORTALITY_DONE = 0x49BC47
+FOOD_GROUPS_ACTIVE = 0x4A0A80         # CVillagerState::FoodGroupsActive(int) thiscall, ret 4
+SET_HEALTH = 0x4A0420                 # CVillagerState::SetHealth(int, ECauseOfDeath) thiscall, ret 8
+CAUSE_OF_DEATH_OLD_AGE = 2
+VILLAGER_STATE_AGE_OFFSET = 8
+OLDER_MORTALITY_RANDOM_LIMIT = 1_000_000
+OLDER_MORTALITY_TABLE_FIRST_AGE = 55
+OLDER_MORTALITY_TABLE_LAST_AGE = 317
+OLDER_MORTALITY_HAZARD_CAP_MILLIONTHS = 999_999
+
+
+def older_mortality_hazard_millionths(effective_age: int) -> int:
+    """B200's annual old-age threshold in the 0..999999 domain (the same formula
+    as work/patch_mobile_furniture_pack.py; the test compares them)."""
+    import math
+    years_past_threshold = max(0, effective_age - 55)
+    late_years = max(0, effective_age - 110)
+    intensity = 0.00365 * years_past_threshold + 0.06 * late_years
+    hazard = -math.expm1(-intensity)
+    threshold = int(math.floor(hazard * OLDER_MORTALITY_RANDOM_LIMIT + 0.5))
+    return min(OLDER_MORTALITY_HAZARD_CAP_MILLIONTHS, threshold)
+
+
+OLDER_MORTALITY_HAZARDS = tuple(
+    older_mortality_hazard_millionths(a)
+    for a in range(OLDER_MORTALITY_TABLE_FIRST_AGE, OLDER_MORTALITY_TABLE_LAST_AGE + 1)
+)
+
+# The stock old-age statement: no branch from outside lands inside it (a branch
+# to its first byte is fine), and every jump inside it that leaves it goes to
+# `exit`. (name, first byte, one past the last byte, exit)
+SINGLE_ENTRY_REGIONS = (
+    ("older_mortality_statement", UPKEEP_FOOD_GROUPS_RESUME, OLDER_MORTALITY_DONE, OLDER_MORTALITY_DONE),
+)
+
+PINS += [
+    Pin(
+        "upkeep_caller", 0x42ACB4,
+        "6A00B9589F5B00E840EA0600B9589F5B00E8760B0700",
+        "context",
+        "theRealtimeManager::UpdateAll: push 0; mov ecx,VillagerManager (0x5B9F58); "
+        "call AllVillagersTimeflowUpkeep (0x499700); mov ecx,VillagerManager; call "
+        "0x49B840 = "
+        "CVillagerManager::AllVillagersRealtimePhysiologyAndProductivityUpkeep, the "
+        "function the old-age roll lives in (its only caller).",
+        module="older_villager_mortality",
+    ),
+    Pin(
+        "mortality_scope", 0x49BB1E,
+        "8DAE6CAFFEFF8BCDE8654E000084C074326A64E83A84F6FF83C40483F83C7F2383BE78AFFEFF147F0F6A"
+        "64E82284F6FF83C40483F81E7F0B6A006AFF8BCDE8FF480000833D00805600007E538BCDE81F4E000084"
+        "C075486A64E8F483F6FF83C40483F8327D398BCBE8A5CFFFFF84C0750F6A64E8DA83F6FF83C40483F814"
+        "7D0B6AFF6A018BCDE8B748000083BE78AFFEFF647E0B6AFF6A648BCDE863480000",
+        "context",
+        "Inside the per-villager loop of 0x49B840: esi = &villager+387F8h (the 'left "
+        "home' byte pointer), ebp = esi-15094h = the villager's CVillagerState, so "
+        "[ebp+8] = [esi-1508Ch] is its internal age (CVillagerBio, 20 ticks = 1 year; "
+        "IsNotOld 0x498B30 is `cmp [ecx],44Ch`, 55 years). The preceding statements "
+        "(sickness, healing, afraid) are untouched.",
+        module="older_villager_mortality",
+    ),
+    Pin(
+        "mortality_food_groups", 0x49BBBD,
+        "6A008BCDE8BA4E0000",
+        "replace",
+        "push 0; mov ecx,ebp; call CVillagerState::FoodGroupsActive(0) (0x4A0A80): "
+        "the first act of the old-age statement (B200 hooks the same call). The stub "
+        "redoes the call and takes the old-age decision itself.",
+        module="older_villager_mortality", target=FOOD_GROUPS_ACTIVE,
+    ),
+    Pin(
+        "mortality_block", 0x49BBBD,
+        "6A008BCDE8BA4E00008BBE74AFFEFF8D0C80B867666666F7EFC1FA038BC2C1E81F03C28D048003C003C9"
+        "03C08BD703C92BD075568D994C0400003BFB7E4C6A64E86E83F6FF89442420B867666666F7EFC1FA038B"
+        "C2C1E81F03C28BC8B867666666F7EBC1FA038BC2C1E81F03C22BC88B4424208D0C8903C983C4043BC17D"
+        "0B6A026A008BCDE8D9470000",
+        "context",
+        "The stock old-age statement, 0x49BBBD..0x49BC46: n = FoodGroupsActive(0) "
+        "(0-5 active food groups); only on a whole birthday (age % 20 == 0) and past "
+        "55 years + n (age > 1100 + 20n) roll GetRandom(100) < 10 * (age/20 - "
+        "(1100+20n)/20); if it succeeds SetHealth(0, 2 = OldAge) on ebp. Every exit "
+        "goes to 0x49BC47.",
+        module="older_villager_mortality",
+    ),
+    Pin(
+        "mortality_done", 0x49BC47,
+        "8B8690AFFEFF85C08B5C24100F8478020000",
+        "context",
+        "The statement after the old-age block (mov eax,[esi-15070h]; test eax,eax; "
+        "...): where B200 rejoins (+0x3C8) and where every stock exit of the block "
+        "lands.",
+        module="older_villager_mortality",
+    ),
+    Pin(
+        "food_groups_active", 0x4A0A80,
+        "53555633ED578DB1840000008DB9880000008D5D05E886A1F8FF8BC8E84F35F6FF39077305C60600EB08"
+        "803E00740383C50183C70483C60183EB0175D85F5E8BC55D5BC20400",
+        "context",
+        "Whole CVillagerState::FoodGroupsActive(int) (thiscall, ret 4): counts the 5 "
+        "food groups whose timer has not run out; returns 0-5.",
+        module="older_villager_mortality",
+    ),
+    Pin(
+        "set_health", 0x4A0420,
+        "8B44240485C089410C7F118B442408C7410C00000000894110C2080083F8647E07C7410C64000000C741"
+        "10FFFFFFFFC20800",
+        "context",
+        "Whole CVillagerState::SetHealth(int health, ECauseOfDeath) (thiscall, ret "
+        "8): [this+0Ch] = health (capped at 100), [this+10h] = cause. Called with (0, "
+        "2) at 0x49BC42, the only `push 2; push 0; call SetHealth` in the image.",
+        module="older_villager_mortality",
+    ),
+]
+
+# --------------------------------------------------------------------------
+# event_collectable_slot_replacement -- B200 patch_event_collectable_slot_replacement
+# (unconditional in B200). CCollectableItem keeps two event slots; Add returns
+# without spawning when both are busy (force clear) and the native events
+# (Bug Whisperer x2, Neighbor Collectible) therefore often spawned nothing.
+# B200 retargets those three `call Add` sites to a thunk that frees the oldest
+# unpicked slot first (owner decision) and then calls the native Add. The
+# fourth caller, CCollectableItem::Update's natural spawn (0x41554D), is left
+# alone, as in B200. The fossil email is a mobile island event: static.
+# --------------------------------------------------------------------------
+COLLECTABLE_ITEM = 0x55A620           # global CollectableItem
+COLLECTABLE_ADD = 0x415090            # CCollectableItem::Add(ECarrying, ldwPoint, bool) thiscall, ret 10h
+COLLECTABLE_REMOVE = 0x413F80         # CCollectableItem::Remove(int slot) thiscall, ret 4
+COLLECTABLE_UPDATE_ADD_CALL = 0x41554D  # the natural spawn in CCollectableItem::Update (not touched)
+EVENT_COLLECTABLE_ADD_CALLSITES = (0x419A2F, 0x41AF0E, 0x41AF4B)
+COLLECTABLE_SLOT_BASE = 0x34C         # two slots, 1Ch apart: +0 active, +8 stamp, +14h picked-by (-1 none)
+COLLECTABLE_SLOT_STRIDE = 0x1C
+COLLECTABLE_STAMP_OFFSET = 8
+COLLECTABLE_PICKED_OFFSET = 0x14
+COLLECTABLE_STAMP_DELAY = 0x78
+GAME_STATE_GET = 0x42AC20             # theGameState::Get() cdecl
+GAME_SECONDS_FROM_START = 0x403FF0    # ldwGameState::GetSecondsFromGameStart() thiscall
+
+PINS += [
+    Pin(
+        "collectable_add_head", 0x415090,
+        "83EC14538BD95633F68D834C03000090803800741A807C242C00751383C60183C01C83FE027CE95E5B83"
+        "C414C210008B44242083F8FF5557742B8B54242C8D0CF5000000002BCE8D3C8B8987500300008B442430"
+        "89975803000089875C030000E9E9010000",
+        "context",
+        "Head of CCollectableItem::Add(ECarrying, ldwPoint, bool) (thiscall, ret 10h; "
+        "the global CollectableItem is 0x55A620): two event slots at this+34Ch and "
+        "+368h (1Ch apart; byte 0 = active). The slot loop takes slot i when it is "
+        "free, OR when `force` (stack arg [esp+2Ch], the 4th) is set -- so force "
+        "always writes slot 0 -- and RETURNS WITHOUT SPAWNING when both are busy and "
+        "force is clear. An explicit carrying (not -1) stores carrying (+350h), x "
+        "(+358h), y (+35Ch) and jumps to the activation at 0x4152DE.",
+        module="event_collectable_slot_replacement",
+    ),
+    Pin(
+        "collectable_add_activate", 0x4152DE,
+        "C6874C03000001E8365901008BC8E8FFECFEFF83C078898754030000C78760030000FFFFFFFF5F5D5E5B"
+        "83C414C21000",
+        "context",
+        "The activation: slot[+0] = 1; stamp [slot+8] = "
+        "theGameState::Get()->GetSecondsFromGameStart() + 78h; picked [slot+14h] = "
+        "-1; ret 10h.",
+        module="event_collectable_slot_replacement",
+    ),
+    Pin(
+        "collectable_remove", 0x413F80,
+        "8B4424048D14C5000000002BD083F8027D0BC684914C03000000C20400C64491CC00C20400",
+        "context",
+        "Whole CCollectableItem::Remove(int slot) (thiscall, ret 4): for slot < 2 "
+        "clears the active byte at this+34Ch + slot*1Ch.",
+        module="event_collectable_slot_replacement",
+    ),
+    Pin(
+        "neighbor_collectible_impact", 0x419A20,
+        "6A0133C95133C0506AFFB920A65500E85CB6FFFFC3",
+        "context",
+        "CEventTheNeighborCollectible::ImpactGame() (vtable 0x4E0FF4 slot 13; RTTI "
+        ".?AVCEventTheNeighborCollectible@@): push 1 (force); push 0; push 0; push -1 "
+        "(random carrying); mov ecx,CollectableItem; call Add; ret.",
+        module="event_collectable_slot_replacement",
+    ),
+    Pin(
+        "neighbor_collectible_add_call", 0x419A2F,
+        "E85CB6FFFF",
+        "retarget",
+        "call CCollectableItem::Add in CEventTheNeighborCollectible::ImpactGame.",
+        module="event_collectable_slot_replacement", target=COLLECTABLE_ADD,
+    ),
+    Pin(
+        "bug_whisperer_impact", 0x41AE90,
+        "837C2404000F85B6000000D905B01C4E00566A0151B9C8805600D91C24E89ED100006A00B9B09D5600E8"
+        "02BD02006A05B9B09D5600E8F6BC02006A07B9B09D5600E8EABC02006A7EE89390FEFF8BF06804010000"
+        "81C625070000E88190FEFF83C4086A0005BC04000056506A0CE86E90FEFF83C40483C04F50B920A65500"
+        "E87DA1FFFF6A7EE85690FEFF8BF0680401000081C625070000E84490FEFF83C4086A0005BC0400005650"
+        "6A0CE83190FEFF83C40483C04F50B920A65500E840A1FFFF5EC20400",
+        "context",
+        "CEventTheBugWhisperer::ImpactGame(int) (vtable 0x4E1C6C slot 12; RTTI "
+        ".?AVCEventTheBugWhisperer@@): for argument 0, sounds, then TWO Add(0x4F + "
+        "GetRandom(12), point, false) calls on CollectableItem (0x41AF0E and "
+        "0x41AF4B).",
+        module="event_collectable_slot_replacement",
+    ),
+    Pin(
+        "bug_whisperer_add_call_1", 0x41AF0E,
+        "E87DA1FFFF",
+        "retarget",
+        "the first Add call in CEventTheBugWhisperer::ImpactGame.",
+        module="event_collectable_slot_replacement", target=COLLECTABLE_ADD,
+    ),
+    Pin(
+        "bug_whisperer_add_call_2", 0x41AF4B,
+        "E840A1FFFF",
+        "retarget",
+        "the second Add call in CEventTheBugWhisperer::ImpactGame.",
+        module="event_collectable_slot_replacement", target=COLLECTABLE_ADD,
+    ),
+    Pin(
+        "game_seconds_from_start", 0x403FF0,
+        "8D4424F883EC0C50E851050C008B0D6CD252008B1568D252008B44240C51",
+        "context",
+        "ldwGameState::GetSecondsFromGameStart() entry (thiscall, no arguments, "
+        "returns the elapsed game seconds in eax): the call Add's activation makes "
+        "after theGameState::Get().",
+        module="event_collectable_slot_replacement",
+    ),
+]
+
+# --------------------------------------------------------------------------
+# power_failure_event -- B200 patch_power_failure_event. Stock
+# CEventThePowerFailure (RTTI ".?AVCEventThePowerFailure@@", vtable 0x4E22DC)
+# is a two-choice event: A "Throw it out" resets the food store, B "Take a
+# chance" gave 0-3 random villagers an upset stomach. B200 gives B a 1-in-4
+# roll in CalcAward that picks the result text (eEventThePowerFailureResultB1
+# 0x9BD "This stuff still looks okay." or ResultB2 0x9BE "Everyone gets an upset
+# stomach. The food was not ok.") and, on B2, an upset stomach (symptom 2)
+# with a 15% chance per living villager at home. B200 detours the three
+# methods inside IslandEvents.obj; here the three vtable slots of the class
+# are replaced instead (CalcAward is the shared `ret 4` stub 0x4B58A0, which
+# no other class is affected by, as only this class's slot changes). Nothing
+# else calls the three methods directly (the stock addresses have no caller
+# and no pointer to them outside this vtable). The state B200 keeps per event
+# (four slots keyed by the event pointer, one-shot, not persisted) lives in
+# the DLL. String 0x9BE is in the vanilla string table: theStringManager's
+# constructor (0x449300) points every id 1..0xA68 at its entry of the static
+# table at 0x53DCE0, which has the 0x9BE record "eEventThePowerFailureResultB2".
+# --------------------------------------------------------------------------
+POWER_FAILURE_VTABLE = 0x4E22DC
+POWER_FAILURE_SLOT_DESCRIPTION = 0x4E2308   # vtable slot 11: GetResultDescription(int)
+POWER_FAILURE_SLOT_IMPACT = 0x4E230C        # vtable slot 12: ImpactGame(int)
+POWER_FAILURE_SLOT_CALC_AWARD = 0x4E2314    # vtable slot 14: CalcAward(int) = the shared `ret 4` stub
+POWER_FAILURE_DESCRIPTION_STOCK = 0x41C2F0
+POWER_FAILURE_IMPACT_STOCK = 0x41C310
+CALC_AWARD_STUB = 0x4B58A0
+POWER_FAILURE_RESULT_A = 0x9BC
+POWER_FAILURE_RESULT_B1 = 0x9BD
+POWER_FAILURE_RESULT_B2 = 0x9BE
+ENVIRONMENT = 0xA87478                      # global Environment
+ENVIRONMENT_SET_PROP = 0x4A58B0             # CEnvironment::SetProp(EPropEnum) thiscall, ret 4
+PROP_FOOD_SPOILED = 0x17
+FOOD_STORE = 0x567F88                       # global FoodStore
+FOOD_STORE_RESET = 0x427530                 # CFoodStore::Reset(bool) thiscall, ret 4
+GIVE_ALL_VILLAGERS_SYMPTOM = 0x4995E0       # CVillagerManager::GiveAllVillagersSymptom(ESymptom, int percent) thiscall, ret 8
+SYMPTOM_UPSET_STOMACH = 2
+POWER_FAILURE_SYMPTOM_PERCENT = 15
+STRING_TABLE_ENTRIES = 0x53DCE0             # static {id, name, text, 0} records, 16 bytes each
+STRING_TABLE_COUNT = 0xA5D
+
+# Vtables whose slots a module replaces: base address -> (RTTI name, slot count to allow).
+VTABLE_CLASSES = {
+    POWER_FAILURE_VTABLE: (".?AVCEventThePowerFailure@@", 16),
+}
+
+PINS += [
+    Pin(
+        "power_failure_description", 0x41C2F0,
+        "33C0394424040F95C005BC090000C20400",
+        "context",
+        "CEventThePowerFailure::GetResultDescription(int choice) (thiscall, ret 4): "
+        "xor eax,eax; cmp [esp+4],eax; setne al; add eax,9BCh -- "
+        "eEventThePowerFailureResultA for choice 0, ResultB1 (0x9BD) otherwise. "
+        "Vtable 0x4E22DC slot 11.",
+        module="power_failure_event",
+    ),
+    Pin(
+        "power_failure_impact", 0x41C310,
+        "6A17B97874A800E894950800837C2404007512C744240401000000B9887F5600E9FBB100006A04E8347C"
+        "FEFF50E82E7CFEFF83C40885C07E31568BF08D6424006A00B9589F5B00E854DB070050B9589F5B00E849"
+        "C907006A028D88F46A0000E85C46080083EE0175D75EC20400",
+        "context",
+        "CEventThePowerFailure::ImpactGame(int choice) (thiscall, ret 4), vtable slot "
+        "12: SetProp(0x17) on Environment 0xA87478; choice 0: FoodStore "
+        "(0x567F88).Reset(true) by a tail jump to 0x427530; choice 1: n = "
+        "GetRandom(GetRandom(4)) villagers, each SelectRandomLivingVillager -> "
+        "SetSymptom(2). Stock B is the random 0-3 villagers B200 replaces.",
+        module="power_failure_event",
+    ),
+    Pin(
+        "calc_award_stub", 0x4B58A0,
+        "C20400",
+        "context",
+        "ret 4: the shared no-op CalcAward(int) the Power Failure vtable's slot 14 "
+        "holds.",
+        module="power_failure_event",
+    ),
+    Pin(
+        "environment_set_prop", 0x4A58B0,
+        "535556578B7C241433F632DB83FF548BE90F8707030000",
+        "context",
+        "Entry of CEnvironment::SetProp(EPropEnum) (thiscall, ret 4; the prop number "
+        "is the stack argument, ecx the global Environment).",
+        module="power_failure_event",
+    ),
+    Pin(
+        "food_store_reset", 0x427530,
+        "566A328BF1E836CAFDFF83C03289467833C083C40438442408750988467C8986840000005EC20400",
+        "context",
+        "Whole CFoodStore::Reset(bool) (thiscall, ret 4); the stock choice A tail- "
+        "jumps here with the argument slot set to 1.",
+        module="power_failure_event",
+    ),
+    Pin(
+        "give_all_villagers_symptom", 0x4995E0,
+        "538B5C240C558B6C240C56578DB1F8870300BF1E000000807EFC007428803E00752383BE78AFFEFF007E"
+        "1A6A64E85EA9F6FF83C4043BC37D0C558D8E6CAFFEFFE8AB73000081C60CCC010083EF0175C75F5E5D5B"
+        "C20800",
+        "context",
+        "Whole CVillagerManager::GiveAllVillagersSymptom(ESymptom symptom, int "
+        "percent) (thiscall, ret 8): for each of the 30 villagers that is active, at "
+        "home and alive, SetSymptom(symptom) when GetRandom(100) < percent.",
+        module="power_failure_event",
+    ),
+    Pin(
+        "string_manager_table_loop", 0x449330,
+        "B9E0DC530033C03911740F83C00183C1103D5D0A000072EF33C9890C95F0EC560083C20181FA690A0000"
+        "7CD4",
+        "context",
+        "theStringManager constructor: for each id 1..0xA68, search the static table "
+        "at 0x53DCE0 (0xA5D records of 16 bytes) for that id and store the record "
+        "pointer (or 0) in the pointer table at 0x56ECF0 -- so every id with a "
+        "record, 0x9BE included, resolves through GetString (0x448E90).",
+        module="power_failure_event",
+    ),
+    Pin(
+        "power_failure_string_records", 0x548040,
+        "BC0900000CB44E00CCB34E0000000000BD090000ACB34E008CB34E0000000000BE0900006CB34E0034B3"
+        "4E0000000000",
+        "data",
+        "Static string records for ids 0x9BC (ResultA), 0x9BD (ResultB1) and 0x9BE "
+        "(ResultB2): {id, name pointer, text pointer, 0}.",
+        module="power_failure_event",
+    ),
+    Pin(
+        "power_failure_b2_text", 0x4EB334,
+        "45766572796F6E65206765747320616E2075707365742073746F6D6163682E2054686520666F6F642077"
+        "6173206E6F74206F6B2E00",
+        "data",
+        "The ResultB2 text: 'Everyone gets an upset stomach. The food was not ok.'",
+        module="power_failure_event",
+    ),
+    Pin(
+        "power_failure_slot_description", 0x4E2308,
+        "F0C24100",
+        "vtable_slot",
+        "CEventThePowerFailure vtable slot 11 (GetResultDescription): the function "
+        "pointer the module replaces.",
+        module="power_failure_event", target=POWER_FAILURE_DESCRIPTION_STOCK,
+    ),
+    Pin(
+        "power_failure_slot_impact", 0x4E230C,
+        "10C34100",
+        "vtable_slot",
+        "CEventThePowerFailure vtable slot 12 (ImpactGame): the function pointer the "
+        "module replaces.",
+        module="power_failure_event", target=POWER_FAILURE_IMPACT_STOCK,
+    ),
+    Pin(
+        "power_failure_slot_calc_award", 0x4E2314,
+        "A0584B00",
+        "vtable_slot",
+        "CEventThePowerFailure vtable slot 14 (CalcAward): the function pointer the "
+        "module replaces.",
+        module="power_failure_event", target=CALC_AWARD_STUB,
+    ),
+]
+
+# Byte offsets the branch scan (deliberately over-approximate: every offset
+# counts as an opcode) reports but which are inside another instruction;
+# source -> the start of the function containing it. gen_sites proves each by
+# linear decode before dropping it.
+NOT_INSTRUCTION_STARTS = {
+    0x443F08: MENU_HANDLE_MESSAGE,  # the 7Ah displacement byte of `mov eax,[557A44h]` at 0x443F06
+    # Inside the old-age statement's neighbourhood (0x49B840): bytes of displacements.
+    0x49BC5E: 0x49B840,             # the 74h of `cmp eax,[esi-1508Ch]` (3B 86 74 AF FE FF) at 0x49BC5C
+    0x49BC93: 0x49B840,             # the 74h of `cmp [esi-1508Ch],edx` (39 96 74 AF FE FF) at 0x49BC91
+}
+
 # Every direct caller of these functions must be exactly the listed sites
 # (gen_sites refuses if .text has any other).
 EXCLUSIVE_CALLERS = {
     CAN_START_NEXT_GENERATION: NEXT_GENERATION_CALLSITES,
     CHANCE_OF_PREGNANCY: (0x49F5FA,),
     TECH_LOAD_STATE: (TECH_LOAD_STATE_CALL,),
+    MENU_ACTIVATE_TAIL_TARGET: (MENU_ACTIVATE_TAIL_CALL,),
+    COLLECTABLE_ADD: (COLLECTABLE_UPDATE_ADD_CALL,) + EVENT_COLLECTABLE_ADD_CALLSITES,
+    POWER_FAILURE_DESCRIPTION_STOCK: (),  # only ever reached through the vtable slot
+    POWER_FAILURE_IMPACT_STOCK: (),
 }
 # Functions that must have no absolute (pointer) reference anywhere in the file.
 NO_ABSOLUTE_REFERENCES = (CAN_START_NEXT_GENERATION, CHANCE_OF_PREGNANCY)

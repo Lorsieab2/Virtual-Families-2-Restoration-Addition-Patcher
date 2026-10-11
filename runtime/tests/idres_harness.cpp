@@ -336,11 +336,12 @@ int wmain(int argc, wchar_t **argv) {
     volatile Status *status = dll ? (volatile Status *)GetProcAddress(dll, "VF2Fun_Status") : 0;
     if (status) {
         Out("{\"status\": {\"magic\": %u, \"version\": %u, \"modules\": %u, \"requested\": %u, \"pins_ok\": %u, "
-            "\"installed\": %u, \"refused\": %u, \"trampoline\": %u, \"write_masks\": [%u, %u, %u, %u, %u, %u, %u, %u]}}",
+            "\"installed\": %u, \"refused\": %u, \"trampoline\": %u, \"write_masks\": [%u, %u, %u, %u, %u, %u, %u, %u, %u, %u, %u]}}",
             status->magic, status->version, status->moduleCount, status->requestedMask, status->pinsOkMask,
             status->installedMask, status->refusedMask, status->trampolinePage, status->writeMasks[0],
             status->writeMasks[1], status->writeMasks[2], status->writeMasks[3], status->writeMasks[4],
-            status->writeMasks[5], status->writeMasks[6], status->writeMasks[7]);
+            status->writeMasks[5], status->writeMasks[6], status->writeMasks[7], status->writeMasks[8],
+            status->writeMasks[9], status->writeMasks[10]);
     }
     if (dll) {
         IMAGE_NT_HEADERS32 *dnt = (IMAGE_NT_HEADERS32 *)((unsigned char *)dll + ((IMAGE_DOS_HEADER *)dll)->e_lfanew);

@@ -27,6 +27,9 @@
 //   fix_vanilla_bugs   Fix Vanilla Game Bugs (.vf2bugs): Pause Yes, title hotspot
 //   career_room_goals  career-room goals rebuilt from owned upgrades on load
 //   time_controls      "Time Controls" dialog from the store screen (new; vf2fun_time.inc)
+//   event_collectable_slot_replacement  island events replace the oldest unpicked collectable
+//   power_failure_event  the Power Failure event's Take-a-chance outcome
+//   older_villager_mortality  the old-age death curve (.vf2mort; the mortality half)
 //
 // The VF2Fun_Status export is the DLL's install-status block (documented
 // below); it is part of the shipped interface. Per-call counters exist only
@@ -139,6 +142,7 @@ static const unsigned kMaxWriteLen = 16;
 struct HookWrite {
     unsigned va;
     unsigned len;
+    bool data;  // a 4-byte vtable slot (never made executable), not code
     unsigned char bytes[kMaxWriteLen];
     unsigned char original[kMaxWriteLen];
 };
@@ -161,7 +165,8 @@ struct Plan {
     unsigned count;
     bool ok;
 
-    HookWrite *Add(unsigned va, unsigned len, unsigned minLen = 5) {
+    HookWrite *Add(unsigned va, unsigned len, bool data = false, unsigned minLen = 5) {
+        if (data) minLen = 4;
         if (!ok || count >= kMaxWrites || len < minLen || len > kMaxWriteLen) {
             ok = false;
             return 0;
@@ -170,7 +175,15 @@ struct Plan {
         memset(&w, 0, sizeof w);
         w.va = va;
         w.len = len;
+        w.data = data;
         return &w;
+    }
+    // Replace the 4-byte function pointer in the vtable slot at va with `to`.
+    void Slot(unsigned va, const void *to) {
+        HookWrite *w = Add(va, 4, true);
+        if (!w) return;
+        unsigned target = (unsigned)to;
+        memcpy(w->bytes, &target, 4);
     }
     // jmp rel32 at va to `to`, the rest of `len` bytes NOP.
     void Jmp(unsigned va, unsigned len, const void *to) {
@@ -185,7 +198,7 @@ struct Plan {
     void Field(unsigned va, unsigned size, unsigned value) {
         // The one-byte fields are signed compare immediates: 0x80 and above would change meaning.
         if ((size != 1 && size != 4) || (size == 1 && value > 0x7F)) { ok = false; return; }
-        HookWrite *w = Add(va, size, 1);
+        HookWrite *w = Add(va, size, false, 1);
         if (!w) return;
         memcpy(w->bytes, &value, size);
     }
@@ -195,6 +208,16 @@ struct Plan {
         HookWrite *w = Add(va, 5);
         if (!w) return;
         EncodeRel32(w->bytes, *(const unsigned char *)va, va, (unsigned)to);
+    }
+    // Retarget the 6-byte `jcc rel32` at va to `to`, keeping its condition
+    // (pinned as 0F 80..8F by gen_sites).
+    void RetargetJcc(unsigned va, const void *to) {
+        HookWrite *w = Add(va, 6);
+        if (!w) return;
+        w->bytes[0] = ((const unsigned char *)va)[0];
+        w->bytes[1] = ((const unsigned char *)va)[1];
+        int rel = (int)((unsigned)to - (va + 6));
+        memcpy(w->bytes + 2, &rel, 4);
     }
     // Copy the `steal` bytes at va (proved whole, non-relative instructions)
     // into the arena followed by jmp va+steal. Returns the trampoline, or 0.
@@ -227,9 +250,10 @@ static bool PinsMatch(unsigned module) {
 
 // The ONLY function that writes game code. The page is writable for this
 // write alone and gets its original protection back before returning.
-static bool WriteCode(unsigned va, const unsigned char *bytes, unsigned len) {
+static bool WriteCode(unsigned va, const unsigned char *bytes, unsigned len, bool data = false) {
     DWORD old = 0;
-    if (!VirtualProtect((void *)va, len, PAGE_EXECUTE_READWRITE, &old))
+    // A data write (a vtable slot) never makes its page executable.
+    if (!VirtualProtect((void *)va, len, data ? PAGE_READWRITE : PAGE_EXECUTE_READWRITE, &old))
         return false;
     memcpy((void *)va, bytes, len);
     DWORD ignored = 0;
@@ -262,14 +286,14 @@ static bool Apply(Plan &plan) {
     for (unsigned i = 0; i < plan.count; ++i) {
         HookWrite &w = plan.writes[i];
         memcpy(w.original, (const void *)w.va, w.len);
-        if (!WriteCode(w.va, w.bytes, w.len)) {
+        if (!WriteCode(w.va, w.bytes, w.len, w.data)) {
             Log("module %s: write at 0x%08X failed (error %lu); restoring its writes",
                 VF2_MODULE_NAMES[plan.module], w.va, GetLastError());
             for (unsigned j = 0; j < i; ++j)
-                WriteCode(plan.writes[j].va, plan.writes[j].original, plan.writes[j].len);
+                WriteCode(plan.writes[j].va, plan.writes[j].original, plan.writes[j].len, plan.writes[j].data);
             // A write that failed at VirtualProtect wrote nothing; one whose
             // restore failed did write, so put it back too.
-            WriteCode(w.va, w.original, w.len);
+            WriteCode(w.va, w.original, w.len, w.data);
             VF2Fun_Status.writeMasks[plan.module] = 0;
             return false;
         }
@@ -547,9 +571,172 @@ static __declspec(naked) void TitleHotspotStub() {
 }
 static_assert(VF2_TITLE_HOTSPOT_BOTTOM + 1 == 0x118, "empty-rect top");
 
+// (c) patch_title_menu_start_over_confirms. The `je` taken for Start Over's id
+// in theMenuScene::HandleMessage (0x443F5C) goes here instead of the shared
+// Play / Start Over handler (esi = the menu scene, the stack as at the jump):
+//   no village yet (GameStats[0] == 0) -> the stock handler, unchanged;
+//   else the click sound, ShowMessageBox(this, eSayConfirmRestart, 0, true);
+//     non-zero (No) -> the function's own "return true" (menu stays up);
+//     zero (Yes)    -> the live new-player sequence on the game state
+//       [this+0Ch]: speed field >= 999 -> 10; theGameState::Init with the six
+//       name dwords +25ABCh..+25AD0h kept; SaveCurrentGame; then the stock
+//       handler just after its own click sound (it starts the intro story).
+// B200's stub does exactly this (work/patch_mobile_furniture_pack.py,
+// patch_title_menu_start_over_confirms). It holds the game state in esi; here
+// esi stays the menu scene, which the stock continuation needs, so the game
+// state is reloaded from [esi+0Ch] (a field nothing here changes).
+static const unsigned StartOverGameStats = VF2_GAME_STATS;
+static const unsigned StartOverSoundObject = VF2_SOUND_OBJECT;
+static const unsigned StartOverSoundPlay = VF2_SOUND_PLAY;
+static const unsigned StartOverShowMessageBox = VF2_SHOW_MESSAGE_BOX;
+static const unsigned StartOverInit = VF2_GAME_STATE_INIT;
+static const unsigned StartOverSave = VF2_GAME_STATE_SAVE_CURRENT;
+static const unsigned StartOverSharedPath = VF2_START_OVER_SHARED_PATH;
+static const unsigned StartOverReturnTrue = VF2_START_OVER_RETURN_TRUE;
+static const unsigned StartOverAfterSound = VF2_START_OVER_AFTER_SOUND;
+static_assert(VF2_START_OVER_CONFIRM_STRING_ID == 0x744 && VF2_SOUND_CLICK == 0xB9 &&
+                  VF2_GAME_STATE_NAME_FIRST == 0x25ABC && VF2_GAME_STATE_NAME_LAST == 0x25AD0 &&
+                  VF2_MENU_GAME_STATE_FIELD == 0xC && VF2_PAUSE_FIELD == 0x25B18,
+              "the Start Over stub's literals follow the sites module");
+
+static __declspec(naked) void StartOverStub() {
+    __asm {
+        mov eax, dword ptr [StartOverGameStats]
+        cmp dword ptr [eax], 0
+        je stock_path
+        push 0xB9
+        mov ecx, dword ptr [StartOverSoundObject]
+        call dword ptr [StartOverSoundPlay]
+        push 1
+        push 0
+        push 0x744
+        push esi
+        call dword ptr [StartOverShowMessageBox]
+        add esp, 16
+        test eax, eax
+        jne return_true
+        mov ecx, dword ptr [esi + 0xC]
+        cmp dword ptr [ecx + 0x25B18], 0x3E7
+        jl no_clamp
+        mov dword ptr [ecx + 0x25B18], 0xA
+    no_clamp:
+        push dword ptr [ecx + 0x25AD0]
+        push dword ptr [ecx + 0x25ACC]
+        push dword ptr [ecx + 0x25AC8]
+        push dword ptr [ecx + 0x25AC4]
+        push dword ptr [ecx + 0x25AC0]
+        push dword ptr [ecx + 0x25ABC]
+        call dword ptr [StartOverInit]
+        mov ecx, dword ptr [esi + 0xC]
+        pop dword ptr [ecx + 0x25ABC]
+        pop dword ptr [ecx + 0x25AC0]
+        pop dword ptr [ecx + 0x25AC4]
+        pop dword ptr [ecx + 0x25AC8]
+        pop dword ptr [ecx + 0x25ACC]
+        pop dword ptr [ecx + 0x25AD0]
+        call dword ptr [StartOverSave]
+        jmp dword ptr [StartOverAfterSound]
+    stock_path:
+        jmp dword ptr [StartOverSharedPath]
+    return_true:
+        jmp dword ptr [StartOverReturnTrue]
+    }
+}
+
+// (d) patch_title_menu_refresh_on_activate. theMenuScene::UpdateShowPlayer
+// becomes the one refresh point (see the sites module for the four hooks).
+typedef void *(__thiscall *GetLargeFontFn)(void *strings);
+typedef const char *(__thiscall *GetStringFn)(void *strings, int id);
+typedef void (__thiscall *ButtonSetTextFn)(void *button, const char *text, unsigned c1, unsigned c2,
+                                           unsigned c3, void *font);
+typedef void (__thiscall *UpdateShowPlayerFn)(void *scene);
+static const GetLargeFontFn TitleGetLargeFont = (GetLargeFontFn)VF2_STRING_GET_LARGE_FONT;
+static const GetStringFn TitleGetString = (GetStringFn)VF2_STRING_GET_STRING;
+static const ButtonSetTextFn TitleButtonSetText = (ButtonSetTextFn)VF2_BUTTON_SET_TEXT;
+static UpdateShowPlayerFn OriginalUpdateShowPlayer;  // the trampoline
+
+// The constructor's own label choice (0x4433F5..0x44346C): the large font of
+// the string manager [this+14h], the colour three times, "Play" (0x775) or,
+// with a village (GameStats[0] != 0), "Continue" (0x280), set on the Play
+// button [this+0D8h]. B200's label stub repeats these calls in this order.
+static void ApplyTitleLabel(unsigned char *scene) {
+    void *strings = *(void **)(scene + VF2_MENU_STRING_MANAGER_FIELD);
+    void *font = TitleGetLargeFont(strings);
+    unsigned colour = *(unsigned *)VF2_TITLE_TEXT_COLOUR;
+    int id = *(int *)VF2_GAME_STATS != 0 ? VF2_TITLE_CONTINUE_STRING_ID : VF2_TITLE_PLAY_STRING_ID;
+    const char *text = TitleGetString(strings, id);
+    TitleButtonSetText(*(void **)(scene + VF2_MENU_PLAY_BUTTON_FIELD), text, colour, colour, colour, font);
+}
+
+static void __fastcall UpdateShowPlayerDetour(void *scene, void *) {
+    ApplyTitleLabel((unsigned char *)scene);
+    OriginalUpdateShowPlayer(scene);
+}
+
+// Jumped to from 0x443C00 in place of `mov edx,[ebx+0F0h]; push edx` (the
+// argument of the name's AddControl): when no control with Manage Games' id
+// is in the scene, add the Manage Games button first, as B200 does; then
+// redo the two instructions and resume at 0x443C07 (ebx = the menu scene).
+static const unsigned ManageGetControl = VF2_SCENE_GET_CONTROL;
+static const unsigned ManageAddControl = VF2_SCENE_ADD_CONTROL;
+static const unsigned ManageResume = VF2_SHOW_PLAYER_ADD_NAME_RESUME;
+static_assert(VF2_MENU_MANAGE_GAMES_ID_FIELD == 0xC4 && VF2_MENU_MANAGE_GAMES_BUTTON_FIELD == 0xE4 &&
+                  VF2_MENU_NAME_BUTTON_FIELD == 0xF0,
+              "the Manage Games stub's literals follow the sites module");
+
+static __declspec(naked) void ManageGamesStub() {
+    __asm {
+        push dword ptr [ebx + 0xC4]
+        mov ecx, ebx
+        call dword ptr [ManageGetControl]
+        test eax, eax
+        jne already_shown
+        push dword ptr [ebx + 0xE4]
+        mov ecx, ebx
+        call dword ptr [ManageAddControl]
+    already_shown:
+        mov edx, dword ptr [ebx + 0xF0]
+        push edx
+        jmp dword ptr [ManageResume]
+    }
+}
+
+// Replace the two calls that end Activate(true) and the name prompt's cancel
+// path: make the original call, then refresh the title (esi = the menu scene
+// in both stock functions; the callee preserves it).
+static const unsigned ActivateTailTarget = VF2_MENU_ACTIVATE_TAIL_TARGET;
+static const unsigned NicknameDialogDtor = VF2_NICKNAME_DIALOG_DTOR;
+static const unsigned RefreshTitle = VF2_UPDATE_SHOW_PLAYER;
+
+static __declspec(naked) void ActivateTailWrapper() {
+    __asm {
+        call dword ptr [ActivateTailTarget]
+        mov ecx, esi
+        call dword ptr [RefreshTitle]
+        ret
+    }
+}
+
+static __declspec(naked) void NicknameCancelWrapper() {
+    __asm {
+        call dword ptr [NicknameDialogDtor]
+        mov ecx, esi
+        call dword ptr [RefreshTitle]
+        ret
+    }
+}
+
 static void PlanFixVanillaBugs(Plan &plan) {
     plan.Jmp(VF2_PAUSE_YES_ADD, VF2_PAUSE_YES_ADD_LEN, (const void *)&PauseYesStub);
     plan.Jmp(VF2_TITLE_HOTSPOT_TOP_STORE, VF2_TITLE_HOTSPOT_TOP_STORE_LEN, (const void *)&TitleHotspotStub);
+    plan.RetargetJcc(VF2_START_OVER_BRANCH, (const void *)&StartOverStub);
+    OriginalUpdateShowPlayer = (UpdateShowPlayerFn)plan.Trampoline(VF2_UPDATE_SHOW_PLAYER,
+                                                                  VF2_UPDATE_SHOW_PLAYER_STEAL);
+    plan.Jmp(VF2_UPDATE_SHOW_PLAYER, VF2_UPDATE_SHOW_PLAYER_STEAL, (const void *)&UpdateShowPlayerDetour);
+    plan.Jmp(VF2_SHOW_PLAYER_ADD_NAME, VF2_SHOW_PLAYER_ADD_NAME_LEN, (const void *)&ManageGamesStub);
+    plan.Retarget(VF2_MENU_ACTIVATE_TAIL_CALL, (const void *)&ActivateTailWrapper);
+    plan.Retarget(VF2_NICKNAME_CANCEL_DTOR_CALL, (const void *)&NicknameCancelWrapper);
+    if (!OriginalUpdateShowPlayer) plan.ok = false;
 }
 
 // ================================================================ module: career_room_goals
@@ -585,6 +772,338 @@ static void PlanCareerRoomGoals(Plan &plan) {
     plan.Retarget(VF2_TECH_LOAD_STATE_CALL, (const void *)&TechLoadStateAndReconcile);
 }
 
+// ================================================================ module: event_collectable_slot_replacement
+// B200 patch_event_collectable_slot_replacement. CCollectableItem keeps exactly
+// two event slots, at +34Ch and +368h (1Ch apart: +0 active, +8 spawn stamp,
+// +14h the villager walking to it, -1 none). Add(carrying, point, false) takes
+// the first free slot and RETURNS WITHOUT SPAWNING when both are busy;
+// Add(.., true) always writes slot 0. Natural spawns keep the pair busy most of
+// the time, so the native events that spawn collectables (Bug Whisperer twice,
+// Neighbor Collectible once) mostly spawned nothing. Owner decision: an EVENT
+// spawn replaces the oldest unpicked collectable. The three native call sites
+// go through the thunk below; everything else (Update's natural spawns, the
+// native Add itself) is untouched. This is B200's VF2EventCollectableAddImpl
+// and helpers, ported function for function (the tests compare their text).
+static bool EventCollectableSlotReplacement;
+
+typedef void (__thiscall *CollectableAddFn)(void *item, int carrying, int x, int y, int force);
+typedef void (__thiscall *CollectableRemoveFn)(void *item, int slot);
+typedef void *(__cdecl *GameStateGetFn)();
+typedef unsigned (__thiscall *SecondsFromGameStartFn)(void *gameState);
+static const CollectableAddFn NativeCollectableAdd = (CollectableAddFn)VF2_COLLECTABLE_ADD;
+static const CollectableRemoveFn NativeCollectableRemove = (CollectableRemoveFn)VF2_COLLECTABLE_REMOVE;
+static const GameStateGetFn NativeGameStateGet = (GameStateGetFn)VF2_GAME_STATE_GET;
+static const SecondsFromGameStartFn NativeSecondsFromGameStart = (SecondsFromGameStartFn)VF2_GAME_SECONDS_FROM_START;
+static_assert(VF2_COLLECTABLE_SLOT_BASE == 0x34C && VF2_COLLECTABLE_SLOT_STRIDE == 0x1C &&
+                  VF2_COLLECTABLE_STAMP_OFFSET == 8 && VF2_COLLECTABLE_PICKED_OFFSET == 0x14 &&
+                  VF2_COLLECTABLE_STAMP_DELAY == 0x78,
+              "the collectable slot layout follows the sites module");
+
+static unsigned char *EventCollectableSlot(int slot) {
+    return (unsigned char *)VF2_COLLECTABLE_ITEM + 0x34C + slot * 0x1C;
+}
+
+static bool EventCollectableSlotBusy(int slot) {
+    return EventCollectableSlot(slot)[0] != 0;
+}
+
+static bool EventCollectableSlotPicked(int slot) {
+    return *(int *)(EventCollectableSlot(slot) + 0x14) != -1;
+}
+
+static unsigned int EventCollectableSlotStamp(int slot) {
+    return *(unsigned int *)(EventCollectableSlot(slot) + 0x08);
+}
+
+// The slot and spawn stamp of the item the previous event spawn produced.
+// The Bug Whisperer spawns TWICE back to back; an item this burst just spawned
+// is never sacrificed. "This burst" is bounded by the game clock: the record
+// must still carry the stamp of the CURRENT game second (Add writes seconds +
+// 0x78 at activation).
+static int gLastEventSpawnSlot = -1;
+static unsigned int gLastEventSpawnStamp = 0;
+
+static unsigned int EventCollectableStampNow() {
+    void *clock = NativeGameStateGet();
+    return clock ? NativeSecondsFromGameStart(clock) + 0x78 : 0;
+}
+
+static bool EventCollectableSlotFreshFromBurst(int slot) {
+    if (gLastEventSpawnSlot != slot || !EventCollectableSlotBusy(slot)) return false;
+    unsigned int const stamp = EventCollectableSlotStamp(slot);
+    return stamp == gLastEventSpawnStamp && stamp == EventCollectableStampNow();
+}
+
+// The slot an event spawn may take over when both are busy: never the item
+// this burst just spawned, else the one nobody is walking to, else the older
+// of the two.
+static int EventCollectableVictim() {
+    bool const fresh0 = EventCollectableSlotFreshFromBurst(0);
+    bool const fresh1 = EventCollectableSlotFreshFromBurst(1);
+    if (fresh0 != fresh1) return fresh0 ? 1 : 0;
+    bool const picked0 = EventCollectableSlotPicked(0);
+    bool const picked1 = EventCollectableSlotPicked(1);
+    if (picked0 != picked1) return picked0 ? 1 : 0;
+    return EventCollectableSlotStamp(1) < EventCollectableSlotStamp(0) ? 1 : 0;
+}
+
+// The native force path only ever writes slot 0, so when slot 0 must survive
+// its record is moved to slot 1 first.
+static void MoveEventCollectableSlot(int from, int to) {
+    unsigned char *source = EventCollectableSlot(from);
+    unsigned char *dest = EventCollectableSlot(to);
+    for (int i = 0; i < 0x1C; ++i) dest[i] = source[i];
+    source[0] = 0;
+}
+
+// A sacrificed record is kept aside until the native spawn has actually
+// activated: the forced RANDOM path (Neighbor Collectible) can give up after a
+// thousand invalid spawn positions and return without activating, and losing a
+// collectable for nothing is exactly what this helper exists to end.
+static void CopyEventCollectableSlot(int slot, unsigned char *dest) {
+    unsigned char *source = EventCollectableSlot(slot);
+    for (int i = 0; i < 0x1C; ++i) dest[i] = source[i];
+}
+
+static void RestoreEventCollectableSlot(int slot, unsigned char const *source) {
+    unsigned char *dest = EventCollectableSlot(slot);
+    for (int i = 0; i < 0x1C; ++i) dest[i] = source[i];
+}
+
+static void __cdecl EventCollectableAddImpl(void *item, int carrying, int x, int y, int force) {
+    bool const busy0 = EventCollectableSlotBusy(0);
+    bool const busy1 = EventCollectableSlotBusy(1);
+    // The slot that must hold the new item afterwards, and the record that
+    // was sacrificed to make room (none when a slot was free).
+    int freed = -1;
+    unsigned char sacrificed[0x1C];
+    if (force) {
+        if (busy0 && !busy1) {
+            MoveEventCollectableSlot(0, 1);
+        } else if (busy0 && busy1) {
+            int const victim = EventCollectableVictim();
+            CopyEventCollectableSlot(victim, sacrificed);
+            freed = 0;
+            if (victim == 1) {
+                MoveEventCollectableSlot(0, 1);
+            } else {
+                NativeCollectableRemove(item, 0);
+            }
+        }
+    } else if (busy0 && busy1) {
+        freed = EventCollectableVictim();
+        CopyEventCollectableSlot(freed, sacrificed);
+        NativeCollectableRemove(item, freed);
+    }
+    // Where the native spawn lands: the force path always writes slot 0; the
+    // plain path takes the first free slot, which is the one just freed or,
+    // when nothing was sacrificed, the first slot that was free.
+    int const landed = force ? 0 : (freed >= 0 ? freed : (busy0 ? 1 : 0));
+    NativeCollectableAdd(item, carrying, x, y, force != 0);
+    if (EventCollectableSlotBusy(landed)) {
+        gLastEventSpawnSlot = landed;
+        gLastEventSpawnStamp = EventCollectableSlotStamp(landed);
+    } else if (freed >= 0) {
+        RestoreEventCollectableSlot(freed, sacrificed);
+    }
+}
+
+// The __thiscall shape the three native call sites already use: ecx = the
+// CollectableItem, then carrying, point.x, point.y, force on the stack (the
+// point is two words). Forwards ecx and the four words to the cdecl body and
+// pops the caller's 16 bytes exactly as Add does.
+static __declspec(naked) void EventCollectableAddThunk() {
+    __asm {
+        push dword ptr [esp + 16]
+        push dword ptr [esp + 16]
+        push dword ptr [esp + 16]
+        push dword ptr [esp + 16]
+        push ecx
+        call EventCollectableAddImpl
+        add esp, 20
+        ret 16
+    }
+}
+
+static void PlanEventCollectables(Plan &plan) {
+    for (size_t i = 0; i < sizeof(VF2_EVENT_COLLECTABLE_ADD_CALLSITES) / sizeof(unsigned); ++i)
+        plan.Retarget(VF2_EVENT_COLLECTABLE_ADD_CALLSITES[i], (const void *)&EventCollectableAddThunk);
+}
+
+// ================================================================ module: power_failure_event
+// B200 patch_power_failure_event. Stock CEventThePowerFailure: choice A resets
+// the food store; choice B ("Take a chance") used to hit 0-3 random villagers.
+// B200 rolls once in CalcAward (1 in 4 = the food was bad, result text 0x9BE,
+// otherwise 0x9BD) and on a bad roll gives every living villager at home a 15%
+// upset stomach. State is per event pointer in four slots, one-shot, not
+// persisted. The class's three vtable slots (CalcAward, GetResultDescription,
+// ImpactGame) are replaced; the code is B200's VF2PowerFailure* helpers.
+static bool PowerFailureEvent;
+
+typedef void (__thiscall *EnvironmentSetPropFn)(void *environment, int prop);
+typedef void (__thiscall *FoodStoreResetFn)(void *foodStore, bool notify);
+typedef void (__thiscall *GiveAllSymptomFn)(void *manager, int symptom, int percent);
+static const EnvironmentSetPropFn EnvironmentSetProp = (EnvironmentSetPropFn)VF2_ENVIRONMENT_SET_PROP;
+static const FoodStoreResetFn FoodStoreReset = (FoodStoreResetFn)VF2_FOOD_STORE_RESET;
+static const GiveAllSymptomFn GiveAllVillagersSymptom = (GiveAllSymptomFn)VF2_GIVE_ALL_VILLAGERS_SYMPTOM;
+static_assert(VF2_POWER_FAILURE_RESULT_A == 0x9BC && VF2_POWER_FAILURE_RESULT_B1 == 0x9BD &&
+                  VF2_POWER_FAILURE_RESULT_B2 == 0x9BE && VF2_PROP_FOOD_SPOILED == 0x17 &&
+                  VF2_SYMPTOM_UPSET_STOMACH == 2 && VF2_POWER_FAILURE_SYMPTOM_PERCENT == 15,
+              "the Power Failure constants follow the sites module");
+
+struct PowerFailureState {
+    void *event;
+    int b2;
+};
+
+static PowerFailureState gPowerFailureStates[4] = {};
+static unsigned int gPowerFailureReplacement = 0;
+
+static PowerFailureState *FindPowerFailureState(void *event, bool create) {
+    if (!event) return 0;
+    PowerFailureState *empty = 0;
+    for (int i = 0; i < 4; ++i) {
+        if (gPowerFailureStates[i].event == event) {
+            return &gPowerFailureStates[i];
+        }
+        if (!empty && !gPowerFailureStates[i].event) {
+            empty = &gPowerFailureStates[i];
+        }
+    }
+    if (!create) return 0;
+    if (empty) {
+        empty->event = event;
+        empty->b2 = 0;
+        return empty;
+    }
+    PowerFailureState *slot = &gPowerFailureStates[gPowerFailureReplacement++ % 4];
+    slot->event = event;
+    slot->b2 = 0;
+    return slot;
+}
+
+static void ClearPowerFailureState(void *event) {
+    PowerFailureState *state = FindPowerFailureState(event, false);
+    if (state) {
+        state->event = 0;
+        state->b2 = 0;
+    }
+}
+
+static void PowerFailureCalcAward(void *event, int choice) {
+    PowerFailureState *state = FindPowerFailureState(event, true);
+    if (!state) return;
+    state->b2 = (choice != 0) && (GetRandom(4) == 0);
+}
+
+static int PowerFailureGetResultDescription(void *event, int choice) {
+    if (choice == 0) return 0x9BC;
+    PowerFailureState *state = FindPowerFailureState(event, false);
+    if (state && state->b2) {
+        return 0x9BE;
+    }
+    return 0x9BD;
+}
+
+static void PowerFailureImpactGame(void *event, int choice) {
+    if (choice == 0) {
+        EnvironmentSetProp((void *)VF2_ENVIRONMENT, 0x17);
+        FoodStoreReset((void *)VF2_FOOD_STORE, true);
+    } else {
+        PowerFailureState *state = FindPowerFailureState(event, false);
+        if (state && state->b2) {
+            GiveAllVillagersSymptom((void *)VF2_VILLAGER_MANAGER, 2, 15);
+        }
+    }
+    ClearPowerFailureState(event);
+}
+
+// The three virtuals: thiscall, the choice on the stack, the callee pops 4.
+static void __fastcall PowerFailureCalcAwardSlot(void *self, void *, int choice) {
+    PowerFailureCalcAward(self, choice);
+}
+static int __fastcall PowerFailureDescriptionSlot(void *self, void *, int choice) {
+    return PowerFailureGetResultDescription(self, choice);
+}
+static void __fastcall PowerFailureImpactSlot(void *self, void *, int choice) {
+    PowerFailureImpactGame(self, choice);
+}
+
+static void PlanPowerFailureEvent(Plan &plan) {
+    plan.Slot(VF2_POWER_FAILURE_SLOT_CALC_AWARD, (const void *)&PowerFailureCalcAwardSlot);
+    plan.Slot(VF2_POWER_FAILURE_SLOT_DESCRIPTION, (const void *)&PowerFailureDescriptionSlot);
+    plan.Slot(VF2_POWER_FAILURE_SLOT_IMPACT, (const void *)&PowerFailureImpactSlot);
+}
+
+// ================================================================ module: older_villager_mortality
+// B200 patch_older_villager_mortality (.vf2mort), the mortality half. In
+// CVillagerManager::AllVillagersRealtimePhysiologyAndProductivityUpkeep the
+// stock old-age statement opens with FoodGroupsActive(0) on the villager's
+// CVillagerState (ebp) and, on a whole birthday past 55 years + groups, rolls
+// GetRandom(100) against 10 * years-over-threshold. With this module on, that
+// statement is never run: the decision comes from the table below (B200's
+// annual hazard, in millionths, by effective age = displayed age - active food
+// groups clamped to 0-4), then SetHealth(0, OldAge) when it says so, and the
+// code continues after the statement. The decision is B200's
+// VF2RollOlderVillagerMortality, ported line for line; the table is generated
+// from B200's formula (vf2_runtime_sites.py) and compared with it by the tests.
+static bool OlderVillagerMortality;
+
+static int __cdecl RollOlderVillagerMortality(int internalAge, int activeFoodGroups) {
+    if (internalAge < 0 || internalAge % 20 != 0) return 0;
+    if (activeFoodGroups < 0) activeFoodGroups = 0;
+    if (activeFoodGroups > 4) activeFoodGroups = 4;
+
+    // Preserve the vanilla cumulative nutrition benefit: every active food
+    // group subtracts one effective year, capped to the native 0..4 range.
+    int nutritionShift = activeFoodGroups;
+    int effectiveAge = internalAge / 20 - nutritionShift;
+    if (effectiveAge < 55) return 0;
+
+    int hazardMillionths = 999999;
+    if (effectiveAge <= 317) {
+        hazardMillionths = VF2_OLDER_MORTALITY_HAZARDS[effectiveAge - 55];
+    }
+    return GetRandom(1000000) < hazardMillionths ? 1 : 0;
+}
+static_assert(VF2_OLDER_MORTALITY_TABLE_FIRST_AGE == 55 && VF2_OLDER_MORTALITY_TABLE_LAST_AGE == 317 &&
+                  VF2_OLDER_MORTALITY_RANDOM_LIMIT == 1000000 && VF2_OLDER_MORTALITY_HAZARD_CAP_MILLIONTHS == 999999 &&
+                  VF2_CAUSE_OF_DEATH_OLD_AGE == 2 && VF2_VILLAGER_STATE_AGE_OFFSET == 8,
+              "the mortality constants follow the sites module");
+static_assert(sizeof(VF2_OLDER_MORTALITY_HAZARDS) / sizeof(VF2_OLDER_MORTALITY_HAZARDS[0]) == 317 - 55 + 1,
+              "the hazard table covers effective ages 55..317");
+
+static const unsigned MortalityFoodGroups = VF2_FOOD_GROUPS_ACTIVE;
+static const unsigned MortalitySetHealth = VF2_SET_HEALTH;
+static const unsigned MortalityDone = VF2_OLDER_MORTALITY_DONE;
+
+// Jumped to from 0x49BBBD in place of `push 0; mov ecx,ebp; call FoodGroupsActive`
+// (ebp = the villager's CVillagerState, esi = the loop pointer). Both outcomes
+// continue at 0x49BC47, after the stock statement, which is never entered.
+static __declspec(naked) void OlderMortalityStub() {
+    __asm {
+        push 0
+        mov ecx, ebp
+        call dword ptr [MortalityFoodGroups]
+        push eax
+        push dword ptr [ebp + 8]
+        call RollOlderVillagerMortality
+        add esp, 8
+        test eax, eax
+        jz alive
+        push 2
+        push 0
+        mov ecx, ebp
+        call dword ptr [MortalitySetHealth]
+    alive:
+        jmp dword ptr [MortalityDone]
+    }
+}
+
+static void PlanOlderVillagerMortality(Plan &plan) {
+    plan.Jmp(VF2_UPKEEP_FOOD_GROUPS_CALL, VF2_UPKEEP_FOOD_GROUPS_CALL_LEN, (const void *)&OlderMortalityStub);
+}
+
 #include "vf2fun_ids.inc"
 
 // ================================================================ module table
@@ -599,6 +1118,9 @@ static const ModuleDef Modules[] = {
     { PlanFixVanillaBugs, &FixVanillaGameBugs },       // VF2_MODULE_FIX_VANILLA_BUGS
     { PlanCareerRoomGoals, &CareerRoomGoalReconciliation },  // VF2_MODULE_CAREER_ROOM_GOALS
     { PlanTimeControls, &TimeControls },               // VF2_MODULE_TIME_CONTROLS
+    { PlanEventCollectables, &EventCollectableSlotReplacement },  // VF2_MODULE_EVENT_COLLECTABLE_SLOT_REPLACEMENT
+    { PlanPowerFailureEvent, &PowerFailureEvent },  // VF2_MODULE_POWER_FAILURE_EVENT
+    { PlanOlderVillagerMortality, &OlderVillagerMortality },  // VF2_MODULE_OLDER_VILLAGER_MORTALITY
     { PlanAchievementRecords, &AchievementReservedRecords },  // VF2_MODULE_ACHIEVEMENT_RECORDS
     { PlanOrnamentAchievement, &OrnamentAchievement },        // VF2_MODULE_ORNAMENT_ACHIEVEMENT
     { PlanIdRegistry, &IdRegistry },                          // VF2_MODULE_ID_REGISTRY (internal, last)

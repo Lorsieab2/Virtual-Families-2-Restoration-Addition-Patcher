@@ -758,7 +758,7 @@ def test_the_release_dll_exports_only_the_status_block(built):
 
 
 # ------------------------------------------------------------ cascade-map evidence
-# The study (section 14) claims, for each table the B200 append touches, exactly who reads it in
+# The study (section 15) claims, for each table the B200 append touches, exactly who reads it in
 # the VANILLA file. These tests re-derive the claims with capstone so the document cannot drift.
 capstone = pytest.importorskip("capstone")
 from capstone import CS_ARCH_X86, CS_MODE_32, Cs  # noqa: E402

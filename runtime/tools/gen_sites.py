@@ -14,14 +14,21 @@ Two separate jobs:
       shortest such run, and none of its instructions is relative (no
       branch/call/ret/int, nothing position-dependent), so the stolen copy
       runs unchanged from the trampoline;
-    - a "replace" pin is whole, non-relative instructions of at least 5 bytes;
-    - a "retarget" pin is exactly one `call rel32` / `jmp rel32` to its target;
+    - a "replace" pin is whole, non-relative instructions of at least 5 bytes
+      (it may end in one `call rel32` to its named target, which the DLL
+      re-issues itself);
+    - a "retarget" pin is exactly one `call rel32` / `jmp rel32` / `jcc rel32`
+      to its target;
     - a "field" pin is exactly one instruction whose displacement or immediate
       is the pinned (offset, size) field, which is the only part rewritten;
-    - a "context" pin ends on an instruction boundary;
+    - a "context" pin ends on an instruction boundary; a "data" pin is exact bytes only;
+    - a "vtable_slot" pin is a 4-byte data pointer holding exactly its target,
+      inside a declared vtable (VTABLE_CLASSES) whose RTTI names the class;
     - no two written runs overlap, in any module;
     - no direct branch anywhere in .text lands inside the bytes the DLL
       overwrites (it may land on their first byte);
+    - every SINGLE_ENTRY_REGIONS entry decodes exactly, is entered only at its
+      first byte and is left only through its named exit;
     - every function in EXCLUSIVE_CALLERS has exactly the pinned direct
       callers, and nothing in NO_ABSOLUTE_REFERENCES is referenced by
       absolute address.
@@ -155,6 +162,31 @@ def validate(data: bytes) -> list[str]:
                 raise SiteError(f"{pin.name}: unknown module {pin.module}")
             facts.append(f"{pin.name} {pin.va:#x} [data] {len(live)} bytes")
             continue
+        if pin.role == "vtable_slot":
+            # A 4-byte function pointer in a vtable (data, never decoded): it must hold
+            # exactly the pinned function, lie outside .text, and sit inside a vtable
+            # whose RTTI names the expected class.
+            if (len(pin.expected) != 4 or pin.target is None
+                    or struct.unpack("<I", pin.expected)[0] != pin.target
+                    or img.text_va <= pin.va < img.text_va + len(img.text)):
+                raise SiteError(f"{pin.name}: not a data slot holding {pin.target}")
+            owners = [(vt, name, n) for vt, (name, n) in S.VTABLE_CLASSES.items() if vt <= pin.va < vt + 4 * n]
+            if len(owners) != 1:
+                raise SiteError(f"{pin.name}: {pin.va:#x} is not in exactly one declared vtable")
+            vt, cls, _n = owners[0]
+            col = struct.unpack("<I", img.read(vt - 4, 4))[0]
+            td = struct.unpack("<I", img.read(col + 12, 4))[0]
+            found = b""
+            while True:
+                ch = img.read(td + 8 + len(found), 1)
+                if ch == b"\0":
+                    break
+                found += ch
+            if found != cls.encode("ascii"):
+                raise SiteError(f"{pin.name}: vtable {vt:#x} is {found!r}, not {cls}")
+            overwritten.append((pin.name, pin.va, 4))
+            facts.append(f"{pin.name} {pin.va:#x} [vtable_slot] slot {(pin.va - vt) // 4} of {cls} holds {pin.target:#x}")
+            continue
         insns = decode_run(md, live, pin.va)
         text = "; ".join(f"{i.mnemonic} {i.op_str}".strip() for i in insns)
         if pin.module != S.CORE and pin.module not in S.MODULE_BY_KEY:
@@ -165,16 +197,27 @@ def validate(data: bytes) -> list[str]:
                 raise SiteError(f"{pin.name}: steal length {n} does not match the pin ({len(pin.expected)})")
             overwritten.append((pin.name, pin.va, n))
         elif pin.role == "replace":
-            if sum(i.size for i in insns) < 5 or any(is_relative(i) for i in insns):
+            # Whole instructions the DLL re-does. A run may end in one `call
+            # rel32` when the pin names its target: the DLL then issues that
+            # same call itself (to the pinned absolute address).
+            body = insns
+            if pin.target is not None:
+                last = insns[-1]
+                if (last.mnemonic != "call" or last.size != 5 or last.bytes[0] != 0xE8
+                        or last.operands[0].type != X86_OP_IMM or last.operands[0].imm != pin.target):
+                    raise SiteError(f"{pin.name}: does not end in `call {pin.target:#x}`")
+                body = insns[:-1]
+            if sum(i.size for i in insns) < 5 or any(is_relative(i) for i in body):
                 raise SiteError(f"{pin.name}: must be whole non-relative instructions of 5+ bytes")
             overwritten.append((pin.name, pin.va, len(pin.expected)))
         elif pin.role == "retarget":
             i = insns[0]
-            if (len(insns) != 1 or i.mnemonic not in ("call", "jmp") or i.size != 5
-                    or i.bytes[0] not in (0xE8, 0xE9) or pin.target is None
+            is_jump_or_call = i.size == 5 and i.mnemonic in ("call", "jmp") and i.bytes[0] in (0xE8, 0xE9)
+            is_jcc = i.size == 6 and i.bytes[0] == 0x0F and 0x80 <= i.bytes[1] <= 0x8F
+            if (len(insns) != 1 or not (is_jump_or_call or is_jcc) or pin.target is None
                     or i.operands[0].type != X86_OP_IMM or i.operands[0].imm != pin.target):
-                raise SiteError(f"{pin.name}: not `call/jmp {pin.target}`")
-            overwritten.append((pin.name, pin.va, 5))
+                raise SiteError(f"{pin.name}: not `call/jmp/jcc {pin.target}`")
+            overwritten.append((pin.name, pin.va, i.size))
         elif pin.role == "field":
             if pin.field is None or len(insns) != 1:
                 raise SiteError(f"{pin.name}: a field pin is exactly one instruction with a field")
@@ -202,6 +245,26 @@ def validate(data: bytes) -> list[str]:
     # new jmp/call); a branch to any later byte would execute half an
     # instruction.
     branches = img.direct_branch_targets()
+    # The scan above is deliberately over-approximate: it also "finds" branch
+    # opcodes inside the immediates and displacements of other instructions.
+    # A listed source is dropped only after a linear decode from its function's
+    # start proves it is NOT an instruction start (it sits inside one).
+    for source, func_start in S.NOT_INSTRUCTION_STARTS.items():
+        starts = set()
+        end = max(source + 16, func_start + 16)
+        for insn in md.disasm(img.read(func_start, end - func_start), func_start):
+            starts.add(insn.address)
+            if insn.address > source:
+                break
+        if source in starts or not any(a < source for a in starts):
+            raise SiteError(f"{source:#x} is an instruction start (or undecodable); the waiver is wrong")
+        covering = [a for a in starts if a < source]
+        last = max(covering)
+        insn = next(md.disasm(img.read(last, 16), last))
+        if not last < source < last + insn.size:
+            raise SiteError(f"{source:#x} is not inside an instruction")
+        facts.append(f"{source:#x} is inside '{insn.mnemonic} {insn.op_str}' at {last:#x}, not a branch")
+    branches = [(src, t) for src, t in branches if src not in S.NOT_INSTRUCTION_STARTS]
     field_names = {name for name, *_ in fields_written}
     insn_of = {name: (pin_va, len(S.PIN_BY_NAME[name].expected)) for name, pin_va, _f, _n in fields_written}
     for name, va, n in overwritten:
@@ -237,6 +300,29 @@ def validate(data: bytes) -> list[str]:
             raise SiteError(f"{table}: references differ from the pinned readers; unpinned "
                             f"{[hex(x) for x in extra]}, absent {[hex(x) for x in missing]}")
         facts.append(f"{table}: exactly {len(found)} references in the whole file, all pinned")
+
+    # A region the module skips whole must be single-entry and single-exit:
+    # decoded exactly, with every jump that leaves it going to the exit, and no
+    # branch from outside landing inside it.
+    for name, lo, hi, exit_ in S.SINGLE_ENTRY_REGIONS:
+        # Decoding alone self-synchronises from a misaligned start, so the first
+        # byte must be a boundary some pinned run already established.
+        if not any(pin.va == lo or pin.end == lo for pin in S.PINS):
+            raise SiteError(f"{name}: {lo:#x} is not the start or end of a pinned run")
+        insns = decode_run(md, img.read(lo, hi - lo), lo)
+        for i in insns:
+            if any(i.group(g) for g in (CS_GRP_RET, CS_GRP_INT, CS_GRP_IRET)):
+                raise SiteError(f"{name}: {i.mnemonic} at {i.address:#x} leaves the region")
+            if i.group(CS_GRP_JUMP):
+                op = i.operands[0]
+                if op.type != X86_OP_IMM:
+                    raise SiteError(f"{name}: indirect jump at {i.address:#x}")
+                if not (lo <= op.imm < hi) and op.imm != exit_:
+                    raise SiteError(f"{name}: {i.mnemonic} at {i.address:#x} exits to {op.imm:#x}, not {exit_:#x}")
+        entering = [(hex(s), hex(t)) for s, t in branches if lo < t < hi and not (lo <= s < hi)]
+        if entering:
+            raise SiteError(f"{name}: branches from outside land inside the region: {entering}")
+        facts.append(f"{name}: {lo:#x}-{hi - 1:#x} is single-entry, every exit goes to {exit_:#x}")
 
     for target, expected in S.EXCLUSIVE_CALLERS.items():
         callers = sorted(s for s, t in branches

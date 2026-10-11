@@ -327,14 +327,14 @@ Rule (owner): **DLLs over cave space unless absolutely necessary.** The executab
 | ldwscene_setactive_null_guard | **Converted** (`3a5570a`) | `scene_null_guard`, key `SceneSetActiveNullGuard` (unconditional in B200 → default 1). Vanilla `ldwScene::SetActive` 0x40D1D0, 59 callers. The stub keeps the `test bl,bl` flags and returns through vanilla's own epilogue. |
 | options_pause_yes_idempotent | **Converted** (`481a641`) | `fix_vanilla_bugs`, key `FixVanillaGameBugs` (default 1). Add at 0x4226A6 in theOptionsDialog::HandleMouse. |
 | title_menu_stale_hotspot | **Converted** (`481a641`) | `fix_vanilla_bugs`. Top store at 0x44337B in the theMenuScene constructor; the inclusive readers are pinned. |
-| title_menu_start_over_confirms | Pending | Vanilla `theMenuScene::HandleMessage` (0x443EF0) is shaped differently from the B200 object: dialogs are built inline, and Play/Start Over share 0x443FFD through `je` rel32 at 0x443F5C. Converting needs a jcc retarget role, located ShowMessageBox / theGameState::Init / SaveCurrentGame, and the "return true" path (0x443FF6). Convertible, not proved. **Until it lands, `FixVanillaGameBugs=1` is not yet the whole B200 setting.** |
-| title_menu_refresh_on_activate | Pending | Four sites (UpdateShowPlayer entry and re-add, Activate, theCreateNickNameDlg cancel). Uses only stock strings 0x775/0x280 and stock controls. Same caveat as above. |
+| title_menu_start_over_confirms | **Converted** (Stage 4) | `fix_vanilla_bugs`. `je` rel32 at 0x443F5C in theMenuScene::HandleMessage retargeted to a DLL stub (new jcc retarget role). ShowMessageBox 0x421410, theGameState::Init 0x429DD0 and SaveCurrentGame 0x429660 located and proved (the Options dialog Evict confirmation and the new-player name dialog make the same calls). |
+| title_menu_refresh_on_activate | **Converted** (Stage 4) | `fix_vanilla_bugs`. UpdateShowPlayer 0x443B80 entry detour (label), Manage Games re-add at 0x443C00, Activate(true) tail call 0x443A07, name-prompt-cancel call 0x444073. **`FixVanillaGameBugs=1` is now the whole B200 setting (7 writes).** |
 | fix_vanilla_game_bugs | n/a | Umbrella that calls the four fixes above. |
 | career_room_goal_reconciliation | **Converted** (`17541be`) | `career_room_goals`, key `CareerRoomGoalReconciliation` (unconditional → 1). Load hook only: CTech::LoadState call 0x42A75E. B200's second call, after Cheat Upgrades' Reset Achievements, belongs to Cheat Upgrades (static). |
-| event_collectable_slot_replacement | Pending | The three native sites (Bug Whisperer ×2, Neighbor Collectible) call stock `CCollectableItem::Add` and use stock slots (+0x34C/+0x368); the helper keeps its last-spawn slot/stamp in DLL globals, and B200 keeps them in helper globals too. Not done this round. The fourth (fossil) site is an island-events (mobile) event and stays with that static feature. |
-| options_dialog | Pending | Evict button: two constructor branch NOPs plus an inserted `AddControl` (needs a detour). Stock strings 0x10/0x11 and the stock EvictFamily handler. Not done. |
-| power_failure_event | Pending | Stock `CEventThePowerFailure` CalcAward/GetResultDescription/ImpactGame (vtable slots, found by RTTI). B2 returns string 0x9BE, which the stock table must be shown to contain in vanilla before converting. Not done. |
-| older_villager_mortality | Pending (S2) | The hazard table would live in the DLL (`OLDER_MORTALITY_HAZARDS_MILLIONTHS`), hooked in `CVillagerManager::AllVillagersRealtimePhysiologyAndProductivityUpkeep` before the old-age roll. In B200 that hook also calls the longevity-achievement observer (custom achievements 0x85–0x89, static), so the runtime module would carry the mortality half only. Not done this round. |
+| event_collectable_slot_replacement | **Converted** (Stage 4) | `event_collectable_slot_replacement`, key `EventCollectableSlotReplacement` (unconditional in B200, default 1). Three call retargets to 0x415090 (Bug Whisperer x2, Neighbor Collectible); Update's natural spawn left alone. The fossil site stays with the static island events. |
+| options_dialog | Pending (deferred, convertible) | Evict button: B200 NOPs a 6-byte and a 2-byte conditional branch in the constructor and inserts an AddControl call. The framework's minimum write is 5 bytes, so it needs a new "byte patch" write class, and the dormant block is stock developer-disabled UI that only a live look can vouch for. Not done; no equivalence proof attempted. |
+| power_failure_event | **Converted** (Stage 4) | `power_failure_event`, key `PowerFailureEvent` (default 1; B200 installs it in island-event builds, on by default). String 0x9BE **is** in the vanilla table (record at 0x548060; the string manager constructor indexes all ids). Three vtable slots of CEventThePowerFailure replaced (new vtable_slot role, RTTI-proved). B200 drops the stock SetProp(0x17) on "Take a chance"; the module reproduces B200. |
+| older_villager_mortality | **Converted** (Stage 4, mortality half) | `older_villager_mortality`, key `OlderVillagerMortality` (default 0). Replace run of `push 0; mov ecx,ebp; call FoodGroupsActive` at 0x49BBBD; the stock statement 0x49BBC6..0x49BC46 is proved single-entry/single-exit (exit 0x49BC47). Hazard table generated from B200's formula. The longevity achievement observer stays static. |
 | (none in B200: new in the runtime build) | **Converted** (Stage 3) | `time_controls`, key `TimeControls` (default off). Time Controls dialog from the store screen, see §13. |
 | mobile_table_prop_draw, mobile_table_prop_paint, mobile_patio_prop_execution | **Static** | They draw and paint props for B200-added mobile furniture (picnic table, patio), whose item and image IDs come from the shared append cascade (§4). |
 | mobile_sound_routes | **Static** | Added sound assets and IDs. |
@@ -345,11 +345,16 @@ Rule (owner): **DLLs over cave space unless absolutely necessary.** The executab
 | same_sex_marriage, villager_same_sex_embrace, same_sex_pregnancy_guard, villager_manager_spouse_accessors, marriage_finalization_for_same_sex, villager_details_same_sex_married_status, embrace_role_split | **Static** | The on/off state is a persisted inventory byte that exists only because Cheat Upgrades grows the inventory table (§9.1). |
 | force_successful_pregnancy_callsites, force_pregnancy_skips_refusals | **Static** | Cheat Upgrades one-shot (inventory and string tables). |
 | six_child_private_time, spontaneous_behaviors, bookshelf_reading_behavior, radio_drop_behavior, behavior_label_variants, arcade_behavior_labels, mobile_furniture_behavior_dispatch, mobile_furniture_behavior_macros, mobile_furniture_autonomous_candidates, mobile_furniture_external_autonomous_selection | **Static** for now | Behavior Patches and mobile-furniture behaviour: labels use the string cascade, and the dispatch tables index added furniture. The macro-table part is §8.3 Stage 2's candidate, not yet proved table-free. |
-| multiple_marriage_candidates, marriage_candidate_reroll, vf3_style_child_adoption_chooser, tool_tray_outfit_normalization, main_scene_outfit_body_apply, main_scene_random_tip_click | Pending (not assessed this round) | Not yet checked for table or Cheat Upgrades dependencies. |
+| multiple_marriage_candidates | **Static** | "Cheat upgrades only" (its own manifest scope); reroll branch lives in the Cheat Upgrades inventory. |
+| marriage_candidate_reroll | **Static** | Its on/off state is the persisted inventory byte InventoryManager+0x152+0x2A3, which exists only because Cheat Upgrades grows the inventory table. |
+| vf3_style_child_adoption_chooser | **Never installed in B200** | The call is commented out in B200's build list (line 41678); nothing to match. |
+| tool_tray_outfit_normalization | **Static** | Normalises the B200 outfit store's synthetic tray item ids (the shared item-id cascade) back to stock ids. |
+| main_scene_outfit_body_apply | **Static** (and disabled in B200) | Same synthetic ids; B200 records it as "disabled for B97 stability" and does not call it. |
+| main_scene_random_tip_click | **Static** | Needs the mobile click sound asset (new sound id) and the house region baked into the modified main_BG_ws image 0x174. |
 | debug_features, plan_logging | **Never ported** | Debug-only: must not ship (owner rule). |
 | all, all_in_sections, section_near_jump, count_sites | n/a | Generator plumbing. |
 
-### 11.3 Order for the next round
+### 11.3 Order for the next round (steps 1-4 done in Stage 4, section 14; options_dialog deferred)
 1. Finish `fix_vanilla_bugs` (start_over_confirms, refresh_on_activate). The setting is only B200-complete once these land.
 2. older_villager_mortality (DLL hazard table, mortality half).
 3. event_collectable_slot_replacement (native sites), power_failure_event (after the 0x9BE string check), options_dialog.
@@ -419,7 +424,46 @@ Mutation checks (each single change made, the intended tests failed, change reve
 - **H. Save/reload.** Quit cleanly and relaunch: the family loads. The module writes no save data of its own (only the speed field the game itself saves).
 
 
-## 14. Stage 3 experiment: can the shared ID tables become runtime modules? (branch `runtime-id-reservation`)
+## 14. Stage 4: the rest of the table-free rows
+
+Branch `runtime-hook-stage1`, commits `338f807` (fix_vanilla_bugs complete), `bd00e4d` (older_villager_mortality), `5621359` (event_collectable_slot_replacement), `2b9fe3a` (power_failure_event). Every conversion follows the same bar: pins located structurally in the vanilla image and proved by capstone (`gen_sites.py`), the DLL's logic compared with B200's generator source (text comparison of ported helpers or byte comparison of the stubs), a harness test that runs the real stock code against recorders and a model written from B200, and one deliberate single-point mutation confirmed caught and reverted.
+
+### 14.1 What was added to the framework
+- **jcc retarget** (a `je/jne rel32` pointed at a DLL stub), **replace-run ending in a pinned call** (the DLL re-issues the call itself), **vtable_slot** (a 4-byte data pointer, written under PAGE_READWRITE, never executable; RTTI of the vtable proved), **data** pins (table records and texts) and **SINGLE_ENTRY_REGIONS** (a stock statement the module skips whole is proved single-entry with every exit at one address).
+- The branch-target scan is deliberately over-approximate. Where it reports a "branch" inside another instruction's displacement, `NOT_INSTRUCTION_STARTS` waives it only after a linear decode from the function start proves the address is inside an instruction.
+
+### 14.2 Results
+| Module | Writes | Evidence |
+|---|---|---|
+| `fix_vanilla_bugs` (complete) | 7 | 10 Start Over/Play click cases, name prompt OK/cancel, 16 UpdateShowPlayer states and Activate through the real stock menu code; Start Over Yes keeps the 24 name bytes through Init and clamps the speed field like the new-player dialog. |
+| `older_villager_mortality` | 1 | The stock statement run for every birthday 0-330 years x 0-5 food groups plus off-birthday ages; the kill threshold is found by binary search and equals B200's table (on) or 10 x years over (off). |
+| `event_collectable_slot_replacement` | 3 | 468 slot configurations (burst protection, stale burst, forced random path, native spawn giving up) replayed against an independent model of B200's policy; Update's natural spawn untouched. |
+| `power_failure_event` | 3 | The real virtuals driven through the vtable (stock and replaced), including five events at once (four-slot overflow). |
+
+Tests: 109 pass (`VF2_VANILLA_RUNTIME_DIR` + VS x86), the Stage 1-3 tests unchanged. Mutations caught and reverted: Start Over `jne`->`je`; Manage Games button field 0xE4->0xF0; hazard index -55->-56; mortality `jz`->`jnz`; collectable victim `<`->`>`; collectable restore condition; Power Failure `==0`->`==1`.
+
+### 14.3 Observations (not changed)
+- B200's Power Failure replacement drops the stock `SetProp(0x17)` (spoiled-food prop) for "Take a chance"; stock set it for both choices. Reproduced as B200 does.
+- B200's mortality clamps food groups at 4; the stock statement allows 5.
+
+### 14.4 Conversion state
+80 `patch_*` functions in the B200 generator. Converted: 11 (allow_older_pregnancies + next_generation_age_gate counted as two, SetActive guard, pause_yes, stale_hotspot, start_over, refresh_on_activate, career_room_goals, event_collectable, power_failure, older_villager_mortality), about 14%. Of the remainder, one (options_dialog) is convertible and deferred, the rest are static for the recorded reasons (shared tables, Cheat Upgrades inventory, assets, mobile events, never installed, plumbing, debug). Time Controls is an additional new module.
+
+### 14.5 Stage 4 live-test checklist (main session; one live test at a time)
+**Build:** `C:\vf2w\vf2-runtime-stage4-test\VF2 Runtime Stage4 Test.exe` (exe SHA-256 `04f9ff02...1b28e`, unchanged bootstrap). `Virtual Families 2 Patcher Files\vf2fun.dll` is a **test build** (SHA-256 `eba5553e...170f3`); `vf2fun.ini` has every module on, `ldw.ini` FullScreen=0. Saves go to `Documents\LDW\VF2 Runtime Stage4 Test\`. Probe: `python runtime\tools\probe_stage1.py --exe-name "VF2 Runtime Stage4 Test.exe"`.
+- **A. Install.** Probe: all nine modules `installed`, none `REFUSED`; vtable sites show `vtable slot -> DLL`.
+- **B. Start Over.** With a village, title screen, Start Over: the confirmation appears. No keeps the menu; Yes starts a new game under the same player name (check the name on the title screen afterwards). Without a village, Start Over starts the intro as before.
+- **C. Title refresh.** Delete the only player in Manage Games and cancel the name prompt: the old name and Continue are gone, Manage Games is back. Return to the title from a game: Play/Continue label is right.
+- **D. Collectables.** Wait until both yard collectable spots are busy, then trigger Bug Whisperer / Neighbor Collectible (or Time Warp for the email): the event adds its collectables by replacing the oldest unpicked one; the Bug Whisperer nets two.
+- **E. Power Failure.** Take a chance several times: about one in four says "Everyone gets an upset stomach. The food was not ok." and some villagers get an upset stomach; the rest say "This stuff still looks okay."; Throw it out resets the food.
+- **F. Old-age mortality.** Time Warp elders past 55 (ages in years 55-90): deaths follow the gentler B200 curve (very rare at 56-60) compared with the Off build, where each year past 55 adds 10%.
+- **G. Off = stock.** Set every key to 0: each behaviour above reverts and the probe shows every site vanilla.
+- **H. Save/reload.** Quit cleanly and reload: no module writes save data.
+
+### 14.6 Open risks
+1. Not live-tested. 2. The harness cannot run the full stock physiology/dialog stack, so the live pass is what proves the hooks inside the real game. 3. Anti-virus heuristics as in section 9.6. 4. A transient harness stall was seen once when another process was running heavily (the next run passed); it did not reproduce.
+
+## 15. Stage 3 experiment: can the shared ID tables become runtime modules? (branch `runtime-id-reservation`)
 
 **Question (§4, §8.3, §11):** can fixed per-feature ID ranges be reserved so that a feature's added images / strings / achievements / items get the SAME IDs whether it is on or off, and so that the runtime DLL can register them, with no change to a saved game?
 
@@ -427,7 +471,7 @@ Mutation checks (each single change made, the intended tests failed, change reve
 
 Commits on `runtime-id-reservation` (from `runtime-hook-stage1`): `2b99cca` registry + pin roles, `ca56b66` harness and tests, `8f07a96` single requirement check + far-tail save case, `a96eb14` cascade-map evidence tests and probe. Tests: 75 new (`tests/test_runtime_id_reservation.py`), all 51 Stage 1–3 tests still pass (126 in total); they skip cleanly without the vanilla game or the VS x86 toolchain.
 
-### 14.1 The cascade map (vanilla addresses; how every reader indexes each table)
+### 15.1 The cascade map (vanilla addresses; how every reader indexes each table)
 
 "Bound" says where the table's size lives: **imm** = an immediate in code (patchable at runtime), **ptr** = a table pointer, **save** = baked into the saved game. "Readers" were found two ways that must agree: a whole-file raw byte scan (vanilla has no relocation table, so an absolute reference can only be a 4-byte value in the file) and a capstone linear sweep; `gen_sites.py` asserts the raw scan for the achievement tables, `tests/test_runtime_id_reservation.py` re-derives the rest.
 
@@ -435,16 +479,16 @@ Commits on `runtime-id-reservation` (from `runtime-hook-stage1`): `2b99cca` regi
 |---|---|---|---|---|---|
 | `achievementList` `0x54BB50` | 0x5F rows × 28 B (`{id, target, icon, 0, titleStr, descStr, coins}`), 2660 B of `.data`, last row ends `0x54C5B4` | inserts rows 0x5F–0xAB (77, reserved capacity in **all 32** variants; strings always valid) | **8 instructions** in 4 functions (`PercentCompleted 0x4B4CD0`, `DrawAchievement 0x4B4D30` ×5, `IncrementProgress 0x4B5300`, `Update 0x4B5340`), each a 32-bit displacement; nothing else in the file points into it | none for the access; DrawAchievement's id guard is `cmp ebp,5Fh` imm8 ×2 (`0x4B4E05`, `0x4B4EF4`) | **PROVED**: DLL copy, 8 displacements retargeted, guards raised |
 | `achievementOrder` `0x4E2AE0` | 0x5F ints (stock order: 0–0x4C, 0x5D, 0x5E, 0x4D–0x5C) | inserts 0x5F after Bottlologist (0x5E) when Holiday Ornaments is on; appends ~74 custom ids depending on Behavior Patches and a runtime byte | **one loop**, `CAchievementsScene::DrawScene 0x42CC80`, three fields: count `cmp ebp,5Fh` (imm8, `0x42CD32`), base (`lea ebp,[ebp*4+order]`, `0x42CD37`), end pointer (`cmp ebp,order+17Ch`, `0x42CD66`); the constructor `0x42C930` holds the scroll height `0x189A` (= 0x5F·0x42+0x1C) twice | imm | **PROVED**: DLL copy, 3 fields + 2 constructor immediates follow the row count |
-| `CAchievement` records, global `0xAA8648` | **0x125 records × 12 B = 0xDBC, at +0**; notify queue 0x5F dwords at **+0xDBC**; popup timer +0xF38, object 0xF50 | uses record ids 0x5F–0xAB (the slots are already in the save); changes LoadState (below) | `SaveState 0x4B4C80` / `LoadState 0x4B51E0` copy exactly 0x125 records | **save**: 3,564 bytes of records | ids 0x5F–0x124 **already exist in every save**: no reservation needed, none possible beyond 0x124 (see 14.5) |
+| `CAchievement` records, global `0xAA8648` | **0x125 records × 12 B = 0xDBC, at +0**; notify queue 0x5F dwords at **+0xDBC**; popup timer +0xF38, object 0xF50 | uses record ids 0x5F–0xAB (the slots are already in the save); changes LoadState (below) | `SaveState 0x4B4C80` / `LoadState 0x4B51E0` copy exactly 0x125 records | **save**: 3,564 bytes of records | ids 0x5F–0x124 **already exist in every save**: no reservation needed, none possible beyond 0x124 (see 15.5) |
 | `stringTable` `0x53DCC0` + `lookupTable` `0x56ECF0` | 0xA5D entries × 16 B; 0xA69 pointers; `0x571694` right after is the string-manager singleton | appends ids 0xA69–0xFF2 (1,418), **unconditionally reserved**, populated by toggle | `GetString 0x448E90` and the same lookup inlined in the text-draw function `0x448ED0`; the constructor `0x449300` builds the lookup (and reads `sm.xml`, absent from the game folder) | imm: `cmp …,0A67h` ×2, `0A5Dh`, `0A69h` | **PROVED**: both readers end in a failure block (`"Unknown String Id!!!!"`); the block is replaced by a stub that answers registered ids |
-| `ImageList` `0x5364C8` + `ImageIndex` `0x56E2E8` | 637 × 0x30 B; 0x27D pointers | appends up to 936 descriptors (ids 637–1572 when everything is on); **ids shift with two toggles** (14.2) | `GetDescriptor 0x448420` (4 index refs, 5 list refs) and the unload loop `0x4483C0`; 3 `push 27Dh` and 1 `push 27Ch` elsewhere (not examined) | imm: `cmp edx,27Ch` | **DESIGNED, not built**: same shape as strings; `GetDescriptor`'s failure block `33 C0 C2 04 00` (`xor eax,eax; ret 4`) is reached by the id guard |
+| `ImageList` `0x5364C8` + `ImageIndex` `0x56E2E8` | 637 × 0x30 B; 0x27D pointers | appends up to 936 descriptors (ids 637–1572 when everything is on); **ids shift with two toggles** (15.2) | `GetDescriptor 0x448420` (4 index refs, 5 list refs) and the unload loop `0x4483C0`; 3 `push 27Dh` and 1 `push 27Ch` elsewhere (not examined) | imm: `cmp edx,27Ch` | **DESIGNED, not built**: same shape as strings; `GetDescriptor`'s failure block `33 C0 C2 04 00` (`xor eax,eax; ret 4`) is reached by the id guard |
 | furniture `itemInfo` `0x54C738` + `itemInfoLookup` (bss `0xAA9AE0`) | 252 × 0x6C B; item ids 0x1AD–0x2A8 | appends 122 records, rewrites the bound `0xFB` | `LookupFurnitureInfo 0x4B63C0` (4 refs); the bound `0xFB` is an immediate in **13** places and `0xFC` in **5** | imm (18); ids are in the **save** | **NOT ATTEMPTED**: reader side is small, but 18 bounds + category lists + per-id state not examined |
 | inventory `itemInfo` `0x5531E8` | 0x1AD × 0x24 B, ends exactly at the category lists `0x556E3C` | fills rows from 0x117 (cheat upgrade items 0x11B–0x15B and the other added inventory items) | 14 functions, 17 field displacements | ids are in the **save** | **rows 0x117–0x1AC are zero rows in vanilla** (tested): B200's cheat/renovation rows can be written in place by the DLL, no retarget |
 | category lists `gHomeList`… `0x556E3C–0x5575EC` | fixed `.data` block | interleaves ids, widens counts | 3 functions (`0x4BA710`, `0x4BA8F0`, `0x4BAA50`), 56 refs | imm counts | **NOT ATTEMPTED** (hook `GetCategoryItem`/`Count`) |
 
 What the three mechanisms are, in order of preference: (1) **fill a pre-provisioned row in place** (inventory rows, achievement save slots: free); (2) **hook the one failure path** (strings, images, furniture fallback: the stock code already answers "unknown id" and every reader funnels into one block per reader); (3) **retarget the displacements** of a closed list of readers to a DLL copy (achievement list/order). A *table move* with an unbounded reference search was never needed.
 
-### 14.2 What is reserved today, and what is not (measured on the generator, all 32 variants)
+### 15.2 What is reserved today, and what is not (measured on the generator, all 32 variants)
 
 Run `VF2_FULL_ID_SWEEP=1 pytest tests/test_runtime_id_reservation.py -k never_move` for all 32 (about a minute); the default run checks four.
 
@@ -454,7 +498,7 @@ Run `VF2_FULL_ID_SWEEP=1 pytest tests/test_runtime_id_reservation.py -k never_mo
 * **Item ids** are B200's constants (not a cascade): inventory 0x117–0x1AC fit the provisioned rows; furniture ids 0x2A9 and up (B200 goes to 0x330) exceed the stock furniture range 0x1AD–0x2A8.
 * **Do image/string ids reach a save?** Unverified here: the achievement record holds ids and counters, not strings or images, and no other SaveState was read in full. Image ids differ between B200's own variants, which is indirect evidence that they are not persisted, but whether a save crosses variants was not checked. This matters only for the unbuilt image registry.
 
-### 14.3 What was built and proved (feature: B200's "Ornamentologist", achievement 0x5F)
+### 15.3 What was built and proved (feature: B200's "Ornamentologist", achievement 0x5F)
 
 Why this feature: the smallest one that touches **every** shared table at once (a row, an order slot, two strings, and a saved record) without dragging in any of the 12 ornament items, their images, or the collector scene, whose ids are not provisioned in vanilla. It has no vanilla trigger, so it is an *infrastructure proof*, not a shippable feature: the module is `OrnamentologistAchievement`, **default off, experimental**. It deliberately does not include B200's other Holiday Ornaments achievement edits (Goal Collector target 12→13 and the SetComplete hook, Master Collector target 5→6): without the collection they would make "Goal Collector" unreachable.
 
@@ -472,27 +516,27 @@ Save results (all asserted):
 
 Mutation checks (each a single change, the intended tests failed, change reverted with `git checkout`, `git status` clean): M1 inline stub stores its result one slot off; M2 string lookup compares `id+1`; M3 first list reader left on the old table; M4 target 12→13; M5 placed after 0x5D instead of 0x5E; M6 draw guard one too low; M7 scroll range one row short; M8 order end pointer one short; M9 LoadState clear pointer left at record 0x5D; M10 registry not requested by its consumer; M11 a module installs although its required module did not (needs the corrupt-pin test); M12 scene count immediate one short; M13 LoadState counter start left at 0x5F (first run **not caught**: the save cases put garbage at the start of the tail; a case with data only in record 0x124 was added and now catches it).
 
-### 14.4 Equivalence with the static B200 build, and where it is conditional
+### 15.4 Equivalence with the static B200 build, and where it is conditional
 
 * Values (row, strings, order slot, `count·0x42+0x1C`, the five LoadState constants) are asserted against the generator's source and against numbers computed by importing it.
 * The release DLL adds no export and no counter; `Plan::Field` refuses one-byte values above 0x7F (they are signed compare immediates).
 * **Order of the Achievements screen with other B200 features on is not reproduced** (only the Ornamentologist slot is): B200 appends ~74 more ids in a toggle-dependent order. The registry places each id after an anchor; the full order must be a fixed template filtered by what is registered (design below).
 * **Ids at or above 0x80** need a stub: `DrawAchievement`'s two guards and `DrawScene`'s count are `cmp ebp,imm8`, which cannot hold 0xAC (sign extension). B200 used caves; at runtime it needs a `jcc` retarget role (a `jge` rel32 is relative, so it cannot use the `replace` role). `RegisterAchievement` refuses ids ≥ 0x7F until that exists.
-* **Goal/Master Collector** and the SetComplete→Goal-Collector hook are not part of this module (see 14.3).
+* **Goal/Master Collector** and the SetComplete→Goal-Collector hook are not part of this module (see 15.3).
 
-### 14.5 What cannot move, and what depends on it
+### 15.5 What cannot move, and what depends on it
 
 * **CAchievement record array and notify queue**: records `[0, 0xDBC)` are copied as exactly 0x125 × 12 bytes by `SaveState`/`LoadState` (`0x4B4C80`, `0x4B51E0`) and the notify queue (0x5F dwords) starts at `+0xDBC`, followed by the popup timer at `+0xF38`. Neither can grow. **No feature in the list needs it to**: ids stop at 0xAB. What depends on it staying fixed: B200's *Complete all achievements* (Cheat Upgrades), which clears all 0x5F queue slots before each completion, and any feature completing more than 95 goals in one frame. Those stay **static** (they live in Cheat Upgrades).
 * **Per-item state arrays** (placed/owned/enabled bytes in `CInventoryManager`/`CFurnitureManager`): not examined. B200's same-sex toggle persists a byte at `InventoryManager+0x14C+0x2A3` — an *existing* stock slot (item 0x2A3) — so the converted-or-not decision for the same-sex family (7 patches) and the Cheat Upgrades one-shots (2) hinges on those arrays, not on the tables studied here. Marked **STATIC (unproven)**, not "impossible".
 
-### 14.6 Updated per-patch table (replaces the 55 "Static" rows of §11.2)
+### 15.6 Updated per-patch table (replaces the 55 "Static" rows of §11.2)
 
 | Group (patches) | Count | State after this experiment |
 |---|---:|---|
 | `custom_achievements` (rows + LoadState), `string_manager` (the string-table growth) | 2 | **Converted/proved** (`id_registry`, `achievement_records`; the Ornamentologist row is the consumer). `string_manager` here means the table growth only. |
 | `custom_achievement_draw_bounds` | 1 | Proved for ids < 0x80; ids 0x80–0xAB need a `jcc` retarget role |
 | `achiever_load_reconciliation`, `pet_achievement_callsites`, `family_tree_appearance_achievement_callsites`, `maximum_resource_achievement_callsites`, `longevity_achievement_load_reconciliation`, `lifetime_generation_counter`, `new_village_clears_patcher_achievement_state` | 7 | **Unblocked**: their blocker (the list/order/string tables) is gone; each is still its own port (call-site retargets and load hooks), plus its goal rows |
-| `graphics_manager` | 1 | **Convertible by design** (image failure block, 14.1); four unexamined immediates (`push 27Dh` ×3, `push 27Ch`) first |
+| `graphics_manager` | 1 | **Convertible by design** (image failure block, 15.1); four unexamined immediates (`push 27Dh` ×3, `push 27Ch`) first |
 | `holiday_body_draw_redirect`, `collectable_item_holiday_ornaments`, `collectable_holiday_ornament_observers`, `collection_scene_holiday_ornaments`, `the_collector_holiday_ornaments` | 5 | Achievement part proved; the rest needs the collectable-item table (ids 0x9E–0xA9), 13 images and 4 strings, not examined → **pending** |
 | `island_events` | 1 | Strings and images now possible; the event tables (`event_has_fired`, vtables) not examined → pending |
 | `behavior_label_variants`, `arcade_behavior_labels` + 8 other behaviour/furniture-dispatch patches | 10 | Labels are strings (now possible); dispatch tables index added furniture → **STATIC (unproven)** |
@@ -505,14 +549,14 @@ Mutation checks (each a single change, the intended tests failed, change reverte
 
 Honest scale: the experiment unblocks about a fifth of the static patches and removes the numeric-coupling blocker for the achievement and string families. The big-ticket items (furniture, inventory, the added-furniture behaviour, renovations) are untouched; their cost is the 18 bound immediates plus the category-list hooks plus the per-id state check, and nothing here argues that cannot work — only that it is unproved.
 
-### 14.7 Risks to saves
+### 15.7 Risks to saves
 
 1. No module writes a byte of save data of its own; the record layout and its 3,564 bytes are unchanged; a runtime-built save and a B200 save use the same slot for Ornamentologist (cross-load is the asserted LoadState rule).
 2. **Turning `AchievementReservedRecords` off, or loading in a build without it, after the feature ever wrote a record, makes stock `LoadState` wipe records 0x5D–0x124** (the stock rule, shown by `test_vanilla_loses_the_feature_record…`). B200 has no off switch for this; the runtime default is on. If the module is ever offered as a setting, the patcher must refuse "off" for a profile that has ever had a registry feature on, or simply not expose it.
 3. A save from a different registry configuration is safe: ids are constants, rows are slot-indexed, and the order screen is rebuilt every run.
-4. Unexamined: item-id state arrays and the furniture/inventory save (14.5).
+4. Unexamined: item-id state arrays and the furniture/inventory save (15.5).
 
-### 14.8 Live-test checklist for the proved feature (main session; one live test at a time)
+### 15.8 Live-test checklist for the proved feature (main session; one live test at a time)
 
 **Build:** `C:\vf2w\vf2-idres-test\VF2 IdRes Test.exe` (SHA-256 `04f9ff02…1b28e`, the unchanged Stage 1 bootstrap exe); `Virtual Families 2 Patcher Files\vf2fun.dll` is the **release** build (SHA-256 `ce56931b…48f9`, no test exports); `vf2fun.ini`: `AchievementReservedRecords=1`, `OrnamentologistAchievement=1`, every other key 0; `ldw.ini` `FullScreen=0`. Saves go to `Documents\LDW\VF2 IdRes Test\`. Probe: `python runtime\tools\probe_stage1.py --exe-name "VF2 IdRes Test.exe"` from `C:\vf2w\wt-idres`; the achievement writes below refuse unless the exe name contains "Test".
 
@@ -521,12 +565,12 @@ Honest scale: the experiment unblocks about a fifth of the static patches and re
 * **C. Completed state and the popup.** `probe … --set-achievement 0x5F 1 12`: the row shows as complete (check mark / full bar) after the screen is redrawn. `probe … --queue-achievement 0x5F`: the goal popup shows "Ornamentologist" with its text and the usual 25-coin reward. Also set `--set-achievement 0x5F 0 6` and reopen the screen: bar at half, "6 of 12".
 * **D. Save/reload with the feature on.** Complete 0x5F as in C, quit cleanly, relaunch. The row is still complete; the probe's `records.0x5f` shows `flag 1, progress 12`; Bottlologist (`0x5e`) and the other achievements you had are unchanged.
 * **E. Feature off, records on.** Quit cleanly, set `OrnamentologistAchievement=0` (keep `AchievementReservedRecords=1`), relaunch. No Ornamentologist row; probe `rows_moved` false, every `ach_*`/`scene_*` site vanilla, `string_*` vanilla. Play a minute, quit cleanly. Set it back to 1 and relaunch: the row is still complete (the record survived a load with the feature off, B200's rule).
-* **F. All off = stock.** Quit cleanly, set both to 0, relaunch: stock Goals screen (95 rows), all sites vanilla. Stock `LoadState` now wipes records 0x5D–0x124 on that load (documented stock behaviour, 14.7 item 2): Bottlologist is lost in this test save. Expected; do not use a save you care about.
+* **F. All off = stock.** Quit cleanly, set both to 0, relaunch: stock Goals screen (95 rows), all sites vanilla. Stock `LoadState` now wipes records 0x5D–0x124 on that load (documented stock behaviour, 15.7 item 2): Bottlologist is lost in this test save. Expected; do not use a save you care about.
 * **G. Vanilla-format save.** Delete the test save folder, start a new family with the feature on, quit cleanly at once: record 0x5F reads `flag 0, progress 0`. (Compare with a save from `Documents\LDW\VF2 Runtime Stage3 Test\` if present: it loads with the feature on and the row at 0 of 12.)
 * **H. Strings elsewhere.** Nothing else in the game should change: spot-check one tutorial popup and the store descriptions (stock strings), and the Details screen.
 * **Pass** = A–H as stated; any crash on the Goals screen, a missing last row, a repeated row, or a lost record in D/E is a fail.
 
-### 14.9 Reproducing
+### 15.9 Reproducing
 
 * `python runtime\tools\gen_sites.py --vanilla "<vanilla>\Virtual Families 2.exe"` (proves the new pins and the reader census, regenerates `vf2fun_sites.h`); `runtime\native\build.bat` (DLL); `VF2_VANILLA_RUNTIME_DIR=<vanilla folder> python -m pytest tests\test_runtime_hooks_stage1.py tests\test_runtime_id_reservation.py`.
-* Test copy: `python runtime\vf2_runtime_patcher.py apply --game-dir <vanilla folder> --output-dir C:\vf2w\vf2-idres-test --dll runtime\build\vf2fun.dll --exe-name "VF2 IdRes Test.exe" --set …` (every key set explicitly; see 14.8).
+* Test copy: `python runtime\vf2_runtime_patcher.py apply --game-dir <vanilla folder> --output-dir C:\vf2w\vf2-idres-test --dll runtime\build\vf2fun.dll --exe-name "VF2 IdRes Test.exe" --set …` (every key set explicitly; see 15.8).

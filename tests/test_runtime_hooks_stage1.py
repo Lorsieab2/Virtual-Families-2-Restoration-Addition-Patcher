@@ -86,7 +86,7 @@ def test_overwritten_pins_do_not_overlap_each_other():
                    for p in S.PINS if p.role not in ("context", "data"))
     for (a_lo, a_hi, a), (b_lo, b_hi, b) in zip(spans, spans[1:]):
         assert a_hi <= b_lo, f"{a} overlaps {b}"
-    assert {p.role for p in S.PINS} == {"detour", "replace", "retarget", "context", "data", "field"}
+    assert {p.role for p in S.PINS} == {"detour", "replace", "retarget", "context", "data", "field", "vtable_slot"}
     assert len([p for p in S.PINS if p.role == "retarget" and p.module == "older_pregnancies"]) == 4
     assert {p.module for p in S.PINS} <= {S.CORE} | set(S.MODULE_BY_KEY)
 
@@ -379,6 +379,11 @@ def test_bootstrap_loads_the_dll_by_full_path_then_runs_init(on):
     assert boot["init_calls"] == 1 and boot["init_this_ok"] == 1 and boot["init_result"] == 1
 
 
+def _expected_protect(va):
+    """Game code is read-execute; a vtable (data) page is read-only. Never writable."""
+    return "R" if any(p.va == va and p.role == "vtable_slot" for p in S.PINS) else "RX"
+
+
 def _sites(rows):
     return {r["site"]: r for r in rows if "site" in r and "bytes" in r}
 
@@ -392,9 +397,9 @@ def test_setting_off_writes_nothing(off):
     assert status["requested"] == 0 and status["installed"] == 0 and status["trampoline"] == 0
     assert not any(status["write_masks"])
     for va, row in _sites(off).items():
-        pin = next(p for p in S.PINS if p.va == va and p.role != "context")
+        pin = next(p for p in S.PINS if p.va == va and p.role not in ("context", "data"))
         assert bytes.fromhex(row["bytes"]) == pin.expected
-        assert row["protect"] == "RX"
+        assert row["protect"] == _expected_protect(va)
     assert _one(off, "wx_regions")["wx_regions"] == 0
 
 
@@ -423,8 +428,8 @@ def test_installed_bytes_trampoline_and_protections(on):
         assert len(insns) == 1 and insns[0].mnemonic == "call"
         targets.add(insns[0].operands[0].imm)
     assert len(targets) == 1 and lo <= targets.pop() < hi
-    for row in sites.values():
-        assert row["protect"] == "RX", "game code left writable"
+    for va, row in sites.items():
+        assert row["protect"] == _expected_protect(va), "game code left writable"
 
     tramp = _one(on, "trampoline")
     t = tramp["trampoline"]
@@ -635,7 +640,7 @@ def test_modules_install_independently(built):
         assert status["requested"] == status["installed"] == bit, (m.key, status)
         sites = _sites(rows)
         for pin in S.PINS:
-            if pin.role == "context" or pin.va not in sites:
+            if pin.role in ("context", "data") or pin.va not in sites:
                 continue
             live = bytes.fromhex(sites[pin.va]["bytes"])
             assert (live != pin.expected) == (pin.module == m.key or pin.module in m.requires), (m.key, pin.name)
@@ -960,8 +965,8 @@ def test_time_controls_writes_exactly_its_three_sites(built):
     assert call.mnemonic == "call" and lo <= call.operands[0].imm < hi
     warp = next(md.disasm(bytes.fromhex(sites[S.WARP_SITE]["bytes"]), S.WARP_SITE))
     assert warp.mnemonic == "jmp" and warp.size == 5 and lo <= warp.operands[0].imm < hi
-    for row in sites.values():
-        assert row["protect"] == "RX"
+    for va, row in sites.items():
+        assert row["protect"] == _expected_protect(va)
     # The trampoline the handler's stolen prologue runs through.
     tramp = _one(rows, "trampoline")
     code = list(md.disasm(bytes.fromhex(tramp["bytes"])[:12], tramp["trampoline"]))
@@ -1093,3 +1098,733 @@ def test_time_controls_off_leaves_the_store_and_aging_stock(off):
     assert status["requested"] == status["installed"] == 0
     counters = _one(off, "counters")
     assert counters["time_buttons"] == counters["time_warps"] == counters["time_dialogs"] == 0
+
+
+# =============================================================== fix_vanilla_bugs, part 2
+# title_menu_start_over_confirms and title_menu_refresh_on_activate: the rest of
+# B200's .vf2bugs. The harness runs the copied stock theMenuScene code with
+# recorders for the game calls; the models below are written from B200's
+# generator (work/patch_mobile_furniture_pack.py), not from the DLL.
+def _menu_rows(rows):
+    return {r["menu_case"]: r for r in rows if "menu_case" in r}
+
+
+def test_start_over_stub_is_b200s_sequence():
+    """B200's stub, read from the generator: the same literals and call order."""
+    body = _python_function(GENERATOR.read_text(encoding="utf-8"), "patch_title_menu_start_over_confirms")
+    assert _b200_constant("START_OVER_CONFIRM_STRING_ID") == S.START_OVER_CONFIRM_STRING_ID == 0x744
+    assert 'b"\\x68\\xB9\\x00\\x00\\x00"' in body                                   # push 0B9h (click sound)
+    assert body.index('"\\x6A\\x01"') < body.index('"\\x6A\\x00"') < body.index("START_OVER_CONFIRM_STRING_ID")
+    assert 'b"\\x57"' in body and "call ShowMessageBox" in body                    # push this; call
+    assert "\\x81\\xBE\\x18\\x5B\\x02\\x00\\xE7\\x03\\x00\\x00" in body             # cmp [state+25B18h],3E7h
+    assert "\\xC7\\x86\\x18\\x5B\\x02\\x00\\x0A\\x00\\x00\\x00" in body             # mov [state+25B18h],10
+    assert body.count("(0x25AD0, 0x25ACC, 0x25AC8, 0x25AC4, 0x25AC0, 0x25ABC)") == 1   # push order
+    assert body.count("(0x25ABC, 0x25AC0, 0x25AC4, 0x25AC8, 0x25ACC, 0x25AD0)") == 1   # pop order
+    assert body.index("call theGameState::Init") < body.index("call SaveCurrentGame")
+    assert "jne return true" in body and "jmp +0x128" in body
+    assert S.GAME_STATE_NAME_FIRST == 0x25ABC and S.GAME_STATE_NAME_LAST == 0x25AD0
+    src = DLL_SOURCE.read_text(encoding="utf-8")
+    stub = src[src.index("static __declspec(naked) void StartOverStub()"):]
+    stub = stub[:stub.index("\n}\n") + 3]
+    assert [l.strip() for l in stub.splitlines() if "push dword ptr [ecx + 0x25A" in l or "push dword ptr [ecx + 0x25AB" in l] == [
+        f"push dword ptr [ecx + {o}]" for o in ("0x25AD0", "0x25ACC", "0x25AC8", "0x25AC4", "0x25AC0", "0x25ABC")]
+    assert [l.strip() for l in stub.splitlines() if l.strip().startswith("pop dword ptr")] == [
+        f"pop dword ptr [ecx + {o}]" for o in ("0x25ABC", "0x25AC0", "0x25AC4", "0x25AC8", "0x25ACC", "0x25AD0")]
+
+
+def test_title_label_rule_is_b200s():
+    body = _python_function(GENERATOR.read_text(encoding="utf-8"), "patch_title_menu_refresh_on_activate")
+    assert _b200_constant("TITLE_PLAY_STRING_ID") == S.TITLE_PLAY_STRING_ID == 0x775
+    assert _b200_constant("TITLE_CONTINUE_STRING_ID") == S.TITLE_CONTINUE_STRING_ID == 0x280
+    assert 'bytes.fromhex("833D0000000000" "742A")' in body  # the constructor's own cmp GameStats[0],0; je
+    # Manage Games: GetControl(id [this+0C4h]) then AddControl([this+0E4h]) before the name.
+    assert 'b"\\xFF\\xB3\\xC4\\x00\\x00\\x00"' in body and 'b"\\xFF\\xB3\\xE4\\x00\\x00\\x00"' in body
+    assert body.index("call GetControl") < body.index("call AddControl")
+    assert S.MENU_MANAGE_GAMES_ID_FIELD == 0xC4 and S.MENU_MANAGE_GAMES_BUTTON_FIELD == 0xE4
+    assert S.MENU_NAME_BUTTON_FIELD == 0xF0 and S.MENU_PLAY_BUTTON_FIELD == 0xD8
+
+
+def test_fix_vanilla_bugs_part2_sites_are_proved_against_the_vanilla_game():
+    facts = gen_sites.validate(vanilla_bytes())
+    for needle in ("start_over_branch: no direct branch lands in 0x443f5d-0x443f61",
+                   "show_player_entry: no direct branch lands in 0x443b81-0x443b87",
+                   "show_player_add_name: no direct branch lands in 0x443c01-0x443c06",
+                   "menu_activate_tail: no direct branch lands in 0x443a08-0x443a0b",
+                   "nickname_cancel_dtor: no direct branch lands in 0x444074-0x444077",
+                   "direct callers of 0x42c020: 0x443a07",
+                   "0x443f08 is inside 'mov eax, dword ptr [0x557a44]' at 0x443f06, not a branch"):
+        assert any(needle in f for f in facts), needle
+
+
+def test_the_branch_scan_waiver_is_checked_not_trusted():
+    saved = dict(S.NOT_INSTRUCTION_STARTS)
+    try:
+        S.NOT_INSTRUCTION_STARTS[0x443F06] = S.MENU_HANDLE_MESSAGE  # an instruction start: must be refused
+        with pytest.raises(gen_sites.SiteError):
+            gen_sites.validate(vanilla_bytes())
+    finally:
+        S.NOT_INSTRUCTION_STARTS.clear()
+        S.NOT_INSTRUCTION_STARTS.update(saved)
+
+
+def test_validation_refuses_a_non_conditional_or_wrong_target_jcc_retarget():
+    data = bytearray(vanilla_bytes())
+    pe = P.PE(bytes(data))
+    off = pe.offset(S.START_OVER_BRANCH)
+    data[off + 2] ^= 0x01   # the target moves: the pin no longer matches
+    with pytest.raises(gen_sites.SiteError):
+        gen_sites.validate(bytes(data))
+
+
+def _start_over_expected(case, on):
+    """Model of the click rows. Events are the recorders' log; story slots are
+    [state+25CB8h, state+25CBCh] (stock starts at [5, 0x77])."""
+    village, slot = case["village"], case["slot"]
+    name = (b"Alyssa\0" + bytes(0x41 + i for i in range(7, 0x18))).hex()
+    sound = "sound B9"
+    box = "msgbox menu 744 0 1"
+    if case["id"] == 5:
+        return dict(result=0, events=[], story=[5, 0x77], speed=case["speed"], gs0=village)
+    if case["id"] == 1 or not on or not village:
+        if village:  # the stock rollover: keeps going into the current game
+            return dict(result=0, events=[sound], story=[0, 5], speed=case["speed"], gs0=village)
+        events = [sound]
+        if not slot:
+            events += ["nick_ctor 0", "domodal menu 0", "nick_dtor"]
+        return dict(result=0, events=events + ["setstory 0"], story=[9, 5], speed=case["speed"], gs0=0)
+    if case["answer"] != 0:  # No
+        return dict(result=1, events=[sound, box], story=[5, 0x77], speed=case["speed"], gs0=village)
+    speed = 10 if case["speed"] >= 999 else case["speed"]
+    return dict(result=0, events=[sound, box, f"init state speed={speed}", "save state", "setstory 0"],
+                story=[9, 5], speed=speed, gs0=0, name=name)
+
+
+CLICK_CASES = {
+    "start_over_no_village": dict(id=6, village=0, answer=0, speed=10, slot=1),
+    "start_over_no_village_no_slot": dict(id=6, village=0, answer=0, speed=10, slot=0),
+    "start_over_no": dict(id=6, village=1, answer=-1, speed=10, slot=1),
+    "start_over_yes": dict(id=6, village=1, answer=0, speed=10, slot=1),
+    "start_over_yes_speed_998": dict(id=6, village=1, answer=0, speed=998, slot=1),
+    "start_over_yes_speed_999": dict(id=6, village=1, answer=0, speed=999, slot=1),
+    "start_over_yes_speed_1009": dict(id=6, village=1, answer=0, speed=1009, slot=1),
+    "play_village": dict(id=1, village=1, answer=-1, speed=10, slot=1),
+    "play_no_village": dict(id=1, village=0, answer=-1, speed=10, slot=1),
+    "unknown_button": dict(id=5, village=1, answer=-1, speed=10, slot=1),
+}
+ORIGINAL_NAME = (b"Alyssa\0" + bytes(0x41 + i for i in range(7, 0x18))).hex()
+
+
+@pytest.mark.parametrize("name", sorted(CLICK_CASES))
+def test_start_over_confirms_like_b200(on, off, name):
+    case = CLICK_CASES[name]
+    a, b = _menu_rows(on)[f"click:{name}"], _menu_rows(off)[f"click:{name}"]
+    for row, installed in ((b, False), (a, True)):
+        want = _start_over_expected(case, installed)
+        assert row["events"] == want["events"], (name, installed, row)
+        assert row["result"] == want["result"] and row["story"] == want["story"], (name, installed, row)
+        assert row["speed"] == want["speed"] and row["gs0"] == want["gs0"], (name, installed, row)
+        assert row["esp_ok"] == 1
+        assert row["name"] == ORIGINAL_NAME  # the name is untouched (restored after Init on Yes)
+    # The stock game never asks; with a village it silently rolls the story slot over.
+    if case["id"] == 6 and case["village"]:
+        assert b["events"] == ["sound B9"] and b["story"] == [0, 5] and b["result"] == 0
+        assert any("msgbox" in e for e in a["events"])
+    else:
+        assert a == b, "everything but Start Over with a village is stock"
+
+
+def test_start_over_yes_keeps_the_player_name_through_init(on):
+    row = _menu_rows(on)["click:start_over_yes"]
+    assert row["name"] == ORIGINAL_NAME  # the recorder's Init wiped all 24 bytes; the stub put them back
+
+
+def _label_events(village):
+    return ["font strings", f"string {0x280 if village else 0x775:X}",
+            f"settext play {'Continue' if village else 'Play'} white font"]
+
+
+def _show_player_expected(village, slot, name_present, manage_present, on):
+    ev = _label_events(village) if on else []
+    ev.append("get 7")
+    if slot:
+        ev.append("name_text name Alyssa")
+        if not name_present:
+            if on:
+                ev.append("get 2")
+                if not manage_present:
+                    ev.append("add manage")
+            ev.append("add name")
+    elif name_present:
+        ev += ["remove manage", "remove name"]
+    return ev
+
+
+@pytest.mark.parametrize("village", [0, 1])
+@pytest.mark.parametrize("slot", [0, 1])
+@pytest.mark.parametrize("name_present", [0, 1])
+@pytest.mark.parametrize("manage_present", [0, 1])
+def test_update_show_player_refreshes_like_b200(on, off, village, slot, name_present, manage_present):
+    key = f"update_show_player:village{village}_slot{slot}_name{name_present}_manage{manage_present}"
+    for rows, installed in ((off, False), (on, True)):
+        row = _menu_rows(rows)[key]
+        assert row["events"] == _show_player_expected(village, slot, name_present, manage_present, installed), \
+            (key, installed, row)
+        assert row["esp_ok"] == 1 and row["gs0"] == village
+
+
+def test_title_refresh_after_a_cancelled_name_prompt_and_on_activate(on, off):
+    # The cancel path: dtor, then the same refresh the Change Player path makes.
+    for rows, installed in ((off, False), (on, True)):
+        r = _menu_rows(rows)
+        cancel = r["nickname:cancel"]
+        base = ["sound B9", "nick_ctor 0", "domodal menu 0", "nick_dtor"]
+        refresh = _label_events(0) + ["get 7", "remove manage", "remove name"] if installed else []
+        assert cancel["events"] == base + refresh and cancel["result"] == 1, (installed, cancel)
+        nothing = r["nickname:cancel_nothing_shown"]
+        assert nothing["events"] == base + (_label_events(0) + ["get 7"] if installed else []), (installed, nothing)
+        ok = r["nickname:ok"]  # the OK path is stock in both
+        assert ok["events"] == base[:3] + ["nick_dtor", "setstory 0"] and ok["result"] == 0
+        for village in (0, 1):
+            true_row = r[f"activate:arg1_village{village}"]
+            want = ["butterflies ok", "anim ok"]
+            if installed:
+                want += _show_player_expected(village, 1, 0, 0, True)
+            assert true_row["events"] == want, (installed, village, true_row)
+            assert r[f"activate:arg0_village{village}"]["events"] == []  # deactivating: nothing
+            assert true_row["esp_ok"] == 1
+
+
+def test_fix_vanilla_bugs_writes_all_seven_sites(built):
+    rows = _harness(built, {k.ini_key: k.key == "fix_vanilla_bugs" for k in S.MODULES if not k.internal}, tag="-fvb")
+    status = _one(rows, "status")
+    idx = [m.key for m in S.MODULES].index("fix_vanilla_bugs")
+    assert status["installed"] == _module_bit("fix_vanilla_bugs") and status["write_masks"][idx] == 0b1111111
+    sites = _sites(rows)
+    lo, hi = status["dll_lo"], status["dll_hi"]
+    md = _md()
+    jcc = next(md.disasm(bytes.fromhex(sites[S.START_OVER_BRANCH]["bytes"]), S.START_OVER_BRANCH))
+    assert jcc.mnemonic == "je" and jcc.size == 6 and lo <= jcc.operands[0].imm < hi
+    for va in (S.UPDATE_SHOW_PLAYER, S.SHOW_PLAYER_ADD_NAME):
+        raw = bytes.fromhex(sites[va]["bytes"])
+        j = next(md.disasm(raw, va))
+        assert j.mnemonic == "jmp" and lo <= j.operands[0].imm < hi
+        assert raw[5:] == b"\x90" * (len(raw) - 5)
+    for va in (S.MENU_ACTIVATE_TAIL_CALL, S.NICKNAME_CANCEL_DTOR_CALL):
+        c = next(md.disasm(bytes.fromhex(sites[va]["bytes"]), va))
+        assert c.mnemonic == "call" and lo <= c.operands[0].imm < hi
+    tramp = _one(rows, "trampoline")
+    raw = bytes.fromhex(tramp["bytes"])
+    assert raw[:8] == S.PIN_BY_NAME["show_player_entry"].expected
+    assert next(md.disasm(raw[8:13], tramp["trampoline"] + 8)).operands[0].imm == S.UPDATE_SHOW_PLAYER + 8
+    assert _one(rows, "wx_regions")["wx_regions"] == 0
+
+
+# =============================================================== older_villager_mortality
+def _b200_hazard_function():
+    """B200's older_mortality_hazard_millionths, executed from the generator's own source."""
+    import ast
+    import math
+
+    text = GENERATOR.read_text(encoding="utf-8")
+    tree = ast.parse(text)
+    wanted = {"OLDER_MORTALITY_TABLE_FIRST_AGE", "OLDER_MORTALITY_RANDOM_LIMIT", "OLDER_MORTALITY_HAZARD_CAP_MILLIONTHS",
+              "OLDER_MORTALITY_BASE_INTENSITY_PER_YEAR", "OLDER_MORTALITY_LATE_INTENSITY_PER_YEAR",
+              "OLDER_MORTALITY_LATE_ACCELERATION_EFFECTIVE_AGE"}
+    body = [n for n in tree.body
+            if (isinstance(n, ast.Assign) and any(getattr(t, "id", None) in wanted for t in n.targets))
+            or (isinstance(n, ast.FunctionDef) and n.name == "older_mortality_hazard_millionths")]
+    namespace = {"math": math}
+    exec(compile(ast.Module(body=body, type_ignores=[]), "b200-hazard", "exec"), namespace)
+    return namespace["older_mortality_hazard_millionths"], namespace
+
+
+def test_mortality_hazard_table_is_b200s_formula():
+    hazard, ns = _b200_hazard_function()
+    assert ns["OLDER_MORTALITY_TABLE_FIRST_AGE"] == S.OLDER_MORTALITY_TABLE_FIRST_AGE == 55
+    assert ns["OLDER_MORTALITY_RANDOM_LIMIT"] == S.OLDER_MORTALITY_RANDOM_LIMIT
+    assert ns["OLDER_MORTALITY_HAZARD_CAP_MILLIONTHS"] == S.OLDER_MORTALITY_HAZARD_CAP_MILLIONTHS
+    assert _b200_constant("OLDER_MORTALITY_TABLE_LAST_AGE") == S.OLDER_MORTALITY_TABLE_LAST_AGE == 317
+    assert S.OLDER_MORTALITY_HAZARDS == tuple(hazard(a) for a in range(55, 318))
+    # Beyond the table B200 uses the cap, which is also the first age at the cap.
+    assert all(hazard(a) == 999999 for a in range(318, 700))
+    assert hazard(317) < 999999 and hazard(54) == 0 and hazard(55) == 0
+
+
+def test_mortality_decision_is_b200s_helper():
+    b200 = _normalise(_c_function(GENERATOR.read_text(encoding="utf-8"),
+                                  r'extern "C" int __cdecl VF2RollOlderVillagerMortality\('))
+    port = _normalise(_c_function(DLL_SOURCE.read_text(encoding="utf-8"), r"static int __cdecl RollOlderVillagerMortality\("))
+    b200 = b200.replace("kOlderMortalityHazardsMillionths", "OLDER_MORTALITY_HAZARDS")
+    port = port.replace("_OLDER_MORTALITY_HAZARDS", "OLDER_MORTALITY_HAZARDS")
+    assert b200 == port
+
+
+def test_mortality_stub_is_b200s_trampoline():
+    """B200: FoodGroups(0) (observer), then helper(age [state+8], groups); a hit does
+    SetHealth(0, OldAge=2); both rejoin after the statement."""
+    body = _python_function(GENERATOR.read_text(encoding="utf-8"), "patch_older_villager_mortality")
+    order = ["push 0", "call FoodGroupsActive observer", "push eax ; food groups", "push [ebx+8] ; internal age",
+             "call mortality helper", "test eax,eax", "push OldAge", "push zero health", "call SetHealth",
+             "jmp mortality done"]
+    positions = [body.index(f"# {item}") if f"# {item}" in body else body.index(item) for item in order]
+    assert positions == sorted(positions)
+    assert "0x6A, 0x02,                         # push OldAge" in body
+    assert "0x6A, 0x00,                         # push zero health" in body
+    src = DLL_SOURCE.read_text(encoding="utf-8")
+    stub = src[src.index("static __declspec(naked) void OlderMortalityStub()"):]
+    stub = stub[:stub.index("\n}\n") + 3]
+    lines = [l.strip() for l in stub.splitlines()]
+    assert lines.index("push dword ptr [ebp + 8]") < lines.index("call RollOlderVillagerMortality")
+    assert lines.index("push 2") + 1 == lines.index("push 0", lines.index("push 2"))
+    assert S.CAUSE_OF_DEATH_OLD_AGE == 2 and S.VILLAGER_STATE_AGE_OFFSET == 8
+    assert "OLDER_MORTALITY_FLAG_SYMBOL" in body and S.MODULE_BY_KEY["older_villager_mortality"].b200_default is False
+
+
+def test_mortality_sites_are_proved_against_the_vanilla_game():
+    facts = gen_sites.validate(vanilla_bytes())
+    for needle in ("mortality_food_groups: no direct branch lands in 0x49bbbe-0x49bbc5",
+                   "older_mortality_statement: 0x49bbc6-0x49bc46 is single-entry, every exit goes to 0x49bc47"):
+        assert any(needle in f for f in facts), needle
+
+
+def test_region_check_refuses_a_wrong_exit_a_misaligned_start_and_a_jump_out():
+    saved = S.SINGLE_ENTRY_REGIONS
+    try:
+        # Every stock exit of the statement is 0x49BC47; claiming another exit must fail.
+        S.SINGLE_ENTRY_REGIONS = (("wrong_exit", 0x49BBC6, 0x49BC47, 0x49BC00),)
+        with pytest.raises(gen_sites.SiteError, match="exits to"):
+            gen_sites.validate(vanilla_bytes())
+        # A start that is not a boundary a pinned run established is refused too.
+        S.SINGLE_ENTRY_REGIONS = (("split", 0x49BBC7, 0x49BC47, 0x49BC47),)
+        with pytest.raises(gen_sites.SiteError):
+            gen_sites.validate(vanilla_bytes())
+        # A range that runs on past the statement (its next jump leaves) is refused.
+        S.SINGLE_ENTRY_REGIONS = (("leaves", 0x49BBC6, 0x49BC47 + 0x12, 0x49BC47),)
+        with pytest.raises(gen_sites.SiteError):
+            gen_sites.validate(vanilla_bytes())
+    finally:
+        S.SINGLE_ENTRY_REGIONS = saved
+    assert gen_sites.validate(vanilla_bytes())
+
+
+def _stock_mortality(age, groups):
+    """(random calls, random limit, kill threshold) of the unpatched statement."""
+    if age % 20 or age <= 1100 + 20 * groups:
+        return 0, 0, 0
+    return 1, 100, 10 * (age // 20 - (1100 + 20 * groups) // 20)
+
+
+def _b200_mortality(age, groups):
+    if age < 0 or age % 20:
+        return 0, 0, 0
+    effective = age // 20 - max(0, min(4, groups))
+    if effective < 55:
+        return 0, 0, 0
+    hazard = S.OLDER_MORTALITY_HAZARDS[effective - 55] if effective <= 317 else 999999
+    return 1, 1000000, hazard
+
+
+def _mortality_rows(rows):
+    return {r["mortality"]: r["rows"] for r in rows if "mortality" in r}
+
+
+@pytest.mark.parametrize("groups", range(6))
+def test_older_mortality_matches_b200_and_off_is_the_stock_statement(on, off, groups):
+    a, b = _mortality_rows(on)[groups], _mortality_rows(off)[groups]
+    assert len(a) == len(b) == 338
+    ages = [r[0] for r in a]
+    assert ages[:332] == [20 * i for i in range(332)] and all(x % 20 for x in ages[332:])
+    rolled_on = rolled_off = 0
+    for (age, calls, limit, threshold, fga, fga_arg, flags), (age2, c2, l2, t2, fga2, arg2, flags2) in zip(a, b):
+        assert age == age2
+        # The stock statement always opens with FoodGroupsActive(0); registers and stack are kept.
+        assert (fga, fga_arg, fga2, arg2) == (1, 0, 1, 0) and flags == flags2 == 31, (age, a, b)
+        assert (c2, l2, t2) == _stock_mortality(age, groups), (age, "off")
+        assert (calls, limit, threshold) == _b200_mortality(age, groups), (age, "on")
+        rolled_on += calls
+        rolled_off += c2
+    assert rolled_on > 200 and rolled_off > 200
+    # The two curves really differ (B200's is gentler early and certain at the cap).
+    assert [r[3] for r in a] != [r[3] for r in b]
+
+
+def test_older_mortality_clamps_food_groups_at_four_like_b200(on):
+    four, five = _mortality_rows(on)[4], _mortality_rows(on)[5]
+    assert four == five
+
+
+def test_older_mortality_writes_one_site_and_is_independent(built):
+    rows = _harness(built, {k.ini_key: k.key == "older_villager_mortality" for k in S.MODULES if not k.internal}, tag="-mort")
+    status = _one(rows, "status")
+    idx = [m.key for m in S.MODULES].index("older_villager_mortality")
+    assert status["installed"] == _module_bit("older_villager_mortality") and status["write_masks"][idx] == 1
+    sites = _sites(rows)
+    raw = bytes.fromhex(sites[S.UPKEEP_FOOD_GROUPS_CALL]["bytes"])
+    jmp = next(_md().disasm(raw, S.UPKEEP_FOOD_GROUPS_CALL))
+    assert jmp.mnemonic == "jmp" and status["dll_lo"] <= jmp.operands[0].imm < status["dll_hi"]
+    assert raw[5:] == b"\x90" * 4
+    assert _one(rows, "wx_regions")["wx_regions"] == 0
+
+
+# =============================================================== event_collectable_slot_replacement
+def _collect_rows(rows):
+    return [r for r in rows if "collect" in r]
+
+
+class _CollectModel:
+    """B200's VF2EventCollectableAddImpl (work/patch_mobile_furniture_pack.py),
+    re-written independently, on top of a model of the native Add. Slots are
+    [active, carrying, stamp, x, y, picked]; state persists across calls like
+    the DLL's globals do, so rows are replayed in the order the harness made them."""
+
+    def __init__(self):
+        self.last_slot, self.last_stamp = -1, 0
+
+    @staticmethod
+    def native_add(slots, now, mode, carrying, x, y, force):
+        if mode == 2:
+            return  # the native random path gave up
+        i = 0
+        while i < 2 and slots[i][0] and not force:
+            i += 1
+        if i == 2:
+            return  # both busy, not forced: the native Add spawns nothing
+        slots[i] = [1, carrying, now + 0x78, x, y, -1]
+
+    def impl(self, slots, now, mode, carrying, x, y, force):
+        busy = [bool(slots[0][0]), bool(slots[1][0])]
+
+        def fresh(i):
+            if self.last_slot != i or not slots[i][0]:
+                return False
+            return slots[i][2] == self.last_stamp and slots[i][2] == now + 0x78
+
+        def victim():
+            f0, f1 = fresh(0), fresh(1)
+            if f0 != f1:
+                return 1 if f0 else 0
+            p0, p1 = slots[0][5] != -1, slots[1][5] != -1
+            if p0 != p1:
+                return 1 if p0 else 0
+            return 1 if slots[1][2] < slots[0][2] else 0
+
+        def move(src, dst):
+            slots[dst] = list(slots[src])
+            slots[src][0] = 0
+
+        freed, sacrificed = -1, None
+        if force:
+            if busy[0] and not busy[1]:
+                move(0, 1)
+            elif busy[0] and busy[1]:
+                v = victim()
+                sacrificed = list(slots[v])
+                freed = 0
+                if v == 1:
+                    move(0, 1)
+                else:
+                    slots[0][0] = 0
+        elif busy[0] and busy[1]:
+            freed = victim()
+            sacrificed = list(slots[freed])
+            slots[freed][0] = 0
+        landed = 0 if force else (freed if freed >= 0 else (1 if busy[0] else 0))
+        self.native_add(slots, now, mode, carrying, x, y, force)
+        if slots[landed][0]:
+            self.last_slot, self.last_stamp = landed, slots[landed][2]
+        elif freed >= 0:
+            slots[freed] = sacrificed
+
+    def expected(self, row, installed):
+        slots = [list(s) for s in row["in"]]
+        kind = row["collect"].split(":")[0]
+        a, b, c, d = row["op"]
+        if kind in ("add", "prior"):
+            ops = [(a, b, c, d)]
+        elif kind == "bug_whisperer":
+            ops = [(0x4F + a, 0x4BC + a, 0x725 + a, 0)] * 2 if d == 0 else []  # every GetRandom returns `a`
+        else:
+            ops = [(-1, 0, 0, 1)]  # Neighbor Collectible: random carrying, forced
+        for op in ops:
+            if installed:
+                self.impl(slots, row["clock"], row["mode"], *op)
+            else:
+                self.native_add(slots, row["clock"], row["mode"], *op)
+        return slots
+
+
+def test_collectable_replay_helpers_are_b200s_text():
+    b200 = GENERATOR.read_text(encoding="utf-8")
+    dll = DLL_SOURCE.read_text(encoding="utf-8")
+
+    def norm(text):
+        text = re.sub(r"reinterpret_cast<([^>]*)>", r"(\1)", text)
+        text = re.sub(r"CCollectableItem \*collectables = [^;]*;", "", text)
+        text = re.sub(r"collectables->Remove\(", "NativeCollectableRemove(item,", text)
+        text = text.replace("ldwPoint point = {x, y};", "")
+        text = text.replace("collectables->Add((ECarrying)carrying, point, force != 0);",
+                            "NativeCollectableAdd(item, carrying, x, y, force != 0);")
+        text = text.replace("kVF2", "k").replace("gVF2", "g").replace("VF2", "")
+        return _normalise(text)
+
+    for name, b_sig, d_sig in (
+        ("busy", r"static bool VF2EventCollectableSlotBusy\(", r"static bool EventCollectableSlotBusy\("),
+        ("picked", r"static bool VF2EventCollectableSlotPicked\(", r"static bool EventCollectableSlotPicked\("),
+        ("stamp", r"static unsigned int VF2EventCollectableSlotStamp\(", r"static unsigned int EventCollectableSlotStamp\("),
+        ("fresh", r"static bool VF2EventCollectableSlotFreshFromBurst\(", r"static bool EventCollectableSlotFreshFromBurst\("),
+        ("victim", r"static int VF2EventCollectableVictim\(", r"static int EventCollectableVictim\("),
+        ("move", r"static void VF2MoveEventCollectableSlot\(", r"static void MoveEventCollectableSlot\("),
+        ("copy", r"static void VF2CopyEventCollectableSlot\(", r"static void CopyEventCollectableSlot\("),
+        ("restore", r"static void VF2RestoreEventCollectableSlot\(", r"static void RestoreEventCollectableSlot\("),
+        ("impl", r'extern "C" void __cdecl VF2EventCollectableAddImpl\(', r"static void __cdecl EventCollectableAddImpl\("),
+    ):
+        assert norm(_c_function(b200, b_sig)) == norm(_c_function(dll, d_sig)), name
+    # The slot address and the clock stamp (written with casts in B200).
+    slot = _normalise(_c_function(b200, r"static unsigned char \*VF2EventCollectableSlot\("))
+    assert "+0x34C+slot*0x1C" in slot
+    assert "+0x34C+slot*0x1C" in _normalise(_c_function(dll, r"static unsigned char \*EventCollectableSlot\("))
+    now = _normalise(_c_function(b200, r"static unsigned int VF2EventCollectableStampNow\("))
+    assert "GetSecondsFromGameStart()+0x78:0" in now
+    assert "NativeSecondsFromGameStart(clock)+0x78:0" in _normalise(
+        _c_function(dll, r"static unsigned int EventCollectableStampNow\("))
+    # The thunk: ecx and the four stack words forwarded, 16 bytes popped.
+    b200_thunk = _normalise(_c_function(b200, r'extern "C" __declspec\(naked\) void VF2EventCollectableAdd\(\)'))
+    dll_thunk = _normalise(_c_function(dll, r"static __declspec\(naked\) void EventCollectableAddThunk\(\)"))
+    assert b200_thunk == dll_thunk
+    assert dll_thunk.count("pushdwordptr[esp+16]") == 4
+
+
+def test_collectable_sites_are_proved_and_the_events_are_the_rtti_named_classes():
+    facts = gen_sites.validate(vanilla_bytes())
+    assert any("direct callers of 0x415090: 0x41554d, 0x419a2f, 0x41af0e, 0x41af4b" in f for f in facts)
+    vanilla = vanilla_bytes()
+    pe = P.PE(vanilla)
+
+    def class_of(vtable):
+        col = struct.unpack_from("<I", vanilla, pe.offset(vtable - 4))[0]
+        td = struct.unpack_from("<I", vanilla, pe.offset(col + 12))[0]
+        at = pe.offset(td + 8)
+        return vanilla[at:vanilla.index(b"\0", at)]
+
+    def slot(vtable, index):
+        return struct.unpack_from("<I", vanilla, pe.offset(vtable + 4 * index))[0]
+
+    assert class_of(0x4E1C6C) == b".?AVCEventTheBugWhisperer@@" and slot(0x4E1C6C, 12) == 0x41AE90
+    assert class_of(0x4E0FF4) == b".?AVCEventTheNeighborCollectible@@" and slot(0x4E0FF4, 13) == 0x419A20
+    # The three retargeted calls are inside those two ImpactGame bodies; the fourth caller
+    # (0x41554D) is CCollectableItem::Update's natural spawn and stays alone, as in B200.
+    assert sorted(S.EVENT_COLLECTABLE_ADD_CALLSITES) == [0x419A2F, 0x41AF0E, 0x41AF4B]
+    assert S.COLLECTABLE_UPDATE_ADD_CALL not in S.EVENT_COLLECTABLE_ADD_CALLSITES
+    b200 = GENERATOR.read_text(encoding="utf-8")
+    assert re.search(r'\("\?ImpactGame@CEventTheBugWhisperer@@UAEXH@Z", 0x7D\),\s*\("\?ImpactGame@CEventTheBugWhisperer@@UAEXH@Z", 0xB8\),\s*'
+                     r'\("\?ImpactGame@CEventTheNeighborCollectible@@UAEXXZ", 0x0E\)', b200)
+
+
+def test_collectable_hooks_follow_the_b200_policy(on, off):
+    for rows, installed in ((on, True), (off, False)):
+        model = _CollectModel()
+        table = _collect_rows(rows)
+        assert len(table) > 400
+        changed = 0
+        for row in table:
+            assert row["esp_ok"] == 1, row["collect"]
+            assert model.expected(row, installed) == row["out"], (installed, row)
+            changed += row["out"] != row["in"]
+        assert changed > 100
+    # Installed, an event spawn with both slots busy replaces something; stock does nothing.
+    a = {r["collect"]: r for r in _collect_rows(on)}
+    b = {r["collect"]: r for r in _collect_rows(off)}
+    both_busy = [k for k in a if k.startswith("add:p0_k") and k.endswith("_f0") and a[k]["in"][0][0] and a[k]["in"][1][0]]
+    assert both_busy and all(b[k]["out"] == b[k]["in"] and a[k]["out"] != a[k]["in"] for k in both_busy)
+    # Nothing but the three event call sites changed: with a free slot both builds spawn the same.
+    free = [k for k in a if k.startswith("add:p0_k") and k.endswith("_f0") and not (a[k]["in"][0][0] and a[k]["in"][1][0])]
+    assert free and all(a[k]["out"] == b[k]["out"] for k in free)
+    # The Bug Whisperer's second spawn never sacrifices its first (a fresh item is protected).
+    bw = a["bug_whisperer:arg0_k22"]  # both busy, unpicked: the event nets two new items
+    assert sorted(s[1] for s in bw["out"]) == [0x4F + 3, 0x4F + 3]
+    assert b["bug_whisperer:arg0_k22"]["out"] == b["bug_whisperer:arg0_k22"]["in"]  # stock: nothing spawns
+    assert a["bug_whisperer:arg1_k22"]["out"] == a["bug_whisperer:arg1_k22"]["in"]  # another event argument: untouched
+    # The call-site targets: the DLL's thunk when installed, the native Add when not.
+    t_on = _one(on, "collect_targets")
+    t_off = _one(off, "collect_targets")
+    assert t_off == [S.COLLECTABLE_ADD] * 3 and len(set(t_on)) == 1 and t_on[0] != S.COLLECTABLE_ADD
+
+
+def test_collectable_sacrificed_record_comes_back_when_the_native_spawn_gives_up(on):
+    rows = {r["collect"]: r for r in _collect_rows(on)}
+    # Native random path gave up (mode 2), both slots busy, forced: nothing may be lost.
+    for k0 in range(6):
+        for k1 in range(6):
+            r = rows[f"neighbor:m2_k{k0}{k1}"]
+            if r["in"][0][0] and r["in"][1][0]:
+                assert sorted(map(tuple, r["out"])) == sorted(map(tuple, r["in"])), r
+    # And when it activates (mode 1) the new item is in slot 0 with one old record kept.
+    r = rows["neighbor:m1_k11"]
+    assert r["out"][0][1] == -1 and r["out"][0][0] == 1 and r["out"][1][1] in (0x61, 0x69)
+
+
+def test_collectable_module_writes_exactly_its_three_calls(built):
+    rows = _harness(built, {k.ini_key: k.key == "event_collectable_slot_replacement" for k in S.MODULES if not k.internal}, tag="-coll")
+    status = _one(rows, "status")
+    idx = [m.key for m in S.MODULES].index("event_collectable_slot_replacement")
+    assert status["installed"] == _module_bit("event_collectable_slot_replacement")
+    assert status["write_masks"][idx] == 0b111
+    sites = _sites(rows)
+    md = _md()
+    for va in S.EVENT_COLLECTABLE_ADD_CALLSITES:
+        c = next(md.disasm(bytes.fromhex(sites[va]["bytes"]), va))
+        assert c.mnemonic == "call" and status["dll_lo"] <= c.operands[0].imm < status["dll_hi"]
+    assert S.COLLECTABLE_UPDATE_ADD_CALL not in sites  # the natural spawn is never touched
+    assert _one(rows, "wx_regions")["wx_regions"] == 0
+
+
+# =============================================================== power_failure_event
+class _PowerModel:
+    """B200's VF2PowerFailure* helpers (state: four slots keyed by event, one-shot)."""
+
+    def __init__(self):
+        self.states = [[None, 0] for _ in range(4)]
+        self.replacement = 0
+
+    def find(self, event, create):
+        empty = None
+        for st in self.states:
+            if st[0] == event:
+                return st
+            if empty is None and st[0] is None:
+                empty = st
+        if not create:
+            return None
+        if empty is not None:
+            empty[0], empty[1] = event, 0
+            return empty
+        st = self.states[self.replacement % 4]
+        self.replacement += 1
+        st[0], st[1] = event, 0
+        return st
+
+    def op(self, slot, ev, choice, rv):
+        if slot == 14:
+            st = self.find(ev, True)
+            st[1] = 1 if (choice != 0 and rv == 0) else 0
+            return [], None
+        if slot == 11:
+            if choice == 0:
+                return [], 0x9BC
+            st = self.find(ev, False)
+            return [], (0x9BE if st and st[1] else 0x9BD)
+        events = ["setprop env 17", "reset food 1"] if choice == 0 else []
+        if choice != 0:
+            st = self.find(ev, False)
+            if st and st[1]:
+                events = ["giveall villagers 2 15"]
+        st = self.find(ev, False)
+        if st:
+            st[0], st[1] = None, 0
+        return events, None
+
+
+def _stock_power(slot, ev, choice, rv):
+    if slot == 14:
+        return [], None
+    if slot == 11:
+        return [], 0x9BC + (1 if choice else 0)
+    events = ["setprop env 17"]  # the stock method sets the prop for BOTH choices
+    events += ["reset food 1"] if choice == 0 else ["symptom 2 villager 2"] * rv
+    return events, None
+
+
+def _power_rows(rows):
+    return [r for r in rows if "power" in r]
+
+
+def test_power_failure_helpers_are_b200s_text():
+    b200 = GENERATOR.read_text(encoding="utf-8")
+    dll = DLL_SOURCE.read_text(encoding="utf-8")
+
+    def norm(text):
+        text = text.replace("gVF2", "g").replace("VF2", "").replace("ldwGameState::GetRandom", "GetRandom")
+        return _normalise(text)
+
+    pairs = (
+        (r"static VF2PowerFailureState \*VF2FindPowerFailureState\(", r"static PowerFailureState \*FindPowerFailureState\("),
+        (r"static void VF2ClearPowerFailureState\(", r"static void ClearPowerFailureState\("),
+    )
+    for b_sig, d_sig in pairs:
+        # B200's comment in Find explains the history; _normalise strips comments.
+        assert norm(_c_function(b200, b_sig)) == norm(_c_function(dll, d_sig)), b_sig
+    for b_sig, d_sig in ((r'extern "C" void __cdecl VF2PowerFailureCalcAward\(', r"static void PowerFailureCalcAward\("),
+                         (r'extern "C" int __cdecl VF2PowerFailureGetResultDescription\(', r"static int PowerFailureGetResultDescription\(")):
+        assert norm(_c_function(b200, b_sig)) == norm(_c_function(dll, d_sig)), b_sig
+    # ImpactGame: B200 calls Environment.SetProp / FoodStore.Reset / VillagerManager.GiveAllVillagersSymptom.
+    impact_b = norm(_c_function(b200, r'extern "C" void __cdecl VF2PowerFailureImpactGame\('))
+    impact_b = (impact_b.replace("Environment.SetProp((EPropEnum)0x17)", "EnvironmentSetProp((void*)_ENVIRONMENT,0x17)")
+                .replace("FoodStore.Reset(true)", "FoodStoreReset((void*)_FOOD_STORE,true)")
+                .replace("VillagerManager.GiveAllVillagersSymptom((ESymptom)2,15)",
+                         "GiveAllVillagersSymptom((void*)_VILLAGER_MANAGER,2,15)"))
+    assert impact_b == norm(_c_function(dll, r"static void PowerFailureImpactGame\("))
+    assert S.POWER_FAILURE_RESULT_A == 0x9BC and S.POWER_FAILURE_RESULT_B1 == 0x9BD and S.POWER_FAILURE_RESULT_B2 == 0x9BE
+    assert '"result_ids": {"a": "0x9BC", "b1": "0x9BD", "b2": "0x9BE"}' in b200
+    assert S.MODULE_BY_KEY["power_failure_event"].b200_default is True
+
+
+def test_power_failure_sites_and_the_b2_string_exist_in_the_vanilla_game():
+    facts = gen_sites.validate(vanilla_bytes())
+    assert any("slot 14 of .?AVCEventThePowerFailure@@ holds 0x4b58a0" in f for f in facts)
+    assert any("direct callers of 0x41c310: " in f for f in facts)
+    vanilla = vanilla_bytes()
+    pe = P.PE(vanilla)
+    # Exactly one pointer to each stock method anywhere in the file: the vtable slot.
+    for target in (S.POWER_FAILURE_DESCRIPTION_STOCK, S.POWER_FAILURE_IMPACT_STOCK):
+        assert vanilla.count(struct.pack("<I", target)) == 1
+    # String 0x9BE has a record in the static table the string manager indexes, with the B2 text.
+    rec = {}
+    for i in range(S.STRING_TABLE_COUNT):
+        at = pe.offset(S.STRING_TABLE_ENTRIES + 16 * i)
+        sid, name, text, zero = struct.unpack_from("<IIII", vanilla, at)
+        rec[sid] = (name, text)
+    assert 0x9BE in rec
+
+    def cstr(va):
+        at = pe.offset(va)
+        return vanilla[at:vanilla.index(b"\0", at)]
+
+    assert cstr(rec[0x9BE][0]) == b"eEventThePowerFailureResultB2"
+    assert cstr(rec[0x9BE][1]) == b"Everyone gets an upset stomach. The food was not ok."
+    assert cstr(rec[0x9BD][0]) == b"eEventThePowerFailureResultB1" and cstr(rec[0x9BC][0]) == b"eEventThePowerFailureResultA"
+
+
+@pytest.mark.parametrize("installed", [False, True])
+def test_power_failure_follows_b200_and_off_is_stock(on, off, installed):
+    rows = _power_rows(on if installed else off)
+    assert len(rows) == 40 + 20
+    model = _PowerModel()
+    for r in rows:
+        slot, ev, choice, rv = r["op"]
+        want_events, want_ret = model.op(slot, ev, choice, rv) if installed else _stock_power(slot, ev, choice, rv)
+        assert r["events"] == want_events, (installed, r)
+        if want_ret is not None:
+            assert r["ret"] == want_ret, (installed, r)
+        assert r["esp_ok"] == 1
+
+
+def test_power_failure_installed_differs_from_stock_where_b200_does(on, off):
+    a, b = _power_rows(on), _power_rows(off)
+    # B200 never sets the spoiled-food prop on "Take a chance" and gives 15% per villager on a bad roll.
+    impacts = [(x, y) for x, y in zip(a, b) if x["op"][0] == 12 and x["op"][2] == 1]
+    assert impacts and all("setprop env 17" in y["events"] and "setprop env 17" not in x["events"] for x, y in impacts)
+    assert any("giveall villagers 2 15" in x["events"] for x, _ in impacts)
+    descriptions = {x["ret"] for x, _ in zip(a, b) if x["op"][0] == 11 and x["op"][2] == 1}
+    assert descriptions == {0x9BD, 0x9BE}
+
+
+def test_power_failure_module_writes_exactly_three_vtable_slots(built):
+    rows = _harness(built, {k.ini_key: k.key == "power_failure_event" for k in S.MODULES if not k.internal}, tag="-pf")
+    status = _one(rows, "status")
+    idx = [m.key for m in S.MODULES].index("power_failure_event")
+    assert status["installed"] == _module_bit("power_failure_event") and status["write_masks"][idx] == 0b111
+    sites = _sites(rows)
+    for slot in (S.POWER_FAILURE_SLOT_CALC_AWARD, S.POWER_FAILURE_SLOT_DESCRIPTION, S.POWER_FAILURE_SLOT_IMPACT):
+        ptr = struct.unpack("<I", bytes.fromhex(sites[slot]["bytes"]))[0]
+        assert status["dll_lo"] <= ptr < status["dll_hi"] and sites[slot]["protect"] == "R"
+    assert _one(rows, "wx_regions")["wx_regions"] == 0
