@@ -1038,7 +1038,7 @@ def test_time_controls_warp_adds_ticks_through_the_games_own_aging(on, off, case
                 on_row["college"]) == (1, 1, 1, 1, 1)
         assert off_row["left_home_calls"] == 0 and off_row["pending_after"] == [3, 3]  # queued, never used
         assert _one(on, "time_warp_nobody")["time_warp_nobody"] == 0
-        assert _one(on, "counters")["time_warps"] == 1 + 3
+        assert _one(on, "counters")["time_warps"] == 1 + 3 + 2  # case 1, case 2, the dialog script's Yes
 
 
 def test_time_controls_store_button_is_the_stores_own_art_next_to_back(on, off):
@@ -1080,6 +1080,8 @@ def test_time_controls_dialog_buttons_do_what_they_say(on):
     assert no == {"text": TIME_WARP_QUESTION, "status": "Running. Speed: normal."}
     assert yes == {"text": TIME_WARP_QUESTION, "status": "Running. Speed: normal. A time warp is under way."}
     assert (row["speed_field"], row["game_speed"], row["pending"]) == (10, 10, 2)  # No queued nothing; Yes queued 2
+    # "+3 years" is 60 ticks (20 a year): the next aging pass gives exactly that, once.
+    assert row["ages_after"] == [400 + 60, 100 + 60] and row["pending_after"] == 0
 
 
 def test_time_controls_off_leaves_the_store_and_aging_stock(off):

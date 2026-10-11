@@ -104,7 +104,7 @@ STATUS_FIELDS = ("magic", "version", "moduleCount", "requestedMask", "pinsOkMask
 # VF2Fun_TestCounters: exported by TEST builds only (VF2FUN_TEST_COUNTERS).
 COUNTER_FIELDS = ("magic", "chanceCalls", "olderRolls", "olderSuccesses", "cooldownStores", "cooldownSkips",
                   "nextGenerationCalls", "nextGenerationOlderGrants", "lastMotherAge", "lastFatherAge",
-                  "sceneActiveWrites", "sceneNullSkips")
+                  "sceneActiveWrites", "sceneNullSkips", "timeButtonsAdded", "timeDialogOpens", "timeWarpsApplied")
 
 
 def export_rva(dll_path: Path, name: str) -> int:
@@ -195,6 +195,9 @@ def snapshot(p: Process) -> dict:
         now = int(time.time()) - start
         out["try_for_baby"] = {"deadline": deadline, "game_seconds_now": now,
                                "seconds_remaining": max(0, deadline - now)}
+        # Time Controls: the speed field in theGameState (>= 999 = paused, else
+        # 10 normal / 5 = 2x / 2 = 5x / 1 = 10x) and CGameTime's own (0 = paused).
+        out["speed"] = {"field": p.i32(gs + S.PAUSE_FIELD), "game_time": p.i32(S.GAME_TIME + 0x20)}
     return out
 
 
@@ -216,6 +219,8 @@ def show(snap: dict) -> None:
     print(f"family tree generation: {snap['family_tree_generation']}")
     if "try_for_baby" in snap:
         print(f"try-for-baby: {snap['try_for_baby']}")
+    if "speed" in snap:
+        print(f"speed: {snap['speed']}")
 
 
 def main() -> int:

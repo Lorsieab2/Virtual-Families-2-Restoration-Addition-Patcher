@@ -355,6 +355,8 @@ static void __fastcall FakeSetStoreCategory(void *scene, void *, int category) {
 // ---- the dialog, driven from a second thread while the game thread is in its modal loop
 struct Driver {
     int mode;                  // 1: read the controls and close; 2: the full script
+    int waitMs;                // how long to wait for the dialog to appear
+    int quiet;                 // log nothing when no dialog appears
     char log[6000];
     int len;
 };
@@ -398,8 +400,11 @@ static void ClickUntil(HWND dlg, int id, const char *expect, char *status) {
 
 static DWORD WINAPI DriverThread(void *param) {
     Driver *d = (Driver *)param;
-    HWND dlg = WaitWindow(L"Time Controls", 5000);
-    if (!dlg) { DLog(d, "\"no_dialog\": 1"); return 1; }
+    HWND dlg = WaitWindow(L"Time Controls", d->waitMs ? d->waitMs : 5000);
+    if (!dlg) {
+        if (!d->quiet) DLog(d, "\"no_dialog\": 1");
+        return 1;
+    }
     wchar_t title[64] = L"";
     GetWindowTextW(dlg, title, 64);
     char t8[128], s8[256];
@@ -628,7 +633,12 @@ static void RunTimeScenarios(HMODULE dll, unsigned char *gameState, bool install
             scene[0x154] = scene[0x155] = scene[0x156] = scene[0x157] = 0;  // no scroll range
             HandleCall call = { (StoreHandleFn)0x4322B0, scene, m.message, m.param, false };
             d.mode = 1;
-            if (installed && m.param == 0x5646 && m.message == 8) RunWithDriver(&d, CallStoreHandle, &call);
+            // A dialog that opens when it should not would block this
+            // thread for good, so a watcher closes it and reports it.
+            bool click = m.param == 0x5646 && m.message == 8;
+            d.waitMs = click ? 5000 : 400;
+            d.quiet = !click;
+            if (installed) RunWithDriver(&d, CallStoreHandle, &call);
             else { d.len = 0; d.log[0] = 0; CallStoreHandle(&call); }
             Out("{\"store_message\": \"%s\", \"installed\": %d, \"result\": %d, \"stock_ran\": %d, \"dialog\": {%s}}",
                 m.name, installed ? 1 : 0, call.result ? 1 : 0, scene[0x164] == 0 ? 1 : 0, d.log);
@@ -645,8 +655,13 @@ static void RunTimeScenarios(HMODULE dll, unsigned char *gameState, bool install
         Driver d = {};
         d.mode = 2;
         RunWithDriver(&d, CallShow, (void *)show);
-        Out("{\"time_dialog_script\": {%s}, \"speed_field\": %d, \"game_speed\": %d, \"pending\": %d}", d.log,
-            *(int *)(gameState + 0x25B18), *(int *)(gameTime + 0x20), tc(5, 0));
+        int pendingAfterDialog = tc(5, 0);
+        // The Yes the script gave is consumed by the game's next aging pass.
+        ((TimeflowFn)0x499700)((void *)0x5B9F58, false);
+        Out("{\"time_dialog_script\": {%s}, \"speed_field\": %d, \"game_speed\": %d, \"pending\": %d, "
+            "\"ages_after\": [%d, %d], \"pending_after\": %d}", d.log,
+            *(int *)(gameState + 0x25B18), *(int *)(gameTime + 0x20), pendingAfterDialog,
+            *(int *)(Villager(0) + 0x6A54), *(int *)(Villager(1) + 0x6A54), tc(5, 0));
     }
     for (int i = 0; i < 30; ++i) {
         unsigned char *v = Villager(i);
