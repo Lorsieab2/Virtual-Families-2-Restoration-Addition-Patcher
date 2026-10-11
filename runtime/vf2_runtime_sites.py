@@ -732,6 +732,7 @@ ACH_RESERVED_FIRST = 0xAC             # first record id LoadState may clear (B20
 ACH_CONTENT_HEIGHT_STOCK = 0x189A     # 0x5F * 0x42 + 0x1C
 ACH_ROW_PITCH = 0x42                  # pixels per Achievements-screen row
 ACH_DRAW_ID_LIMIT_MAX = 0x7F          # the stock `cmp ebp,imm8` can only hold ids below 0x80
+ACHIEVEMENT_OBJECT = 0xAA8648       # global CAchievement Achievement (records at +0, notify queue at +0xDBC)
 STRING_STOCK_MAX_ID = 0xA68
 STRING_UNKNOWN_TEXT = 0x518A18        # "Unknown String Id!!!!"
 STRING_GET_FAIL = 0x448EC7            # theStringManager::GetString: mov eax,<unknown text>

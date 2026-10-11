@@ -16,11 +16,14 @@ suspension) and prints:
   departed), the Family Tree generation, and the try-for-baby deadline
   (theGameState+0x25AE0) as seconds remaining on the game's own clock.
 
---set-age is the ONLY write: it sets one villager's internal age (years * 20)
-so a 50+ couple or a 60-year-old can be produced at once. It refuses unless
-the target executable's file name contains "Test", so it can never touch the
-owner's own game. The game saves only on a clean quit, so a written age
-reaches that test copy's own save folder only if the test quits cleanly.
+--set-age is a write: it sets one villager's internal age (years * 20)
+so a 50+ couple or a 60-year-old can be produced at once. --set-achievement
+(ID FLAG PROGRESS) writes one achievement record and --queue-achievement ID
+puts an id in the notify queue so the game shows that goal's popup (ID 0x5F is
+the experimental Ornamentologist row). All writes refuse unless the target
+executable's file name contains "Test", so they can never touch the owner's own
+game. The game saves only on a clean quit, so a written value reaches that test
+copy's own save folder only if the test quits cleanly.
 """
 from __future__ import annotations
 
@@ -176,6 +179,21 @@ def snapshot(p: Process) -> dict:
         else:
             raw = p.read(module + crva, 4 * len(COUNTER_FIELDS))
             out["counters"] = dict(zip(COUNTER_FIELDS, struct.unpack(f"<{len(COUNTER_FIELDS)}I", raw)))
+    # Achievement table state: where the stock readers point now, the records, the notify queue.
+    ach = S.ACHIEVEMENT_OBJECT
+    rows_base = p.u32(S.PIN_BY_NAME["ach_rows_target_div"].field_va) - 4
+    order_base = p.u32(S.PIN_BY_NAME["scene_draw_order_base"].field_va)
+    count = p.read(S.PIN_BY_NAME["scene_draw_count"].field_va, 1)[0]
+    order = [p.u32(order_base + 4 * i) for i in range(min(count, 0xC0))]
+    out["achievements"] = {
+        "rows_base": hex(rows_base), "rows_moved": rows_base != S.ACH_LIST_BASE,
+        "order_base": hex(order_base), "order_count": count,
+        "order_around_0x5E": order[0x4C:0x52],
+        "records": {hex(i): {"flag": p.read(ach + i * 12, 1)[0], "progress": p.i32(ach + i * 12 + 4),
+                             "stamp": p.i32(ach + i * 12 + 8)} for i in (0x5D, 0x5E, 0x5F, 0x60)},
+        "notify_queue": [p.i32(ach + 0xDBC + 4 * i) for i in range(3)],
+        "row_0x5F": p.read(rows_base + 0x5F * S.ACH_ROW_SIZE, S.ACH_ROW_SIZE).hex() if rows_base != S.ACH_LIST_BASE else None,
+    }
     villagers = []
     for i in range(30):
         v = S.VILLAGER_MANAGER + S.VILLAGER_ARRAY_OFFSET + i * S.VILLAGER_STRIDE
@@ -225,6 +243,8 @@ def show(snap: dict) -> None:
         print(f"try-for-baby: {snap['try_for_baby']}")
     if "speed" in snap:
         print(f"speed: {snap['speed']}")
+    if "achievements" in snap:
+        print(f"achievements: {snap['achievements']}")
 
 
 def main() -> int:
@@ -233,8 +253,35 @@ def main() -> int:
     ap.add_argument("--watch", type=float, default=0.0, help="poll every SECONDS")
     ap.add_argument("--count", type=int, default=1, help="number of polls (bounded)")
     ap.add_argument("--set-age", nargs=2, type=int, metavar=("INDEX", "YEARS"))
+    ap.add_argument("--set-achievement", nargs=3, type=lambda v: int(v, 0), metavar=("ID", "FLAG", "PROGRESS"))
+    ap.add_argument("--queue-achievement", type=lambda v: int(v, 0), metavar="ID")
     args = ap.parse_args()
     pid = find_pid(args.exe_name)
+    if args.set_achievement or args.queue_achievement is not None:
+        if "test" not in args.exe_name.lower():
+            raise SystemExit("achievement writes only work on a test copy (exe name must contain 'Test')")
+        p = Process(pid, write=True)
+        if args.set_achievement:
+            ident, flag, progress = args.set_achievement
+            if not (0 <= ident < S.ACH_RECORD_COUNT and flag in (0, 1) and 0 <= progress <= 100000):
+                raise SystemExit("id 0-0x124, flag 0 or 1, progress 0-100000")
+            rec = S.ACHIEVEMENT_OBJECT + ident * S.ACH_RECORD_SIZE
+            p.write(rec, bytes([flag]))
+            p.write(rec + 4, struct.pack("<i", progress))
+            print(f"achievement {ident:#x}: flag {flag}, progress {progress}")
+        if args.queue_achievement is not None:
+            ident = args.queue_achievement
+            if not (0 <= ident < S.ACH_RECORD_COUNT):
+                raise SystemExit("id 0-0x124")
+            queue = S.ACHIEVEMENT_OBJECT + 0xDBC
+            for slot in range(0x5F):
+                if p.i32(queue + 4 * slot) == -1:
+                    p.write(queue + 4 * slot, struct.pack("<i", ident))
+                    print(f"achievement {ident:#x} queued for the popup in slot {slot}")
+                    break
+            else:
+                raise SystemExit("the notify queue is full")
+        return 0
     if args.set_age:
         if "test" not in args.exe_name.lower():
             raise SystemExit("--set-age only works on a test copy (exe name must contain 'Test')")

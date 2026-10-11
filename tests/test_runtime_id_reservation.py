@@ -755,3 +755,80 @@ def test_the_release_dll_exports_only_the_status_block(built):
     data = (built / "vf2fun.dll").read_bytes()
     assert b"VF2Fun_Status" in data and b"VF2Fun_Startup" in data
     assert b"VF2Fun_TestCounters" not in data
+
+
+# ------------------------------------------------------------ cascade-map evidence
+# The study (section 14) claims, for each table the B200 append touches, exactly who reads it in
+# the VANILLA file. These tests re-derive the claims with capstone so the document cannot drift.
+capstone = pytest.importorskip("capstone")
+from capstone import CS_ARCH_X86, CS_MODE_32, Cs  # noqa: E402
+from capstone.x86 import X86_OP_IMM, X86_OP_MEM  # noqa: E402
+
+
+@pytest.fixture(scope="module")
+def sweep():
+    """(address, mnemonic, [operand values]) for a linear sweep of .text."""
+    img = vanilla_image()
+    _n, rva, _vs, raw, rsize = next(s for s in img.sections if s[0] == ".text")
+    code = img.data[raw:raw + rsize]
+    md = Cs(CS_ARCH_X86, CS_MODE_32)
+    md.detail = True
+    out, i = [], 0
+    while i < len(code):
+        got = False
+        for ins in md.disasm(code[i:], img.base + rva + i):
+            got = True
+            vals, imms = [], []
+            for o in ins.operands:
+                if o.type == X86_OP_IMM:
+                    vals.append(o.imm & 0xFFFFFFFF)
+                    imms.append(o.imm & 0xFFFFFFFF)
+                elif o.type == X86_OP_MEM:
+                    vals.append(o.mem.disp & 0xFFFFFFFF)
+            out.append((ins.address, ins.mnemonic, vals, imms))
+            i = ins.address - (img.base + rva) + ins.size
+        if not got:
+            i += 1
+    return out
+
+
+def _refs(sweep, lo, hi):
+    return sorted(a for a, _m, vals, _i in sweep if any(lo <= v < hi for v in vals))
+
+
+def test_string_tables_are_read_by_the_two_lookups_and_the_constructor_only(sweep):
+    lookup = _refs(sweep, 0x56ECF0, 0x571694)
+    # GetString 0x448E90 (+0x1B), the inlined copy in 0x448ED0 (+0x50) and the constructor 0x449300.
+    assert lookup == [0x448EAB, 0x448F20, 0x44934A, 0x449405, 0x44947A], [hex(a) for a in lookup]
+    assert _refs(sweep, 0x53DCC0, 0x53DCC0 + 0xA5D * 0x10 + 1) == [0x449330]
+    # The bound 0xA67 is compared in exactly the two readers; the count 0xA5D and 0xA69 only in the constructor.
+    assert [a for a, m, _v, i in sweep if 0xA67 in i and m == "cmp"] == [0x448EA3, 0x448F19]
+    assert [a for a, m, _v, i in sweep if 0xA5D in i and m == "cmp"] == [0x449341]
+    assert [a for a, m, _v, i in sweep if 0xA69 in i and m == "cmp"] == [0x449354]
+
+
+def test_the_image_descriptor_table_is_read_by_two_functions(sweep):
+    # ImageList 0x5364C8 (637 descriptors of 0x30): GetDescriptor 0x448420 and the unload loop 0x4483C0.
+    assert _refs(sweep, 0x5364C8, 0x5364C8 + 0x7770 + 1) == [0x4483C2, 0x44843C, 0x448442, 0x44844C, 0x44845B, 0x448472]
+    # ImageIndex 0x56E2E8 (0x27D pointers): GetDescriptor only.
+    assert _refs(sweep, 0x56E2E8, 0x56E2E8 + 0x27D * 4) == [0x44842C, 0x448462, 0x448477, 0x44847E]
+    img = vanilla_image()
+    # The id guard and the failure block (`xor eax,eax; ret 4`) the same fail-path hook as the strings would take.
+    assert img.read(0x448424, 6) == bytes.fromhex("81FA7C020000") and img.read(0x448488, 5) == bytes.fromhex("33C0C20400")
+    # Other uses of the image count: three `push 27Dh` and one `push 27Ch` (not examined here).
+    assert [a for a, m, _v, i in sweep if 0x27D in i and m == "push"] == [0x42F108, 0x42F19D, 0x46F276]
+
+
+def test_furniture_and_inventory_item_tables_are_provisioned_beyond_what_stock_uses(sweep):
+    img = vanilla_image()
+    # Inventory itemInfo: 0x1AD records of 0x24, records 0x117..0x1AC are zero rows in vanilla,
+    # and the table ends exactly where the category lists begin.
+    base = 0x5531E8
+    assert all(not any(img.read(base + i * 0x24, 0x24)) for i in range(0x117, 0x1AD))
+    assert any(img.read(base + 0x116 * 0x24, 0x24)) and base + 0x1AD * 0x24 == 0x556E3C
+    # Furniture itemInfo: 252 records of 0x6C ending at 0x553188; its only direct reader is LookupFurnitureInfo.
+    assert 0x54C738 + 252 * 0x6C == 0x553188
+    assert _refs(sweep, 0x54C738, 0x553189) == [0x4B63DB, 0x4B63EA, 0x4B63F1, 0x4B63FA]
+    # The furniture id bound 0xFB is an immediate in 13 places and 0xFC in 5 (B200 rewrites all of them).
+    assert len([a for a, m, _v, i in sweep if 0xFB in i and m in ("cmp", "sub", "lea", "add")]) == 13
+    assert len([a for a, m, _v, i in sweep if 0xFC in i and m in ("cmp", "sub", "lea", "add")]) == 5
