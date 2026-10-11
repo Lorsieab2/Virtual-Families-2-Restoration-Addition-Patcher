@@ -473,6 +473,7 @@ int wmain(int argc, wchar_t **argv) {
             { "ornament_saved", 1, 0, 0 },
             { "other_features", 1, 1, 0 },
             { "reserved_tail", 1, 1, 1 },
+            { "reserved_far", 1, 1, 2 },     // data only in the very last record of the tail
         };
         for (unsigned c = 0; c < sizeof cases / sizeof cases[0]; ++c) {
             unsigned char *src = NewAchievement();
@@ -484,9 +485,11 @@ int wmain(int argc, wchar_t **argv) {
                 SetRecord(src, 0x7F, 0, 3, 0);
                 SetRecord(src, 0xAB, 1, 1, 7000);
             }
-            if (cases[c].tail) {
+            if (cases[c].tail == 1) {
                 SetRecord(src, 0xAC, 0, 5, 0);
                 SetRecord(src, 0xB0, 0, 0, 9999);   // only the +8 stamp: neither scanned nor cleared
+                SetRecord(src, 0x124, 1, 0, 0);
+            } else if (cases[c].tail == 2) {
                 SetRecord(src, 0x124, 1, 0, 0);
             }
             static unsigned char buf[0x125 * 12 + 64];

@@ -659,14 +659,7 @@ static void InstallAll() {
         if (plan.ok) planned |= 1u << m;
         else Log("module %s: could not be planned; installing nothing for it", VF2_MODULE_NAMES[m]);
     }
-    // A module whose required (internal) module could not be planned installs nothing.
-    for (unsigned m = 0; m < VF2_MODULE_COUNT; ++m) {
-        if ((planned & (1u << m)) && (VF2_MODULE_REQUIRES[m] & ~planned)) {
-            Log("module %s: a module it requires was not planned; installing nothing for it",
-                VF2_MODULE_NAMES[m]);
-            planned &= ~(1u << m);
-        }
-    }
+
     if (Arena) {
         DWORD old = 0;
         if (!VirtualProtect(Arena, 4096, PAGE_EXECUTE_READ, &old)) {

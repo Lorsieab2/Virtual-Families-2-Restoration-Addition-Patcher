@@ -632,15 +632,17 @@ def make_records(case: str) -> list[list[int]]:
     recs = [[0, 0, 0] for _ in range(S.ACH_RECORD_COUNT)]
     for i in range(S.ACH_STOCK_ROWS):
         recs[i] = [int(i % 3 == 0), i * 7, i * 100]
-    if case in ("ornament_saved", "other_features", "reserved_tail"):
+    if case in ("ornament_saved", "other_features", "reserved_tail", "reserved_far"):
         recs[0x5F] = [1, 12, 5000]
-    if case in ("other_features", "reserved_tail"):
+    if case in ("other_features", "reserved_tail", "reserved_far"):
         recs[0x60] = [1, 1, 6000]
         recs[0x7F] = [0, 3, 0]
         recs[0xAB] = [1, 1, 7000]
     if case == "reserved_tail":
         recs[0xAC] = [0, 5, 0]
         recs[0xB0] = [0, 0, 9999]
+        recs[0x124] = [1, 0, 0]
+    if case == "reserved_far":
         recs[0x124] = [1, 0, 0]
     return recs
 
@@ -673,7 +675,7 @@ def _loaded(rows, case):
     return [[raw[i * 12], *struct.unpack_from("<ii", raw, i * 12 + 4)] for i in range(S.ACH_RECORD_COUNT)]
 
 
-CASES = ["vanilla_format", "ornament_saved", "other_features", "reserved_tail"]
+CASES = ["vanilla_format", "ornament_saved", "other_features", "reserved_tail", "reserved_far"]
 
 
 @pytest.mark.parametrize("case", CASES)
