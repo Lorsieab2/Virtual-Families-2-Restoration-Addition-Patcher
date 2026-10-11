@@ -327,14 +327,14 @@ Rule (owner): **DLLs over cave space unless absolutely necessary.** The executab
 | ldwscene_setactive_null_guard | **Converted** (`3a5570a`) | `scene_null_guard`, key `SceneSetActiveNullGuard` (unconditional in B200 → default 1). Vanilla `ldwScene::SetActive` 0x40D1D0, 59 callers. The stub keeps the `test bl,bl` flags and returns through vanilla's own epilogue. |
 | options_pause_yes_idempotent | **Converted** (`481a641`) | `fix_vanilla_bugs`, key `FixVanillaGameBugs` (default 1). Add at 0x4226A6 in theOptionsDialog::HandleMouse. |
 | title_menu_stale_hotspot | **Converted** (`481a641`) | `fix_vanilla_bugs`. Top store at 0x44337B in the theMenuScene constructor; the inclusive readers are pinned. |
-| title_menu_start_over_confirms | Pending | Vanilla `theMenuScene::HandleMessage` (0x443EF0) is shaped differently from the B200 object: dialogs are built inline, and Play/Start Over share 0x443FFD through `je` rel32 at 0x443F5C. Converting needs a jcc retarget role, located ShowMessageBox / theGameState::Init / SaveCurrentGame, and the "return true" path (0x443FF6). Convertible, not proved. **Until it lands, `FixVanillaGameBugs=1` is not yet the whole B200 setting.** |
-| title_menu_refresh_on_activate | Pending | Four sites (UpdateShowPlayer entry and re-add, Activate, theCreateNickNameDlg cancel). Uses only stock strings 0x775/0x280 and stock controls. Same caveat as above. |
+| title_menu_start_over_confirms | **Converted** (Stage 4) | `fix_vanilla_bugs`. `je` rel32 at 0x443F5C in theMenuScene::HandleMessage retargeted to a DLL stub (new jcc retarget role). ShowMessageBox 0x421410, theGameState::Init 0x429DD0 and SaveCurrentGame 0x429660 located and proved (the Options dialog Evict confirmation and the new-player name dialog make the same calls). |
+| title_menu_refresh_on_activate | **Converted** (Stage 4) | `fix_vanilla_bugs`. UpdateShowPlayer 0x443B80 entry detour (label), Manage Games re-add at 0x443C00, Activate(true) tail call 0x443A07, name-prompt-cancel call 0x444073. **`FixVanillaGameBugs=1` is now the whole B200 setting (7 writes).** |
 | fix_vanilla_game_bugs | n/a | Umbrella that calls the four fixes above. |
 | career_room_goal_reconciliation | **Converted** (`17541be`) | `career_room_goals`, key `CareerRoomGoalReconciliation` (unconditional → 1). Load hook only: CTech::LoadState call 0x42A75E. B200's second call, after Cheat Upgrades' Reset Achievements, belongs to Cheat Upgrades (static). |
-| event_collectable_slot_replacement | Pending | The three native sites (Bug Whisperer ×2, Neighbor Collectible) call stock `CCollectableItem::Add` and use stock slots (+0x34C/+0x368); the helper keeps its last-spawn slot/stamp in DLL globals, and B200 keeps them in helper globals too. Not done this round. The fourth (fossil) site is an island-events (mobile) event and stays with that static feature. |
-| options_dialog | Pending | Evict button: two constructor branch NOPs plus an inserted `AddControl` (needs a detour). Stock strings 0x10/0x11 and the stock EvictFamily handler. Not done. |
-| power_failure_event | Pending | Stock `CEventThePowerFailure` CalcAward/GetResultDescription/ImpactGame (vtable slots, found by RTTI). B2 returns string 0x9BE, which the stock table must be shown to contain in vanilla before converting. Not done. |
-| older_villager_mortality | Pending (S2) | The hazard table would live in the DLL (`OLDER_MORTALITY_HAZARDS_MILLIONTHS`), hooked in `CVillagerManager::AllVillagersRealtimePhysiologyAndProductivityUpkeep` before the old-age roll. In B200 that hook also calls the longevity-achievement observer (custom achievements 0x85–0x89, static), so the runtime module would carry the mortality half only. Not done this round. |
+| event_collectable_slot_replacement | **Converted** (Stage 4) | `event_collectable_slot_replacement`, key `EventCollectableSlotReplacement` (unconditional in B200, default 1). Three call retargets to 0x415090 (Bug Whisperer x2, Neighbor Collectible); Update's natural spawn left alone. The fossil site stays with the static island events. |
+| options_dialog | Pending (deferred, convertible) | Evict button: B200 NOPs a 6-byte and a 2-byte conditional branch in the constructor and inserts an AddControl call. The framework's minimum write is 5 bytes, so it needs a new "byte patch" write class, and the dormant block is stock developer-disabled UI that only a live look can vouch for. Not done; no equivalence proof attempted. |
+| power_failure_event | **Converted** (Stage 4) | `power_failure_event`, key `PowerFailureEvent` (default 1; B200 installs it in island-event builds, on by default). String 0x9BE **is** in the vanilla table (record at 0x548060; the string manager constructor indexes all ids). Three vtable slots of CEventThePowerFailure replaced (new vtable_slot role, RTTI-proved). B200 drops the stock SetProp(0x17) on "Take a chance"; the module reproduces B200. |
+| older_villager_mortality | **Converted** (Stage 4, mortality half) | `older_villager_mortality`, key `OlderVillagerMortality` (default 0). Replace run of `push 0; mov ecx,ebp; call FoodGroupsActive` at 0x49BBBD; the stock statement 0x49BBC6..0x49BC46 is proved single-entry/single-exit (exit 0x49BC47). Hazard table generated from B200's formula. The longevity achievement observer stays static. |
 | (none in B200: new in the runtime build) | **Converted** (Stage 3) | `time_controls`, key `TimeControls` (default off). Time Controls dialog from the store screen, see §13. |
 | mobile_table_prop_draw, mobile_table_prop_paint, mobile_patio_prop_execution | **Static** | They draw and paint props for B200-added mobile furniture (picnic table, patio), whose item and image IDs come from the shared append cascade (§4). |
 | mobile_sound_routes | **Static** | Added sound assets and IDs. |
@@ -345,11 +345,16 @@ Rule (owner): **DLLs over cave space unless absolutely necessary.** The executab
 | same_sex_marriage, villager_same_sex_embrace, same_sex_pregnancy_guard, villager_manager_spouse_accessors, marriage_finalization_for_same_sex, villager_details_same_sex_married_status, embrace_role_split | **Static** | The on/off state is a persisted inventory byte that exists only because Cheat Upgrades grows the inventory table (§9.1). |
 | force_successful_pregnancy_callsites, force_pregnancy_skips_refusals | **Static** | Cheat Upgrades one-shot (inventory and string tables). |
 | six_child_private_time, spontaneous_behaviors, bookshelf_reading_behavior, radio_drop_behavior, behavior_label_variants, arcade_behavior_labels, mobile_furniture_behavior_dispatch, mobile_furniture_behavior_macros, mobile_furniture_autonomous_candidates, mobile_furniture_external_autonomous_selection | **Static** for now | Behavior Patches and mobile-furniture behaviour: labels use the string cascade, and the dispatch tables index added furniture. The macro-table part is §8.3 Stage 2's candidate, not yet proved table-free. |
-| multiple_marriage_candidates, marriage_candidate_reroll, vf3_style_child_adoption_chooser, tool_tray_outfit_normalization, main_scene_outfit_body_apply, main_scene_random_tip_click | Pending (not assessed this round) | Not yet checked for table or Cheat Upgrades dependencies. |
+| multiple_marriage_candidates | **Static** | "Cheat upgrades only" (its own manifest scope); reroll branch lives in the Cheat Upgrades inventory. |
+| marriage_candidate_reroll | **Static** | Its on/off state is the persisted inventory byte InventoryManager+0x152+0x2A3, which exists only because Cheat Upgrades grows the inventory table. |
+| vf3_style_child_adoption_chooser | **Never installed in B200** | The call is commented out in B200's build list (line 41678); nothing to match. |
+| tool_tray_outfit_normalization | **Static** | Normalises the B200 outfit store's synthetic tray item ids (the shared item-id cascade) back to stock ids. |
+| main_scene_outfit_body_apply | **Static** (and disabled in B200) | Same synthetic ids; B200 records it as "disabled for B97 stability" and does not call it. |
+| main_scene_random_tip_click | **Static** | Needs the mobile click sound asset (new sound id) and the house region baked into the modified main_BG_ws image 0x174. |
 | debug_features, plan_logging | **Never ported** | Debug-only: must not ship (owner rule). |
 | all, all_in_sections, section_near_jump, count_sites | n/a | Generator plumbing. |
 
-### 11.3 Order for the next round
+### 11.3 Order for the next round (steps 1-4 done in Stage 4, section 14; options_dialog deferred)
 1. Finish `fix_vanilla_bugs` (start_over_confirms, refresh_on_activate). The setting is only B200-complete once these land.
 2. older_villager_mortality (DLL hazard table, mortality half).
 3. event_collectable_slot_replacement (native sites), power_failure_event (after the 0x9BE string check), options_dialog.
@@ -417,3 +422,43 @@ Mutation checks (each single change made, the intended tests failed, change reve
 - **F. Time Warp.** Note villager ages (Details). Dialog, Time Warp, **No**: nothing happens. Time Warp, **Yes**: status gains ` A time warp is under way.` Close the dialog and the store: within a second everyone at home is 3 years older (a child that crosses 19 leaves home as usual); the oldest-ever record updates in the Family Tree/Achievements. Warping again works. Probe counter `timeWarpsApplied` = number of villagers aged.
 - **G. Off = stock.** Quit cleanly, set `TimeControls=0` in `vf2fun.ini`, relaunch: no Time button, the store works, probe shows the module off and its three sites vanilla.
 - **H. Save/reload.** Quit cleanly and relaunch: the family loads. The module writes no save data of its own (only the speed field the game itself saves).
+
+
+## 14. Stage 4: the rest of the table-free rows
+
+Branch `runtime-hook-stage1`, commits `338f807` (fix_vanilla_bugs complete), `bd00e4d` (older_villager_mortality), `5621359` (event_collectable_slot_replacement), `2b9fe3a` (power_failure_event). Every conversion follows the same bar: pins located structurally in the vanilla image and proved by capstone (`gen_sites.py`), the DLL's logic compared with B200's generator source (text comparison of ported helpers or byte comparison of the stubs), a harness test that runs the real stock code against recorders and a model written from B200, and one deliberate single-point mutation confirmed caught and reverted.
+
+### 14.1 What was added to the framework
+- **jcc retarget** (a `je/jne rel32` pointed at a DLL stub), **replace-run ending in a pinned call** (the DLL re-issues the call itself), **vtable_slot** (a 4-byte data pointer, written under PAGE_READWRITE, never executable; RTTI of the vtable proved), **data** pins (table records and texts) and **SINGLE_ENTRY_REGIONS** (a stock statement the module skips whole is proved single-entry with every exit at one address).
+- The branch-target scan is deliberately over-approximate. Where it reports a "branch" inside another instruction's displacement, `NOT_INSTRUCTION_STARTS` waives it only after a linear decode from the function start proves the address is inside an instruction.
+
+### 14.2 Results
+| Module | Writes | Evidence |
+|---|---|---|
+| `fix_vanilla_bugs` (complete) | 7 | 10 Start Over/Play click cases, name prompt OK/cancel, 16 UpdateShowPlayer states and Activate through the real stock menu code; Start Over Yes keeps the 24 name bytes through Init and clamps the speed field like the new-player dialog. |
+| `older_villager_mortality` | 1 | The stock statement run for every birthday 0-330 years x 0-5 food groups plus off-birthday ages; the kill threshold is found by binary search and equals B200's table (on) or 10 x years over (off). |
+| `event_collectable_slot_replacement` | 3 | 468 slot configurations (burst protection, stale burst, forced random path, native spawn giving up) replayed against an independent model of B200's policy; Update's natural spawn untouched. |
+| `power_failure_event` | 3 | The real virtuals driven through the vtable (stock and replaced), including five events at once (four-slot overflow). |
+
+Tests: 109 pass (`VF2_VANILLA_RUNTIME_DIR` + VS x86), the Stage 1-3 tests unchanged. Mutations caught and reverted: Start Over `jne`->`je`; Manage Games button field 0xE4->0xF0; hazard index -55->-56; mortality `jz`->`jnz`; collectable victim `<`->`>`; collectable restore condition; Power Failure `==0`->`==1`.
+
+### 14.3 Observations (not changed)
+- B200's Power Failure replacement drops the stock `SetProp(0x17)` (spoiled-food prop) for "Take a chance"; stock set it for both choices. Reproduced as B200 does.
+- B200's mortality clamps food groups at 4; the stock statement allows 5.
+
+### 14.4 Conversion state
+80 `patch_*` functions in the B200 generator. Converted: 11 (allow_older_pregnancies + next_generation_age_gate counted as two, SetActive guard, pause_yes, stale_hotspot, start_over, refresh_on_activate, career_room_goals, event_collectable, power_failure, older_villager_mortality), about 14%. Of the remainder, one (options_dialog) is convertible and deferred, the rest are static for the recorded reasons (shared tables, Cheat Upgrades inventory, assets, mobile events, never installed, plumbing, debug). Time Controls is an additional new module.
+
+### 14.5 Stage 4 live-test checklist (main session; one live test at a time)
+**Build:** `C:\vf2w\vf2-runtime-stage4-test\VF2 Runtime Stage4 Test.exe` (exe SHA-256 `04f9ff02...1b28e`, unchanged bootstrap). `Virtual Families 2 Patcher Files\vf2fun.dll` is a **test build** (SHA-256 `eba5553e...170f3`); `vf2fun.ini` has every module on, `ldw.ini` FullScreen=0. Saves go to `Documents\LDW\VF2 Runtime Stage4 Test\`. Probe: `python runtime\tools\probe_stage1.py --exe-name "VF2 Runtime Stage4 Test.exe"`.
+- **A. Install.** Probe: all nine modules `installed`, none `REFUSED`; vtable sites show `vtable slot -> DLL`.
+- **B. Start Over.** With a village, title screen, Start Over: the confirmation appears. No keeps the menu; Yes starts a new game under the same player name (check the name on the title screen afterwards). Without a village, Start Over starts the intro as before.
+- **C. Title refresh.** Delete the only player in Manage Games and cancel the name prompt: the old name and Continue are gone, Manage Games is back. Return to the title from a game: Play/Continue label is right.
+- **D. Collectables.** Wait until both yard collectable spots are busy, then trigger Bug Whisperer / Neighbor Collectible (or Time Warp for the email): the event adds its collectables by replacing the oldest unpicked one; the Bug Whisperer nets two.
+- **E. Power Failure.** Take a chance several times: about one in four says "Everyone gets an upset stomach. The food was not ok." and some villagers get an upset stomach; the rest say "This stuff still looks okay."; Throw it out resets the food.
+- **F. Old-age mortality.** Time Warp elders past 55 (ages in years 55-90): deaths follow the gentler B200 curve (very rare at 56-60) compared with the Off build, where each year past 55 adds 10%.
+- **G. Off = stock.** Set every key to 0: each behaviour above reverts and the probe shows every site vanilla.
+- **H. Save/reload.** Quit cleanly and reload: no module writes save data.
+
+### 14.6 Open risks
+1. Not live-tested. 2. The harness cannot run the full stock physiology/dialog stack, so the live pass is what proves the hooks inside the real game. 3. Anti-virus heuristics as in section 9.6. 4. A transient harness stall was seen once when another process was running heavily (the next run passed); it did not reproduce.
