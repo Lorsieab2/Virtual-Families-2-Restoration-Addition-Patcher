@@ -1388,5 +1388,19 @@ class UpdatesLinkTests(unittest.TestCase):
         self.assertEqual(shipped.read_bytes(), public.read_bytes())
 
 
+class LabelHeightGuardTests(unittest.TestCase):
+    def test_wrapped_line_count_is_skipped_until_the_label_has_a_real_width(self):
+        """Counting wrapped lines in a text widget with no width yet (hidden window) froze the GUI for minutes."""
+        source = Path(gui.__file__).read_text(encoding="utf-8")
+        resize = source[source.index("def _resize_markup_label"):
+                        source.index("def _resize_all_markup_labels")]
+        count_at = resize.index('widget.count("1.0", "end-1c", "displaylines")')
+        self.assertIn("laid_out = width >= 80", resize)
+        guard_at = resize.index("if laid_out:")
+        self.assertLess(guard_at, count_at,
+                        "the displaylines count must run only for a laid-out label")
+        self.assertNotIn("if width < 80:", resize)
+
+
 if __name__ == "__main__":
     unittest.main()
