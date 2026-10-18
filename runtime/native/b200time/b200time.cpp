@@ -84,6 +84,15 @@ extern "C" __declspec(dllexport) volatile B200TimeStatus B200Time_Status = { 0x4
 static HMODULE ThisModule;
 static wchar_t Folder[MAX_PATH];
 
+// path = Folder + name (no C runtime: this runs under the emulator in the tests). False if it does not fit.
+static bool InFolder(const wchar_t *name, wchar_t *path) {
+    unsigned n = 0;
+    while (Folder[n]) { if (n + 1 >= MAX_PATH) return false; path[n] = Folder[n]; ++n; }
+    for (unsigned i = 0; name[i]; ++i) { if (n + 1 >= MAX_PATH) return false; path[n++] = name[i]; }
+    path[n] = 0;
+    return true;
+}
+
 // ---------------------------------------------------------------- log
 // vf2time.log beside the DLL: one short record of what this launch installed.
 static bool LogStarted;
@@ -94,7 +103,7 @@ static void Log(const char *, ...) {}
 #else
 static void Log(const char *fmt, ...) {
     wchar_t path[MAX_PATH];
-    if (_snwprintf_s(path, MAX_PATH, _TRUNCATE, L"%svf2time.log", Folder) < 0)
+    if (!InFolder(L"vf2time.log", path))
         return;
     FILE *f = 0;
     if (_wfopen_s(&f, path, LogStarted ? L"a" : L"w") != 0 || !f)
@@ -333,7 +342,7 @@ static bool Apply(Plan &plan) {
 
 static bool SettingOn() {
     wchar_t path[MAX_PATH];
-    if (_snwprintf_s(path, MAX_PATH, _TRUNCATE, L"%svf2time.ini", Folder) < 0) return false;
+    if (!InFolder(L"vf2time.ini", path)) return false;
     return GetPrivateProfileIntW(L"Patches", L"TimeControls", 0, path) == 1;
 }
 
@@ -345,9 +354,10 @@ extern "C" __declspec(dllexport) void __cdecl B200Time_Startup() {
 
     DWORD n = GetModuleFileNameW(ThisModule, Folder, MAX_PATH);
     if (n == 0 || n >= MAX_PATH) return;
-    wchar_t *slash = wcsrchr(Folder, L'\\');
-    if (!slash) return;
-    slash[1] = 0;
+    unsigned cut = n;
+    while (cut > 0 && Folder[cut - 1] != L'\\') --cut;
+    if (!cut) return;
+    Folder[cut] = 0;
 
     Log("vf2time_b200 started");
     bool on = SettingOn();
@@ -393,6 +403,11 @@ extern "C" __declspec(dllexport) int __cdecl B200Time_TestPlan(int enabled, unsi
         out[2 + i * 5 + 4] = *(unsigned *)(plan.writes[i].bytes + 4);
     }
     return built;
+}
+// DllMain does not run under the emulator: tell the DLL which module it is (B200Time_Startup finds its
+// folder from it).
+extern "C" __declspec(dllexport) void __cdecl B200Time_TestSetModule(unsigned module) {
+    ThisModule = (HMODULE)module;
 }
 // The resolved sites (live addresses), B200_SITE_COUNT of them, after a TestPlan with the setting on.
 extern "C" __declspec(dllexport) void __cdecl B200Time_TestSites(unsigned *out) {

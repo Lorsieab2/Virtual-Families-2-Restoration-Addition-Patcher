@@ -195,6 +195,23 @@ class Emu:
         self.calls.append(("MessageBoxW", emu.wstr(emu.arg(1)), emu.wstr(emu.arg(2))))
         return self.messagebox_answer, 16
 
+    def bind_exe_imports(self, handlers: dict):
+        """Point the EXECUTABLE's import-table slots for the named functions at Python handlers.
+        handlers: name -> fn(emu) -> (eax, bytes popped)."""
+        bound = set()
+        for d in self.exe.DIRECTORY_ENTRY_IMPORT:
+            for imp in d.imports:
+                name = imp.name.decode() if imp.name else None
+                if name in handlers:
+                    addr = THUNK_BASE + 0x10 * len(self.thunks)
+                    self.thunks[addr] = "exe:" + name
+                    self.imports["exe:" + name] = handlers[name]
+                    self.uc.mem_write(imp.address + self.delta, struct.pack("<I", addr))
+                    bound.add(name)
+        missing = set(handlers) - bound
+        if missing:
+            raise EmuError(f"the executable does not import {sorted(missing)}")
+
     # ------------------------------------------------------------------ memory helpers
     def a(self, link_va: int) -> int:
         """Live address of a link-time game VA."""

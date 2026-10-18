@@ -792,3 +792,129 @@ def run_stock(exe, dll, delta):
         fn(w)
     for fn in OFF:
         fn(World(exe, dll, delta, install=False))
+
+
+# ====================================================================== the loader, end to end
+def loader_sites(exe_path):
+    """(.vf2time flag VA, VA of theGame::Init's first call opcode, that call's target) in a B201 executable."""
+    import pefile
+    pe = pefile.PE(str(exe_path))
+    base = pe.OPTIONAL_HEADER.ImageBase
+    data = pe.__data__
+
+    def u32_at(va):
+        return struct.unpack("<I", pe.get_data(va - base, 4))[0]
+    flag = [base + s.VirtualAddress for s in pe.sections if s.Name.rstrip(b"\0") == b".vf2time"]
+    assert len(flag) == 1, "the executable has no .vf2time section"
+    i = bytes(data).find(b".?AVtheGame@@\0")
+    td = base + pe.get_rva_from_offset(i) - 8
+    rdata = [s for s in pe.sections if s.Name.rstrip(b"\0") == b".rdata"][0]
+    blob = rdata.get_data()
+    col = None
+    j = blob.find(struct.pack("<I", td))
+    while j >= 0:
+        if j >= 12 and struct.unpack_from("<II", blob, j - 12) == (0, 0):
+            col = base + rdata.VirtualAddress + j - 12
+            break
+        j = blob.find(struct.pack("<I", td), j + 1)
+    assert col, "theGame's RTTI not found"
+    k = blob.find(struct.pack("<I", col))
+    vtable = base + rdata.VirtualAddress + k + 4
+    init = u32_at(vtable + 16)
+    call = init + 0x26
+    assert pe.get_data(call - base, 1) == b"\xE8"
+    target = (call + 5 + struct.unpack("<i", pe.get_data(call + 1 - base, 4))[0]) & 0xFFFFFFFF
+    return flag[0], call, target
+
+
+EXE_PATH = "C:\\Game\\Virtual Families 2 - B201.exe"
+DLL_PATH = "C:\\Game\\Virtual Families 2 Patcher Files\\vf2time_b200.dll"
+
+
+def run_loader(exe, dll, delta, flag, ini, dll_present=True):
+    """Run the executable's REAL loader wrapper (as theGame::Init's first call would) with the DLL it would
+    load, against the emulated Win32 imports. Returns (world, wrapper result, calls log)."""
+    w = World(exe, dll, delta, install=False)
+    e = w.e
+    flag_va, call_va, wrapper = loader_sites(exe)
+    log = []
+    if flag is not None:  # None: leave the byte the executable file has
+        e.write(flag_va + delta, bytes([flag]))
+
+    def wide(addr, text):
+        raw = text.encode("utf-16-le") + b"\0\0"
+        e.write(addr, raw)
+        return len(text)
+
+    def exe_get_module_file_name(emu):
+        log.append("exe:GetModuleFileNameW")
+        return wide(emu.arg(1), EXE_PATH), 12
+
+    def exe_load_library(emu):
+        log.append("exe:LoadLibraryW " + emu.wstr(emu.arg(0)))
+        return (0x30000000 if dll_present else 0), 4
+
+    def exe_get_proc(emu):
+        name = emu.cstr(emu.arg(1))
+        log.append("exe:GetProcAddress " + name)
+        return (emu.dll_export("B200Time_Startup") if name == "B200Time_Startup" else 0), 8
+    e.bind_exe_imports({"GetModuleFileNameW": exe_get_module_file_name, "LoadLibraryW": exe_load_library,
+                        "GetProcAddress": exe_get_proc})
+
+    def dll_get_module_file_name(emu):
+        log.append("dll:GetModuleFileNameW")
+        return wide(emu.arg(1), DLL_PATH), 12
+
+    def dll_get_ini(emu):
+        log.append("dll:GetPrivateProfileIntW " + emu.wstr(emu.arg(3)))
+        return ini, 16
+
+    def dll_virtual_protect(emu):
+        emu.w32(emu.arg(3), 0x20)
+        return 1, 16
+    e.imports.update({
+        "GetModuleFileNameW": dll_get_module_file_name, "GetPrivateProfileIntW": dll_get_ini,
+        "VirtualProtect": dll_virtual_protect, "FlushInstructionCache": lambda emu: (1, 12),
+        "GetCurrentProcess": lambda emu: (0xFFFFFFFF, 0), "GetLastError": lambda emu: (0, 0),
+    })
+    # binding the import slots is the test's own write: measure changes from here
+    w.orig_code = [(addr, e.read(addr, size)) for addr, size in w._code_ranges()]
+    e.call(e.dll_export("B200Time_TestSetModule"), (0x30000000,))
+    result = e.call(wrapper + delta, ())
+    return w, result, log
+
+
+def scenario_loader_cases(exe, dll, delta):
+    """The dormant loader: byte 0 never loads the DLL; byte 1 loads it; the DLL installs only when its ini says 1."""
+    probe = World(exe, dll, delta, install=False)
+    flag_va, call_va, wrapper = loader_sites(exe)
+    for flag, ini, present, installs, loads in ((0, 1, True, False, False), (1, 0, True, False, True),
+                                                 (1, 1, False, False, True), (1, 1, True, True, True)):
+        w, result, log = run_loader(exe, dll, delta, flag, ini, present)
+        assert result == w.state, "the wrapper must return theGameState::Get()'s result"
+        loaded = any(x.startswith("exe:LoadLibraryW") for x in log)
+        assert loaded == loads, (flag, ini, present, log)
+        if loaded:
+            assert [x for x in log if x.startswith("exe:LoadLibraryW")] == [
+                "exe:LoadLibraryW C:\\Game\\Virtual Families 2 Patcher Files\\vf2time_b200.dll"], log
+        changed = w.changed_code_bytes()
+        if not installs:
+            assert not changed, (flag, ini, present, len(changed))
+            assert not any(x.startswith("dll:GetPrivateProfileIntW") for x in log) or ini == 0 or present
+            continue
+        assert changed
+        # the three vtable slots and the two call sites now lead into the DLL
+        for slot in ("OPTIONS_SLOT_HANDLE_MESSAGE", "GAME_STATE_SLOT_LOAD", "GAME_STATE_SLOT_SAVE"):
+            assert 0x30000000 <= w.e.r32(w.s(slot)) < 0x30030000, slot
+        for site in ("OPTIONS_CTOR_LAST_CALL", "TIMEFLOW_INCREMENT_AGE_CALL"):
+            a = w.s(site)
+            target = (a + 5 + struct.unpack("<i", w.e.read(a + 1, 4))[0]) & 0xFFFFFFFF
+            assert 0x30000000 <= target < 0x30030000, site
+        # and it works: the Time Controls button opens the dialog through the installed slot
+        d = w.make_dialog()
+        assert w.call_handle_message(d, 8, 9) & 0xFF == 1 and len(w.e.dialogs) == 1
+    # the wrapper twice (theGame::Init is one call, but a second must be harmless): the DLL is loaded once
+    w, result, log = run_loader(exe, dll, delta, 1, 1, True)
+    again = w.e.call(loader_sites(exe)[2] + delta, ())
+    assert again == w.state
+    assert len([x for x in log if x.startswith("exe:LoadLibraryW")]) == 1

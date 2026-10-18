@@ -259,10 +259,11 @@ def test_resolver_scans_under_the_emulator(built):
     assert w.test_plan(False) == (0, [])
 
 
-def test_installed_scenarios_on_another_variant(built):
-    other = os.environ.get("VF2_B200_OTHER_EXE")
+@pytest.mark.parametrize("env", ["VF2_B200_OTHER_EXE", "VF2_B201_CORE_EXE"])
+def test_installed_scenarios_on_another_variant(built, env):
+    other = os.environ.get(env)
     if not other or not Path(other).is_file():
-        pytest.skip("VF2_B200_OTHER_EXE is not set to a second variant's executable")
+        pytest.skip(f"{env} is not set to another executable")
     scen = _scen()
     for fn in scen.ALL:
         w = scen.World(other, str(built["test"]), 0x1A0000, install=True)
@@ -271,6 +272,60 @@ def test_installed_scenarios_on_another_variant(built):
         w = scen.World(other, str(built["test"]), 0x1A0000, install=False)
         w.test_plan(False)
         fn(w)
+
+
+@pytest.mark.parametrize("delta", DELTAS, ids=["at_link_address", "relocated"])
+def test_the_b201_loader_end_to_end(built, delta):
+    """The B201 executable's own dormant loader wrapper, then the DLL it loads, then the installed patches."""
+    b201 = os.environ.get("VF2_B201_CORE_EXE")
+    if not b201 or not Path(b201).is_file():
+        pytest.skip("VF2_B201_CORE_EXE is not set to the B201 core executable")
+    scen = _scen()
+    scen.scenario_loader_cases(b201, str(built["test"]), delta)
+
+
+def test_exporter_records_drive_the_real_loader(built, tmp_path):
+    """The exporter's .vf2time toggle and DLL / ini records, applied to the B201 executable, make the real loader
+    load and install; the executable as built does not."""
+    import json
+    b201 = os.environ.get("VF2_B201_CORE_EXE")
+    if not b201 or not Path(b201).is_file():
+        pytest.skip("VF2_B201_CORE_EXE is not set to the B201 core executable")
+    scen = _scen()
+    sys.path.insert(0, str(ROOT / "work"))
+    import export_offline_patch_bundle as X
+    manifest = json.loads((Path(b201).parent / "patch-manifest.json").read_text())
+    assert manifest["TimeControls"]["runtime_flag"]["source_section"] == ".vf2time"
+    patches = X.time_controls_post_asset_patches([Path(b201)], output_exe_name="Out.exe", build_manifest_data=manifest)
+    assert len(patches) == 1 and patches[0]["requires"] == ["core_executable", "time_controls"]
+    variant = patches[0]["variants"][0]
+    data = bytearray(Path(b201).read_bytes())
+    offset = int(variant["offset"], 16)
+    assert data[offset] == int(variant["expected_asset_bytes"], 16) == 0 and variant["replacement_bytes"] == "01"
+    toggled = tmp_path / "Out.exe"
+    data[offset] = 1
+    toggled.write_bytes(bytes(data))
+    for delta in DELTAS:
+        _w, _r, log = scen.run_loader(b201, str(built["test"]), delta, None, 1)
+        assert not any(x.startswith("exe:LoadLibraryW") for x in log), "as built, the loader never loads the DLL"
+        w, _r, log = scen.run_loader(str(toggled), str(built["test"]), delta, None, 1)
+        assert any(x.startswith("exe:LoadLibraryW") for x in log) and w.changed_code_bytes()
+    # the asset records: the shipped DLL and a one-line ini, removed again when the setting is off
+    records = X.time_controls_asset_patches(tmp_path / "bundle", built["release"], manifest)
+    assert [r["file_path"] for r in records] == ["Virtual Families 2 Patcher Files/vf2time_b200.dll",
+                                                 "Virtual Families 2 Patcher Files/vf2time.ini"]
+    for r in records:
+        assert r["requires"] == ["core_executable", "time_controls"] and r["remove_when_disabled"] is True
+        staged = tmp_path / "bundle" / r["source_path"]
+        assert hashlib.sha256(staged.read_bytes()).hexdigest() == r["source_sha256"]
+    assert (tmp_path / "bundle" / records[1]["source_path"]).read_bytes() == b"[Patches]\r\nTimeControls=1\r\n"
+    # refusals: the test DLL, a missing DLL, and an older build without the loader
+    with pytest.raises(ValueError):
+        X.time_controls_asset_patches(tmp_path / "b2", built["test"], manifest)
+    with pytest.raises(ValueError):
+        X.time_controls_asset_patches(tmp_path / "b3", None, manifest)
+    assert X.time_controls_asset_patches(tmp_path / "b4", None, {}) == []
+    assert X.time_controls_post_asset_patches([Path(b201)], output_exe_name="Out.exe", build_manifest_data={}) == []
 
 
 def test_the_plan_is_five_writes_and_off_is_none(built):
