@@ -1,7 +1,7 @@
 // b200time_time.inc -- the Time Controls module; included by b200time.cpp after
 // the site table (SITE), the resolver and the plan type.
 //
-// Adapted from the runtime-hook build's vf2fun_time.inc (Settings-screen version)
+// Adapted from the REDUX runtime-hook build's vf2fun_time.inc (Settings-screen version; a separate branch)
 // for the B200 executable: every address is found in the live image by the resolver and read through
 // SITE(), the Settings button is built at x = 30 / id 9, and the aging hook is a
 // retargeted `call IncrementAge` instead of a 5-byte stolen run (B200 saves the

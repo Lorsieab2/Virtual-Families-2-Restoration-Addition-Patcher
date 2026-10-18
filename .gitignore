@@ -127,5 +127,5 @@ src/patcher_local_settings.json
 # generated build artifact, not source, and review flagged committing it.
 work/Villager_relocations.txt
 
-# Stage 1 runtime-hook module: locally built DLL and objects.
+# B201 Time Controls: locally built DLLs and objects (runtime/native/build_b200time.bat).
 /runtime/build/

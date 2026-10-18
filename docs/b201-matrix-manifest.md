@@ -2,7 +2,7 @@
 
 Built from `efbe304` (tree recorded in `data/vf2/build-matrix-release-b201.json`) with `work/build_matrix.ps1`, 32 variants, seeded from the B200 matrix. Each variant linked; each carries the dormant Time Controls loader (`.vf2time` byte 0 as built).
 
-Release DLL `runtime/build/vf2time_b200.dll` (`runtime/native/build_b200time.bat`): SHA-256 `1d646d97c36f0358e63890c17e15195023426fb3098d48ab9d1a0e0cf07fcdcf` (the hash changes on every rebuild).
+Release DLL `runtime/build/vf2time_b200.dll` (`runtime/native/build_b200time.bat`): SHA-256 `238cbfe9aed1d5204534465d076cdb2b95b6cab61346fcd7c50bed55d3bb5787` (the file hash changes on every rebuild because the linker stamps a timestamp; the code, data and resources are byte-identical to the build that produced `1d646d97...`, which a rebuild after removing the REDUX files confirmed).
 
 Checked for every executable: links; its pinned runs resolve exactly once with all derivations agreeing; loader present, flag 0; the loader end to end under emulation (byte 0 never loads, byte 1 with ini 0 installs nothing, missing DLL harmless, byte 1 with ini 1 installs). No live test.
 

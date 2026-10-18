@@ -61,9 +61,9 @@ New button id: **9** (2, 3, 4 and 5..8 are used; the handler's `edi-5 <= 3` test
 ## 6. The companion DLL (added after the static study)
 
 `runtime/native/b200time/` builds `vf2time_b200.dll` (`runtime/native/build_b200time.bat`, /W4 /WX). It is
-REDUX's Settings-screen Time Controls module (`vf2fun_time.inc`) re-proved against this executable and made
+REDUX's Settings-screen Time Controls module (`vf2fun_time.inc`, on the separate runtime-hook branch, not part of this one) re-proved against this executable and made
 self-contained (its own small plan / pin / apply host; one feature, one DLL). Every address is in
-`runtime/b200_time_sites.py` (46 pins), proved by `runtime/tools/gen_b200_time_sites.py` (capstone + pefile) and
+`runtime/b200_time_sites.py` (33 pins), proved by `runtime/tools/gen_b200_time_sites.py` (capstone + pefile) and
 emitted as `b200time_sites.h`.
 
 Findings that differ from the vanilla runtime build:
@@ -89,14 +89,19 @@ unicorn (`tests/b200_time_emu.py`, `tests/b200_time_scenarios.py`), at the link 
 The emulator test build leaves out `ISOLATION_AWARE_ENABLED` (Microsoft's activation-context wrappers around the
 user32 calls); the shipped build has it, exactly as REDUX's.
 
-## 7. Not covered
+## 7. Built, and not covered
 
-- No live test. The art behind the buttons at (30,434) is unverified (REDUX uses the same spot), and the button
-  width/height (144 x 34) come from REDUX's recorded Done position, not the art file. The scenarios feed those
-  sizes to the real constructor code through a stand-in Done button.
-- How the DLL is loaded into the B200 process (a loader stub / entry point calling `B200Time_Startup`) and the
-  patcher UI that writes `vf2time.ini` (`[Patches] TimeControls=1`) are not part of this change.
+Built (no live test of any of it):
+- The loader: a dormant `.vf2time` byte (0 as built) and a wrapper on `theGame::Init`'s first call in every B201
+  executable, the exporter's `time_controls` setting that flips the byte and ships the DLL and `vf2time.ini`,
+  and the DLL itself. With the byte 0 the DLL is never loaded.
+- The 32-variant matrix: every variant links; the 33 pinned runs resolve exactly once in each; the loader works
+  end to end under emulation in each. Executables and hashes: `docs/b201-matrix-manifest.md`.
+
+Not covered:
+- No live test. The art behind the buttons at (30,434) is unverified (the runtime-hook build on the separate REDUX
+  branch uses the same spot), and the button width/height (144 x 34) come from that build's recorded Done
+  position, not the art file. The scenarios feed those sizes to the real constructor code through a stand-in
+  Done button.
 - The shipped build's isolation-aware activation of the dialog's manifest, the SDL fullscreen toggle and real
   Windows dialog behaviour are not exercised under emulation.
-- No 32-variant matrix has been built; other variants' constructor / `theGameState` / aging code may differ from
-  the core variant, in which case the pins refuse and nothing is installed.

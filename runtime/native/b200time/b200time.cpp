@@ -2,7 +2,7 @@
 // Families 2 executable.
 //
 // It is the Settings-menu Time Controls module of the runtime-hook build
-// (vf2fun_time.inc on the runtime branch), re-proved against B200 and made
+// (vf2fun_time.inc, on the separate REDUX runtime-hook branch), re-proved against B200 and made
 // self-contained: B200 has no other runtime hooks, so this DLL has its own tiny
 // host. One feature, one DLL: nothing else is installed here.
 //
