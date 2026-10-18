@@ -2,7 +2,7 @@
 
 Built from main `2e326b6` (the merge of PR #423; tree `ebf0784302068b18471eeafc7a85b43f1b1c7b18`, recorded in `data/vf2/build-matrix-release-b201.json`) with `work/build_matrix.ps1`: 32 variants, seeded from the B200 matrix. Each variant linked, and each carries the dormant Time Controls loader (`.vf2time` byte 0 as built).
 
-Release DLL `runtime/build/vf2time_b200.dll` (`runtime/native/build_b200time.bat`, built from the same tree): SHA-256 `7ec7eb32974e1705759376a186de8778b8a4132039d4e729c456c75fea97fb09`.
+Release DLL `runtime/build/vf2time_b200.dll` (`runtime/native/build_b200time.bat`, built from main `2e326b6`): SHA-256 `3ea0a2a5689ecbf5d1bef05368493adb3f54b8e0e96343b2d75a585267b1d35e`, the fresh release build (`C:\vf2w\b201-release`) that is shipped. It replaces `7ec7eb32974e1705759376a186de8778b8a4132039d4e729c456c75fea97fb09`, an earlier build of the same tree that I recorded first; the two differ in four bytes only, both linker timestamps: two bytes of the PE header `TimeDateStamp` (file offset 0x110) and two bytes of the debug-directory `TimeDateStamp` in `.rdata` (0x1EE2C). Code, data and resources are byte-identical, the exports are exactly `B200Time_Startup` and `B200Time_Status`, and the Time Controls emulation tests (94) pass against the same source tree.
 
 Checked for every executable: links; its pinned runs resolve exactly once with all derivations agreeing; loader present, flag 0; the loader end to end under emulation (byte 0 never loads, byte 1 with ini 0 installs nothing, missing DLL harmless, byte 1 with ini 1 installs). No live test.
 
