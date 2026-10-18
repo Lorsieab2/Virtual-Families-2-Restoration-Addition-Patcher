@@ -251,7 +251,14 @@ class TheSource(unittest.TestCase):
     def test_the_patch_is_wired_for_every_variant(self):
         src = _source()
         self.assertIn("def patch_event_collectable_slot_replacement(manifest):", src)
-        self.assertIn("    patch_career_room_goal_reconciliation(manifest)\n    patch_event_collectable_slot_replacement(manifest)\n", src)
+        # Called once, unconditionally, from the build sequence, after the career-room
+        # reconciliation. Other patches (new-village reset, Fix Vanilla Game Bugs, Time
+        # Controls) legitimately sit between the two, so adjacency is not the contract.
+        calls = "    patch_event_collectable_slot_replacement(manifest)\n"
+        self.assertEqual(src.count(calls), 1, "installed exactly once, at the build sequence's indent")
+        career = src.index("    patch_career_room_goal_reconciliation(manifest)\n")
+        self.assertLess(career, src.index(calls), "after the career-room reconciliation")
+        self.assertGreater(src.index(calls), src.index("def main()"), "inside main(), so every variant gets it")
         self.assertEqual(patcher.EVENT_COLLECTABLE_ADD_THUNK_SYMBOL, THUNK)
 
     def test_natural_spawns_are_untouched(self):

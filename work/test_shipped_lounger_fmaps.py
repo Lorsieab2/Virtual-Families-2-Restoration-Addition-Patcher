@@ -27,8 +27,12 @@ import os
 import re
 import struct
 import unittest
+import sys
 from collections import Counter
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import patch_mobile_furniture_pack as patcher  # noqa: E402  (without_mobile_hotspot, the rule a borrower follows)
 
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUTS = ROOT / "outputs"
@@ -385,7 +389,15 @@ class TestShippedLoungerMapsAreDesktopSafe(unittest.TestCase):
                         ):
                             if not raw or safe:
                                 continue
-                            if now == raw or now == OBJECT_CELL:
+                            # A carried cell keeps EVERYTHING except a mobile
+                            # hotspot id the desktop dispatcher cannot hold
+                            # (issue #378, which merged after this check was
+                            # written: it compared against the raw donor value
+                            # and so flagged the deliberate clearing). The
+                            # expected value is therefore the donor cell with
+                            # exactly that rule applied -- still an exact
+                            # comparison, not an occupancy test.
+                            if now == patcher.without_mobile_hotspot(raw) or now == OBJECT_CELL:
                                 continue
                             lost.append((index, raw, now))
                         carried = sum(
