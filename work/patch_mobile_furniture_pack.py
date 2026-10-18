@@ -446,6 +446,21 @@ OLDER_MORTALITY_FLAG_SYMBOL = "_gVF2OlderVillagerMortality"
 VANILLA_BUGS_SETTING = "fix_vanilla_game_bugs"
 VANILLA_BUGS_FLAG_SECTION = ".vf2bugs"
 VANILLA_BUGS_FLAG_SYMBOL = "_gVF2FixVanillaGameBugs"
+# "Time Controls" (B201): the Settings-menu Time Controls companion DLL. One
+# dormant byte; zero never loads the DLL. The loader runs where theGame::Init
+# asks for theGameState::Get() (its first call), exactly once, before the game
+# loop. The DLL itself (runtime/native/b200time) installs nothing unless its
+# own pins match and its vf2time.ini says TimeControls=1.
+TIME_CONTROLS_SETTING = "time_controls"
+TIME_CONTROLS_FLAG_SECTION = ".vf2time"
+TIME_CONTROLS_FLAG_SYMBOL = "_gVF2TimeControls"
+TIME_CONTROLS_LOADER_SYMBOL = "_VF2GameStateGetAfterTimeControlsLoad"
+TIME_CONTROLS_INIT_FUNCTION = "?Init@theGame@@UAE_NXZ"
+TIME_CONTROLS_GET_SYMBOL = "?Get@theGameState@@SAPAV1@XZ"
+TIME_CONTROLS_GET_CALL_RELOCATION = 0x27   # the first call in theGame::Init
+TIME_CONTROLS_PATCHER_FOLDER = "Virtual Families 2 Patcher Files"
+TIME_CONTROLS_DLL_NAME = "vf2time_b200.dll"
+TIME_CONTROLS_INI_NAME = "vf2time.ini"
 OLDER_MORTALITY_HELPER_SYMBOL = "_VF2RollOlderVillagerMortality"
 LONGEVITY_AGE_HELPER_SYMBOL = "_VF2AwardLongevityGoals"
 LONGEVITY_LOAD_HELPER_SYMBOL = "@VF2VillagerLoadStateAndReconcileLongevity@12"
@@ -15949,6 +15964,46 @@ volatile unsigned char gVF2OlderVillagerMortality = 0;
 extern "C" __declspec(allocate(".vf2bugs"))
 volatile unsigned char gVF2FixVanillaGameBugs = 0;
 
+// Time Controls loader (see TIME_CONTROLS_* in the generator). Zero = never
+// loads the companion DLL. theGame::Init's first call, theGameState::Get(),
+// is retargeted here: the first call loads the DLL beside the executable
+// once (when the byte is 1) and calls its B200Time_Startup(); every call
+// then returns the stock theGameState::Get() unchanged.
+#pragma section(".vf2time", read, write)
+extern "C" __declspec(allocate(".vf2time"))
+volatile unsigned char gVF2TimeControls = 0;
+
+extern "C" __declspec(dllimport) unsigned long __stdcall GetModuleFileNameW(
+    void *module, unsigned short *name, unsigned long size);
+extern "C" __declspec(dllimport) void *__stdcall LoadLibraryW(const unsigned short *name);
+extern "C" __declspec(dllimport) void *__stdcall GetProcAddress(void *module, const char *name);
+
+static void VF2LoadTimeControlsDll() {
+    unsigned short path[512];
+    unsigned long length = GetModuleFileNameW(0, path, 400);
+    if (length == 0 || length >= 400) return;
+    unsigned long cut = length;
+    while (cut > 0 && path[cut - 1] != 92) --cut;
+    if (cut == 0) return;
+    const char *tail = "__VF2_TIME_CONTROLS_RELATIVE_PATH__";
+    unsigned long out = cut;
+    for (const char *c = tail; *c; ++c) path[out++] = (unsigned short)(unsigned char)*c;
+    path[out] = 0;
+    void *module = LoadLibraryW(path);
+    if (!module) return;
+    void (__cdecl *startup)() = (void (__cdecl *)())GetProcAddress(module, "B200Time_Startup");
+    if (startup) startup();
+}
+
+extern "C" void *__cdecl VF2GameStateGetAfterTimeControlsLoad() {
+    static bool tried = false;
+    if (!tried) {
+        tried = true;
+        if (gVF2TimeControls == 1) VF2LoadTimeControlsDll();
+    }
+    return theGameState::Get();
+}
+
 __VF2_MORTALITY_HAZARD_ARRAY__
 
 static const bool kVF2IncludeOrnamentologistGoal = __VF2_INCLUDE_ORNAMENT_GOAL__;
@@ -18409,6 +18464,10 @@ extern "C" void __cdecl VF2ApplyVisibleSpecialUpgrade(int itemId) {
     special_upgrade_helper_cpp = special_upgrade_helper_cpp.replace(
         "__VF2_MORTALITY_HAZARD_ARRAY__",
         mortality_hazards_cpp,
+    )
+    special_upgrade_helper_cpp = special_upgrade_helper_cpp.replace(
+        "__VF2_TIME_CONTROLS_RELATIVE_PATH__",
+        TIME_CONTROLS_PATCHER_FOLDER + "\\\\" + TIME_CONTROLS_DLL_NAME,
     )
     special_upgrade_helper_cpp = special_upgrade_helper_cpp.replace(
         "__VF2_FURNITURE_RECORD_COUNT__",
@@ -25642,6 +25701,54 @@ def patch_fix_vanilla_game_bugs(manifest):
             "TitleMenuRefresh",
         ],
         "flag_off": "every site runs the stock instructions it displaced",
+    }
+
+
+def patch_time_controls_loader(manifest):
+    """Time Controls: retarget theGame::Init's first call (theGameState::Get)
+    to the dormant-byte loader. With .vf2time == 0 it only returns the stock
+    theGameState::Get() result."""
+    obj_path = PATCHED / "theGame.obj"
+    obj = CoffObject(obj_path)
+    init = obj.symbol(TIME_CONTROLS_INIT_FUNCTION)
+    sec = obj.section(init.section)
+    reloc_at = init.value + TIME_CONTROLS_GET_CALL_RELOCATION
+    found = None
+    for index in range(sec.nreloc):
+        vaddr, symbol_index, rtype = struct.unpack_from(
+            "<IIH", obj.buf, sec.reloc_ptr + index * 10
+        )
+        if vaddr == reloc_at:
+            found = (obj.symbol_by_index[symbol_index].name, rtype)
+            break
+    if found != (TIME_CONTROLS_GET_SYMBOL, IMAGE_REL_I386_REL32):
+        raise RuntimeError(f"theGame::Init's theGameState::Get call drifted: {found}")
+    if obj.buf[sec.raw_ptr + reloc_at - 1] != 0xE8:
+        raise RuntimeError("theGame::Init's theGameState::Get call is not a call rel32")
+    helper = obj.append_undefined_symbol(TIME_CONTROLS_LOADER_SYMBOL)
+    obj.retarget_relocation(sec.index, reloc_at, helper, IMAGE_REL_I386_REL32)
+    obj.write(obj_path)
+    manifest["TimeControls"] = {
+        "status": "dormant loader installed in every executable",
+        "offline_patcher_setting": TIME_CONTROLS_SETTING,
+        "category": "optional",
+        "default": True,
+        "hook": (
+            "theGame::Init's first call (theGameState::Get) -> "
+            "VF2GameStateGetAfterTimeControlsLoad, which loads "
+            f"{TIME_CONTROLS_PATCHER_FOLDER}\\{TIME_CONTROLS_DLL_NAME} once when the byte is 1"
+        ),
+        "runtime_flag": {
+            "symbol": TIME_CONTROLS_FLAG_SYMBOL,
+            "source_section": TIME_CONTROLS_FLAG_SECTION,
+            "size": 1,
+            "default": "00",
+            "enabled": "01",
+            "linked_location_status": "pending_link_metadata",
+        },
+        "companion_dll": TIME_CONTROLS_DLL_NAME,
+        "companion_ini": TIME_CONTROLS_INI_NAME,
+        "flag_off": "the DLL is never loaded; theGameState::Get() is called exactly as in the stock Init",
     }
 
 
@@ -41645,6 +41752,8 @@ def main():
     # Fix Vanilla Game Bugs (.vf2bugs, on by default in the patcher): Start
     # Over, Settings Pause Yes, the title hotspot and the stale title screen.
     patch_fix_vanilla_game_bugs(manifest)
+    # Time Controls (.vf2time, loads the companion DLL when the patcher sets it).
+    patch_time_controls_loader(manifest)
     # Invisible furniture counts as its stock donor where stock code tests
     # the donor's item id (every executable).
     patch_invisible_furniture_parity(manifest)

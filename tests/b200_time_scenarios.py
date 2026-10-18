@@ -13,38 +13,47 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "runtime"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "runtime" / "tools"))
+import gen_b200_time_sites as G
 
 from b200_time_emu import EmuError, Emu, SENTINEL, TEB_BASE, u32
 from unicorn.x86_const import (UC_X86_REG_EAX, UC_X86_REG_EBP, UC_X86_REG_EBX, UC_X86_REG_ECX, UC_X86_REG_EDI,
                                UC_X86_REG_EDX, UC_X86_REG_EIP, UC_X86_REG_ESI, UC_X86_REG_ESP)
 
 # ---- B200 link-time addresses the scenarios drive (all proved by runtime/b200_time_sites.py)
-VM = 0x706F90
-GAME_TIME = 0x683038
-GAME_STATE_PTR = 0x685A88
 SPEED_FIELD = 0x25B18
-OPTIONS_VTABLE = 0x5006D8
-GAME_STATE_VTABLE = 0x4FC554
-TIMEFLOW = 0x4C4C30
-SET_SPEED = 0x468B80
-SPACE_TOGGLE = 0x49EAC8       # the Space key's pause toggle, entered with edi = the scene
-NATIVE_HANDLE_MESSAGE = 0x4A6940
-NATIVE_SAVE = 0x49AA00
-NATIVE_LOAD = 0x499DC0
-CTOR_TAIL = 0x4A61F9          # theOptionsDialog constructor, from AddControl(last check box) to ret 8
-TEXT_COLOUR = 0x58BEAC
 
 # ---- dialog control ids of the DLL's own Windows dialog
 ID_STATUS, ID_PAUSE, ID_RESUME, ID_SLOW, ID_NORMAL, ID_FAST, ID_X5, ID_X10, ID_WARP = range(560, 569)
 WM_INITDIALOG, WM_COMMAND = 0x110, 0x111
 
 
+_PROVED = {}
+
+
+def proved(exe_path):
+    """(model of the core variant, derived sites of this executable, pin locations), cached.
+    The model always comes from the core variant (VF2_B200_CORE_EXE); `exe_path` may be any variant."""
+    key = str(exe_path)
+    if key not in _PROVED:
+        import os
+        core = os.environ.get("VF2_B200_CORE_EXE") or key
+        model = G.validate(Path(core).read_bytes())
+        exe = G.Exe(Path(key).read_bytes())
+        _PROVED[key] = (model, G.resolve(exe, model), G.locate(exe, model))
+    return _PROVED[key]
+
+
 class World:
     """One emulated process: the B200 core exe + the test DLL, optionally with the plan applied."""
 
-    def __init__(self, exe, dll, delta=0, install=True):
+    def __init__(self, exe, dll, delta=0, install=True, native_scan=True):
         self.e = Emu(exe, dll, delta)
         self.delta = delta
+        self.exe_path = str(exe)
+        self.model, self.sites, self.pin_locs = proved(self.exe_path)
+        if native_scan:
+            self._native_scan()
         self.now = 1_000_000
         self.native_handle = []        # (message, param) the ORIGINAL HandleMessage was given
         self.native_handle_result = 0
@@ -61,7 +70,7 @@ class World:
         self._seams()
         # the game's state object and CGameTime
         self.state = self.e.alloc(0x26400)
-        self.e.w32(self.a(GAME_STATE_PTR), self.state)
+        self.e.w32(self.s("GAME_STATE_INSTANCE_PTR"), self.state)
         self.set_gametime(10)
         self.e.w32(self.state + SPEED_FIELD, 10)
         if install:
@@ -69,6 +78,41 @@ class World:
 
     def a(self, va):
         return self.e.a(va)
+
+    def s(self, name):
+        """Live address of a derived site of THIS executable."""
+        return self.sites[name] + self.delta
+
+    def options_vtable(self):
+        return self.s("OPTIONS_SLOT_HANDLE_MESSAGE") - 12
+
+    def game_state_vtable(self):
+        return self.s("GAME_STATE_SLOT_LOAD") - 13 * 4
+
+    def _native_scan(self):
+        """Replace the DLL's byte-by-byte ScanPattern (a million iterations per pin, far too slow to
+        emulate for every scenario) with a native one; the rest of the resolver still runs under unicorn.
+        test_resolver_scans_under_the_emulator runs the real scan once."""
+        import re as _re
+        e = self.e
+        addr = e.call(e.dll_export("B200Time_TestScanAddress"))
+
+        def scan(emu):
+            base, size, pat, mask, length, hits = (emu.arg(i) for i in range(6))
+            data = emu.read(base, size)
+            p, m = emu.read(pat, length), emu.read(mask, length)
+            rx = _re.compile(b"".join(b"." if w else _re.escape(bytes([b])) for b, w in zip(p, m)), _re.DOTALL)
+            first = 0
+            count = emu.r32(hits)
+            for mt in rx.finditer(data):
+                if not count:
+                    first = base + mt.start()
+                count += 1
+                if count >= 2:
+                    break
+            emu.w32(hits, count)
+            return first, 0
+        e.seam_live(addr, scan)
 
     # ------------------------------------------------------------------ image snapshots
     def _code_ranges(self):
@@ -94,10 +138,9 @@ class World:
         return out
 
     # ------------------------------------------------------------------ plan
-    def test_plan(self, enabled=True, image_base=None):
+    def test_plan(self, enabled=True):
         out = self.e.alloc(0x400)
-        base = self.e.base if image_base is None else image_base
-        status = self.e.call(self.e.dll_export("B200Time_TestPlan"), (base, 1 if enabled else 0, out))
+        status = self.e.call(self.e.dll_export("B200Time_TestPlan"), (1 if enabled else 0, out))
         status = struct.unpack("<i", struct.pack("<I", status & 0xFFFFFFFF))[0]
         count = self.e.r32(out + 4)
         writes = []
@@ -118,19 +161,19 @@ class World:
     # ------------------------------------------------------------------ seams
     def _seams(self):
         e = self.e
-        e.seam(0x475830, lambda emu: (self.now, 0))                 # state->Now() (real clock reader)
-        e.seam(0x468B00, lambda emu: (self.now & 0xFFFFF, 0))       # CGameTime::Seconds()
+        e.seam(self.sites["STATE_NOW"], lambda emu: (self.now, 0))                # state->Now() (real clock reader)
+        e.seam(self.sites["GAME_TIME_SECONDS"], lambda emu: (self.now & 0xFFFFF, 0))  # CGameTime::Seconds()
 
         def native_handle(emu):
             self.native_handle.append((emu.arg(0), emu.arg(1)))
             return self.native_handle_result, 8
-        e.seam(NATIVE_HANDLE_MESSAGE, native_handle)
+        e.seam(self.sites["OPTIONS_HANDLE_MESSAGE"], native_handle)
 
         def native_save(emu):
             st = emu.ecx
-            self.native_saves.append((emu.arg(0), emu.rs32(st + SPEED_FIELD), emu.rs32(self.a(GAME_TIME) + 0x20)))
+            self.native_saves.append((emu.arg(0), emu.rs32(st + SPEED_FIELD), emu.rs32(self.s("GAME_TIME") + 0x20)))
             return 1, 4
-        e.seam(NATIVE_SAVE, native_save)
+        e.seam(self.sites["GAME_STATE_SAVE"], native_save)
 
         def native_load(emu):
             st = emu.ecx
@@ -138,16 +181,16 @@ class World:
             if self.load_sets_field is not None:
                 emu.w32(st + SPEED_FIELD, self.load_sets_field)
             return self.load_result, 4
-        e.seam(NATIVE_LOAD, native_load)
+        e.seam(self.sites["GAME_STATE_LOAD"], native_load)
 
-        e.seam(0x4CE840, lambda emu: (emu.alloc(emu.arg(0)), 0))                  # operator new
+        e.seam(self.sites["GAME_NEW"], lambda emu: (emu.alloc(emu.arg(0)), 0))                  # operator new
         self.gfx = e.alloc(64)
-        e.seam(0x49AFD0, lambda emu: (self.gfx, 0))                               # GraphicsManager::Get
+        e.seam(self.sites["GRAPHICS_GET"], lambda emu: (self.gfx, 0))                               # GraphicsManager::Get
 
         def image_grid(emu):
             assert emu.ecx == self.gfx, "GetImageGrid was not called on the graphics manager"
             return 0x10000000 + emu.arg(0), 4
-        e.seam(0x49B1D0, image_grid)
+        e.seam(self.sites["GRAPHICS_GET_IMAGE_GRID"], image_grid)
 
         def button_ctor(emu):
             args = [emu.arg(i) for i in range(6)]
@@ -156,26 +199,26 @@ class World:
                                       "y": struct.unpack("<i", struct.pack("<I", args[3]))[0],
                                       "scene": args[4], "flag": args[5]})
             return emu.ecx, 0x18
-        e.seam(0x472D70, button_ctor)
+        e.seam(self.sites["BUTTON_CTOR"], button_ctor)
 
         def set_text(emu):
             self.button_texts.append({"button": emu.ecx, "text": emu.cstr(emu.arg(0)),
                                       "c": (emu.arg(1), emu.arg(2), emu.arg(3)), "font": emu.arg(4)})
             return 0, 0x14
-        e.seam(0x4736C0, set_text)
+        e.seam(self.sites["BUTTON_SET_TEXT"], set_text)
 
         def add_control(emu):
             self.added.append((emu.ecx, emu.arg(0)))
             return 0, 4
-        e.seam(0x47EC70, add_control)
+        e.seam(self.sites["SCENE_ADD_CONTROL"], add_control)
 
     # ------------------------------------------------------------------ small helpers
     def gametime(self):
-        return self.e.rs32(self.a(GAME_TIME) + 0x20)
+        return self.e.rs32(self.s("GAME_TIME") + 0x20)
 
     def set_gametime(self, speed):
-        self.e.w32(self.a(GAME_TIME) + 0x20, speed)
-        self.e.w32(self.a(GAME_TIME) + 0x24, speed)
+        self.e.w32(self.s("GAME_TIME") + 0x20, speed)
+        self.e.w32(self.s("GAME_TIME") + 0x24, speed)
 
     def field(self):
         return self.e.rs32(self.state + SPEED_FIELD)
@@ -183,8 +226,8 @@ class World:
     def set_field(self, v):
         self.e.w32(self.state + SPEED_FIELD, v)
 
-    def vtable_slot(self, obj_vtable_link, slot):
-        return self.e.r32(self.a(obj_vtable_link) + 4 * slot)
+    def vtable_slot(self, vtable_live, slot):
+        return self.e.r32(vtable_live + 4 * slot)
 
     def test_time(self, op, arg=0):
         r = self.e.call(self.e.dll_export("B200Time_TestTime"), (op, arg))
@@ -192,7 +235,7 @@ class World:
 
     # ------------------------------------------------------------------ villagers
     def villager_base(self, k):
-        return self.a(VM) + 0x1CC70 + k * 0x1CC0C
+        return self.s("VILLAGER_MANAGER") + 0x1CC70 + k * 0x1CC0C
 
     def set_villager(self, k, active=1, left=0, health=100, age=100, acc=0, behind=1300):
         b = self.villager_base(k)
@@ -211,7 +254,7 @@ class World:
         return self.e.rs32(self.villager_base(k) + 0x6AF4)
 
     def run_timeflow(self):
-        self.e.call(self.a(TIMEFLOW), (0,), ecx=self.a(VM))
+        self.e.call(self.s("TIMEFLOW"), (0,), ecx=self.s("VILLAGER_MANAGER"))
 
     # ------------------------------------------------------------------ the dialog procedure
     def open_time_dialog(self):
@@ -236,7 +279,7 @@ class World:
     def make_dialog(self):
         e = self.e
         d = e.alloc(0x400)
-        e.w32(d, self.a(OPTIONS_VTABLE))
+        e.w32(d, self.options_vtable())
         e.w32(d + 0x14, 0)
         e.w32(d + 0x18, 0)
         e.w32(d + 0x1C, 640)
@@ -256,12 +299,12 @@ class World:
         done = e.alloc(64)
         e.w32(done, vt)
         e.w32(d + 0xD4, done)
-        e.w32(self.a(TEXT_COLOUR), 0xAABBCCDD)
+        e.w32(self.s("OPTIONS_TEXT_COLOUR"), 0xAABBCCDD)
         self.mgr = mgr
         return d
 
     def call_handle_message(self, dialog, message, param):
-        slot = self.vtable_slot(OPTIONS_VTABLE, 3)
+        slot = self.vtable_slot(self.options_vtable(), 3)
         return self.e.call(slot, (message, param), ecx=dialog) & 0xFFFFFFFF
 
     def run_ctor_tail(self, dialog):
@@ -278,7 +321,7 @@ class World:
                  (frame - 0x18, 0xB1B1B1B1), (frame - 0x1C, 0x51515151), (frame - 0x20, 0xD1D1D1D1),
                  (frame - 0x24, 0xC0C0C0C0)]
         e.write(self.state + 0x25B0A, b"\x01")
-        e.run_frame(self.a(CTOR_TAIL), {
+        e.run_frame(self.s("CTOR_TAIL"), {
             UC_X86_REG_EBX: dialog, UC_X86_REG_ESI: box, UC_X86_REG_EDI: 0xAAAA0001,
             UC_X86_REG_EBP: frame, UC_X86_REG_ESP: frame - 0x24,
         }, stack)
@@ -291,8 +334,8 @@ def scenario_plan_matches_the_sites(w: World):
     writes = w.plan
     by_va = {x["va"]: x for x in writes}
     assert len(writes) == 5, writes
-    call_site = w.a(0x4A621B)
-    aging_site = w.a(0x4C4DEF)
+    call_site = w.s("OPTIONS_CTOR_LAST_CALL")
+    aging_site = w.s("TIMEFLOW_INCREMENT_AGE_CALL")
     assert call_site in by_va and aging_site in by_va
     for site in (call_site, aging_site):
         x = by_va[site]
@@ -300,11 +343,12 @@ def scenario_plan_matches_the_sites(w: World):
         target = (site + 5 + struct.unpack("<i", x["bytes"][1:5])[0]) & 0xFFFFFFFF
         # the target lies inside the DLL image
         assert 0x30000000 <= target < 0x30030000, hex(target)
-    for slot in (0x5006E4, 0x4FC588, 0x4FC58C):
-        x = by_va[w.a(slot)]
+    slots = [w.s(n) for n in ("OPTIONS_SLOT_HANDLE_MESSAGE", "GAME_STATE_SLOT_LOAD", "GAME_STATE_SLOT_SAVE")]
+    for slot in slots:
+        x = by_va[slot]
         assert x["len"] == 4 and x["data"]
         assert 0x30000000 <= u32(x["bytes"]) < 0x30030000
-    targets = {u32(by_va[w.a(s)]["bytes"]) for s in (0x5006E4, 0x4FC588, 0x4FC58C)}
+    targets = {u32(by_va[slot]["bytes"]) for slot in slots}
     assert len(targets) == 3, "the three vtable slots must get three different functions"
 
 
@@ -428,7 +472,7 @@ def _space(w: World, field, gt):
     scene = e.alloc(0x40)
     e.w32(scene + 0x14, w.state)
     x = e.sp_top - 0x80
-    e.run_frame(w.a(SPACE_TOGGLE), {UC_X86_REG_EDI: scene, UC_X86_REG_EBP: x + 4, UC_X86_REG_ESP: x},
+    e.run_frame(w.s("SPACE_TOGGLE"), {UC_X86_REG_EDI: scene, UC_X86_REG_EBP: x + 4, UC_X86_REG_ESP: x},
                 [(x, 0xE1E1E1E1), (x + 4, 0xE2E2E2E2), (x + 8, SENTINEL), (x + 12, 0)])
     return w.field(), w.gametime()
 
@@ -509,7 +553,7 @@ def scenario_stock_aging_without_the_plan(w: World):
 def scenario_save_normalises_the_speed(w: World):
     """Save writes any non-stock speed as normal and puts the live speed back."""
     e = w.e
-    slot_save = w.vtable_slot(GAME_STATE_VTABLE, 14)
+    slot_save = w.vtable_slot(w.game_state_vtable(), 14)
     rows = [
         # (live field, live CGameTime speed, slot, expected (field, gametime) seen by the original Save)
         (1, 1, 1, (10, 10)),          # 10x running -> normal
@@ -536,7 +580,7 @@ def scenario_save_normalises_the_speed(w: World):
 def scenario_load_normalises_the_speed(w: World):
     """A loaded non-stock speed becomes normal (paused stays paused); stock values are untouched."""
     e = w.e
-    slot_load = w.vtable_slot(GAME_STATE_VTABLE, 13)
+    slot_load = w.vtable_slot(w.game_state_vtable(), 13)
     rows = [
         # (speed the "file" holds, slot, expected field, expected CGameTime speed given gametime 77 before)
         (1, 1, 10, 10),
@@ -576,10 +620,6 @@ def scenario_off_changes_nothing(w: World):
     status, writes = w.test_plan(False)
     assert (status, writes) == (0, [])
     assert w.code_unchanged()
-    # the executable loaded somewhere other than the DLL is told (a wrong delta): the pins refuse
-    status, writes = w.test_plan(True, image_base=w.e.base + 0x1000)
-    assert status == -1 and writes == [], status
-    assert w.code_unchanged()
 
 
 def scenario_install_diff_is_exactly_the_plan(w: World):
@@ -616,19 +656,102 @@ def scenario_warp_button(w: World):
 
 
 def scenario_pins_are_enforced(w: World):
-    """Any single wrong byte in any pinned run (first or last) makes the plan refuse, with nothing planned."""
-    import b200_time_sites as S
+    """Any single wrong byte in a pinned run that is not a wildcard makes the resolver refuse, with nothing planned."""
     e = w.e
     assert w.test_plan(True)[0] == 1
-    for pin in S.PINS:
-        for off in (0, len(pin.bytes) - 1):
-            addr = w.a(pin.va) + off
+    for pin, loc in zip(w.model.pins, w.pin_locs):
+        fixed = [k for k, wild in enumerate(pin["mask"]) if not wild]
+        for k in {fixed[0], fixed[-1], fixed[len(fixed) // 2]}:
+            addr = loc + w.delta + k
             was = e.read(addr, 1)
             e.write(addr, bytes([was[0] ^ 0x01]))
             status, writes = w.test_plan(True)
-            assert status == -1 and not writes, (pin.name, off, status)
+            assert status == -1 and not writes, (pin["name"], k, status)
             e.write(addr, was)
     assert w.test_plan(True)[0] == 1
+
+
+def scenario_disagreeing_evidence_is_refused(w: World):
+    """Every derivation of an address must agree: damaging one wildcard field that carries evidence refuses."""
+    e = w.e
+    assert w.test_plan(True)[0] == 1
+    checked = 0
+    for si, kind, pi, off in w.model.evidence:
+        if kind == "L" or si >= w.model.dll_sites:
+            continue
+        name = w.model.sites[si]
+        n_evidence = sum(1 for x in w.model.evidence if x[0] == si)
+        if n_evidence < 2:
+            continue
+        addr = w.pin_locs[pi] + w.delta + off + (0 if kind == "A" else 0)
+        was = e.read(addr, 4)
+        e.write(addr, bytes([was[0] ^ 0x04]) + was[1:])
+        status, writes = w.test_plan(True)
+        assert status == -1 and not writes, (name, kind, status)
+        e.write(addr, was)
+        checked += 1
+    assert checked >= 10, checked
+    assert w.test_plan(True)[0] == 1
+
+
+def _free_rodata_dword(w: World) -> int:
+    """A zero dword in a read-only data section of the mapped executable (to plant a stray pointer)."""
+    pe = w.e.exe
+    for sec in pe.sections:
+        ch = sec.Characteristics
+        if ch & 0x20000000 or ch & 0x80000000 or not ch & 0x40000000:
+            continue
+        base = w.e.base + sec.VirtualAddress
+        size = min(sec.Misc_VirtualSize, sec.SizeOfRawData)
+        data = w.e.read(base, size)
+        for off in range((size - 8) & ~3, 0, -4):
+            if data[off:off + 8] == b"\0" * 8:
+                return base + off
+    raise AssertionError("no free read-only dword")
+
+
+def scenario_call_sites_must_be_the_expected_calls(w: World):
+    """The two call sites the plan re-points must still be `call` to the function the core variant calls."""
+    e = w.e
+    assert w.test_plan(True)[0] == 1
+    for site in ("OPTIONS_CTOR_LAST_CALL", "TIMEFLOW_INCREMENT_AGE_CALL"):
+        addr = w.s(site)
+        was = e.read(addr, 5)
+        e.write(addr, b"\xE9" + was[1:])                   # a jmp, not a call
+        assert w.test_plan(True)[0] == -1, site
+        e.write(addr, was[:1] + bytes([was[1] ^ 0x10]) + was[2:])   # a call to somewhere else
+        assert w.test_plan(True)[0] == -1, site
+        e.write(addr, was)
+    assert w.test_plan(True)[0] == 1
+
+
+def scenario_slots_must_be_the_one_pointer(w: World):
+    """A vtable slot is the ONLY pointer to its function in the read-only data, and Save follows Load."""
+    e = w.e
+    assert w.test_plan(True)[0] == 1
+    spare = _free_rodata_dword(w)
+    for func, slot in (("OPTIONS_HANDLE_MESSAGE", "OPTIONS_SLOT_HANDLE_MESSAGE"), ("GAME_STATE_LOAD", "GAME_STATE_SLOT_LOAD"),
+                       ("GAME_STATE_SAVE", "GAME_STATE_SLOT_SAVE")):
+        e.w32(spare, w.s(func))                            # a second pointer to the same function
+        assert w.test_plan(True)[0] == -1, func
+        e.w32(spare, 0)
+    # Save no longer follows Load: its only pointer moves elsewhere
+    slot_save = w.s("GAME_STATE_SLOT_SAVE")
+    e.w32(spare, e.r32(slot_save))
+    e.w32(slot_save, 0)
+    assert w.test_plan(True)[0] == -1
+    e.w32(slot_save, e.r32(spare))
+    e.w32(spare, 0)
+    assert w.test_plan(True)[0] == 1
+
+
+def scenario_sites_match_the_generator(w: World):
+    """The sites the DLL derived under the emulator are the ones the generator derives for this executable."""
+    assert w.test_plan(True)[0] == 1
+    out = w.e.alloc(4 * 64)
+    w.e.call(w.e.dll_export("B200Time_TestSites"), (out,))
+    for i, name in enumerate(w.model.sites[:w.model.dll_sites]):
+        assert w.e.r32(out + 4 * i) == w.s(name), (name, hex(w.e.r32(out + 4 * i)), hex(w.s(name)))
 
 
 ALL = [
@@ -650,7 +773,9 @@ STOCK = [
     scenario_slot3_without_the_plan,
     scenario_stock_aging_without_the_plan,
 ]
-OFF = [scenario_off_changes_nothing, scenario_pins_are_enforced]
+OFF = [scenario_off_changes_nothing, scenario_pins_are_enforced, scenario_disagreeing_evidence_is_refused,
+       scenario_sites_match_the_generator, scenario_call_sites_must_be_the_expected_calls,
+       scenario_slots_must_be_the_one_pointer]
 
 
 def run_installed(exe, dll, delta):

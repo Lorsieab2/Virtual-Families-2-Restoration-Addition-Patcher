@@ -291,8 +291,11 @@ class Emu:
         self._return_from_seam(eax, pop)
 
     def seam(self, link_va: int, fn):
-        """Replace the game function at link_va by a Python seam: fn(emu) -> (eax, bytes the callee pops)."""
-        addr = self.a(link_va)
+        """Replace the game function at link-time VA link_va by a Python seam: fn(emu) -> (eax, bytes popped)."""
+        self.seam_live(self.a(link_va), fn)
+
+    def seam_live(self, addr: int, fn):
+        """The same, at a live address (the DLL's own code, or a rebased game address)."""
 
         def cb(uc, address, size, user):
             eax, pop = fn(self)

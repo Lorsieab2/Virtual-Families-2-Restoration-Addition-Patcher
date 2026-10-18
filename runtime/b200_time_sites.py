@@ -7,12 +7,14 @@ work/patch_mobile_furniture_pack.py, core variant), so the DLL, the generator
 and the tests all refuse an executable that is not byte-for-byte that build at
 these places.
 
-THE B200 IMAGE IS RELOCATED. Its DllCharacteristics are 0x8140 (DYNAMICBASE
-set) and it has a .reloc section, so Windows may load it away from 0x400000.
-Every address here is a link-time VA at image base 0x400000; the DLL adds
-(live module base - 0x400000) to each one, and a pin compares the bytes with
-every relocated 32-bit field (listed by tools/gen_b200_time_sites.py from the
-.reloc table) taken back to its link-time value.
+THE B200 IMAGE IS RELOCATED AND EVERY VARIANT DIFFERS. Its DllCharacteristics are
+0x8140 (DYNAMICBASE set) and it has a .reloc section, so Windows may load it
+away from 0x400000, and each of the 32 matrix variants links to different
+addresses. The DLL therefore holds no address: it searches the live image for
+each pinned run (relocated fields and call/jmp displacements are wildcards)
+and derives every address from where the runs were found (see
+ADDRESS_CONSTANTS). tools/gen_b200_time_sites.py proves the derivation on the
+core variant and on every other executable it is given.
 
 Each address was located structurally and is re-proved by
 runtime/tools/gen_b200_time_sites.py, which decodes each pinned run with
@@ -33,21 +35,19 @@ INI_KEY = "TimeControls"
 class Pin:
     """One exact run of the executable.
 
-    kind: "context"  whole instructions, exact bytes (proves an assumption)
-          "data"     exact bytes only (a vtable)
-          "retarget" exactly one `call rel32` whose target is `target`; the DLL
-                     re-points it (these runs are WRITTEN)
-          "vtable_slot" a 4-byte pointer that holds `target`; the DLL replaces
-                     it (these runs are WRITTEN)
+    kind: "context"  whole instructions of the core variant (proves an assumption)
+          "data"     exact bytes only
+    The bytes are the core variant's. A relocated 32-bit field and the 32-bit
+    displacement of every call / jmp rel32 are wildcards when the DLL looks for
+    the run in another variant (their values differ per variant and per load).
     """
 
-    def __init__(self, name, va, hexbytes, kind, note, target=None):
+    def __init__(self, name, va, hexbytes, kind, note):
         self.name = name
         self.va = va
         self.bytes = bytes.fromhex(hexbytes)
         self.kind = kind
         self.note = note
-        self.target = target
 
 
 # --------------------------------------------------------------------------
@@ -108,8 +108,8 @@ GAME_STATE_SLOT_SAVE = 0x4FC58C         # vtable slot 14: Save(int slot)
 GAME_STATE_LOAD = 0x499DC0              # thiscall, ret 4, bool
 GAME_STATE_SAVE = 0x49AA00              # thiscall, ret 4
 
-# vtable -> (class name, CompleteObjectLocator, TypeDescriptor); the generator
-# proves the chain and that every slot pin lies in a declared vtable.
+# vtable -> (class name, CompleteObjectLocator, TypeDescriptor) in the CORE variant; the generator
+# proves the RTTI chain of the vtables the replaced slots live in.
 VTABLE_CLASSES = {
     OPTIONS_DIALOG_VTABLE: ("theOptionsDialog", 0x55C140, 0x59F33C),
     GAME_STATE_VTABLE: ("theGameState", 0x55BE04, 0x59F23C),
@@ -161,12 +161,6 @@ PINS = [
         "ldwCheckBox::SetChecked(bool): mov ecx,[ecx+10h]; mov [ecx+31h],al; ret 4. Only the call at 0x4A621B is retargeted, never the function.",
     ),
     Pin(
-        "options_vtable", 0x5006D8,
-        "60624A00606B4A00403B400040694A00A0394700503847007008480050254000",
-        "data",
-        "theOptionsDialog vtable (slots 0..7); slot 3 is HandleMessage.",
-    ),
-    Pin(
         "options_handle_head", 0x4A6940,
         "558BEC6AFF682B324F0064A1000000005081EC80000000A100C6590033C58945F05657508D45F464"
         "A3000000008BF1837D08080F85AE0100008B7D0C3B7E74751B",
@@ -199,53 +193,19 @@ PINS = [
         "ldwScene::AddControl: ret 4.",
     ),
     Pin(
-        "image_grid_wrapper", 0x49B1D0,
-        "558BEC8B095DE905000000",
+        "image_grid", 0x49B1D0,
+        "558BEC8B095DE905000000CCCCCCCCCC558BEC6AFF687D2C4F0064A100000000505657A100C65900"
+        "33C5508D45F464A300000000FF7508E854FFFFFF8BF885FF0F8423010000837F08000F8419010000"
+        "837F0C0075688B772885F6754C6A34E80C3603008BF083C404897508C745FC0000000085F6742D6A"
+        "01FF77088BCEFF7704E88A23FEFFC70694804F008BC68977288B4DF464890D00000000595F5E8BE5"
+        "5DC2040033F68977288BC68B4DF464890D00000000595F5E8BE55DC204008B472C85C00F858A0000"
+        "008B77146A34E89D35030083C40489450885F6743DC745FC0100000085C07466FF770C8BC8FF7708"
+        "FF7718FF7714FF7710FF7704E83F21FEFFFF472089472C8B4DF464890D00000000595F5E8BE55DC2"
+        "0400C745FC0200000085C07429FF770C8BC8FF7708FF7704E8DB22FEFFFF472089472C8B4DF46489"
+        "0D00000000595F5E8BE55DC2040033C089472CFF47208B4DF464890D00000000595F5E8BE55DC204"
+        "0033C08B4DF464890D00000000595F5E8BE55DC20400",
         "context",
-        "GetImageGrid wrapper: mov ecx,[ecx]; jmp 0x49B1E0 (ecx = theGraphicsManager::Get()).",
-    ),
-    Pin(
-        "image_grid_head", 0x49B1E0,
-        "558BEC6AFF687D2C4F0064A100000000505657A100C6590033C5508D45F464A300000000FF7508E8"
-        "54FFFFFF",
-        "context",
-        "GetImageGrid(EImage) head.",
-    ),
-    Pin(
-        "image_grid_ret_1", 0x49B271,
-        "C20400",
-        "context",
-        "GetImageGrid exit: ret 4.",
-    ),
-    Pin(
-        "image_grid_ret_2", 0x49B28B,
-        "C20400",
-        "context",
-        "GetImageGrid exit: ret 4.",
-    ),
-    Pin(
-        "image_grid_ret_3", 0x49B2E7,
-        "C20400",
-        "context",
-        "GetImageGrid exit: ret 4.",
-    ),
-    Pin(
-        "image_grid_ret_4", 0x49B31B,
-        "C20400",
-        "context",
-        "GetImageGrid exit: ret 4.",
-    ),
-    Pin(
-        "image_grid_ret_5", 0x49B336,
-        "C20400",
-        "context",
-        "GetImageGrid exit: ret 4.",
-    ),
-    Pin(
-        "image_grid_ret_6", 0x49B34B,
-        "C20400",
-        "context",
-        "GetImageGrid exit: ret 4.",
+        "Whole GetImageGrid: the wrapper (mov ecx,[ecx]; jmp) and GetImageGrid(EImage) thiscall, every exit ret 4 (ecx = theGraphicsManager::Get()).",
     ),
     Pin(
         "set_text", 0x4736C0,
@@ -255,23 +215,12 @@ PINS = [
         "ldwButton::SetText(text, c1, c2, c3, font) thiscall, ret 14h.",
     ),
     Pin(
-        "graphics_get_head", 0x49AFD0,
+        "graphics_get", 0x49AFD0,
         "558BEC6AFF685F1C4F0064A1000000005051A100C6590033C5508D45F464A300000000A1D0E66F00"
-        "85C0753A",
+        "85C0753A6A08E83D38030083C4048945F0C745FC0000000085C0741B8BC8E805FCFFFFA3D0E66F00"
+        "8B4DF464890D00000000598BE55DC333C0A3D0E66F008B4DF464890D00000000598BE55DC3",
         "context",
-        "theGraphicsManager::Get() head (cdecl, no arguments).",
-    ),
-    Pin(
-        "graphics_get_ret_1", 0x49B02E,
-        "C3",
-        "context",
-        "theGraphicsManager::Get() exit: plain ret.",
-    ),
-    Pin(
-        "graphics_get_ret_2", 0x49B044,
-        "C3",
-        "context",
-        "theGraphicsManager::Get() exit: plain ret.",
+        "Whole theGraphicsManager::Get() (cdecl, no arguments, plain ret).",
     ),
     Pin(
         "get_font", 0x4A8820,
@@ -315,9 +264,9 @@ PINS = [
     ),
     Pin(
         "increment_age", 0x4C4080,
-        "558BEC8B450801015DC20400",
+        "558BEC8B450801015DC20400CCCCCCCC",
         "context",
-        "CVillagerBio::IncrementAge(int): push ebp; mov ebp,esp; mov eax,[ebp+8]; add [ecx],eax; ret 4. Adding is all it does.",
+        "CVillagerBio::IncrementAge(int): push ebp; mov ebp,esp; mov eax,[ebp+8]; add [ecx],eax; ret 4. Adding is all it does (followed by the 4 bytes of padding that make the run unique).",
     ),
     Pin(
         "timeflow_head", 0x4C4C30,
@@ -362,8 +311,9 @@ PINS = [
         "Loop end: esi += 1CC0Ch (the villager stride), 30 villagers, ret 4.",
     ),
     Pin(
-        "timeflow_caller", 0x4A7CF2,
-        "8BF9B9906F70006A00E830CF0100",
+        "timeflow_caller", 0x4A7CF0,
+        "56578BF9B9906F70006A00E830CF0100B9906F7000E806C701008B35E02F6800B9906F7000E876EB"
+        "01003BC6",
         "context",
         "The caller of AllVillagersTimeflowUpkeep: mov ecx,0x706F90 (the villager manager); push 0; call.",
     ),
@@ -374,6 +324,19 @@ PINS = [
         "5A68008B4DF464890D00000000598BE55DC333C0A3885A68008B4DF464890D00000000598BE55DC3",
         "context",
         "theGameState::Get(): [0x685A88] is the singleton pointer (created on first use).",
+    ),
+    Pin(
+        "game_state_load_head", 0x499DC0,
+        "558BECB8AC5B0200E823500300A100C6590033C58945FC53568B75088BD985F60F85A1000000",
+        "context",
+        "theGameState::Load(int slot) entry: thiscall, ret 4 (slot 0 reads the header only).",
+    ),
+    Pin(
+        "game_state_save_head", 0x49AA00,
+        "558BEC837D0800568BF175208BD68D86205B0200F7DA6A001BD2689000000023D052E8D9B5FDFF5E"
+        "5DC20400",
+        "context",
+        "theGameState::Save(int slot) entry: thiscall, slot 0 writes the header only, ret 4.",
     ),
     Pin(
         "game_state_load_speed", 0x499E87,
@@ -395,31 +358,52 @@ PINS = [
         "context",
         "theGameState::Save(slot != 0) end: writes 25B18h bytes from this+8, which include the speed field, then ret 4.",
     ),
-    Pin(
-        "options_ctor_last_call", OPTIONS_CTOR_LAST_CALL, "E83088FDFF", "retarget",
-        "The constructor's last call, `call SetChecked` on the last check box (ecx = esi, one bool "
-        "argument, ret 4). Retargeted to a stub that makes the same call and then adds the button.",
-        target=CONTROL_SET_CHECKED,
-    ),
-    Pin(
-        "timeflow_increment_age_call", TIMEFLOW_INCREMENT_AGE_CALL, "E88CF2FFFF", "retarget",
-        "AllVillagersTimeflowUpkeep's call to CVillagerBio::IncrementAge (ecx = &age, the ticks "
-        "pushed). Retargeted to a wrapper that adds queued Time Warp ticks and calls the same function.",
-        target=INCREMENT_AGE,
-    ),
-    Pin(
-        "options_slot_handle_message", OPTIONS_SLOT_HANDLE_MESSAGE, "40694A00", "vtable_slot",
-        "theOptionsDialog vtable slot 3 (HandleMessage): the function pointer the module replaces.",
-        target=OPTIONS_HANDLE_MESSAGE,
-    ),
-    Pin(
-        "game_state_slot_load", GAME_STATE_SLOT_LOAD, "C09D4900", "vtable_slot",
-        "theGameState vtable slot 13 (Load): the function pointer the module replaces.",
-        target=GAME_STATE_LOAD,
-    ),
-    Pin(
-        "game_state_slot_save", GAME_STATE_SLOT_SAVE, "00AA4900", "vtable_slot",
-        "theGameState vtable slot 14 (Save): the function pointer the module replaces.",
-        target=GAME_STATE_SAVE,
-    ),
 ]
+
+# --------------------------------------------------------------------------
+# Variant-dependent addresses. The DLL does not know any of these numbers: it
+# finds each pinned run in the live executable (the pins above are searched
+# with their relocated fields and call/jump displacements wildcarded), and
+# derives every address below from where its evidence landed (the start of a
+# pin, an absolute field or a call target inside one). The values here are the
+# core variant's link-time VAs, used only to build and prove that derivation.
+# Every other number in this module (struct offsets, ids, speeds, margins) is
+# the same in every variant and is compiled into the DLL.
+# --------------------------------------------------------------------------
+ADDRESS_CONSTANTS = (
+    "OPTIONS_CTOR_LAST_CALL", "CONTROL_SET_CHECKED", "OPTIONS_HANDLE_MESSAGE", "OPTIONS_SLOT_HANDLE_MESSAGE",
+    "OPTIONS_TEXT_COLOUR", "GET_EVICT_FONT", "GAME_NEW", "GRAPHICS_GET", "GRAPHICS_GET_IMAGE_GRID",
+    "BUTTON_CTOR", "BUTTON_SET_TEXT", "SCENE_ADD_CONTROL", "GAME_TIME", "SET_SPEED",
+    "GAME_STATE_INSTANCE_PTR", "VILLAGER_MANAGER", "INCREMENT_AGE", "TIMEFLOW_INCREMENT_AGE_CALL",
+    "GAME_STATE_SLOT_LOAD", "GAME_STATE_SLOT_SAVE", "GAME_STATE_LOAD", "GAME_STATE_SAVE",
+)
+
+
+# Addresses only the tests need (the emulator harness starts game code at these and replaces the
+# clock readers); derived exactly like ADDRESS_CONSTANTS but never given to the DLL.
+TIMEFLOW = 0x4C4C30                   # CVillagerManager::AllVillagersTimeflowUpkeep(bool)
+SPACE_TOGGLE = 0x49EAC8               # the Space key's pause toggle, entered with edi = the scene
+CTOR_TAIL = 0x4A61F9                  # theOptionsDialog constructor, from AddControl(last check box)
+STATE_NOW = 0x475830                  # theGameState's clock reader (called by SetSpeed and the upkeep)
+GAME_TIME_SECONDS = 0x468B00          # CGameTime::Seconds()
+TEST_ADDRESS_CONSTANTS = ("TIMEFLOW", "SPACE_TOGGLE", "CTOR_TAIL", "STATE_NOW", "GAME_TIME_SECONDS")
+
+# The two `call rel32` sites the DLL re-points (written), and the function each one calls today.
+CALL_SITES = {
+    "OPTIONS_CTOR_LAST_CALL": "CONTROL_SET_CHECKED",
+    "TIMEFLOW_INCREMENT_AGE_CALL": "INCREMENT_AGE",
+}
+
+# The three vtable slots the DLL replaces (written), and the function each one points to today.
+# A slot is found as the one pointer to that function in the executable's data.
+SLOTS = {
+    "OPTIONS_SLOT_HANDLE_MESSAGE": "OPTIONS_HANDLE_MESSAGE",
+    "GAME_STATE_SLOT_LOAD": "GAME_STATE_LOAD",
+    "GAME_STATE_SLOT_SAVE": "GAME_STATE_SAVE",
+}
+# Save follows Load in theGameState's vtable.
+SLOT_ADJACENT = ("GAME_STATE_SLOT_LOAD", "GAME_STATE_SLOT_SAVE")
+
+# Core-variant addresses used only to prove RTTI chains; never emitted to the DLL.
+CORE_ONLY_CONSTANTS = ("IMAGE_BASE", "OPTIONS_DIALOG_VTABLE", "GAME_STATE_VTABLE",
+                       *TEST_ADDRESS_CONSTANTS, "TEST_ADDRESS_CONSTANTS")

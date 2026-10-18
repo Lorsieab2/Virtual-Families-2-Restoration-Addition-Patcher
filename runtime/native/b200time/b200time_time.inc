@@ -1,9 +1,9 @@
 // b200time_time.inc -- the Time Controls module; included by b200time.cpp after
-// the relocation helper A(), the pin check and the plan type.
+// the site table (SITE), the resolver and the plan type.
 //
 // Adapted from the runtime-hook build's vf2fun_time.inc (Settings-screen version)
-// for the B200 executable: every address is a B200 link-time VA rebased through
-// A(), the Settings button is built at x = 30 / id 9, and the aging hook is a
+// for the B200 executable: every address is found in the live image by the resolver and read through
+// SITE(), the Settings button is built at x = 30 / id 9, and the aging hook is a
 // retargeted `call IncrementAge` instead of a 5-byte stolen run (B200 saves the
 // native tick count itself, so no register juggling is needed).
 
@@ -43,22 +43,22 @@ static unsigned char **GameStatePtr;
 static unsigned VillagerBase;           // first villager's age field: manager + array + age offset
 
 static void ResolveAbi() {
-    SetSpeed = (SetSpeedFn)A(B200TC_SET_SPEED);
-    GameTime = (void *)A(B200TC_GAME_TIME);
-    GameNew = (NewFn)A(B200TC_GAME_NEW);
-    GraphicsGet = (GetManagerFn)A(B200TC_GRAPHICS_GET);
-    GetImageGrid = (GetImageGridFn)A(B200TC_GRAPHICS_GET_IMAGE_GRID);
-    GetEvictFont = (GetEvictFontFn)A(B200TC_GET_EVICT_FONT);
-    ButtonCtor = (ButtonCtorFn)A(B200TC_BUTTON_CTOR);
-    ButtonSetText = (ButtonSetTextFn)A(B200TC_BUTTON_SET_TEXT);
-    AddControl = (AddControlFn)A(B200TC_SCENE_ADD_CONTROL);
-    NativeOptionsHandleMessage = (HandleMessageFn)A(B200TC_OPTIONS_HANDLE_MESSAGE);
-    NativeIncrementAge = (IncrementAgeFn)A(B200TC_INCREMENT_AGE);
-    NativeGameStateSave = (GameStateSlotFn)A(B200TC_GAME_STATE_SAVE);
-    NativeGameStateLoad = (GameStateSlotFn)A(B200TC_GAME_STATE_LOAD);
-    NativeSetChecked = A(B200TC_CONTROL_SET_CHECKED);
-    GameStatePtr = (unsigned char **)A(B200TC_GAME_STATE_INSTANCE_PTR);
-    VillagerBase = A(B200TC_VILLAGER_MANAGER) + B200TC_VILLAGER_ARRAY_OFFSET + B200TC_VILLAGER_AGE_OFFSET;
+    SetSpeed = (SetSpeedFn)SITE(SET_SPEED);
+    GameTime = (void *)SITE(GAME_TIME);
+    GameNew = (NewFn)SITE(GAME_NEW);
+    GraphicsGet = (GetManagerFn)SITE(GRAPHICS_GET);
+    GetImageGrid = (GetImageGridFn)SITE(GRAPHICS_GET_IMAGE_GRID);
+    GetEvictFont = (GetEvictFontFn)SITE(GET_EVICT_FONT);
+    ButtonCtor = (ButtonCtorFn)SITE(BUTTON_CTOR);
+    ButtonSetText = (ButtonSetTextFn)SITE(BUTTON_SET_TEXT);
+    AddControl = (AddControlFn)SITE(SCENE_ADD_CONTROL);
+    NativeOptionsHandleMessage = (HandleMessageFn)SITE(OPTIONS_HANDLE_MESSAGE);
+    NativeIncrementAge = (IncrementAgeFn)SITE(INCREMENT_AGE);
+    NativeGameStateSave = (GameStateSlotFn)SITE(GAME_STATE_SAVE);
+    NativeGameStateLoad = (GameStateSlotFn)SITE(GAME_STATE_LOAD);
+    NativeSetChecked = SITE(CONTROL_SET_CHECKED);
+    GameStatePtr = (unsigned char **)SITE(GAME_STATE_INSTANCE_PTR);
+    VillagerBase = SITE(VILLAGER_MANAGER) + B200TC_VILLAGER_ARRAY_OFFSET + B200TC_VILLAGER_AGE_OFFSET;
 }
 
 static const int kTimeButtonId = B200TC_TIME_BUTTON_ID;
@@ -66,7 +66,7 @@ static const char kTimeButtonText[] = "Time Controls";
 
 static unsigned char *VillagerByIndex(int index) {
     if (index < 0 || index >= 30) return 0;
-    return (unsigned char *)(A(B200TC_VILLAGER_MANAGER) + B200TC_VILLAGER_ARRAY_OFFSET +
+    return (unsigned char *)(SITE(VILLAGER_MANAGER) + B200TC_VILLAGER_ARRAY_OFFSET +
                              (unsigned)index * B200TC_VILLAGER_STRIDE);
 }
 
@@ -376,7 +376,7 @@ static void __cdecl AddTimeButton(unsigned char *dialog) {
     if (!memory) return;
     void *grid = GetImageGrid(GraphicsGet(), B200TC_OPTIONS_BUTTON_IMAGE);
     void *button = ButtonCtor(memory, kTimeButtonId, grid, pos, dialog, false);
-    unsigned colour = *(unsigned *)A(B200TC_OPTIONS_TEXT_COLOUR);
+    unsigned colour = *(unsigned *)SITE(OPTIONS_TEXT_COLOUR);
     void *font = GetEvictFont(*(void **)(dialog + B200TC_OPTIONS_STRING_MANAGER_FIELD));
     ButtonSetText(button, kTimeButtonText, colour, colour, colour, font);
     AddControl(dialog, button);
@@ -407,9 +407,9 @@ static bool __fastcall OptionsHandleMessage(void *dialog, void *, int message, l
 }
 
 static void PlanTimeControls(Plan &plan) {
-    plan.Retarget(B200TC_OPTIONS_CTOR_LAST_CALL, (const void *)&OptionsCtorLastCall);
-    plan.Slot(B200TC_OPTIONS_SLOT_HANDLE_MESSAGE, (const void *)&OptionsHandleMessage);
-    plan.Retarget(B200TC_TIMEFLOW_INCREMENT_AGE_CALL, (const void *)&IncrementAgeWithWarp);
-    plan.Slot(B200TC_GAME_STATE_SLOT_SAVE, (const void *)&GameStateSaveSlot);
-    plan.Slot(B200TC_GAME_STATE_SLOT_LOAD, (const void *)&GameStateLoadSlot);
+    plan.Retarget(SITE(OPTIONS_CTOR_LAST_CALL), (const void *)&OptionsCtorLastCall);
+    plan.Slot(SITE(OPTIONS_SLOT_HANDLE_MESSAGE), (const void *)&OptionsHandleMessage);
+    plan.Retarget(SITE(TIMEFLOW_INCREMENT_AGE_CALL), (const void *)&IncrementAgeWithWarp);
+    plan.Slot(SITE(GAME_STATE_SLOT_SAVE), (const void *)&GameStateSaveSlot);
+    plan.Slot(SITE(GAME_STATE_SLOT_LOAD), (const void *)&GameStateLoadSlot);
 }

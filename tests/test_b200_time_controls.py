@@ -63,11 +63,14 @@ def test_header_pins_are_the_sites_module():
         assert m, pin.name
         got = bytes(int(x, 16) for x in m.group(1).split(", "))
         assert got == pin.bytes, pin.name
-        assert re.search(r'\{ "%s", 0x%Xu, %du, pin_%s,' % (re.escape(pin.name), pin.va, len(pin.bytes), pin.name),
-                         header), pin.name
-    for key in ("TIME_BUTTON_ID", "OPTIONS_TIME_X", "SET_SPEED", "GAME_TIME", "OPTIONS_CTOR_LAST_CALL",
-                "TIMEFLOW_INCREMENT_AGE_CALL", "OPTIONS_SLOT_HANDLE_MESSAGE"):
+        assert re.search(r"static const unsigned char pinmask_%s\[\] = " % re.escape(pin.name), header), pin.name
+    for key in ("TIME_BUTTON_ID", "OPTIONS_TIME_X", "GAME_STATE_SPEED_FIELD", "VILLAGER_STRIDE"):
         assert "#define B200TC_%s 0x%Xu" % (key, getattr(S, key)) in header
+    # the DLL is given no game address
+    for key in S.ADDRESS_CONSTANTS:
+        assert "B200TC_%s " % key not in header, key
+    for key in S.TEST_ADDRESS_CONSTANTS:
+        assert not re.search(r"B200_SITE_%s\b" % key, header), key
 
 
 def test_layout_decision_constants():
@@ -75,6 +78,7 @@ def test_layout_decision_constants():
     assert S.OPTIONS_TIME_X == 30 and S.TIME_BUTTON_ID == 9
     assert S.OPTIONS_BUTTON_BOTTOM_MARGIN == 0x1E
     assert 0x1F2 - S.OPTIONS_BUTTON_BOTTOM_MARGIN - 34 == 434
+    # the core variant's evidence (the DLL derives these in every variant)
     assert S.OPTIONS_DIALOG_VTABLE == 0x5006D8 and S.OPTIONS_HANDLE_MESSAGE == 0x4A6940
     assert S.OPTIONS_SLOT_HANDLE_MESSAGE == 0x5006E4
     assert S.CONTROL_SET_CHECKED == 0x47EA50 and S.OPTIONS_CTOR_LAST_CALL == 0x4A621B
@@ -103,27 +107,24 @@ def test_every_site_is_proved_against_the_b200_executable():
 
 
 def test_committed_header_is_a_fresh_render():
-    assert (SRC / "b200time_sites.h").read_text() == G.render_header(core_exe_bytes())
+    assert (SRC / "b200time_sites.h").read_text() == G.render_header(G.validate(core_exe_bytes()))
 
 
 def test_the_image_really_is_relocated():
-    import pefile
-    pe = pefile.PE(data=core_exe_bytes(), fast_load=True)
-    assert pe.OPTIONAL_HEADER.DllCharacteristics & 0x40, "DYNAMICBASE"
-    assert G.relocated_fields(core_exe_bytes()), "has a .reloc table"
-    # and the sites module is aware: its relocated fields include a vtable slot and absolute immediates
-    fields = G.relocated_fields(core_exe_bytes())
-    assert S.OPTIONS_SLOT_HANDLE_MESSAGE in fields and S.GAME_STATE_SLOT_SAVE in fields
-    assert any(f in fields for f in range(0x4A5F32, 0x4A6068))
+    exe = G.Exe(core_exe_bytes())
+    assert exe.pe.OPTIONAL_HEADER.DllCharacteristics & 0x40, "DYNAMICBASE"
+    assert exe.relocs, "has a .reloc table"
+    # the replaced vtable slots are relocated pointers, and the pins hold relocated fields
+    assert S.OPTIONS_SLOT_HANDLE_MESSAGE in exe.relocs and S.GAME_STATE_SLOT_SAVE in exe.relocs
+    model = G.build_model(exe)
+    assert sum(sum(e["mask"]) for e in model.pins) > 100, "wildcards exist"
 
 
 @pytest.mark.parametrize("pin", S.PINS, ids=[p.name for p in S.PINS])
 def test_a_damaged_executable_is_refused(pin):
     exe = bytearray(core_exe_bytes())
-    img = G.gen_sites.Image(bytes(exe))
-    rva = pin.va - img.base
-    sec = next(s for s in img.sections if s[1] <= rva < s[1] + s[2])
-    off = sec[3] + rva - sec[1]
+    parsed = G.Exe(bytes(exe))
+    off = parsed.pe.get_offset_from_rva(pin.va - parsed.base)
     exe[off] ^= 0x01
     with pytest.raises(G.SiteError):
         G.validate(bytes(exe))
@@ -134,18 +135,37 @@ def test_wrong_constants_are_refused(monkeypatch):
     for name, value in (("SET_SPEED", S.SET_SPEED + 0x10), ("GAME_TIME", S.GAME_TIME + 4),
                         ("VILLAGER_MANAGER", S.VILLAGER_MANAGER + 4), ("GAME_STATE_INSTANCE_PTR", 0x685A8C),
                         ("OPTIONS_TEXT_COLOUR", S.OPTIONS_TEXT_COLOUR + 4), ("VILLAGER_STRIDE", S.VILLAGER_STRIDE + 4),
-                        ("GAME_STATE_SPEED_FIELD", 0x25B1C), ("BUTTON_CTOR", S.BUTTON_CTOR + 0x10)):
-        original = getattr(S, name)
-        monkeypatch.setattr(S, name, value)
-        # CROSS_CHECKS captured the constants at import; rebuild them for the changed one
-        import importlib
-        try:
-            importlib.reload(G)
+                        ("GAME_STATE_SPEED_FIELD", 0x25B1C), ("BUTTON_CTOR", S.BUTTON_CTOR + 0x10),
+                        ("OPTIONS_CTOR_LAST_CALL", S.OPTIONS_CTOR_LAST_CALL + 5)):
+        with monkeypatch.context() as mp:
+            mp.setattr(S, name, value)
             with pytest.raises(G.SiteError):
                 G.validate(exe)
-        finally:
-            monkeypatch.setattr(S, name, original)
-            importlib.reload(G)
+
+
+def _matrix_exes():
+    pattern = os.environ.get("VF2_B200_MATRIX_GLOB")
+    if not pattern:
+        pytest.skip("VF2_B200_MATRIX_GLOB is not set (a glob for every matrix variant's executable)")
+    import glob
+    found = sorted(glob.glob(pattern))
+    if not found:
+        pytest.skip("VF2_B200_MATRIX_GLOB matched nothing")
+    return found
+
+
+def test_every_matrix_variant_resolves_every_site():
+    """The pins are found exactly once and every derivation agrees, in every variant of the matrix."""
+    model = G.validate(core_exe_bytes())
+    exes = _matrix_exes()
+    bad = {}
+    for path in exes:
+        try:
+            G.validate_variant(Path(path).read_bytes(), model)
+        except G.SiteError as e:
+            bad[path] = str(e)
+    assert not bad, bad
+    assert len(exes) == 32, f"expected the 32-variant matrix, found {len(exes)}"
 
 
 # ===================================================================== build
@@ -230,6 +250,29 @@ def test_setting_off_is_stock(built, name, delta):
     _run(scen, built["test"], delta, getattr(scen, name), False)
 
 
+def test_resolver_scans_under_the_emulator(built):
+    """The real byte-by-byte ScanPattern (not the native stand-in the other scenarios use) finds every pin."""
+    scen = _scen()
+    w = scen.World(CORE_EXE, str(built["test"]), 0x1A0000, install=False, native_scan=False)
+    status, writes = w.test_plan(True)
+    assert status == 1 and len(writes) == 5
+    assert w.test_plan(False) == (0, [])
+
+
+def test_installed_scenarios_on_another_variant(built):
+    other = os.environ.get("VF2_B200_OTHER_EXE")
+    if not other or not Path(other).is_file():
+        pytest.skip("VF2_B200_OTHER_EXE is not set to a second variant's executable")
+    scen = _scen()
+    for fn in scen.ALL:
+        w = scen.World(other, str(built["test"]), 0x1A0000, install=True)
+        fn(w)
+    for fn in scen.STOCK + scen.OFF:
+        w = scen.World(other, str(built["test"]), 0x1A0000, install=False)
+        w.test_plan(False)
+        fn(w)
+
+
 def test_the_plan_is_five_writes_and_off_is_none(built):
     scen = _scen()
     w = scen.World(CORE_EXE, str(built["test"]), 0, install=False)
@@ -268,16 +311,16 @@ MUTATIONS = [
      "    return false;"),
     ("handler: opens without owner", "b200time_time.inc", "ShowTimeControls(GetActiveWindow());", "ShowTimeControls(0);"),
     ("plan: no constructor retarget", "b200time_time.inc",
-     "    plan.Retarget(B200TC_OPTIONS_CTOR_LAST_CALL, (const void *)&OptionsCtorLastCall);\n", ""),
+     "    plan.Retarget(SITE(OPTIONS_CTOR_LAST_CALL), (const void *)&OptionsCtorLastCall);\n", ""),
     ("plan: no HandleMessage slot", "b200time_time.inc",
-     "    plan.Slot(B200TC_OPTIONS_SLOT_HANDLE_MESSAGE, (const void *)&OptionsHandleMessage);\n", ""),
+     "    plan.Slot(SITE(OPTIONS_SLOT_HANDLE_MESSAGE), (const void *)&OptionsHandleMessage);\n", ""),
     ("plan: no aging retarget", "b200time_time.inc",
-     "    plan.Retarget(B200TC_TIMEFLOW_INCREMENT_AGE_CALL, (const void *)&IncrementAgeWithWarp);\n", ""),
+     "    plan.Retarget(SITE(TIMEFLOW_INCREMENT_AGE_CALL), (const void *)&IncrementAgeWithWarp);\n", ""),
     ("plan: Save and Load swapped", "b200time_time.inc",
-     "plan.Slot(B200TC_GAME_STATE_SLOT_SAVE, (const void *)&GameStateSaveSlot);",
-     "plan.Slot(B200TC_GAME_STATE_SLOT_SAVE, (const void *)&GameStateLoadSlot);"),
+     "plan.Slot(SITE(GAME_STATE_SLOT_SAVE), (const void *)&GameStateSaveSlot);",
+     "plan.Slot(SITE(GAME_STATE_SLOT_SAVE), (const void *)&GameStateLoadSlot);"),
     ("plan: Load slot missing", "b200time_time.inc",
-     "    plan.Slot(B200TC_GAME_STATE_SLOT_LOAD, (const void *)&GameStateLoadSlot);\n", ""),
+     "    plan.Slot(SITE(GAME_STATE_SLOT_LOAD), (const void *)&GameStateLoadSlot);\n", ""),
     ("warp: ticks not added", "b200time_time.inc", "    return ticks + warp;", "    return ticks;"),
     ("warp: ticks added twice", "b200time_time.inc", "    return ticks + warp;", "    return ticks + 2 * warp;"),
     ("warp: villager never marked done", "b200time_time.inc", "    WarpPending &= ~bit;\n    int warp",
@@ -330,13 +373,28 @@ MUTATIONS = [
      "    if (!slot || !state) return ok;"),
     ("load: stock value rewritten", "b200time_time.inc", "    if (StockSpeedValue(*field)) return ok;\n    if (*field >=",
      "    if (*field >="),
-    ("pins: no comparison", "b200time.cpp", "            if (tmp[i] != pin.bytes[i]) {", "            if (false) {"),
-    ("pins: relocation ignored", "b200time.cpp", "            v -= Delta;\n", ""),
-    ("pins: only the first is checked", "b200time.cpp", "    for (size_t p = 0; p < sizeof(B200_PINS) / sizeof(B200_PINS[0]); ++p) {",
-     "    for (size_t p = 0; p < 1; ++p) {"),
+    ("resolver: wildcards match nothing special (mask ignored)", "b200time.cpp",
+     "while (i < len && (mask[i] || base[pos + i] == pat[i])) ++i;", "while (i < len && base[pos + i] == pat[i]) ++i;"),
+    ("resolver: everything matches", "b200time.cpp",
+     "while (i < len && (mask[i] || base[pos + i] == pat[i])) ++i;", "while (i < len) ++i;"),
+    ("resolver: anchored pins unchecked", "b200time.cpp",
+     "            if (!pin.mask[k] && live[k] != pin.bytes[k]) {", "            if (false) {"),
+    ("resolver: disagreeing derivations tolerated", "b200time.cpp",
+     "        if (have[ev.site] && Sites[ev.site] != v) {", "        if (false) {"),
+    ("resolver: a changed call site tolerated", "b200time.cpp",
+     "if (site[0] != 0xE8 || target != Sites[B200_CALLS[c].function]) {", "if (false) {"),
+    ("resolver: first derivation of a call site", "b200time.cpp",
+     "        else v = at + 4 + *(const unsigned *)at;", "        else v = at;"),
+    ("resolver: ambiguous slot accepted", "b200time.cpp", "    return found == 1;", "    return found >= 1;"),
+    ("resolver: every pin found at the first range only", "b200time.cpp",
+     "for (unsigned r = 0; r < codeCount && hits < 2; ++r) {", "for (unsigned r = 0; r < 0 && hits < 2; ++r) {"),
+    ("resolver: Save need not follow Load", "b200time.cpp",
+     "if (Sites[B200_SITE_GAME_STATE_SLOT_SAVE] != Sites[B200_SITE_GAME_STATE_SLOT_LOAD] + 4) {", "if (false) {"),
     ("setting off still plans", "b200time.cpp", "    if (!enabled) return 0;\n", ""),
-    ("abi: wrong delta for calls", "b200time_time.inc", "SetSpeed = (SetSpeedFn)A(B200TC_SET_SPEED);",
-     "SetSpeed = (SetSpeedFn)B200TC_SET_SPEED;"),
+    ("abi: SetSpeed is another site", "b200time_time.inc", "SetSpeed = (SetSpeedFn)SITE(SET_SPEED);",
+     "SetSpeed = (SetSpeedFn)SITE(GAME_NEW);"),
+    ("abi: wrong age field base", "b200time_time.inc", "GameStatePtr = (unsigned char **)SITE(GAME_STATE_INSTANCE_PTR);",
+     "GameStatePtr = (unsigned char **)SITE(GAME_TIME);"),
 ]
 
 
@@ -366,6 +424,18 @@ def _scenarios_fail(dll: Path) -> str | None:
                 _run(scen, dll, delta, fn, False)
             except BaseException as e:  # noqa: BLE001
                 return f"{fn.__name__} @ {delta:#x}: {type(e).__name__}"
+    # The scenarios replace the DLL's byte-by-byte ScanPattern by a native one (too slow to emulate
+    # for every scenario); the real one is judged here, once, so a mutation of it is caught too.
+    try:
+        w = scen.World(CORE_EXE, str(dll), 0x1A0000, install=False, native_scan=False)
+        status, writes = w.test_plan(True)
+        assert status == 1 and len(writes) == 5
+        out = w.e.alloc(4 * 64)
+        w.e.call(w.e.dll_export("B200Time_TestSites"), (out,))
+        for i, name in enumerate(w.model.sites[:w.model.dll_sites]):
+            assert w.e.r32(out + 4 * i) == w.s(name), name
+    except BaseException as e:  # noqa: BLE001
+        return f"the real scan: {type(e).__name__}"
     return None
 
 

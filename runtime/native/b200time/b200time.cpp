@@ -6,22 +6,24 @@
 // self-contained: B200 has no other runtime hooks, so this DLL has its own tiny
 // host. One feature, one DLL: nothing else is installed here.
 //
-// The B200 executable is RELOCATED (DYNAMICBASE, with a .reloc section), so
-// every game address in b200time_sites.h is a link-time VA at base 0x400000 and
-// is rebased by `Delta` (live module base - 0x400000) before it is used. A pin
-// compares the live bytes with every relocated 32-bit field taken back to its
-// link-time value.
+// The B200 executable is RELOCATED (DYNAMICBASE, with a .reloc section) and each
+// of the 32 matrix variants links to different addresses, so this DLL holds NO
+// game address. b200time_sites.h (generated and proved by
+// runtime/tools/gen_b200_time_sites.py) holds pinned runs of the core variant
+// with wildcards where a relocated field or a call displacement sits; Resolve()
+// finds every run in the live image exactly once and derives each address from
+// where the runs were found.
 //
 // The executable's loader calls B200Time_Startup() once, before the game loop.
-// Installing is: setting -> pins -> plan -> apply. With the TimeControls key off
-// (or missing) or any pin different, NOTHING is written and the game keeps
-// B200's own bytes.
+// Installing is: setting -> resolve -> plan -> apply. With the TimeControls key
+// off (or missing), or anything the resolver cannot prove, NOTHING is written
+// and the game keeps B200's own bytes.
 //
 //   1. The Settings dialog constructor's last call (`call SetChecked` on the last
-//      check box, 0x4A621B) is retargeted to a stub that makes the same call
+//      check box) is retargeted to a stub that makes the same call
 //      and then adds one more button (id 9) at x = 30, built as the constructor
 //      builds Evict: same art, y, font and colour.
-//   2. theOptionsDialog's HandleMessage vtable slot 3 (0x4A6940) is replaced. A
+//   2. theOptionsDialog's HandleMessage vtable slot 3 is replaced. A
 //      click on that button opens the dialog; every other message goes to the
 //      game's own handler unchanged.
 //   3. Speed and pause use the game's own CGameTime::SetSpeed and the speed field
@@ -58,24 +60,26 @@
 
 #include "b200time_sites.h"
 
-// ---------------------------------------------------------------- relocation
-static unsigned Delta;  // live module base - 0x400000
-static inline unsigned A(unsigned linkTimeVa) { return linkTimeVa + Delta; }
+// ---------------------------------------------------------------- the sites
+// Live addresses derived by Resolve(), indexed by B200Site.
+static unsigned Sites[B200_SITE_COUNT];
+#define SITE(name) (Sites[B200_SITE_##name])
 
 // ---------------------------------------------------------------- status block
 // B200Time_Status: what this launch installed. Written only by the install path
-// in B200Time_Startup. Layout version 1:
-//   magic 'B2TC', version, requested (1 = setting on), pinsOk (1 = every pin
-//   matched), installed (1 = every write is live), writeMask (bit w: write w live)
+// in B200Time_Startup. Layout version 2:
+//   magic 'B2TC', version, requested (1 = setting on), resolved (1 = every pin
+//   found and every derivation agreed), installed (1 = every write is live),
+//   writeMask (bit w: write w live)
 struct B200TimeStatus {
     unsigned magic;
     unsigned version;
     unsigned requested;
-    unsigned pinsOk;
+    unsigned resolved;
     unsigned installed;
     unsigned writeMask;
 };
-extern "C" __declspec(dllexport) volatile B200TimeStatus B200Time_Status = { 0x43543242u, 1u, 0, 0, 0, 0 };
+extern "C" __declspec(dllexport) volatile B200TimeStatus B200Time_Status = { 0x43543242u, 2u, 0, 0, 0, 0 };
 
 static HMODULE ThisModule;
 static wchar_t Folder[MAX_PATH];
@@ -130,59 +134,154 @@ struct Plan {
         for (unsigned i = 0; i < 8; ++i) { w.bytes[i] = 0; w.original[i] = 0; }
         return &w;
     }
-    // Replace the 4-byte function pointer in the vtable slot (link-time va) with `to`.
+    // Replace the 4-byte function pointer in the vtable slot at `va` with `to`.
     void Slot(unsigned va, const void *to) {
-        HookWrite *w = Add(A(va), 4, true);
+        HookWrite *w = Add(va, 4, true);
         if (!w) return;
         *(unsigned *)w->bytes = (unsigned)to;
     }
-    // Retarget the 5-byte `call rel32` at va (pinned as E8 by the generator) to `to`.
+    // Retarget the 5-byte `call rel32` at `va` (proved to be an E8 by Resolve) to `to`.
     void Retarget(unsigned va, const void *to) {
-        HookWrite *w = Add(A(va), 5, false);
+        HookWrite *w = Add(va, 5, false);
         if (!w) return;
-        w->bytes[0] = *(const unsigned char *)A(va);
-        *(int *)(w->bytes + 1) = (int)((unsigned)to - (A(va) + 5));
+        w->bytes[0] = *(const unsigned char *)va;
+        *(int *)(w->bytes + 1) = (int)((unsigned)to - (va + 5));
     }
 };
 
-// ---------------------------------------------------------------- pins
-static bool InImage(unsigned liveVa, unsigned len) {
+// ================================================================ resolver
+// The algorithm of gen_b200_time_sites.resolve(), over the live image.
+struct ImageRange { unsigned base, size; };
+static const unsigned kMaxRanges = 24;
+
+static unsigned LiveSections(ImageRange *code, unsigned *codeCount, ImageRange *rodata, unsigned *rodataCount) {
     HMODULE exe = GetModuleHandleW(0);
-    if (!exe) return false;
+    *codeCount = 0;
+    *rodataCount = 0;
+    if (!exe) return 0;
     const IMAGE_DOS_HEADER *dos = (const IMAGE_DOS_HEADER *)exe;
     const IMAGE_NT_HEADERS32 *nt = (const IMAGE_NT_HEADERS32 *)((const unsigned char *)exe + dos->e_lfanew);
-    unsigned base = (unsigned)exe;
-    return liveVa >= base && len <= nt->OptionalHeader.SizeOfImage && liveVa - base <= nt->OptionalHeader.SizeOfImage - len;
+    const IMAGE_SECTION_HEADER *s = IMAGE_FIRST_SECTION(nt);
+    for (unsigned i = 0; i < nt->FileHeader.NumberOfSections; ++i) {
+        unsigned size = s[i].Misc.VirtualSize ? s[i].Misc.VirtualSize : s[i].SizeOfRawData;
+        ImageRange r = { (unsigned)exe + s[i].VirtualAddress, size };
+        DWORD ch = s[i].Characteristics;
+        if ((ch & IMAGE_SCN_MEM_EXECUTE) && *codeCount < kMaxRanges) code[(*codeCount)++] = r;
+        else if ((ch & IMAGE_SCN_MEM_READ) && !(ch & IMAGE_SCN_MEM_WRITE) && *rodataCount < kMaxRanges)
+            rodata[(*rodataCount)++] = r;
+    }
+    return (unsigned)exe;
 }
 
-// Every pin must equal live memory, each relocated field taken back to its
-// link-time value.
-static bool PinsMatch() {
-    for (size_t p = 0; p < sizeof(B200_PINS) / sizeof(B200_PINS[0]); ++p) {
-        const B200Pin &pin = B200_PINS[p];
-        unsigned live = A(pin.va);
-        if (!InImage(live, pin.len)) {
-            Log("pin %s at 0x%08X is outside the image", pin.name, live);
+// Find `pat` (mask 1 = wildcard) in [base, base+size). Counts matches up to 2 in *hits;
+// returns the first match (0 if none).
+#ifdef B200TIME_TEST
+__declspec(noinline)
+#endif
+static unsigned ScanPattern(const unsigned char *base, unsigned size, const unsigned char *pat,
+                            const unsigned char *mask, unsigned len, unsigned *hits) {
+    unsigned first = 0, key = 0;
+    while (key < len && mask[key]) ++key;       // the first byte that must match
+    if (key == len || size < len) return 0;
+    unsigned last = size - len;
+    for (unsigned pos = 0; pos <= last; ++pos) {
+        if (base[pos + key] != pat[key]) continue;
+        unsigned i = 0;
+        while (i < len && (mask[i] || base[pos + i] == pat[i])) ++i;
+        if (i == len) {
+            if (!*hits) first = (unsigned)base + pos;
+            if (++*hits >= 2) return first;
+        }
+    }
+    return first;
+}
+
+static bool ReadOnlyPointerTo(const ImageRange *rodata, unsigned count, unsigned target, unsigned *slot) {
+    unsigned found = 0, at = 0;
+    for (unsigned r = 0; r < count; ++r) {
+        for (unsigned off = 0; off + 4 <= rodata[r].size; off += 4) {
+            if (*(const unsigned *)(rodata[r].base + off) == target) {
+                ++found;
+                at = rodata[r].base + off;
+            }
+        }
+    }
+    *slot = at;
+    return found == 1;
+}
+
+// Resolve every pin and site in the live executable. False (and a log line) on the first thing
+// that is not exactly as the core variant has it.
+static bool Resolve() {
+    static ImageRange code[kMaxRanges], rodata[kMaxRanges];
+    unsigned codeCount = 0, rodataCount = 0;
+    if (!LiveSections(code, &codeCount, rodata, &rodataCount) || !codeCount) return false;
+    const unsigned pinCount = sizeof(B200_PINS) / sizeof(B200_PINS[0]);
+    static unsigned loc[sizeof(B200_PINS) / sizeof(B200_PINS[0])];
+    for (unsigned i = 0; i < pinCount; ++i) {
+        const B200Pin &pin = B200_PINS[i];
+        if (pin.parent >= 0) continue;
+        unsigned hits = 0, at = 0;
+        for (unsigned r = 0; r < codeCount && hits < 2; ++r) {
+            unsigned h = 0;
+            unsigned found = ScanPattern((const unsigned char *)code[r].base, code[r].size, pin.bytes, pin.mask,
+                                         pin.len, &h);
+            if (h) { if (!hits) at = found; hits += h; }
+        }
+        if (hits != 1) {
+            Log("pin %s found %u times", pin.name, hits);
             return false;
         }
-        unsigned char tmp[512];
-        if (pin.len > sizeof tmp) return false;
-        for (unsigned i = 0; i < pin.len; ++i) tmp[i] = ((const unsigned char *)live)[i];
-        for (unsigned r = 0; r < pin.relocCount; ++r) {
-            unsigned off = pin.relocs[r];
-            unsigned v = (unsigned)tmp[off] | ((unsigned)tmp[off + 1] << 8) | ((unsigned)tmp[off + 2] << 16) |
-                         ((unsigned)tmp[off + 3] << 24);
-            v -= Delta;
-            tmp[off] = (unsigned char)v; tmp[off + 1] = (unsigned char)(v >> 8);
-            tmp[off + 2] = (unsigned char)(v >> 16); tmp[off + 3] = (unsigned char)(v >> 24);
-        }
-        for (unsigned i = 0; i < pin.len; ++i) {
-            if (tmp[i] != pin.bytes[i]) {
-                Log("pin %s at 0x%08X does not match the B200 bytes", pin.name, live);
+        loc[i] = at;
+    }
+    for (unsigned i = 0; i < pinCount; ++i) {
+        const B200Pin &pin = B200_PINS[i];
+        if (pin.parent < 0) continue;
+        loc[i] = loc[pin.parent] + (unsigned)pin.offset;
+        const unsigned char *live = (const unsigned char *)loc[i];
+        bool inside = false;
+        for (unsigned r = 0; r < codeCount; ++r)
+            if (loc[i] >= code[r].base && loc[i] + pin.len <= code[r].base + code[r].size) inside = true;
+        if (!inside) { Log("pin %s lies outside the code", pin.name); return false; }
+        for (unsigned k = 0; k < pin.len; ++k) {
+            if (!pin.mask[k] && live[k] != pin.bytes[k]) {
+                Log("pin %s differs at its anchor offset", pin.name);
                 return false;
             }
         }
     }
+    bool have[B200_SITE_COUNT];
+    for (unsigned i = 0; i < B200_SITE_COUNT; ++i) have[i] = false;
+    for (unsigned e = 0; e < sizeof(B200_EVIDENCE) / sizeof(B200_EVIDENCE[0]); ++e) {
+        const B200Evidence &ev = B200_EVIDENCE[e];
+        unsigned at = loc[ev.pin] + ev.offset, v;
+        if (ev.kind == 'L') v = at;
+        else if (ev.kind == 'A') v = *(const unsigned *)at;
+        else v = at + 4 + *(const unsigned *)at;
+        if (have[ev.site] && Sites[ev.site] != v) { Log("site %u: derivations disagree", ev.site); return false; }
+        Sites[ev.site] = v;
+        have[ev.site] = true;
+    }
+    for (unsigned c = 0; c < sizeof(B200_CALLS) / sizeof(B200_CALLS[0]); ++c) {
+        const unsigned char *site = (const unsigned char *)Sites[B200_CALLS[c].site];
+        unsigned target = Sites[B200_CALLS[c].site] + 5 + *(const unsigned *)(site + 1);
+        if (site[0] != 0xE8 || target != Sites[B200_CALLS[c].function]) { Log("a patched call site is not as expected"); return false; }
+        have[B200_CALLS[c].site] = true;
+    }
+    for (unsigned s = 0; s < sizeof(B200_SLOTS) / sizeof(B200_SLOTS[0]); ++s) {
+        unsigned slot = 0;
+        if (!ReadOnlyPointerTo(rodata, rodataCount, Sites[B200_SLOTS[s].function], &slot)) {
+            Log("a vtable slot is not the single pointer to its function");
+            return false;
+        }
+        Sites[B200_SLOTS[s].site] = slot;
+        have[B200_SLOTS[s].site] = true;
+    }
+    if (Sites[B200_SITE_GAME_STATE_SLOT_SAVE] != Sites[B200_SITE_GAME_STATE_SLOT_LOAD] + 4) {
+        Log("theGameState Save does not follow Load");
+        return false;
+    }
+    for (unsigned i = 0; i < B200_SITE_COUNT; ++i) if (!have[i]) { Log("site %u is underived", i); return false; }
     return true;
 }
 
@@ -190,12 +289,12 @@ static bool PinsMatch() {
 #include "b200time_time.inc"
 
 // ================================================================ install
-// 0 = setting off (nothing planned); -1 = a pin differs (nothing planned); 1 = planned.
+// 0 = setting off (nothing planned); -1 = could not be proved (nothing planned); 1 = planned.
 static int BuildPlan(bool enabled, Plan &plan) {
     plan.count = 0;
     plan.ok = true;
     if (!enabled) return 0;
-    if (!PinsMatch()) return -1;
+    if (!Resolve()) return -1;
     ResolveAbi();
     PlanTimeControls(plan);
     return plan.ok ? 1 : -1;
@@ -250,15 +349,14 @@ extern "C" __declspec(dllexport) void __cdecl B200Time_Startup() {
     if (!slash) return;
     slash[1] = 0;
 
-    Delta = (unsigned)GetModuleHandleW(0) - B200TC_IMAGE_BASE;
-    Log("vf2time_b200 started (module base delta 0x%08X)", Delta);
+    Log("vf2time_b200 started");
     bool on = SettingOn();
     B200Time_Status.requested = on ? 1u : 0u;
     static Plan plan;
     int built = BuildPlan(on, plan);
     if (built == 0) { Log("TimeControls is off: the game is stock"); return; }
-    if (built < 0) { Log("pins differ or the plan failed: installing nothing"); return; }
-    B200Time_Status.pinsOk = 1;
+    if (built < 0) { Log("the executable could not be proved or the plan failed: installing nothing"); return; }
+    B200Time_Status.resolved = 1;
     if (Apply(plan)) {
         B200Time_Status.installed = 1;
         Log("Time Controls installed (%u writes)", plan.count);
@@ -275,12 +373,15 @@ BOOL WINAPI DllMain(HINSTANCE instance, DWORD reason, LPVOID) {
 
 // ---------------------------------------------------------------- test builds only
 #ifdef B200TIME_TEST
-// Runs the install path's planning half against whatever executable image the
-// harness has mapped at imageBase (the pins, the plan) without writing it.
+// The address of ScanPattern, so the emulator harness can replace the scan (a million-byte loop
+// per pin) with a native one while every other line of the resolver still runs.
+extern "C" __declspec(dllexport) unsigned __cdecl B200Time_TestScanAddress() {
+    return (unsigned)&ScanPattern;
+}
+// Runs the install path's planning half against the image the harness has mapped, without writing it.
 // out: [status, count, then per write: va, len, data, bytes0..3, bytes4..7].
-extern "C" __declspec(dllexport) int __cdecl B200Time_TestPlan(unsigned imageBase, int enabled, unsigned *out) {
+extern "C" __declspec(dllexport) int __cdecl B200Time_TestPlan(int enabled, unsigned *out) {
     static Plan plan;
-    Delta = imageBase - B200TC_IMAGE_BASE;
     int built = BuildPlan(enabled != 0, plan);
     out[0] = (unsigned)built;
     out[1] = built > 0 ? plan.count : 0;
@@ -292,6 +393,10 @@ extern "C" __declspec(dllexport) int __cdecl B200Time_TestPlan(unsigned imageBas
         out[2 + i * 5 + 4] = *(unsigned *)(plan.writes[i].bytes + 4);
     }
     return built;
+}
+// The resolved sites (live addresses), B200_SITE_COUNT of them, after a TestPlan with the setting on.
+extern "C" __declspec(dllexport) void __cdecl B200Time_TestSites(unsigned *out) {
+    for (unsigned i = 0; i < B200_SITE_COUNT; ++i) out[i] = Sites[i];
 }
 // The state machine without the dialog: op 1 pause, 2 resume, 3 speed(arg),
 // 4 start a warp of arg ticks, 5 warp pending villager count, 6 speed field.
