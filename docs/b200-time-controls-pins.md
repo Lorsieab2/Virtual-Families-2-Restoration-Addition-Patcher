@@ -58,8 +58,45 @@ Time Controls button: **x = 30, y = 434**, same art/id-0x128 as Done and Evict. 
 
 New button id: **9** (2, 3, 4 and 5..8 are used; the handler's `edi-5 <= 3` test sends ids above 8 to the fall-through at 0x4A6B1C, so id 9 reaches no existing branch). It must be matched in slot 3 (0x4A6940) before the Evict compare chain.
 
-## 6. Not covered
+## 6. The companion DLL (added after the static study)
 
-- The art behind the buttons at (30,434): no live look, so whether the dialog background is blank there is unverified (REDUX uses the same spot).
-- Button width/height not read from the image file.
-- No DLL, no 32-variant matrix built.
+`runtime/native/b200time/` builds `vf2time_b200.dll` (`runtime/native/build_b200time.bat`, /W4 /WX). It is
+REDUX's Settings-screen Time Controls module (`vf2fun_time.inc`) re-proved against this executable and made
+self-contained (its own small plan / pin / apply host; one feature, one DLL). Every address is in
+`runtime/b200_time_sites.py` (46 pins), proved by `runtime/tools/gen_b200_time_sites.py` (capstone + pefile) and
+emitted as `b200time_sites.h`.
+
+Findings that differ from the vanilla runtime build:
+
+- **The B200 image is relocated.** `DllCharacteristics = 0x8140` (DYNAMICBASE) with a `.reloc` section, so
+  Windows may load it away from 0x400000. The DLL rebases every address by (module base - 0x400000) and each pin
+  compares the live bytes with every relocated 32-bit field (named by the `.reloc` table) taken back to its
+  link-time value. The vanilla runtime build never needed this (no ASLR).
+- Game state: the `theGameState` singleton pointer is `[0x685A88]` (`Get` at 0x499620), the speed field is still
+  `+0x25B18`, `GameTime` is 0x683038, `CGameTime::SetSpeed` is 0x468B80, the villager manager is 0x706F90 with
+  the vanilla array offset 0x1CC70 / stride 0x1CC0C / age +0x6A54 / health +0x6B00 / active +0x1BB84 / left home
+  +0x1BB88 (all re-proved, not assumed).
+- Pause leaves `CGameTime` at speed 0, not 999 (`SetSpeed(999)` stores 0 in B200 and in vanilla); the speed field
+  carries the +999.
+- The constructor stub finds the dialog in **ebx** (vanilla's was esi): `esi` is the last check box.
+- `theGameState::Save` / `Load` are vtable slots 14 / 13 at 0x4FC58C / 0x4FC588 (functions 0x49AA00 / 0x499DC0).
+- Aging: B200 stores the native tick count in `[ebp-14h]` before its single `call IncrementAge` (0x4C4DEF), and
+  computes the accumulator remainder from it, so the module retargets that one call (no stolen bytes).
+- The button is placed at x = 30 (0x1E, the literal), y = dialog height - Done height - 0x1E, id 9.
+
+Tests: `tests/test_b200_time_controls.py` runs the REAL compiled DLL together with the REAL B200 core code inside
+unicorn (`tests/b200_time_emu.py`, `tests/b200_time_scenarios.py`), at the link address and relocated by 0x1A0000.
+The emulator test build leaves out `ISOLATION_AWARE_ENABLED` (Microsoft's activation-context wrappers around the
+user32 calls); the shipped build has it, exactly as REDUX's.
+
+## 7. Not covered
+
+- No live test. The art behind the buttons at (30,434) is unverified (REDUX uses the same spot), and the button
+  width/height (144 x 34) come from REDUX's recorded Done position, not the art file. The scenarios feed those
+  sizes to the real constructor code through a stand-in Done button.
+- How the DLL is loaded into the B200 process (a loader stub / entry point calling `B200Time_Startup`) and the
+  patcher UI that writes `vf2time.ini` (`[Patches] TimeControls=1`) are not part of this change.
+- The shipped build's isolation-aware activation of the dialog's manifest, the SDL fullscreen toggle and real
+  Windows dialog behaviour are not exercised under emulation.
+- No 32-variant matrix has been built; other variants' constructor / `theGameState` / aging code may differ from
+  the core variant, in which case the pins refuse and nothing is installed.

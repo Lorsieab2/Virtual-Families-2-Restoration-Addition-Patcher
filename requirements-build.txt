@@ -12,3 +12,8 @@ capstone>=5.0
 # step without it. It was missing here for the same reason capstone was: both
 # happen to be installed on the machines this has been built on.
 Pillow>=9.0
+
+# pefile and unicorn are test-time only: the B200 Time Controls site proof reads the executable with
+# pefile, and the DLL is run against the real B200 code under unicorn (tests/test_b200_time_controls.py).
+pefile>=2023.2.7
+unicorn>=2.0
