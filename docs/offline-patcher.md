@@ -1179,6 +1179,20 @@ hotspot on the title screen, and the title screen's refresh of the player name,
 Manage Games button and Play/Continue label each time it is shown. Unticked,
 every site runs the stock instructions it displaced.
 
+time_controls (Time Controls, Optional, on by default; B201) uses the same exact-SHA
+byte toggle, through .vf2time, plus two asset records. Every B201 executable
+carries a dormant loader: theGame::Init's first call (theGameState::Get) goes
+through a wrapper that, only when .vf2time is 1, loads "Virtual Families 2
+Patcher Files\\vf2time_b200.dll" next to the game and calls its B200Time_Startup
+once. Ticking the setting sets the byte, copies the DLL and writes vf2time.ini
+(TimeControls=1); unticking it sets the byte back to 0 and removes both files, so
+the executable never looks for the DLL and the game is the unmodified B201. The
+DLL holds no game address: it finds each pinned run in the running executable
+(every matrix variant links differently, and the image is relocated by ASLR),
+and installs nothing unless every run is found exactly once and every derived
+address agrees. Exporting needs the shipped DLL: --time-controls-dll
+runtime\\build\\vf2time_b200.dll (runtime\\native\\build_b200time.bat).
+
 The same post-asset phase controls the independent Holiday Furniture goal
 suffix through .vf2goal. Its record requires core_executable and
 holiday_furniture; disabling Holiday Furniture recopies the pristine

@@ -40,6 +40,7 @@ FINAL_PLAYTEST_DEFAULT_ON_SETTINGS = frozenset({
     "mobile_furniture_behaviors",
     "cheat_upgrades",
     "ai_generated_bathroom2_renovations",
+    "time_controls",
 })
 # Empty by design. The owner's standing instruction is that a playtest ships
 # with every patch on -- "make sure your playtests ship and compile with every
@@ -279,6 +280,7 @@ SOURCE_BACKED_OPTIONAL_SETTINGS = {
     "cheat_upgrades",
     "no_ai_icons",
     "ai_generated_bathroom2_renovations",
+    "time_controls",
 }
 EXECUTABLE_OVERLAY_OPTIONAL_SETTINGS = {
     "island_events",
@@ -449,6 +451,13 @@ SETTINGS = [
         "free to make some yourself and open an Issue on the Github if you want to change it- Lorsieab2) "
         "Requires Add mobile room renovations: the Bathroom 2 renovations exist only in that executable, so this "
         "art is not installed while it is unticked.",
+        "default": True,
+        "category": "optional",
+    },
+    {
+        "id": "time_controls",
+        "label": "Time Controls",
+        "description": "Adds a Time Controls button to the Settings screen, left of Done. It opens a window to pause and resume the game, choose Slow, Normal or Fast (the game's own speeds) or the extra 5x and 10x, and fast-forward everyone at home by three years with Time Warp (birthdays, leaving home and old age all still happen normally). The chosen speed is never saved: a saved village always comes back at normal speed, so a village saved at 10x does not age years while the game is closed. Installs a small companion DLL in the Virtual Families 2 Patcher Files folder next to the game; unticking the setting removes it and the game is the unmodified B201 again.",
         "default": True,
         "category": "optional",
     },
@@ -986,6 +995,7 @@ RUNTIME_FLAG_SECTION_BY_SETTING = {
     "allow_older_pregnancies": ".vf2preg",
     "older_villager_mortality": ".vf2mort",
     "fix_vanilla_game_bugs": ".vf2bugs",
+    "time_controls": ".vf2time",
     "same_sex_marriage": ".vf2same",
     "holiday_furniture": ".vf2goal",
     "mobile_furniture_behaviors": ".vf2beh",
@@ -1114,6 +1124,86 @@ def fix_vanilla_game_bugs_post_asset_patches(
         setting_id="fix_vanilla_game_bugs",
         feature_label="Fix Vanilla Game Bugs",
     )
+
+
+def time_controls_post_asset_patches(
+    executable_sources: list[Path],
+    *,
+    output_exe_name: str,
+    build_manifest_data: dict[str, Any],
+) -> list[dict[str, Any]]:
+    contract = build_manifest_data.get("TimeControls")
+    if not isinstance(contract, dict):
+        return []
+    runtime_flag = contract.get("runtime_flag")
+    if not isinstance(runtime_flag, dict):
+        raise ValueError("Build manifest has an invalid TimeControls contract.")
+    return setting_runtime_flag_post_asset_patches(
+        executable_sources,
+        output_exe_name=output_exe_name,
+        runtime_flag=runtime_flag,
+        section_name=RUNTIME_FLAG_SECTION_BY_SETTING["time_controls"],
+        setting_id="time_controls",
+        feature_label="Time Controls",
+    )
+
+
+TIME_CONTROLS_PATCHER_FOLDER = "Virtual Families 2 Patcher Files"
+TIME_CONTROLS_DLL_NAME = "vf2time_b200.dll"
+TIME_CONTROLS_INI_NAME = "vf2time.ini"
+TIME_CONTROLS_INI_TEXT = "[Patches]\r\nTimeControls=1\r\n"
+
+
+def time_controls_asset_patches(
+    bundle_dir: Path,
+    dll_path: Path | None,
+    build_manifest_data: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """The companion DLL and its one-line ini, placed beside the game only while Time Controls is on.
+
+    The executable carries a dormant loader (.vf2time byte, 0 in every build); the post-asset toggle
+    sets it to 1 and these two files are what that loader loads. With the setting off the files are
+    removed and the byte stays 0: the game never looks for the DLL.
+    """
+    contract = build_manifest_data.get("TimeControls")
+    if not isinstance(contract, dict):
+        return []
+    if contract.get("companion_dll") != TIME_CONTROLS_DLL_NAME or contract.get("companion_ini") != TIME_CONTROLS_INI_NAME:
+        raise ValueError("Build manifest's TimeControls contract names another companion file.")
+    if dll_path is None:
+        raise ValueError(
+            "This build has the Time Controls loader; pass --time-controls-dll with the built "
+            f"{TIME_CONTROLS_DLL_NAME} (runtime\\native\\build_b200time.bat) or the setting would do nothing."
+        )
+    if not dll_path.is_file() or dll_path.name != TIME_CONTROLS_DLL_NAME:
+        raise ValueError(f"--time-controls-dll must be an existing {TIME_CONTROLS_DLL_NAME}: {dll_path}")
+    require_vf2_pe32_x86(dll_path, label="Time Controls DLL")
+    data = dll_path.read_bytes()
+    if b"B200Time_Startup" not in data or b"B200Time_TestPlan" in data:
+        raise ValueError("The Time Controls DLL must be the shipped build (exports B200Time_Startup, no test entry points).")
+    payload_dir = bundle_dir / "payload" / "TimeControls"
+    payload_dir.mkdir(parents=True, exist_ok=True)
+    staged_dll = payload_dir / TIME_CONTROLS_DLL_NAME
+    staged_dll.write_bytes(data)
+    staged_ini = payload_dir / TIME_CONTROLS_INI_NAME
+    staged_ini.write_bytes(TIME_CONTROLS_INI_TEXT.encode("ascii"))
+    records: list[dict[str, Any]] = []
+    for staged, note in (
+        (staged_dll, "Time Controls companion DLL, loaded by the executable's dormant .vf2time loader."),
+        (staged_ini, "Time Controls switch (TimeControls=1) read by the companion DLL."),
+    ):
+        records.append({
+            "file_path": f"{TIME_CONTROLS_PATCHER_FOLDER}/{staged.name}",
+            "source_path": relative_posix(staged.relative_to(bundle_dir)),
+            "source_sha256": sha256_file(staged),
+            "source_size": staged.stat().st_size,
+            "overwrite_existing": True,
+            "allow_missing_target": True,
+            "remove_when_disabled": True,
+            "requires": ["core_executable", "time_controls"],
+            "note": note + " Disabling Time Controls removes only this exact file.",
+        })
+    return records
 
 
 def same_sex_marriage_post_asset_patches(
@@ -1437,6 +1527,11 @@ def b152_runtime_flag_post_asset_patches(
             build_manifest_data=build_manifest_data,
         ),
         *fix_vanilla_game_bugs_post_asset_patches(
+            executable_sources,
+            output_exe_name=output_exe_name,
+            build_manifest_data=build_manifest_data,
+        ),
+        *time_controls_post_asset_patches(
             executable_sources,
             output_exe_name=output_exe_name,
             build_manifest_data=build_manifest_data,
@@ -4458,6 +4553,12 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
     original_upgrades_source = Path(args.original_upgrades_dir).resolve() if args.original_upgrades_dir else None
     asset_patches.extend(optional_visual_asset_patches(bundle_dir))
     asset_patches.extend(optional_patch_asset_patches(bundle_dir))
+    if args.include_exe_replacement:
+        asset_patches.extend(time_controls_asset_patches(
+            bundle_dir,
+            Path(args.time_controls_dll).resolve() if getattr(args, "time_controls_dll", None) else None,
+            build_manifest_data,
+        ))
     # Invisible Workspace Upgrades is emitted AFTER the misc/optional visual
     # records on purpose. Records that share a target with distinct requires
     # are a layered override and the patcher applies them in manifest order,
@@ -5022,6 +5123,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--mobile-sound-assets-dir", help="Folder containing all 67 pinned mobile behavior sound .ogg files to place behind the mobile_sound_assets setting.")
     parser.add_argument("--invisible-upgrades-dir", help="Folder containing invisible upgrade .png files to place in payload/OptionalVisualMods/Invisible Upgrades and target to Images/Upgrades.")
     parser.add_argument("--original-upgrades-dir", help="Folder containing original upgrade .png files to bundle as restore/reference sources for Invisible Upgrades.")
+    parser.add_argument("--time-controls-dll", help="The built vf2time_b200.dll (runtime\\native\\build_b200time.bat) to ship behind the time_controls setting. Required when the build has the Time Controls loader.")
     parser.add_argument("--generation-locks-dir", help="Folder containing lock_02.png through lock_30.png; defaults to bundled workspace assets.")
     parser.add_argument("--include-byte-patches", action="store_true", help="Diff vanilla EXE against patched EXE into byte patch records.")
     parser.add_argument("--include-exe-replacement", action="store_true", help="Copy the patched EXE into payload and replace a verified vanilla target EXE during apply.")

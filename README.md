@@ -109,18 +109,19 @@ checked against `manifest.json`, the release notes and the owner's confirmed
 play reports; superseded claims are marked rather than deleted.*
 
 The GUI reads its checkboxes from the shipped manifest, so the exact list follows
-the release you downloaded. B198's bundle offers 36 settings, grouped the way
-the GUI groups them: the 35 offered unchanged from B180 through B197, plus
-**Fix Vanilla Game Bugs**.
+the release you downloaded. B201's bundle offers 37 settings, grouped the way
+the GUI groups them: the 36 offered unchanged from B198 through B200, plus
+**Time Controls**.
 
 That number is not simply the count of settings the patcher defines, which is
-37. The settings list drops any optional setting that has no packaged source
-assets -- in B198, as in B180, the two named just below -- and the export adds
+38. The settings list drops any optional setting that has no packaged source
+assets -- in B201, as in B180, the two named just below -- and the export adds
 one setting of its own, `core_assets`, which copies the support files and
-generated assets that are not tied to a single feature. So 37 defined, less 2
-without packaged assets, plus 1 generated, is the 36 the GUI shows. (Before
-Fix Vanilla Game Bugs existed the same sum was 36 - 2 + 1: the B197
-bundle offers 35 settings.)
+generated assets that are not tied to a single feature. So 38 defined, less 2
+without packaged assets, plus 1 generated, is the 37 the GUI shows. (Before
+Time Controls existed the same sum was 37 - 2 + 1: the B198 through B200
+bundles offer 36 settings, and before Fix Vanilla Game Bugs the B197
+bundle offered 35.)
 
 **A missing checkbox does not mean a missing feature.** That filter asks only
 whether a setting has files to copy, so a feature built as *code* rather than
