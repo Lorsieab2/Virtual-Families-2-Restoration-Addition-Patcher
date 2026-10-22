@@ -109,9 +109,9 @@ checked against `manifest.json`, the release notes and the owner's confirmed
 play reports; superseded claims are marked rather than deleted.*
 
 The GUI reads its checkboxes from the shipped manifest, so the exact list follows
-the release you downloaded. The next bundle offers 38 settings, grouped the way
-the GUI groups them: the 37 that B201 offers, plus **Up to 28 Children** (added
-after B201, not yet in a release).
+the release you downloaded. The B202 bundle offers 38 settings, grouped the way
+the GUI groups them: the 37 that B201 offers, plus **Up to 28 Children** (new in
+B202, in its own Experimental section).
 
 That number is not simply the count of settings the patcher defines, which is
 39. The settings list drops any optional setting that has no packaged source
@@ -119,7 +119,7 @@ assets -- in B201, as in B180, the two named just below -- and the export adds
 one setting of its own, `core_assets`, which copies the support files and
 generated assets that are not tied to a single feature. So 39 defined, less 2
 without packaged assets, plus 1 generated, is the 38 the GUI shows. (Before
-Up to 28 Children existed the same sum was 38 - 2 + 1: B201's bundle offers
+Up to 28 Children existed the same sum was 38 - 2 + 1: B201's bundle offered
 37 settings; before Time Controls the B198 through B200 bundles offered 36,
 and before Fix Vanilla Game Bugs the B197 bundle offered 35.)
 
@@ -183,8 +183,10 @@ verified against the shipped `manifest.json`.
 
 Release bundles are exported with the all-enabled release profile, so **nearly
 all of these arrive on** when you pick **Defaults** in the GUI — including
-**Cheat Upgrades**. Of B198's 36 settings, 35 arrive enabled and one arrives
-off (**Swap Invisible Furniture Graphics with Transparent Graphics**). The
+**Cheat Upgrades**. Of B202's 38 settings, 36 arrive enabled and two arrive
+off (**Swap Invisible Furniture Graphics with Transparent Graphics**, and the
+Experimental **Up to 28 Children**). (B198 through B200: 36 settings, 35 on;
+B201: 37 settings, 36 on; superseded.) The
 `(on)` marks below are a reading aid on entries whose default has surprised
 people, **not** an exhaustive index -- an unmarked entry is not thereby off.
 Uncheck anything you do not want and click **Enable/Disable Patches** to
@@ -245,10 +247,11 @@ release bundle, like almost everything else)
 - **Add optional song mods** - optional music replacements.
 - **No AI Icons** - requires Cheat Upgrades; swaps the late Special Upgrade icons for non-AI artwork.
 
-**Almost everything in the release bundle is on by default.** Of B198's 36
-settings, **35 arrive enabled** when you pick **Defaults** in the GUI, and
-exactly one arrives off: **Swap Invisible Furniture Graphics with Transparent
-Graphics**. The `(on)` marks below are therefore not an exhaustive index --
+**Almost everything in the release bundle is on by default.** Of B202's 38
+settings, **36 arrive enabled** when you pick **Defaults** in the GUI, and
+exactly two arrive off: **Swap Invisible Furniture Graphics with Transparent
+Graphics**, and **Up to 28 Children**, which is Experimental and which
+**Enable All** leaves off too. The `(on)` marks below are therefore not an exhaustive index --
 they were added to entries where the default has surprised people, and an
 entry without one is not thereby off. The shipped `manifest.json` is the
 authority, and the GUI shows each setting's real initial state. Unticking a
