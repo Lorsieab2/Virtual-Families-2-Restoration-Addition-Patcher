@@ -94,10 +94,20 @@ name[28]) and an FNV-1a 64 checksum of all of it.
   `.tmp` file, flushed, then a replace). Slot 0 (the settings file) never has one.
 - The game keeps the previous save at slot + 20 (`ldwGameState::Save` removes slot + 20 and renames
   the save to it). The DLL does the same with the sidecars, so a restored backup has its own sidecar.
+- Before each save the two sidecars are read and checked against the save files beside them. Only a
+  sidecar that validates and was written with its save is rotated with it (or removed with it, at
+  slot + 20); a damaged one, or one that validates but belongs to another save, is renamed
+  `<name>.unreadable-N.dat` beside itself and never deleted or overwritten. If that rename cannot be
+  made (even the longest save path fits the name buffer; a file system that refuses the name is
+  enough), the file is left exactly as it is and no sidecar is written over it.
+- A sidecar another program holds open (sharing, lock or access-denied errors) is not damaged: the open
+  is tried five times over about a second. If it stays shut it is left exactly as it is, never set
+  aside, and no save writes or rotates this slot's sidecar until it has been read; the first save that
+  can read it keeps every child it records together with the ones born since.
 - After a load: the sidecar whose save-file hash matches the loaded file (this slot's, then the
   backup's) is used as is (dead and gone entries keep counting); otherwise a sidecar of the same family
   keeps only the children still found in their slots; another family's is ignored. A missing file is
-  empty. An unreadable or foreign file is renamed `<name>.unreadable-N.dat` and never overwritten.
+  empty. A damaged file is renamed `<name>.unreadable-N.dat` (a shut one is left as it is).
 - The save file itself is never written by the DLL: the extra children are ordinary villagers in the
   30 slots the stock save already stores.
 
@@ -125,10 +135,13 @@ and 28 with free slots, so the 28 alone limits); the stock odds unchanged with r
 offering every child, the stock six-or-fewer path unchanged, the full house (in-place clones, children
 restored byte for byte, a save during the scene saving the child), Accept of a stock child (parent line
 kept) and of an extra child (no line); the sidecar round trip, the backup, another save of the same
-family, another family, an unreadable sidecar kept aside, nothing written without extras; the
+family, another family, an unreadable sidecar kept aside, an unreadable and a foreign backup sidecar
+set aside (never deleted, never rotated), a shut sidecar retried (sharing, lock and access-denied
+errors) and never set aside or replaced, the longest save path set aside or left in place, nothing
+written without extras; the
 executable's own loader end to end (byte off: never loaded; on: loaded after Time Controls, installs
 only with the ini on, exactly the eleven jumps); the exporter's records driving the real loader; and
-14 source mutations, each caught by a scenario.
+24 source mutations, each caught by a scenario.
 
 ## 5. Differences from the request, and what is not covered
 

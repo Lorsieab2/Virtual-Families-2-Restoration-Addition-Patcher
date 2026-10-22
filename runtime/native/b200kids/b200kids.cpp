@@ -80,7 +80,9 @@ static unsigned Sites[KIDS_SITE_COUNT];
 // B200Kids_Status: what this launch installed, and what the last load and save did.
 //   magic 'B2KC', version, requested, resolved, installed, writeMask, extras (entries held),
 //   lastLoad (0 none, 1 exact sidecar, 2 backup sidecar, 3 roster recovery, 4 nothing to use,
-//   5 sidecar moved aside), lastSave (0 none, 1 written, 2 nothing to write, 3 write failed)
+//   5 sidecar moved aside, 6 sidecar shut (in use: left as it is), 7 damaged sidecar that could not be
+//   moved aside (left as it is)), lastSave (0 none, 1 written, 2 nothing to write, 3 write failed,
+//   4 a sidecar was shut or could not be moved aside: nothing was written or replaced)
 struct KidsStatus {
     unsigned magic;
     unsigned version;
@@ -676,15 +678,43 @@ static unsigned long long Fnv(unsigned long long h, const unsigned char *p, unsi
 static void Put32(unsigned char *p, unsigned v) { p[0] = (unsigned char)v; p[1] = (unsigned char)(v >> 8); p[2] = (unsigned char)(v >> 16); p[3] = (unsigned char)(v >> 24); }
 static unsigned Get32(const unsigned char *p) { return p[0] | (p[1] << 8) | (p[2] << 16) | ((unsigned)p[3] << 24); }
 
-static bool HashFile(const char *path, unsigned long long *hash, unsigned *size) {
-    HANDLE h = CreateFileA(path, GENERIC_READ, FILE_SHARE_READ, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
-    if (h == INVALID_HANDLE_VALUE) return false;
+// What reading a file found. FILE_SHUT: it is there but could not be opened or read (another program
+// holds it: a backup tool, a virus scan, a cloud sync). A shut file is never judged damaged, never set
+// aside and never replaced; only a file that opened and then failed validation is damaged.
+enum { FILE_MISSING = 0, FILE_OK = 1, FILE_DAMAGED = -1, FILE_SHUT = -2, FILE_FOREIGN = -3 };
+
+static const unsigned kOpenTries = 5;          // about a second in all
+static const DWORD kOpenWaitMs = 250;
+
+static bool Transient(DWORD e) {
+    return e == ERROR_SHARING_VIOLATION || e == ERROR_LOCK_VIOLATION || e == ERROR_ACCESS_DENIED;
+}
+
+// Opens for reading, trying a file another program holds open again a few times.
+static HANDLE OpenForRead(const char *path, DWORD *error) {
+    for (unsigned k = 0;; ++k) {
+        HANDLE h = CreateFileA(path, GENERIC_READ, FILE_SHARE_READ, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
+        if (h != INVALID_HANDLE_VALUE) { *error = 0; return h; }
+        DWORD e = GetLastError();
+        if (!Transient(e) || k + 1 >= kOpenTries) { *error = e; return h; }
+        Sleep(kOpenWaitMs);
+    }
+}
+
+static int OpenFailure(DWORD e) {
+    return e == ERROR_FILE_NOT_FOUND || e == ERROR_PATH_NOT_FOUND ? FILE_MISSING : FILE_SHUT;
+}
+
+static int HashFile(const char *path, unsigned long long *hash, unsigned *size) {
+    DWORD error = 0;
+    HANDLE h = OpenForRead(path, &error);
+    if (h == INVALID_HANDLE_VALUE) return OpenFailure(error);
     unsigned long long v = kFnvBasis;
     unsigned total = 0;
-    bool ok = true;
+    int r = FILE_OK;
     for (;;) {
         DWORD got = 0;
-        if (!ReadFile(h, ReadBuffer, sizeof(ReadBuffer), &got, 0)) { ok = false; break; }
+        if (!ReadFile(h, ReadBuffer, sizeof(ReadBuffer), &got, 0)) { r = FILE_SHUT; break; }
         if (!got) break;
         v = Fnv(v, ReadBuffer, got);
         total += got;
@@ -692,8 +722,11 @@ static bool HashFile(const char *path, unsigned long long *hash, unsigned *size)
     CloseHandle(h);
     *hash = v;
     *size = total;
-    return ok;
+    return r;
 }
+
+// Every sidecar path buffer: SidecarPath refuses a path that does not fit.
+static const unsigned kSidecarPathCap = MAX_PATH + 64;
 
 static unsigned Length(const char *s) { unsigned n = 0; while (s[n]) ++n; return n; }
 
@@ -739,17 +772,20 @@ static void EnsureFolders(const char *children) {
     CreateDirectoryA(path, 0);
 }
 
-// 1 = read and valid, 0 = no file, -1 = there but unreadable or foreign.
+// FILE_OK (read and valid), FILE_MISSING, FILE_DAMAGED (opened, failed validation) or FILE_SHUT.
 static int ReadSidecar(const char *path, Sidecar *out) {
-    HANDLE h = CreateFileA(path, GENERIC_READ, FILE_SHARE_READ, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
-    if (h == INVALID_HANDLE_VALUE) return GetLastError() == ERROR_FILE_NOT_FOUND || GetLastError() == ERROR_PATH_NOT_FOUND ? 0 : -1;
+    DWORD error = 0;
+    HANDLE h = OpenForRead(path, &error);
+    if (h == INVALID_HANDLE_VALUE) return OpenFailure(error);
     DWORD got = 0;
     BOOL ok = ReadFile(h, FileBuffer, kMaxFile, &got, 0);
     DWORD more = 0;
     unsigned char extra[1];
-    if (ok && got == kMaxFile) ReadFile(h, extra, 1, &more, 0);
+    BOOL okMore = TRUE;
+    if (ok && got == kMaxFile) okMore = ReadFile(h, extra, 1, &more, 0);
     CloseHandle(h);
-    if (!ok || more) return -1;
+    if (!ok || !okMore) return FILE_SHUT;
+    if (more) return -1;
     static const unsigned char magic[8] = { 'V', 'F', '2', 'K', 'I', 'D', 'S', 0 };
     static const unsigned char tag[8] = { 'V', 'F', '2', 'B', '2', '0', '0', 0 };
     if (got < kHeader + 8) return -1;
@@ -813,8 +849,9 @@ static bool WriteSidecar(const char *path, const char *folder, unsigned long lon
     Put32(FileBuffer + size - 8, (unsigned)sum);
     Put32(FileBuffer + size - 4, (unsigned)(sum >> 32));
     EnsureFolders(folder);
-    char temp[MAX_PATH + 8];
+    char temp[kSidecarPathCap + 8];
     unsigned n = Length(path);
+    if (n + 5 > sizeof(temp)) return false;
     Copy(temp, path, n);
     Copy(temp + n, ".tmp", 5);
     HANDLE h = CreateFileA(temp, GENERIC_WRITE, 0, 0, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
@@ -829,10 +866,12 @@ static bool WriteSidecar(const char *path, const char *folder, unsigned long lon
 }
 
 // An unreadable or foreign sidecar is kept, renamed beside itself: "<name>.unreadable-N.dat".
-static void MoveAside(const char *path) {
-    char aside[MAX_PATH + 24];
+// True when the file is now beside itself; false leaves it exactly where it was (it is never deleted).
+static bool MoveAside(const char *path) {
+    // "<path less .dat>.unreadable-NNN.dat": the path plus 16 characters at most, and the nul.
+    char aside[kSidecarPathCap + 32];
     unsigned n = Length(path);
-    if (n < 4 || n + 20 >= sizeof(aside)) return;
+    if (n < 4 || n + 17 > sizeof(aside)) return false;
     Copy(aside, path, n - 4);
     for (unsigned k = 1; k < 1000; ++k) {
         unsigned m = n - 4;
@@ -844,9 +883,10 @@ static void MoveAside(const char *path) {
         do { digits[d++] = (char)('0' + v % 10); v /= 10; } while (v);
         while (d) aside[m++] = digits[--d];
         Copy(aside + m, ".dat", 5);
-        if (MoveFileExA(path, aside, 0)) return;
-        if (GetLastError() != ERROR_ALREADY_EXISTS && GetLastError() != ERROR_FILE_EXISTS) return;
+        if (MoveFileExA(path, aside, 0)) return true;
+        if (GetLastError() != ERROR_ALREADY_EXISTS && GetLastError() != ERROR_FILE_EXISTS) return false;
     }
+    return false;
 }
 
 static bool SameFamily(const Sidecar &file) {
@@ -859,11 +899,24 @@ static bool SameFamily(const Sidecar &file) {
 
 // exact: the sidecar was written with this very save file, so its dead and gone entries (which count
 // toward the 28) are kept; otherwise only the children still found in their slots are kept.
+static void Merge(const Sidecar &file, bool exact);
+
 static void Adopt(const Sidecar &file, bool exact) {
     ClearExtras();
+    Merge(file, exact);
+}
+
+// The file's entries join the ones held now, less any already held. Adopt starts from none; a save
+// merges a sidecar a load found shut and could only read later.
+static void Merge(const Sidecar &file, bool exact) {
     if (StockChildren() < (int)KIDS_TREE_CHILDREN) return;   // extras exist only after the stock six
+    unsigned held = ExtraCount;
     for (unsigned i = 0; i < file.count && ExtraCount < KIDS_MAX_EXTRA_CHILDREN; ++i) {
         Extra e = file.entries[i];
+        bool already = false;
+        for (unsigned j = 0; j < held && !already; ++j)
+            already = Extras[j].slot == e.slot && Extras[j].gender == e.gender && NameEquals(Extras[j].name, e.name);
+        if (already) continue;
         bool found = Matches(e);
         if (e.state == STATE_ALIVE && !found) {
             if (!exact) continue;
@@ -875,22 +928,46 @@ static void Adopt(const Sidecar &file, bool exact) {
     MirrorTable();
 }
 
+// FILE_OK only when the sidecar validates and was written with `save` as it is on disk now; FILE_FOREIGN
+// when it validates but belongs to another save (or to none); FILE_SHUT when either could not be read.
+static int Describes(const Sidecar &file, const char *save) {
+    unsigned long long hash = 0;
+    unsigned size = 0;
+    int h = HashFile(save, &hash, &size);
+    if (h == FILE_SHUT) return FILE_SHUT;
+    return h == FILE_OK && file.saveHash == hash && file.saveSize == size ? FILE_OK : FILE_FOREIGN;
+}
+
+static int Classify(const char *path, const char *save, Sidecar *out) {
+    int r = ReadSidecar(path, out);
+    return r == FILE_OK ? Describes(*out, save) : r;
+}
+
+// A load found this slot's sidecar shut: it is unread, and no save replaces or moves it until it is read.
+static int ShutSlot = -1;
+
 static void AfterLoad(void *state, int slot) {
-    char path[MAX_PATH + 64], save[MAX_PATH], folder[MAX_PATH + 64];
-    char backup[MAX_PATH + 64], backupSave[MAX_PATH];
+    char path[kSidecarPathCap], save[MAX_PATH], folder[kSidecarPathCap];
+    char backup[kSidecarPathCap], backupSave[MAX_PATH];
+    ShutSlot = -1;
     if (!SidecarPath(state, slot, path, sizeof(path), save, folder)) return;
     unsigned long long hash = 0;
     unsigned size = 0;
-    bool hashed = HashFile(save, &hash, &size);
+    bool hashed = HashFile(save, &hash, &size) == FILE_OK;
     int r = ReadSidecar(path, &Loaded);
     B200Kids_Status.lastLoad = 4;
-    if (r < 0) {
-        MoveAside(path);
-        B200Kids_Status.lastLoad = 5;
-        Log("slot %u: an unreadable sidecar was moved aside", (unsigned)slot);
-        r = 0;
+    if (r == FILE_SHUT) {
+        // Held open by another program: not damaged. It is left exactly as it is and read at the next save.
+        ShutSlot = slot;
+        B200Kids_Status.lastLoad = 6;
+        Log("slot %u: the sidecar could not be opened (in use?); it is left as it is", (unsigned)slot);
+    } else if (r == FILE_DAMAGED) {
+        bool moved = MoveAside(path);
+        B200Kids_Status.lastLoad = moved ? 5 : 7;
+        Log(moved ? "slot %u: an unreadable sidecar was moved aside"
+                  : "slot %u: an unreadable sidecar could not be moved aside; it is left as it is", (unsigned)slot);
     }
-    if (r == 1 && hashed && Loaded.saveHash == hash && Loaded.saveSize == size && SameFamily(Loaded)) {
+    if (r == FILE_OK && hashed && Loaded.saveHash == hash && Loaded.saveSize == size && SameFamily(Loaded)) {
         Adopt(Loaded, true);
         B200Kids_Status.lastLoad = 1;
         Log("slot %u: %u extra children from the sidecar", (unsigned)slot, ExtraCount);
@@ -899,14 +976,14 @@ static void AfterLoad(void *state, int slot) {
     // The game's own backup (slot + 20) is the previous save: a restored backup has its sidecar there.
     static Sidecar backupFile;
     if (hashed && SidecarPath(state, slot + (int)KIDS_SAVE_BACKUP_OFFSET, backup, sizeof(backup), backupSave, 0)
-        && ReadSidecar(backup, &backupFile) == 1 && backupFile.saveHash == hash && backupFile.saveSize == size
+        && ReadSidecar(backup, &backupFile) == FILE_OK && backupFile.saveHash == hash && backupFile.saveSize == size
         && SameFamily(backupFile)) {
         Adopt(backupFile, true);
-        B200Kids_Status.lastLoad = 2;
+        if (r != FILE_SHUT) B200Kids_Status.lastLoad = 2;
         Log("slot %u: %u extra children from the backup's sidecar", (unsigned)slot, ExtraCount);
         return;
     }
-    if (r == 1 && SameFamily(Loaded)) {
+    if (r == FILE_OK && SameFamily(Loaded)) {
         Adopt(Loaded, false);
         B200Kids_Status.lastLoad = 3;
         Log("slot %u: the sidecar is for another save of this family; kept the %u children still at home",
@@ -921,18 +998,51 @@ static bool __fastcall GameStateLoad(void *state, void *, int slot) {
     return loaded;
 }
 
+// Before the game's own save rotates its files (it removes the save at slot + 20 and renames this slot's
+// save to it), the two sidecars are checked. Only a sidecar that validated and belongs to its save is
+// rotated with it (or removed with it); a damaged or foreign one is set aside; a shut one is left as it is,
+// and while this slot's is shut no sidecar is written for it. Returns false when none may be written.
+static bool RotateSidecars(int slot, const char *path, const char *save, const char *backup, const char *backupSave) {
+    static Sidecar mineFile, oldFile;
+    int mine = Classify(path, save, &mineFile);
+    // Written with the save now at slot + 20 (a save was made while it was shut): it goes with that save.
+    bool backups = mine == FILE_FOREIGN && Describes(mineFile, backupSave) == FILE_OK;
+    if (ShutSlot == slot && mine != FILE_SHUT) {
+        // First read since the load found it shut: what it holds is kept, with what this session added.
+        if ((mine == FILE_OK || mine == FILE_FOREIGN) && SameFamily(mineFile))
+            Merge(mineFile, mine == FILE_OK || backups);
+        ShutSlot = -1;
+    }
+    if (mine == FILE_SHUT || ShutSlot == slot) {
+        Log("slot %u: the sidecar could not be opened (in use?); it is left as it is", (unsigned)slot);
+        return false;
+    }
+    int old = Classify(backup, backupSave, &oldFile);
+    bool clear = old == FILE_MISSING;
+    if (old == FILE_OK) clear = DeleteFileA(backup) != 0;       // its save is the one the game removes now
+    else if (old == FILE_DAMAGED || old == FILE_FOREIGN) clear = MoveAside(backup);
+    // old == FILE_SHUT: the backup's sidecar is left as it is
+    if (mine == FILE_OK) {
+        if (clear) MoveFileExA(path, backup, 0);
+    } else if (backups) {
+        DeleteFileA(path);                                       // validated, and its save is removed now
+    } else if (mine == FILE_DAMAGED || mine == FILE_FOREIGN) {
+        if (!MoveAside(path)) {
+            Log("slot %u: a sidecar could not be moved aside; it is left as it is", (unsigned)slot);
+            return false;
+        }
+    }
+    return true;
+}
+
 static bool __fastcall GameStateSave(void *state, void *, int slot) {
     if (slot <= 0) return OrigSave(state, slot);
     Sweep();
-    char path[MAX_PATH + 64], save[MAX_PATH], folder[MAX_PATH + 64];
-    char backup[MAX_PATH + 64];
+    char path[kSidecarPathCap], save[MAX_PATH], folder[kSidecarPathCap];
+    char backup[kSidecarPathCap], backupSave[MAX_PATH];
     bool named = SidecarPath(state, slot, path, sizeof(path), save, folder)
-        && SidecarPath(state, slot + (int)KIDS_SAVE_BACKUP_OFFSET, backup, sizeof(backup), 0, 0);
-    if (named) {
-        // ldwGameState::Save removes the save at slot + 20 and renames this slot's save to it.
-        DeleteFileA(backup);
-        MoveFileExA(path, backup, 0);
-    }
+        && SidecarPath(state, slot + (int)KIDS_SAVE_BACKUP_OFFSET, backup, sizeof(backup), backupSave, 0);
+    bool writable = named && RotateSidecars(slot, path, save, backup, backupSave);
     // The adult on show in a child's own slot is not saved: the child is.
     bool swapped = Next.swapped >= 0;
     unsigned char *v = swapped ? Villager(Next.swapped) : 0;
@@ -943,10 +1053,11 @@ static bool __fastcall GameStateSave(void *state, void *, int slot) {
     bool saved = OrigSave(state, slot);
     if (v) Copy(v, AdultImage, KIDS_VILLAGER_STRIDE);
     if (!saved || !named) return saved;
+    if (!writable) { B200Kids_Status.lastSave = 4; return saved; }
     if (!ExtraCount) { B200Kids_Status.lastSave = 2; return saved; }
     unsigned long long hash = 0;
     unsigned size = 0;
-    if (HashFile(save, &hash, &size) && WriteSidecar(path, folder, hash, size)) {
+    if (HashFile(save, &hash, &size) == FILE_OK && WriteSidecar(path, folder, hash, size)) {
         B200Kids_Status.lastSave = 1;
     } else {
         B200Kids_Status.lastSave = 3;
