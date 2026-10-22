@@ -3,13 +3,13 @@
   "output_prefix": "VF2-B201-matrix",
   "exe_name": "Virtual Families 2 - B201.exe",
   "seed_set": "VF2-B200-matrix",
-  "note": "Patcher matrix for B201, built from branch b200-time-controls at efbe304 (not merged), seeded from the B200 matrix. B201 adds Time Controls: a Time Controls button on the Settings screen (pause, resume, Slow/Normal/Fast, 5x, 10x and a +3 years Time Warp) from a companion DLL (vf2time_b200.dll) that a dormant loader in every executable (.vf2time byte, 0 as built) loads only when the patcher setting time_controls is on. The 32 variants are the same feature combinations as B200. No live test of Time Controls has been done.",
+  "note": "Patcher matrix for B201, built from main (PR #423) at 2e326b6 (not merged), seeded from the B200 matrix. B201 adds Time Controls: a Time Controls button on the Settings screen (pause, resume, Slow/Normal/Fast, 5x, 10x and a +3 years Time Warp) from a companion DLL (vf2time_b200.dll) that a dormant loader in every executable (.vf2time byte, 0 as built) loads only when the patcher setting time_controls is on. The 32 variants are the same feature combinations as B200. No live test of Time Controls has been done.",
   "built_from": {
-    "revision": "efbe304",
-    "ref": "b200-time-controls",
-    "pull_request": null,
-    "how_to_verify": "git rev-parse efbe304^{tree} must print 6db5f5b2ae7e7a48d11cacea29d59764b9d2046b. That single object id covers the whole tree and resolves from the published repository alone.",
-    "tree": "6db5f5b2ae7e7a48d11cacea29d59764b9d2046b"
+    "revision": "2e326b6",
+    "ref": "main",
+    "pull_request": 423,
+    "how_to_verify": "git rev-parse 2e326b6^{tree} must print ebf0784302068b18471eeafc7a85b43f1b1c7b18. That single object id covers the whole tree and resolves from the published repository alone.",
+    "tree": "ebf0784302068b18471eeafc7a85b43f1b1c7b18"
   },
   "seeds": {
     "core": "outputs/VF2-B200-matrix-core",

@@ -692,6 +692,13 @@ class TheDriftGuard(unittest.TestCase):
                            for it in (patcher.INVISIBLE_OUTDOOR_ITEMS + patcher.INVISIBLE_TRANSPARENT_BASE_ITEMS)}
         routed_invisible = {i for i in routed if invisible_names.get(i, "").startswith("Invisible")}
         listed = {patcher.furniture_item_id_by_name(n) for n in patcher.TRANSPARENT_DROP_FOOTPRINT_ITEMS}
+        if not patcher.ENABLE_BEHAVIOR_PATCHES:
+            # A build without Behavior Patches emits no route for these two by
+            # design (work/test_b180_docs.py, BEHAVIOR_PATCH_ROUTED); the
+            # fallback still lists them, and a drop on one does what an
+            # unrouted drop does. Every other listed item must still be routed.
+            listed -= {patcher.furniture_item_id_by_name(n)
+                       for n in ("InvisibleYogaEquipment", "InvisiblePingPongTable")}
         self.assertEqual(routed_invisible, listed)
 
     def test_the_visible_spa_lounger_is_routed_but_deliberately_not_listed(self):

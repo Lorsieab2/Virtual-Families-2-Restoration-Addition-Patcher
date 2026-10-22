@@ -71,7 +71,7 @@ ROUTED.update({
 })
 
 
-def _behavior_patches_enabled():
+def _behavior_patches_enabled(emitted_mtime=None):
     """Was this build made with behaviour patches on?
 
     Read from BehaviorPatchesGate in a build manifest, which the generator
@@ -91,6 +91,14 @@ def _behavior_patches_enabled():
         ROOT / "work" / "patched_mobile_furniture_pack_objs" / "patch-manifest.json",
     ):
         if not candidate.is_file():
+            continue
+        # The generator writes its manifest at the END of a run, after the
+        # emitted units. A manifest older than the emitted dispatcher was
+        # written by an EARLIER run -- typically the default output folder
+        # left behind while a matrix build (which writes its manifests to
+        # each variant's own VF2_PATCH_OUT) regenerated the units -- and says
+        # nothing about the build being checked.
+        if emitted_mtime is not None and candidate.stat().st_mtime < emitted_mtime:
             continue
         try:
             data = json.loads(candidate.read_text(encoding="utf-8"))
@@ -230,10 +238,11 @@ class TestTheEmittedDispatcherAgreesWithTheDocs(unittest.TestCase):
         # The generator writes manifest["BehaviorPatchesGate"]["enabled"]
         # alongside the routes, from the flag itself rather than from what was
         # emitted, so it still says True when the routes are missing.
-        self.behavior_patches_on = _behavior_patches_enabled()
+        self.behavior_patches_on = _behavior_patches_enabled(EMITTED.stat().st_mtime)
         if self.behavior_patches_on is None:
             self.skipTest(
-                "no build manifest names BehaviorPatchesGate, so the build "
+                "no build manifest from the run that emitted the dispatcher "
+                "names BehaviorPatchesGate, so the build "
                 "configuration cannot be established independently of the "
                 "routes being validated; these checks would be circular")
 

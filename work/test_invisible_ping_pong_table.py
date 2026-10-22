@@ -217,6 +217,13 @@ class TheRoute(unittest.TestCase):
         emitted = patcher.PATCHED / "vf2_mobile_furniture_behaviors.cpp"
         if not emitted.is_file():
             self.skipTest("generator output not present; run the generator first")
+        if not patcher.ENABLE_BEHAVIOR_PATCHES:
+            # The generator emits the ping-pong route (and the whole
+            # vf2_spontaneous_behaviors unit) only when
+            # VF2_ENABLE_BEHAVIOR_PATCHES is on; a build without it keeps the
+            # stock behaviour by design (work/test_b180_docs.py,
+            # BEHAVIOR_PATCH_ROUTED).
+            self.skipTest("VF2_ENABLE_BEHAVIOR_PATCHES=0: this build has no ping-pong route by design")
         text = emitted.read_text(encoding="utf-8", errors="replace")
         self.assertIn("if (candidate == 0x32e ||\n        candidate == 0x331) {\n        VF2PingPongPlay(villager);", text)
         special = (patcher.PATCHED / "vf2_spontaneous_behaviors.cpp").read_text(encoding="utf-8", errors="replace")
