@@ -725,12 +725,15 @@ Up to 28 Children (companion DLL, after B201; not live tested)
 
 - The owner reopened the B153 child-limit request as "Up to 28 Children": up to
   28 children per generation, only the first 6 in the Family Tree, every child
-  able to inherit the house. Setting up_to_28_children, on by default
-  (the owner's rule: every patch defaults on).
-- Virtual Families 2 can natively support up to 30 villagers per generation; any more will start overwriting Family Tree entries and glitch the game.
-  (The owner's wording, used as written in the patch description. The
-  disassembly shows the household is 30 villager slots and the Family Tree
-  record holds 2 parents + 6 children; a 7th child written into it would
+  able to inherit the house. Setting up_to_28_children is Experimental
+  (the owner's decision, 2026-10-22): the patcher's new Experimental
+  section, off by default, never ticked by Enable All or --enable-all.
+  EveryPatchDefaultsOn exempts the Experimental category by rule; every
+  other patch still defaults on.
+- Virtual Families 2 natively keeps up to 6 children per generation in its Family Tree, and a household holds at most 30 villagers (2 parents and 28 children). This patch keeps children 7 to 28 in a separate file beside the save, so they never overwrite Family Tree entries; storing more than 6 children in the Family Tree itself would overwrite its entries and glitch the game. Experimental: not yet tested in a running game. Back up your saves before using it.
+  (The owner's wording, used as written in the patch description, and it
+  matches the disassembly: the household is 30 villager slots and the Family
+  Tree record holds 2 parents + 6 children; a 7th child written into it would
   overwrite the next generation's record. See docs/b200-up-to-28-children.md.)
 - The stock six-child records, the save file and its format are unchanged.
   Children 7..28 are remembered by vf2kids_b200.dll in

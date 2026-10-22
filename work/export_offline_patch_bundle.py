@@ -41,8 +41,8 @@ FINAL_PLAYTEST_DEFAULT_ON_SETTINGS = frozenset({
     "cheat_upgrades",
     "ai_generated_bathroom2_renovations",
     "time_controls",
-    "up_to_28_children",
 })
+# up_to_28_children is Experimental: the final playtest profile leaves it off too, like Enable All.
 # Empty by design. The owner's standing instruction is that a playtest ships
 # with every patch on -- "make sure your playtests ship and compile with every
 # single patch on. you have wasted too much of my life giving me playtests that
@@ -466,9 +466,9 @@ SETTINGS = [
     {
         "id": "up_to_28_children",
         "label": "Up to 28 Children",
-        "description": "Lets one generation have up to 28 children instead of 6. Only the first 6 children appear in the Family Tree, exactly as before; every child, including the 7th to the 28th, can be chosen to inherit the house in Next Generation. Twins and triplets never take a family past 28: with 27 children a twin or triplet pregnancy has one baby, with 26 a triplet pregnancy has two, and at 28 no more babies come (the normal twin and triplet chances are unchanged while there is room). Children 7 to 28 are remembered in a small file beside each save (the Virtual Families 2 Patcher Data\\Children folder in the save folder); the save file itself is not changed. Virtual Families 2 can natively support up to 30 villagers per generation; any more will start overwriting Family Tree entries and glitch the game. Installs a small companion DLL in the Virtual Families 2 Patcher Files folder next to the game; unticking the setting removes it and the game is unmodified again.",
-        "default": True,
-        "category": "optional",
+        "description": "Lets one generation have up to 28 children instead of 6. Only the first 6 children appear in the Family Tree, exactly as before; every child, including the 7th to the 28th, can be chosen to inherit the house in Next Generation. Twins and triplets never take a family past 28: with 27 children a twin or triplet pregnancy has one baby, with 26 a triplet pregnancy has two, and at 28 no more babies come (the normal twin and triplet chances are unchanged while there is room). Children 7 to 28 are remembered in a small file beside each save (the Virtual Families 2 Patcher Data\\Children folder in the save folder); the save file itself is not changed. Virtual Families 2 natively keeps up to 6 children per generation in its Family Tree, and a household holds at most 30 villagers (2 parents and 28 children). This patch keeps children 7 to 28 in a separate file beside the save, so they never overwrite Family Tree entries; storing more than 6 children in the Family Tree itself would overwrite its entries and glitch the game. Experimental: not yet tested in a running game. Back up your saves before using it. Installs a small companion DLL in the Virtual Families 2 Patcher Files folder next to the game; unticking the setting removes it and the game is unmodified again.",
+        "default": False,   # Experimental: default off, never ticked by Enable All
+        "category": "experimental",
     },
     {
         "id": "mobile_sound_assets",

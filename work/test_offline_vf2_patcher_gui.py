@@ -90,13 +90,12 @@ class OfflineVF2PatcherGUITests(unittest.TestCase):
 
         self.assertEqual(
             [category[0] for category in gui.SETTING_CATEGORIES],
-            ["main", "optional"],
+            ["main", "optional", "experimental"],
         )
-        self.assertEqual([row[0] for row in rows], ["main", "optional", "other"])
-        self.assertNotIn("experimental", [row[0] for row in rows])
+        self.assertEqual([row[0] for row in rows], ["main", "optional", "experimental"])
         self.assertEqual(rows[0][1:3], ("Main Patches", "#00802b"))
         self.assertEqual(rows[1][1:3], ("Optional Patches", "#000000"))
-        self.assertEqual(rows[2][1:3], ("Other Patches", "#000000"))
+        self.assertEqual(rows[2][1:3], ("Experimental", "#b30000"))
         self.assertEqual([setting.id for setting in rows[0][3]], ["core_executable"])
         self.assertEqual([setting.id for setting in rows[1][3]], ["custom_map"])
         self.assertEqual([setting.id for setting in rows[2][3]], ["experimental_feature"])
@@ -344,6 +343,48 @@ class OfflineVF2PatcherGUITests(unittest.TestCase):
                 settings=settings,
                 selected_settings={"blocked_feature"},
             )
+
+    def test_enable_all_leaves_experimental_settings_off(self):
+        """Experimental settings default off and no "all" option turns them on: the command line's
+        --enable-all and the GUI's Enable All leave them off; --enable (or ticking the box) turns one on."""
+        manifest = {
+            "settings": [
+                {"id": "main_feature", "default": True, "category": "main"},
+                {"id": "optional_feature", "default": False, "category": "optional"},
+                {"id": "experimental_feature", "default": False, "category": "experimental"},
+            ]
+        }
+
+        def args(**kw):
+            base = dict(enable_all=False, disable_all=False, enable=None, disable=None)
+            base.update(kw)
+            return patcher.argparse.Namespace(**base)
+
+        _settings, enabled = patcher.resolve_enabled_settings(manifest, args(enable_all=True))
+        self.assertEqual(enabled, {"main_feature", "optional_feature"})
+        _settings, enabled = patcher.resolve_enabled_settings(manifest, args())
+        self.assertEqual(enabled, {"main_feature"})
+        _settings, enabled = patcher.resolve_enabled_settings(
+            manifest, args(enable_all=True, enable=["experimental_feature"]))
+        self.assertEqual(enabled, {"main_feature", "optional_feature", "experimental_feature"})
+
+        class FakeVar:
+            def __init__(self):
+                self.value = None
+
+            def set(self, value):
+                self.value = value
+
+        settings = patcher.manifest_settings(manifest)
+        self.assertTrue(settings["experimental_feature"].experimental)
+        self.assertFalse(settings["optional_feature"].experimental)
+        controller = object.__new__(gui.VF2PatcherGUI)
+        controller.settings = settings
+        controller.setting_vars = {setting_id: FakeVar() for setting_id in settings}
+        controller._bulk_setting_change = mock.MagicMock()
+        gui.VF2PatcherGUI.select_all_settings(controller)
+        self.assertEqual({k: v.value for k, v in controller.setting_vars.items()},
+                         {"main_feature": True, "optional_feature": True, "experimental_feature": False})
 
     def test_explicit_final_playtest_profile_allows_blocked_rows_only_with_profile_flag(self):
         manifest = {
@@ -1400,6 +1441,82 @@ class LabelHeightGuardTests(unittest.TestCase):
         self.assertLess(guard_at, count_at,
                         "the displaylines count must run only for a laid-out label")
         self.assertNotIn("if width < 80:", resize)
+
+
+class ExperimentalSectionAndPageHeightTests(unittest.TestCase):
+    """The real GUI with every shipped setting (the exporter's SETTINGS table, real descriptions).
+
+    The Experimental section shows its heading and warning, Enable All leaves it off, and the scrolled
+    settings page and the main window stay far below Windows' signed 16-bit coordinate limit (32,767 px),
+    past which the Virtual Villagers patcher's window painted blank, even at 200% display scaling.
+    """
+
+    def setUp(self):
+        try:
+            import tkinter as tk
+        except ImportError:  # pragma: no cover - tkinter is part of CPython
+            self.skipTest("tkinter is not available")
+        try:
+            self.root = tk.Tk()
+        except Exception:
+            self.skipTest("no display available for Tk")
+        self.root.withdraw()
+        self.app = gui.VF2PatcherGUI(self.root)
+        self.tmp = tempfile.TemporaryDirectory()
+        sys.path.insert(0, str(ROOT.joinpath("work")))
+        import export_offline_patch_bundle as exporter
+        self.rows = [
+            {key: row[key] for key in ("id", "label", "description", "default", "category")}
+            for row in exporter.SETTINGS
+        ]
+        path = Path(self.tmp.name) / "manifest.json"
+        path.write_text(json.dumps({"manifest_version": 1, "settings": self.rows}), encoding="utf-8")
+        self.app.manifest_var.set(str(path))
+        self.assertTrue(self.app.load_manifest_settings())
+        self.root.update()
+
+    def tearDown(self):
+        self.tmp.cleanup()
+        self.root.destroy()
+
+    def test_the_experimental_section_has_its_heading_and_warning(self):
+        experimental = [row["id"] for row in self.rows if row["category"] == "experimental"]
+        self.assertEqual(experimental, ["up_to_28_children"])
+        labels = [w.cget("text") for w in self.app.settings_inner.winfo_children() if w.winfo_class() == "Label"]
+        self.assertEqual(labels, ["Main Patches", "Optional Patches", "Experimental"])
+        texts = [getattr(w, "_vf2_description_text", "") for w in self.app.description_widgets]
+        warning = "**" + gui.EXPERIMENTAL_WARNING + "**"
+        self.assertIn(warning, texts)
+        self.assertEqual(gui.EXPERIMENTAL_WARNING,
+                         "Experimental: not yet tested in a running game. Back up your saves before using it.")
+        # the warning sits directly under the heading, before the setting
+        self.assertLess(texts.index(warning),
+                        next(i for i, t in enumerate(texts) if t.startswith("up_to_28_children - default off")))
+
+    def test_enable_all_and_defaults_leave_experimental_off(self):
+        self.assertFalse(self.app.setting_vars["up_to_28_children"].get())
+        self.app.select_all_settings()
+        self.root.update()
+        ticked = {k for k, v in self.app.setting_vars.items() if v.get()}
+        self.assertNotIn("up_to_28_children", ticked)
+        everything_else = {row["id"] for row in self.rows if row["category"] != "experimental"}
+        self.assertEqual(ticked, everything_else)
+        self.app.select_default_settings()
+        self.assertFalse(self.app.setting_vars["up_to_28_children"].get())
+        self.app.setting_vars["up_to_28_children"].set(True)      # ticked deliberately
+        self.root.update()
+        self.assertTrue(self.app.setting_vars["up_to_28_children"].get())
+
+    def test_pages_stay_far_below_the_windows_coordinate_limit(self):
+        self.root.deiconify()
+        self.root.update_idletasks()
+        self.app._resize_all_markup_labels()
+        self.root.update_idletasks()
+        settings_page = self.app.settings_inner.winfo_reqheight()
+        main_page = self.root.winfo_reqheight()
+        print(f"settings page {settings_page} px, main page {main_page} px")
+        self.assertLess(settings_page * 2, 16000, settings_page)
+        self.assertLess(main_page * 2, 24000, main_page)
 
 
 if __name__ == "__main__":

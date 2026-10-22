@@ -5,10 +5,13 @@ Family Tree; every child, the 7th to the 28th included, can be chosen to inherit
 Generation. Children the stock save cannot hold are kept in a `.dat` sidecar beside the save (the
 Virtual Villagers patcher's convention); the save format does not change. Twins and triplets near
 the limit are clamped (27 children: a twin or triplet pregnancy has one baby; 26: a triplet pregnancy
-has two), never past 28. Its own companion DLL and its own setting. The request said "off by default
-unless the owner says otherwise"; this repository's standing owner rule is that every patch defaults
-on (`tests/test_export_offline_patch_bundle.py`, EveryPatchDefaultsOn), so it is on by default. One
-line (`"default"` in `SETTINGS`) turns it off by default if the owner prefers.
+has two), never past 28. Its own companion DLL and its own setting. **Experimental** (the owner's
+decision, 2026-10-22): the setting's category is `experimental`, which the GUI shows as its own
+**Experimental** section (red heading, after Optional Patches) with the warning "Experimental: not yet tested in a running game. Back up your saves before using it." It defaults off;
+Enable All (GUI) and `--enable-all` (command line) leave Experimental settings off, and the final
+playtest profile does too, so the player ticks it (or names it with `--enable`) deliberately.
+EveryPatchDefaultsOn (`tests/` and `work/test_export_offline_patch_bundle.py`) exempts the Experimental
+category by rule and still fails if any other patch defaults off.
 
 This was the "Increase Child Limit to 12" workstream, put on indefinite hiatus at B153
 (`docs/REQUEST_LEDGER.md`, `docs/TODO.md`, `docs/discoveries.md` 2026-07-12 and 2026-08-06). The owner
@@ -33,13 +36,10 @@ separately, so its code is different bytes with the same layout (section 4).
 | Next Generation | `CAdoptionScene::CreateNextGenerationCandidates` 0x4034A0, `GetNextCandidate` 0x403900, `HandleMessage` 0x403920 | | clones every recorded child as an adult (`ClonePeepAsAdult`) into six-dword arrays at scene+20h (clone slots) and +38h (source slots), count +50h, cursor +54h; Accept calls StartNextGeneration(scene[+10h], scene[+38h + 4*scene[+54h]]) and deactivates every other household slot |
 
 **On the owner's description sentence.** The patch description carries, as the owner wrote it:
-"Virtual Families 2 can natively support up to 30 villagers per generation; any more will start
-overwriting Family Tree entries and glitch the game." The disassembly agrees that the household is
-30 villager slots. It does not show a 30-villager point at which Family Tree entries are overwritten:
-the Family Tree record holds 2 parents + **6** children per generation, and a 7th child written into
-it would overwrite the next generation's record (that is the stock refusal at count 6). Past 30
-villagers the game does not overwrite anything: `FindEmptySlot` returns -1 and no villager is
-spawned. This difference is reported to the owner, who decides whether to change the wording.
+"Virtual Families 2 natively keeps up to 6 children per generation in its Family Tree, and a household holds at most 30 villagers (2 parents and 28 children). This patch keeps children 7 to 28 in a separate file beside the save, so they never overwrite Family Tree entries; storing more than 6 children in the Family Tree itself would overwrite its entries and glitch the game." It matches the disassembly: the household is 30 villager slots, and the Family Tree record
+holds 2 parents + **6** children per generation; a 7th child written into it would overwrite the next
+generation's record (that is the stock refusal at count 6). Past 30 villagers nothing is overwritten:
+`FindEmptySlot` returns -1 and no villager is spawned.
 
 ## 2. What the patch does
 

@@ -43,8 +43,7 @@ CORE_EXE = os.environ.get("VF2_B200_CORE_EXE")
 KIDS_EXE = os.environ.get("VF2_KIDS_EXE")
 VCVARS = os.environ.get("VF2_VCVARS32")
 DELTAS = (0, 0x1A0000)
-OWNER_SENTENCE = ("Virtual Families 2 can natively support up to 30 villagers per generation; any more will "
-                  "start overwriting Family Tree entries and glitch the game.")
+OWNER_SENTENCE = ('Virtual Families 2 natively keeps up to 6 children per generation in its Family Tree, and a household holds at most 30 villagers (2 parents and 28 children). This patch keeps children 7 to 28 in a separate file beside the save, so they never overwrite Family Tree entries; storing more than 6 children in the Family Tree itself would overwrite its entries and glitch the game.')
 
 
 def core_exe_bytes() -> bytes:
@@ -131,14 +130,16 @@ def test_exporter_setting():
     setting = [s for s in X.SETTINGS if s["id"] == "up_to_28_children"]
     assert len(setting) == 1
     s = setting[0]
-    # on by default: the owner's standing rule in this repository (EveryPatchDefaultsOn)
-    assert s["default"] is True and s["category"] == "optional" and s["label"] == "Up to 28 Children"
+    # Experimental (the owner's decision): off by default, and Enable All leaves it off
+    assert s["default"] is False and s["category"] == "experimental" and s["label"] == "Up to 28 Children"
+    assert ("glitch the game. Experimental: not yet tested in a running game. Back up your saves before using it."
+            in s["description"])
     assert OWNER_SENTENCE in s["description"]
     for needle in ("only the first 6", "28", "twin", "triplet", "Next Generation", "Virtual Families 2 Patcher Data"):
         assert needle.lower() in s["description"].lower(), needle
     assert X.RUNTIME_FLAG_SECTION_BY_SETTING["up_to_28_children"] == ".vf2kids"
     assert "up_to_28_children" in X.SOURCE_BACKED_OPTIONAL_SETTINGS
-    assert "up_to_28_children" in X.FINAL_PLAYTEST_DEFAULT_ON_SETTINGS
+    assert "up_to_28_children" not in X.FINAL_PLAYTEST_DEFAULT_ON_SETTINGS   # Experimental: off there too
     assert X.UP_TO_28_CHILDREN_INI_TEXT == "[Patches]\r\nUpTo28Children=1\r\n"
 
 
