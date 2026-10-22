@@ -110,6 +110,12 @@ class PostAssetPatch:
     requires: tuple[str, ...]
 
 
+# Settings in this category are experimental: they default off, and no "all" option turns them on (the
+# command line's --enable-all, the GUI's Enable All); the player ticks or --enable's each one by name.
+EXPERIMENTAL_CATEGORY = "experimental"
+EXPERIMENTAL_WARNING = "Experimental: not yet tested in a running game. Back up your saves before using it."
+
+
 @dataclass(frozen=True)
 class PatchSetting:
     id: str
@@ -120,6 +126,10 @@ class PatchSetting:
     readiness_status: str | None = None
     readiness_reason: str | None = None
     selection_policy: str | None = None
+
+    @property
+    def experimental(self) -> bool:
+        return (self.category or "main").lower() == EXPERIMENTAL_CATEGORY
 
     @property
     def blocked(self) -> bool:
@@ -1248,7 +1258,8 @@ def resolve_enabled_settings(manifest: dict[str, Any], args: argparse.Namespace)
         enabled.update(profile_default_on)
         enabled.difference_update(profile_default_off)
     elif args.enable_all:
-        enabled = set(settings)
+        # Every setting except the experimental ones, which only --enable turns on.
+        enabled = {setting_id for setting_id, setting in settings.items() if not setting.experimental}
     elif args.disable_all:
         enabled = set()
     else:
@@ -4395,7 +4406,7 @@ def build_parser() -> argparse.ArgumentParser:
     apply_cmd.add_argument("--dry-run", action="store_true", help="Validate only; do not back up or modify files.")
     apply_cmd.add_argument("--enable", action="append", help="Enable a manifest setting. Repeat or comma-separate IDs.")
     apply_cmd.add_argument("--disable", action="append", help="Disable a manifest setting. Repeat or comma-separate IDs.")
-    apply_cmd.add_argument("--enable-all", action="store_true", help="Enable all manifest-declared settings before patching.")
+    apply_cmd.add_argument("--enable-all", action="store_true", help="Enable all manifest-declared settings before patching, except Experimental ones (name those with --enable).")
     apply_cmd.add_argument(
         "--final-playtest-all-enabled",
         action="store_true",

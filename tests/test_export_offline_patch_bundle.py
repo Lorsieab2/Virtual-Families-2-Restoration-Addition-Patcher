@@ -133,11 +133,30 @@ class EveryPatchDefaultsOn(unittest.TestCase):
         "invisible_furniture_transparent_graphics",
     })
 
+    # The Experimental category is exempt by rule, not by name: an
+    # experimental patch (the owner's decision, 2026-10-22: Up to 28
+    # Children) defaults OFF and Enable All leaves it off. Every patch outside
+    # that category must still default on.
+    @staticmethod
+    def experimental_ids():
+        return {row["id"] for row in exporter.SETTINGS
+                if row.get("category") == "experimental"}
+
+    @property
+    def EXCEPTIONS(self):
+        return set(self.SEQUENCING_EXCEPTIONS) | self.experimental_ids()
+
+    def test_experimental_settings_default_off(self):
+        on = sorted(row["id"] for row in exporter.SETTINGS
+                    if row.get("category") == "experimental" and row["default"])
+        self.assertEqual(on, [], "an Experimental setting must default off: %s" % on)
+        self.assertIn("up_to_28_children", self.experimental_ids())
+
     def test_every_setting_defaults_on(self):
         off = sorted(
             row["id"] for row in exporter.SETTINGS
             if not row["default"]
-            and row["id"] not in self.SEQUENCING_EXCEPTIONS
+            and row["id"] not in self.EXCEPTIONS
         )
         self.assertEqual(
             off, [],
@@ -156,17 +175,18 @@ class EveryPatchDefaultsOn(unittest.TestCase):
             row["id"] for row in exporter.SETTINGS if not row["default"]
         }
         self.assertEqual(
-            actual_off, set(self.SEQUENCING_EXCEPTIONS),
+            actual_off, set(self.EXCEPTIONS),
             "the set of default-off settings must be exactly the documented "
-            "sequencing exception -- no undocumented setting may default off, "
-            "and the exception itself must not be flipped on")
+            "sequencing exception and the owner-approved exception -- no "
+            "undocumented setting may default off, and neither exception may "
+            "be flipped on")
 
     def test_the_exception_still_exists_as_a_setting(self):
         # Guards the reverse failure: if the named exception is renamed or
         # removed, the exemption above would silently start excusing nothing
         # and this class would keep passing while the rule went unchecked.
         ids = {row["id"] for row in exporter.SETTINGS}
-        for sid in self.SEQUENCING_EXCEPTIONS:
+        for sid in self.EXCEPTIONS:
             with self.subTest(setting=sid):
                 self.assertIn(
                     sid, ids,
@@ -451,9 +471,12 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
         settings_by_id = {row["id"]: row for row in exporter.SETTINGS}
 
         self.assertNotIn("expand_game_map", settings_by_id)
-        self.assertNotIn(
-            "experimental",
-            {row["category"] for row in exporter.SETTINGS},
+        # B156 removed the old Experimental/Not Working section. The owner brought
+        # an Experimental category back on 2026-10-22 for Up to 28 Children alone
+        # (default off, never ticked by Enable All); nothing else may move there.
+        self.assertEqual(
+            {row["id"] for row in exporter.SETTINGS if row["category"] == "experimental"},
+            {"up_to_28_children"},
         )
         for setting_id in (
             "allow_older_pregnancies",

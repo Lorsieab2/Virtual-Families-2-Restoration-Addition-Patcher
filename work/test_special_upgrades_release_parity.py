@@ -636,8 +636,12 @@ class SpecialUpgradesReleaseParityTests(unittest.TestCase):
         self.assertIn("static bool VF2IsBehaviorSixChildPrivateTimeMarriage()", same_sex)
         self.assertIn("if (firstGender == secondGender) return false;", same_sex)
         self.assertIn("FamilyTree.GetCurrentFamily()", same_sex)
-        self.assertIn("family + 0x1B4", same_sex)
-        self.assertIn(">= 6", same_sex)
+        # "The family is full" is EmptyOffspringSlots() <= 0: stock that is
+        # 6 - the current record's +0x1B4 count (the same test as +0x1B4 >= 6),
+        # and with Up to 28 Children it is the 28 limit the companion DLL
+        # enforces there. The raw six-child read must not come back.
+        self.assertIn("return FamilyTree.EmptyOffspringSlots() <= 0;", same_sex)
+        self.assertNotIn("*(int *)(family + 0x1B4) >= 6", same_sex)
         # The opposite-sex drop route gates on Behavior Patches alone: the
         # classifier only runs behind the native no-room gate, so the family
         # is already full. It must not re-read the +0x1B4 count there.

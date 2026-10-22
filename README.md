@@ -109,19 +109,19 @@ checked against `manifest.json`, the release notes and the owner's confirmed
 play reports; superseded claims are marked rather than deleted.*
 
 The GUI reads its checkboxes from the shipped manifest, so the exact list follows
-the release you downloaded. B201's bundle offers 37 settings, grouped the way
-the GUI groups them: the 36 offered unchanged from B198 through B200, plus
-**Time Controls**.
+the release you downloaded. The next bundle offers 38 settings, grouped the way
+the GUI groups them: the 37 that B201 offers, plus **Up to 28 Children** (added
+after B201, not yet in a release).
 
 That number is not simply the count of settings the patcher defines, which is
-38. The settings list drops any optional setting that has no packaged source
+39. The settings list drops any optional setting that has no packaged source
 assets -- in B201, as in B180, the two named just below -- and the export adds
 one setting of its own, `core_assets`, which copies the support files and
-generated assets that are not tied to a single feature. So 38 defined, less 2
-without packaged assets, plus 1 generated, is the 37 the GUI shows. (Before
-Time Controls existed the same sum was 37 - 2 + 1: the B198 through B200
-bundles offer 36 settings, and before Fix Vanilla Game Bugs the B197
-bundle offered 35.)
+generated assets that are not tied to a single feature. So 39 defined, less 2
+without packaged assets, plus 1 generated, is the 38 the GUI shows. (Before
+Up to 28 Children existed the same sum was 38 - 2 + 1: B201's bundle offers
+37 settings; before Time Controls the B198 through B200 bundles offered 36,
+and before Fix Vanilla Game Bugs the B197 bundle offered 35.)
 
 **A missing checkbox does not mean a missing feature.** That filter asks only
 whether a setting has files to copy, so a feature built as *code* rather than
@@ -210,6 +210,17 @@ release bundle, like almost everything else)
 - **Allow Same-Sex Marriage** (no settings row; see [What's included](#whats-included)) - flips only the spawned candidate's gender field when the in-game **Enable Same-Sex Marriage** Special Upgrade is on; same-sex spouses keep native private romantic time and never become pregnant. **Corrected 2026-09-29:** listed here before as a `.vf2same` one-byte runtime flag. It is not one -- its state is a byte saved with the game, turned on and off by the Cheat Upgrades row.
 - **Older Villager Mortality Curve** (`.vf2mort`) - replaces only the annual old-age death roll with a calibrated curve that accelerates past effective age 110. Active food groups still subtract 0-4 effective years. No hard maximum age.
 - **Store Scroll Bar** (`.vf2scrl`) (on) - adds a scroll bar to the store.
+- **Up to 28 Children** (`.vf2kids`, in the patcher's own **Experimental** section (red heading, under Optional Patches, with the warning "Experimental: not yet tested in a running game. Back up your saves before using it."), off by default; Enable All and `--enable-all` leave it off, so it is only ever ticked deliberately; added after B201, not yet in a release) - one
+  generation may have up to 28 children instead of 6. Only the first 6 appear in the Family Tree, as
+  before; every child, the 7th to the 28th included, can be chosen to inherit the house in Next
+  Generation. Twins and triplets never take a family past 28: with 27 children a twin or triplet
+  pregnancy has one baby, with 26 a triplet pregnancy has two, at 28 no more babies come, and the
+  normal twin and triplet chances are unchanged while there is room. Children 7 to 28 are remembered in
+  a small file beside each save (`Virtual Families 2 Patcher Data\Children` in the save folder); the
+  save file itself is not changed. Virtual Families 2 natively keeps up to 6 children per generation in its Family Tree, and a household holds at most 30 villagers (2 parents and 28 children). This patch keeps children 7 to 28 in a separate file beside the save, so they never overwrite Family Tree entries; storing more than 6 children in the Family Tree itself would overwrite its entries and glitch the game. Experimental: not yet tested in a running game. Back up your saves before using it. A companion DLL
+  (`vf2kids_b200.dll`) in the Virtual Families 2 Patcher Files folder does the work; with the setting
+  off it is not installed and the executable never loads it. **Not live tested yet** -- see
+  `docs/b200-up-to-28-children.md` for the evidence and what is not covered.
 
 **Asset and UI mods**
 

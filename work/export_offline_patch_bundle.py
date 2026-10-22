@@ -42,6 +42,7 @@ FINAL_PLAYTEST_DEFAULT_ON_SETTINGS = frozenset({
     "ai_generated_bathroom2_renovations",
     "time_controls",
 })
+# up_to_28_children is Experimental: the final playtest profile leaves it off too, like Enable All.
 # Empty by design. The owner's standing instruction is that a playtest ships
 # with every patch on -- "make sure your playtests ship and compile with every
 # single patch on. you have wasted too much of my life giving me playtests that
@@ -281,6 +282,7 @@ SOURCE_BACKED_OPTIONAL_SETTINGS = {
     "no_ai_icons",
     "ai_generated_bathroom2_renovations",
     "time_controls",
+    "up_to_28_children",
 }
 EXECUTABLE_OVERLAY_OPTIONAL_SETTINGS = {
     "island_events",
@@ -460,6 +462,13 @@ SETTINGS = [
         "description": "Adds a Time Controls button to the Settings screen, left of Done. It opens a window to pause and resume the game, choose Slow, Normal or Fast (the game's own speeds) or the extra 5x and 10x, and fast-forward everyone at home by three years with Time Warp (birthdays, leaving home and old age all still happen normally). The chosen speed is never saved: a saved village always comes back at normal speed, so a village saved at 10x does not age years while the game is closed. Installs a small companion DLL in the Virtual Families 2 Patcher Files folder next to the game; unticking the setting removes it and the game is the unmodified B201 again.",
         "default": True,
         "category": "optional",
+    },
+    {
+        "id": "up_to_28_children",
+        "label": "Up to 28 Children",
+        "description": "Lets one generation have up to 28 children instead of 6. Only the first 6 children appear in the Family Tree, exactly as before; every child, including the 7th to the 28th, can be chosen to inherit the house in Next Generation. Twins and triplets never take a family past 28: with 27 children a twin or triplet pregnancy has one baby, with 26 a triplet pregnancy has two, and at 28 no more babies come (the normal twin and triplet chances are unchanged while there is room). Children 7 to 28 are remembered in a small file beside each save (the Virtual Families 2 Patcher Data\\Children folder in the save folder); the save file itself is not changed. Virtual Families 2 natively keeps up to 6 children per generation in its Family Tree, and a household holds at most 30 villagers (2 parents and 28 children). This patch keeps children 7 to 28 in a separate file beside the save, so they never overwrite Family Tree entries; storing more than 6 children in the Family Tree itself would overwrite its entries and glitch the game. Experimental: not yet tested in a running game. Back up your saves before using it. Installs a small companion DLL in the Virtual Families 2 Patcher Files folder next to the game; unticking the setting removes it and the game is unmodified again.",
+        "default": False,   # Experimental: default off, never ticked by Enable All
+        "category": "experimental",
     },
     {
         "id": "mobile_sound_assets",
@@ -996,6 +1005,7 @@ RUNTIME_FLAG_SECTION_BY_SETTING = {
     "older_villager_mortality": ".vf2mort",
     "fix_vanilla_game_bugs": ".vf2bugs",
     "time_controls": ".vf2time",
+    "up_to_28_children": ".vf2kids",
     "same_sex_marriage": ".vf2same",
     "holiday_furniture": ".vf2goal",
     "mobile_furniture_behaviors": ".vf2beh",
@@ -1202,6 +1212,88 @@ def time_controls_asset_patches(
             "remove_when_disabled": True,
             "requires": ["core_executable", "time_controls"],
             "note": note + " Disabling Time Controls removes only this exact file.",
+        })
+    return records
+
+
+def up_to_28_children_post_asset_patches(
+    executable_sources: list[Path],
+    *,
+    output_exe_name: str,
+    build_manifest_data: dict[str, Any],
+) -> list[dict[str, Any]]:
+    contract = build_manifest_data.get("UpTo28Children")
+    if not isinstance(contract, dict):
+        return []
+    runtime_flag = contract.get("runtime_flag")
+    if not isinstance(runtime_flag, dict):
+        raise ValueError("Build manifest has an invalid UpTo28Children contract.")
+    return setting_runtime_flag_post_asset_patches(
+        executable_sources,
+        output_exe_name=output_exe_name,
+        runtime_flag=runtime_flag,
+        section_name=RUNTIME_FLAG_SECTION_BY_SETTING["up_to_28_children"],
+        setting_id="up_to_28_children",
+        feature_label="Up to 28 Children",
+    )
+
+
+UP_TO_28_CHILDREN_DLL_NAME = "vf2kids_b200.dll"
+UP_TO_28_CHILDREN_INI_NAME = "vf2kids.ini"
+UP_TO_28_CHILDREN_INI_TEXT = "[Patches]\r\nUpTo28Children=1\r\n"
+
+
+def up_to_28_children_asset_patches(
+    bundle_dir: Path,
+    dll_path: Path | None,
+    build_manifest_data: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """The companion DLL and its one-line ini, placed beside the game only while Up to 28 Children is on.
+
+    The executable carries a dormant loader (.vf2kids byte, 0 in every build); the post-asset toggle
+    sets it to 1 and these two files are what that loader loads (after the Time Controls DLL). With
+    the setting off the files are removed and the byte stays 0: the game never looks for the DLL.
+    """
+    contract = build_manifest_data.get("UpTo28Children")
+    if not isinstance(contract, dict):
+        return []
+    if (contract.get("companion_dll") != UP_TO_28_CHILDREN_DLL_NAME
+            or contract.get("companion_ini") != UP_TO_28_CHILDREN_INI_NAME):
+        raise ValueError("Build manifest's UpTo28Children contract names another companion file.")
+    if dll_path is None:
+        raise ValueError(
+            "This build has the Up to 28 Children loader; pass --up-to-28-children-dll with the built "
+            f"{UP_TO_28_CHILDREN_DLL_NAME} (runtime\\native\\build_b200kids.bat) or the setting would do nothing."
+        )
+    if not dll_path.is_file() or dll_path.name != UP_TO_28_CHILDREN_DLL_NAME:
+        raise ValueError(f"--up-to-28-children-dll must be an existing {UP_TO_28_CHILDREN_DLL_NAME}: {dll_path}")
+    require_vf2_pe32_x86(dll_path, label="Up to 28 Children DLL")
+    data = dll_path.read_bytes()
+    if b"B200Kids_Startup" not in data or b"B200Kids_TestPlan" in data:
+        raise ValueError(
+            "The Up to 28 Children DLL must be the shipped build (exports B200Kids_Startup, no test entry points)."
+        )
+    payload_dir = bundle_dir / "payload" / "UpTo28Children"
+    payload_dir.mkdir(parents=True, exist_ok=True)
+    staged_dll = payload_dir / UP_TO_28_CHILDREN_DLL_NAME
+    staged_dll.write_bytes(data)
+    staged_ini = payload_dir / UP_TO_28_CHILDREN_INI_NAME
+    staged_ini.write_bytes(UP_TO_28_CHILDREN_INI_TEXT.encode("ascii"))
+    records: list[dict[str, Any]] = []
+    for staged, note in (
+        (staged_dll, "Up to 28 Children companion DLL, loaded by the executable's dormant .vf2kids loader."),
+        (staged_ini, "Up to 28 Children switch (UpTo28Children=1) read by the companion DLL."),
+    ):
+        records.append({
+            "file_path": f"{TIME_CONTROLS_PATCHER_FOLDER}/{staged.name}",
+            "source_path": relative_posix(staged.relative_to(bundle_dir)),
+            "source_sha256": sha256_file(staged),
+            "source_size": staged.stat().st_size,
+            "overwrite_existing": True,
+            "allow_missing_target": True,
+            "remove_when_disabled": True,
+            "requires": ["core_executable", "up_to_28_children"],
+            "note": note + " Disabling Up to 28 Children removes only this exact file.",
         })
     return records
 
@@ -1532,6 +1624,11 @@ def b152_runtime_flag_post_asset_patches(
             build_manifest_data=build_manifest_data,
         ),
         *time_controls_post_asset_patches(
+            executable_sources,
+            output_exe_name=output_exe_name,
+            build_manifest_data=build_manifest_data,
+        ),
+        *up_to_28_children_post_asset_patches(
             executable_sources,
             output_exe_name=output_exe_name,
             build_manifest_data=build_manifest_data,
@@ -4559,6 +4656,11 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
             Path(args.time_controls_dll).resolve() if getattr(args, "time_controls_dll", None) else None,
             build_manifest_data,
         ))
+        asset_patches.extend(up_to_28_children_asset_patches(
+            bundle_dir,
+            Path(args.up_to_28_children_dll).resolve() if getattr(args, "up_to_28_children_dll", None) else None,
+            build_manifest_data,
+        ))
     # Invisible Workspace Upgrades is emitted AFTER the misc/optional visual
     # records on purpose. Records that share a target with distinct requires
     # are a layered override and the patcher applies them in manifest order,
@@ -5123,6 +5225,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--mobile-sound-assets-dir", help="Folder containing all 67 pinned mobile behavior sound .ogg files to place behind the mobile_sound_assets setting.")
     parser.add_argument("--invisible-upgrades-dir", help="Folder containing invisible upgrade .png files to place in payload/OptionalVisualMods/Invisible Upgrades and target to Images/Upgrades.")
     parser.add_argument("--original-upgrades-dir", help="Folder containing original upgrade .png files to bundle as restore/reference sources for Invisible Upgrades.")
+    parser.add_argument("--up-to-28-children-dll", help="The built vf2kids_b200.dll (runtime\\native\\build_b200kids.bat) to ship behind the up_to_28_children setting. Required when the build has the Up to 28 Children loader.")
     parser.add_argument("--time-controls-dll", help="The built vf2time_b200.dll (runtime\\native\\build_b200time.bat) to ship behind the time_controls setting. Required when the build has the Time Controls loader.")
     parser.add_argument("--generation-locks-dir", help="Folder containing lock_02.png through lock_30.png; defaults to bundled workspace assets.")
     parser.add_argument("--include-byte-patches", action="store_true", help="Diff vanilla EXE against patched EXE into byte patch records.")
