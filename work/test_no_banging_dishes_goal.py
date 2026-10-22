@@ -99,6 +99,11 @@ class TheLabel(unittest.TestCase):
         emitted = patcher.PATCHED / "vf2_spontaneous_behaviors.cpp"
         if not emitted.is_file():
             self.skipTest("generator output not present; run the generator first")
+        if not patcher.ENABLE_BEHAVIOR_PATCHES:
+            # patch_spontaneous_behaviors, which emits the scold award cases,
+            # runs only when VF2_ENABLE_BEHAVIOR_PATCHES is on; without it the
+            # unit is a stub by design.
+            self.skipTest("VF2_ENABLE_BEHAVIOR_PATCHES=0: this build has no scold award cases by design")
         text = emitted.read_text(encoding="utf-8", errors="replace")
         case = re.search(
             r'if \(VF2RawBehaviorLabelEquals\(label, "Banging dishes!"\)\) \{ '
