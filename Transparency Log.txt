@@ -233,5 +233,12 @@ Changelog
 - B104 patcher refresh: Keeps OptionalVisualMods, Original Virtual Families 2
   Assets, and OptionalSongMods as read-only/copy-only payload source folders.
 
+- Up to 28 Children (after B201, on by default): one generation may have up
+  to 28 children; only the first 6 appear in the Family Tree and every child
+  can inherit the house. Children 7 to 28 are remembered in a small file
+  beside each save; the save file itself is not changed. Virtual Families 2 can natively support up to 30 villagers per generation; any more will start overwriting Family Tree entries and glitch the game.
+  Installs vf2kids_b200.dll in the Virtual Families 2 Patcher Files folder
+  only while the setting is on.
+
 Have fun! -Lorsieab2 :)
 

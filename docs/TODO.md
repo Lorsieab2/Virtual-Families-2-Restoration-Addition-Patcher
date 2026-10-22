@@ -9,9 +9,13 @@ must remain visible as Needs source audit; it must not be silently omitted.
 
 - VF3 Phone: do not implement or research until the user reopens the request.
 - Races: do not implement or research until the user reopens the request.
-- Increase Child Limit to 12: do not raise the native limit or pursue the
-  required persistence, Family Tree, candidate-array, or compatibility work
-  until the user reopens the request.
+- Increase Child Limit: reopened by the owner on 2026-10-21 as Up to 28
+  Children and built as a companion DLL (branch vf2-28-children,
+  `docs/b200-up-to-28-children.md`). The native limit is still not raised: the
+  stock six-child records stay as they are and children 7..28 live in a sidecar.
+  Live test outstanding. (Superseded: "do not raise the native limit or pursue
+  the required persistence, Family Tree, candidate-array, or compatibility work
+  until the user reopens the request.")
 
 ## Highest Priority
 
@@ -826,6 +830,11 @@ must remain visible as Needs source audit; it must not be silently omitted.
   Cane, placeholders, and collected ornaments are upright and aligned.
 
 ## B153 Experimental Increase Child Limit — indefinite hiatus
+
+**Reopened 2026-10-21 as Up to 28 Children** (see `docs/b200-up-to-28-children.md`). The owner asked
+for 28 children with only the first 6 in the Family Tree, so the 12-child Family Tree grid below is not
+needed; the persistence, candidate and birth items are done in the companion DLL. The original list is
+kept for the record.
 
 The user placed this entire workstream on indefinite hiatus. The audit below
 is retained as reference evidence only; do not implement or test it unless the

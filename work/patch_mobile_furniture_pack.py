@@ -461,6 +461,20 @@ TIME_CONTROLS_GET_CALL_RELOCATION = 0x27   # the first call in theGame::Init
 TIME_CONTROLS_PATCHER_FOLDER = "Virtual Families 2 Patcher Files"
 TIME_CONTROLS_DLL_NAME = "vf2time_b200.dll"
 TIME_CONTROLS_INI_NAME = "vf2time.ini"
+# "Up to 28 Children" (after B201): the companion DLL vf2kids_b200.dll (runtime/native/
+# b200kids). One dormant byte; zero never loads the DLL. It rides the same
+# theGame::Init wrapper as Time Controls and is loaded after it, once. The DLL
+# installs nothing unless its own pins match and vf2kids.ini says
+# UpTo28Children=1. .vf2kidt is a small table the DLL keeps current (the extra
+# children's household slots); generated code reads it only while the byte is 1.
+UP_TO_28_CHILDREN_SETTING = "up_to_28_children"
+UP_TO_28_CHILDREN_FLAG_SECTION = ".vf2kids"
+UP_TO_28_CHILDREN_FLAG_SYMBOL = "_gVF2UpTo28Children"
+UP_TO_28_CHILDREN_TABLE_SECTION = ".vf2kidt"
+UP_TO_28_CHILDREN_TABLE_SYMBOL = "_gVF2ExtraChildrenTable"
+UP_TO_28_CHILDREN_DLL_NAME = "vf2kids_b200.dll"
+UP_TO_28_CHILDREN_INI_NAME = "vf2kids.ini"
+UP_TO_28_CHILDREN_STARTUP = "B200Kids_Startup"
 OLDER_MORTALITY_HELPER_SYMBOL = "_VF2RollOlderVillagerMortality"
 LONGEVITY_AGE_HELPER_SYMBOL = "_VF2AwardLongevityGoals"
 LONGEVITY_LOAD_HELPER_SYMBOL = "@VF2VillagerLoadStateAndReconcileLongevity@12"
@@ -15995,11 +16009,66 @@ static void VF2LoadTimeControlsDll() {
     if (startup) startup();
 }
 
+// Up to 28 Children loader (see UP_TO_28_CHILDREN_* in the generator). Zero =
+// never loads the companion DLL. It is loaded by the same wrapper, after the
+// Time Controls DLL, once. .vf2kidt is the DLL's table of the extra children's
+// household slots (children 7..28 of the current generation, which the stock
+// six-child Family Tree record cannot hold); it is read below only while the
+// byte is 1, and the DLL fills it only after proving its own pins.
+#pragma section(".vf2kids", read, write)
+extern "C" __declspec(allocate(".vf2kids"))
+volatile unsigned char gVF2UpTo28Children = 0;
+
+struct VF2ExtraChildrenTable {
+    unsigned magic;
+    unsigned version;
+    int count;
+    int slots[22];
+};
+#pragma section(".vf2kidt", read, write)
+extern "C" __declspec(allocate(".vf2kidt"))
+volatile VF2ExtraChildrenTable gVF2ExtraChildrenTable = {
+    0x544B3256u, 1u, 0,
+    {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1}
+};
+
+static void VF2LoadUpTo28ChildrenDll() {
+    unsigned short path[512];
+    unsigned long length = GetModuleFileNameW(0, path, 400);
+    if (length == 0 || length >= 400) return;
+    unsigned long cut = length;
+    while (cut > 0 && path[cut - 1] != 92) --cut;
+    if (cut == 0) return;
+    const char *tail = "__VF2_UP_TO_28_CHILDREN_RELATIVE_PATH__";
+    unsigned long out = cut;
+    for (const char *c = tail; *c; ++c) path[out++] = (unsigned short)(unsigned char)*c;
+    path[out] = 0;
+    void *module = LoadLibraryW(path);
+    if (!module) return;
+    void (__cdecl *startup)() = (void (__cdecl *)())GetProcAddress(module, "B200Kids_Startup");
+    if (startup) startup();
+}
+
+// Is this household slot one of the DLL's extra children (7..28)? Always false
+// while the byte is 0 or the DLL has not proved itself (count stays 0).
+static bool VF2IsExtraChildSlot(int slot) {
+    if (gVF2UpTo28Children != 1) return false;
+    if (gVF2ExtraChildrenTable.magic != 0x544B3256u || gVF2ExtraChildrenTable.version != 1u) return false;
+    int count = gVF2ExtraChildrenTable.count;
+    if (count < 0) count = 0;
+    if (count > 22) count = 22;
+    for (int i = 0; i < count; ++i) {
+        if (gVF2ExtraChildrenTable.slots[i] == slot) return true;
+    }
+    return false;
+}
+
 extern "C" void *__cdecl VF2GameStateGetAfterTimeControlsLoad() {
     static bool tried = false;
     if (!tried) {
         tried = true;
         if (gVF2TimeControls == 1) VF2LoadTimeControlsDll();
+        if (gVF2UpTo28Children == 1) VF2LoadUpTo28ChildrenDll();
     }
     return theGameState::Get();
 }
@@ -16168,7 +16237,9 @@ static bool VF2IsCurrentGenerationChild(CVillager *villager) {
         unsigned char *record = family + 0x1B8 + child * 0xD8;
         if (record[0x1A] && *(int *)(record + 0x28) == peepId) return true;
     }
-    return false;
+    // Up to 28 Children: children 7..28 are not in the six-child record; the
+    // companion DLL lists their slots. False whenever the setting is off.
+    return VF2IsExtraChildSlot(peepId);
 }
 
 // The couple as the family tree actually records them, with no fallback.
@@ -16462,12 +16533,14 @@ static bool VF2IsBehaviorSixChildPrivateTimeMarriage() {
     // state, in exchange for nothing.
     if (firstGender == secondGender) return false;
 
-    // CFamilyTree::EmptyOffspringSlots and AddOffspring use this native
-    // current-generation field for the six-child capacity check.
+    // "The family is full" is exactly what CFamilyTree::EmptyOffspringSlots
+    // answers: stock it is 6 - the current record's +0x1B4 child count (the
+    // field AddOffspring caps at 6), so this is the stock count >= 6 test;
+    // with Up to 28 Children it is the 28-child limit the DLL enforces there.
     unsigned char *family =
         (unsigned char *)FamilyTree.GetCurrentFamily();
     if (!family) return false;
-    return *(int *)(family + 0x1B4) >= 6;
+    return FamilyTree.EmptyOffspringSlots() <= 0;
 }
 
 extern "C" int __fastcall VF2ClassifyRomanticSpouseDrop(
@@ -18464,6 +18537,10 @@ extern "C" void __cdecl VF2ApplyVisibleSpecialUpgrade(int itemId) {
     special_upgrade_helper_cpp = special_upgrade_helper_cpp.replace(
         "__VF2_MORTALITY_HAZARD_ARRAY__",
         mortality_hazards_cpp,
+    )
+    special_upgrade_helper_cpp = special_upgrade_helper_cpp.replace(
+        "__VF2_UP_TO_28_CHILDREN_RELATIVE_PATH__",
+        TIME_CONTROLS_PATCHER_FOLDER + "\\\\" + UP_TO_28_CHILDREN_DLL_NAME,
     )
     special_upgrade_helper_cpp = special_upgrade_helper_cpp.replace(
         "__VF2_TIME_CONTROLS_RELATIVE_PATH__",
@@ -25749,6 +25826,57 @@ def patch_time_controls_loader(manifest):
         "companion_dll": TIME_CONTROLS_DLL_NAME,
         "companion_ini": TIME_CONTROLS_INI_NAME,
         "flag_off": "the DLL is never loaded; theGameState::Get() is called exactly as in the stock Init",
+    }
+
+
+def patch_up_to_28_children_manifest(manifest):
+    """Up to 28 Children: the dormant .vf2kids byte and the .vf2kidt table are
+    compiled into every executable (special upgrade helper C++); the loader is
+    the Time Controls wrapper on theGame::Init's first call, which loads the
+    kids DLL after the Time Controls DLL. Requires patch_time_controls_loader."""
+    if "TimeControls" not in manifest:
+        raise RuntimeError("Up to 28 Children rides the Time Controls loader; patch it first")
+    manifest["UpTo28Children"] = {
+        "status": "dormant loader installed in every executable",
+        "offline_patcher_setting": UP_TO_28_CHILDREN_SETTING,
+        "category": "optional",
+        "default": True,
+        "hook": (
+            "theGame::Init's first call (theGameState::Get) -> "
+            "VF2GameStateGetAfterTimeControlsLoad, which loads "
+            f"{TIME_CONTROLS_PATCHER_FOLDER}\\{UP_TO_28_CHILDREN_DLL_NAME} once when the byte is 1, "
+            "after the Time Controls DLL"
+        ),
+        "runtime_flag": {
+            "symbol": UP_TO_28_CHILDREN_FLAG_SYMBOL,
+            "source_section": UP_TO_28_CHILDREN_FLAG_SECTION,
+            "size": 1,
+            "default": "00",
+            "enabled": "01",
+            "linked_location_status": "pending_link_metadata",
+        },
+        "shared_table": {
+            "symbol": UP_TO_28_CHILDREN_TABLE_SYMBOL,
+            "source_section": UP_TO_28_CHILDREN_TABLE_SECTION,
+            "layout": "magic 0x544B3256, version 1, count, 22 household slots",
+            "readers": ["VF2IsCurrentGenerationChild (same-sex marriage pair fallback)"],
+            "writer": UP_TO_28_CHILDREN_DLL_NAME,
+        },
+        "generated_code": {
+            "VF2IsBehaviorSixChildPrivateTimeMarriage": (
+                "family full = FamilyTree.EmptyOffspringSlots() <= 0 "
+                "(stock: 6 - current +0x1B4, the same test as +0x1B4 >= 6)"
+            ),
+            "VF2IsCurrentGenerationChild": "also true for a slot in the .vf2kidt table while the byte is 1",
+        },
+        "companion_dll": UP_TO_28_CHILDREN_DLL_NAME,
+        "companion_ini": UP_TO_28_CHILDREN_INI_NAME,
+        "startup_export": UP_TO_28_CHILDREN_STARTUP,
+        "children_per_generation": 28,
+        "family_tree_children_shown": 6,
+        "sidecar": "<save folder>\\Virtual Families 2 Patcher Data\\Children\\<save file>.dat",
+        "save_format": "unchanged",
+        "flag_off": "the DLL is never loaded and the table is never read: the game is the unmodified build",
     }
 
 
@@ -41754,6 +41882,8 @@ def main():
     patch_fix_vanilla_game_bugs(manifest)
     # Time Controls (.vf2time, loads the companion DLL when the patcher sets it).
     patch_time_controls_loader(manifest)
+    # Up to 28 Children (.vf2kids; the same loader loads its DLL after Time Controls).
+    patch_up_to_28_children_manifest(manifest)
     # Invisible furniture counts as its stock donor where stock code tests
     # the donor's item id (every executable).
     patch_invisible_furniture_parity(manifest)

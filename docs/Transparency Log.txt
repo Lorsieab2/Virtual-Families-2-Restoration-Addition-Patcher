@@ -720,6 +720,28 @@ B153 Increase Child Limit native audit
   coordinated persistence, UI, and candidate routes pass save/reload and
   generation-transition tests.
 
+Up to 28 Children (companion DLL, after B201; not live tested)
+---------------------------------------------------------------
+
+- The owner reopened the B153 child-limit request as "Up to 28 Children": up to
+  28 children per generation, only the first 6 in the Family Tree, every child
+  able to inherit the house. Setting up_to_28_children, on by default
+  (the owner's rule: every patch defaults on).
+- Virtual Families 2 can natively support up to 30 villagers per generation; any more will start overwriting Family Tree entries and glitch the game.
+  (The owner's wording, used as written in the patch description. The
+  disassembly shows the household is 30 villager slots and the Family Tree
+  record holds 2 parents + 6 children; a 7th child written into it would
+  overwrite the next generation's record. See docs/b200-up-to-28-children.md.)
+- The stock six-child records, the save file and its format are unchanged.
+  Children 7..28 are remembered by vf2kids_b200.dll in
+  "<save folder>\Virtual Families 2 Patcher Data\Children\<save file>.dat",
+  written atomically after each save and bound to that save file by a hash.
+- Twins and triplets are clamped by the game's own rule: Impregnate asks
+  EmptyOffspringSlots first, and the DLL makes it min(28 - children so far,
+  free household slots), so 27 children allow one baby and 26 allow two.
+- Static evidence (capstone + pefile) and emulated evidence (the real DLL with
+  the real game code under unicorn) only. No live test.
+
 B153 default-off native debugger input milestone
 -------------------------------------------------
 

@@ -1179,6 +1179,17 @@ hotspot on the title screen, and the title screen's refresh of the player name,
 Manage Games button and Play/Continue label each time it is shown. Unticked,
 every site runs the stock instructions it displaced.
 
+up_to_28_children (Up to 28 Children, Optional, on by default; after B201) uses the same
+exact-SHA byte toggle, through .vf2kids, plus two asset records (vf2kids_b200.dll and vf2kids.ini,
+UpTo28Children=1, in "Virtual Families 2 Patcher Files"). The loader is the Time Controls wrapper on
+theGame::Init's first call, which loads this DLL after the Time Controls DLL, once, only when .vf2kids
+is 1. The DLL lets a generation have up to 28 children (the first 6 in the Family Tree as before, all
+28 offered in Next Generation, twins and triplets clamped at the limit) and keeps children 7..28 in
+"<save folder>\Virtual Families 2 Patcher Data\Children\<save file>.dat"; the save format does not
+change. Virtual Families 2 can natively support up to 30 villagers per generation; any more will start overwriting Family Tree entries and glitch the game. Exporting needs the shipped DLL: --up-to-28-children-dll
+runtime\build\vf2kids_b200.dll (runtime\native\build_b200kids.bat). Design, pins and evidence:
+docs/b200-up-to-28-children.md.
+
 time_controls (Time Controls, Optional, on by default; B201) uses the same exact-SHA
 byte toggle, through .vf2time, plus two asset records. Every B201 executable
 carries a dormant loader: theGame::Init's first call (theGameState::Get) goes
