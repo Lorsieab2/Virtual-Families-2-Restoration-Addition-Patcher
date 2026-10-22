@@ -73,6 +73,19 @@ def main() -> int:
     parser.add_argument("--asset-mode", default="additive", choices=["additive", "all", "full"],
                         help="additive (default) ships every addition; full also "
                              "redistributes the untouched base game")
+    # The companion DLLs the dormant .vf2time / .vf2kids loaders load. The
+    # exporter refuses a build that has a loader but no DLL, so a release made
+    # without these flags failed outright (B201 needed a hand edit here).
+    # Default: the release builds in runtime/build (build_b200time.bat,
+    # build_b200kids.bat). Each setting keeps the behaviour the exporter's
+    # catalog gives it (Time Controls a normal patch, Up to 28 Children
+    # Experimental, off by default); this script only supplies the files.
+    parser.add_argument("--time-controls-dll",
+                        default=str(ROOT / "runtime" / "build" / "vf2time_b200.dll"),
+                        help="Built vf2time_b200.dll shipped behind the time_controls setting")
+    parser.add_argument("--up-to-28-children-dll",
+                        default=str(ROOT / "runtime" / "build" / "vf2kids_b200.dll"),
+                        help="Built vf2kids_b200.dll shipped behind the up_to_28_children setting")
     args = parser.parse_args()
 
     outputs = ROOT / "outputs"
@@ -139,6 +152,15 @@ def main() -> int:
         "--name", args.release,
         "--force",
     ]
+    # Always passed; a missing file is left to the exporter, which names it
+    # ("pass --time-controls-dll ...") rather than ship a setting that does
+    # nothing.
+    for flag, value in (("--time-controls-dll", args.time_controls_dll),
+                        ("--up-to-28-children-dll", args.up_to_28_children_dll)):
+        if flag not in flags:
+            print(f"exporter has no {flag}; the companion DLL would be absent", file=sys.stderr)
+            return 1
+        argv += [flag, str(Path(value).resolve())]
     unwired = []
     for v in variants:
         if v in ("core", "final_all_enabled"):
