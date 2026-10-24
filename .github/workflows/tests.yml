@@ -72,7 +72,18 @@ jobs:
         # -rs reports skipped tests with their reason, so a test that silently
         # stops running because its guard started matching is visible here
         # instead of looking like a pass.
-        run: python -m pytest tests/ -v -rs --junitxml=junit-${{ matrix.os }}.xml
+        #
+        # --release: CI runs the release-only tests too (scripts/release_only.py),
+        # so making a test release-only never removes it from this check. On a
+        # runner they skip anyway for want of Visual Studio and the game
+        # executables, and say so.
+        #
+        # One job, not shards: this step takes about 55 s of a 1.5-minute run,
+        # and a second runner would spend more than that on its own setup. The
+        # files run here are exactly the tests/ part of the local parallel
+        # runner (`python scripts/run_tests_parallel.py --list --suite tests`;
+        # tests/test_parallel_runner.py pins the two to the same list).
+        run: python -m pytest tests/ --release -v -rs --junitxml=junit-${{ matrix.os }}.xml
 
       - name: Upload test results
         # Upload on failure too -- that is when the XML is most worth having.
