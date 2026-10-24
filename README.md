@@ -728,6 +728,19 @@ binary-contract tests:
 python -m unittest work.test_offline_vf2_patcher work.test_export_offline_patch_bundle work.test_offline_vf2_patcher_gui work.test_patch_mobile_furniture_pack
 ```
 
+To run both suites in parallel (one pytest process per file, 12 at a time; failures are re-run alone and only
+those that still fail count):
+
+```powershell
+python scripts\run_tests_parallel.py              # ordinary run: the slow release-only tests skip
+python scripts\run_tests_parallel.py --release    # the run before a release must use --release
+```
+
+The release-only tests are listed in `scripts/release_only.py`; plain `pytest` skips them too unless given
+`--release` (or `VF2_RELEASE=1`). CI runs `pytest tests/ --release` as one job. The tests that share files
+in the checkout, the measured timings, and running the matrix build and the other release steps in parallel
+(`work/build_matrix_parallel.ps1`, `work/release_parallel.ps1`) are in `docs/parallel-tests.md`.
+
 Three suites exist in both `work/` and `tests/`, and a test asserts the two
 copies stay identical -- `tests/` differs only in importing the shipped `src/`
 copy rather than `work/`. Editing one and not the other fails with "has drifted
