@@ -40,8 +40,10 @@ $root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $head = (& git -C $root rev-parse HEAD).Trim()
 $matrixPath = (Resolve-Path -LiteralPath $MatrixConfig).Path
 $releasePath = (Resolve-Path -LiteralPath $ReleaseConfig).Path
-$matrixRel = $matrixPath.Substring($root.Length).TrimStart('\')
-$releaseRel = $releasePath.Substring($root.Length).TrimStart('\')
+# A release config inside this checkout is read from each worktree's own copy (same commit, same bytes);
+# one outside it is passed as it is.
+$inRoot = $releasePath.StartsWith($root.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase)
+$releaseRel = if ($inRoot) { $releasePath.Substring($root.Length).TrimStart('\') } else { $null }
 $matrix = Get-Content -LiteralPath $matrixPath -Raw | ConvertFrom-Json
 $release = Get-Content -LiteralPath $releasePath -Raw | ConvertFrom-Json
 $prefix = $release.output_prefix
@@ -83,12 +85,12 @@ for ($k = 0; $k -lt $parts; $k++) {
     if ($CollectOnly) { $jobs += [pscustomobject]@{ part = $k + 1; worktree = $wt; log = $null; process = $null }; continue }
     $script = Join-Path $wt "work\build_matrix.ps1"
     $argsList = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "`"$script`"", "-Python", "`"$Python`"",
-                  "-MatrixConfig", "`"$partFile`"", "-ReleaseConfig", "`"$(Join-Path $wt $releaseRel)`"")
-    $jobs += [pscustomobject]@{
-        part = $k + 1; worktree = $wt; log = $log
-        process = Start-Process (Join-Path $PSHOME "powershell.exe") -ArgumentList $argsList -WorkingDirectory $wt -PassThru -NoNewWindow `
-            -RedirectStandardOutput $log -RedirectStandardError "$log.err"
-    }
+                  "-MatrixConfig", "`"$partFile`"", "-ReleaseConfig", "`"$(if ($releaseRel) { Join-Path $wt $releaseRel } else { $releasePath })`"")
+    $process = Start-Process (Join-Path $PSHOME "powershell.exe") -ArgumentList $argsList -WorkingDirectory $wt -PassThru -NoNewWindow `
+        -RedirectStandardOutput $log -RedirectStandardError "$log.err"
+    # Reading Handle now keeps it open; without that, ExitCode is empty once the process has exited.
+    $null = $process.Handle
+    $jobs += [pscustomobject]@{ part = $k + 1; worktree = $wt; log = $log; process = $process }
 }
 if ($PlanOnly) { Write-Host "Plan only: part matrix files are in $partDir"; return }
 $jobs | Where-Object { $_.process } | ForEach-Object { $_.process.WaitForExit() }

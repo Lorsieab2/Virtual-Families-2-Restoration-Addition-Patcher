@@ -28,11 +28,19 @@ Measured on the B202 main (24 cores, all inputs present, every test passing):
 
 | run | wall time | passed | skipped | subtests passed |
 | --- | --- | --- | --- | --- |
-| serial, one file after another | 2,597 s (43 min) | 1,932 | 30 | 8,467 |
-| parallel, `--release` | 523 s | 1,934 | 30 | 8,467 |
-| parallel, ordinary | 253 s | 1,924 | 40 | 8,457 |
+| serial: `pytest tests/ --release`, then `pytest test_*.py --release` in `work\` | 2,450 s (41 min) | 1,938 | 27 | 8,467 |
+| parallel, `--release` | 544 s (523 s in an earlier run) | 1,937 | 28 | 8,467 |
+| parallel, ordinary (release-only tests skip) | 253 s to 423 s | 1,925 | 40 | 8,457 |
 
-(The two extra passes are this runner's own tests; the ordinary run skips the release-only tests.)
+Per file, the serial and parallel `--release` runs agree on every file's passes, failures and skips except:
+the Tk skips below; one test in `tests\test_offline_vf2_patcher.py` that skips when run on its own
+("export_offline_patch_bundle is a build tool and is not part of the shipped tree; the work/ copy of this
+suite covers it") and runs in the one-process serial run only because an earlier file in that process put
+`work\` on `sys.path` (it runs in `work\test_offline_vf2_patcher.py` either way); and a counting difference in
+`work\test_mobile_sound_route_toggle_contract.py`, where pytest's summary counts four skipped subtests that the
+JUnit file records as one test. The wall time of a parallel run is set by its longest file,
+`tests\test_b200_time_controls.py` (350 s alone, more beside eleven other workers), and varies with the load
+on the machine.
 
 ### Shared state
 
@@ -93,7 +101,11 @@ matrix order (variant i to part i mod N), runs the unchanged `work\build_matrix.
 with a matrix file holding only that part's variants (toggles copied as they are), renames each part's summary
 and logs to `-summary-mK.json` / `-logs-mK`, and with `-CollectInto` copies every variant folder into the
 release checkout's `outputs\` and checks all 32 arrived with distinct hashes. `-PlanOnly` prints the split
-and builds nothing; `-CollectOnly` only collects.
+and builds nothing; `-CollectOnly` only collects. Checked so far: `-PlanOnly` on the 32-variant matrix (the
+three parts hold exactly the 32 variants, toggles unchanged), and a real two-variant build (core and
+behavior_patches, seeded from B202) over two worktrees, both linked and collected with distinct hashes in
+8 minutes. A full 32-variant release build with it has not been run yet. Each worktree needs every seed folder
+its part's variants name; the generator fails without them (`missing required runtime file: wc.dat`).
 
 `work\release_parallel.ps1` runs the independent steps together, from the release worktree:
 

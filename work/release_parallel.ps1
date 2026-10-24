@@ -57,6 +57,7 @@ if (-not $SkipMatrix) {
                     "-Worktrees", "`"$($Worktrees -join ',')`"")
     $matrix = Start-Process $ps -ArgumentList $matrixArgs -WorkingDirectory $root -PassThru -NoNewWindow `
         -RedirectStandardOutput (Join-Path $runDir "matrix.log") -RedirectStandardError (Join-Path $runDir "matrix.err.log")
+    $null = $matrix.Handle      # keeps the handle open, or ExitCode is empty after the process exits
     Write-Host "matrix: started (log $runDir\matrix.log)"
 }
 
