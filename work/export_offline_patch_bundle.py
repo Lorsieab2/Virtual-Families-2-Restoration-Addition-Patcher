@@ -21,6 +21,14 @@ from typing import Any, Callable
 
 
 SOURCE_DIR = Path(__file__).resolve().parent
+# The files the GUI imports beside offline_vf2_patcher_gui.py (the Tools tab, Back Up / Restore Saves and the
+# How to Use guides). Each ships in the bundle root next to the GUI; the GUI does not start without them.
+GUI_TOOL_FILES = (
+    "vf2_tools_gui.py",
+    "vf2_save_backup.py",
+    "vf2_how_to_use.py",
+    "vf2_how_to_use.json",
+)
 ROOT = SOURCE_DIR.parent
 DEFAULT_BASE_PAYLOAD = SOURCE_DIR / "vanilla_runtime_payload"
 OFFICIAL_PE_STRUCTURES_FILE = SOURCE_DIR / "official_vf2_pe_structures.json"
@@ -3796,6 +3804,8 @@ def write_bundle_runner_files(bundle_dir: Path, build_label: str) -> list[str]:
     icon_files = copy_patcher_icon_assets(bundle_dir)
     shutil.copy2(SOURCE_DIR / "offline_vf2_patcher.py", bundle_dir / "offline_vf2_patcher.py")
     shutil.copy2(SOURCE_DIR / "offline_vf2_patcher_gui.py", bundle_dir / "offline_vf2_patcher_gui.py")
+    for tool_name in GUI_TOOL_FILES:
+        shutil.copy2(SOURCE_DIR / tool_name, bundle_dir / tool_name)
     shutil.copy2(SOURCE_DIR / "vf2_crash_capture.py", bundle_dir / "vf2_crash_capture.py")
     (bundle_dir / "crash-capture-manifest.template.json").write_text(
         json.dumps(
@@ -3994,6 +4004,16 @@ Check for updates:
 
 10. Run the clearly named modded EXE inside the new modded folder.
 
+Tools tab:
+The patcher window has two tabs. Patches is where you choose and apply patches.
+Tools holds Back Up Saves and Restore Saves for your Virtual Families 2 families
+(they live in Documents/LDW/<game folder name>), and a How to Use guide for
+every button. Small ? buttons beside controls open the page for that control.
+Back Up Saves copies the save folder, including the patcher's own files in
+"Virtual Families 2 Patcher Data", into its Backups folder (the game is paused
+for the copy if it is running). Restore Saves shows exactly what will change,
+asks first, and backs up your current saves before it restores anything.
+
 Crash capture QA only (optional):
 The patcher never changes Windows Error Reporting settings or launches the
 game. If a test build crashes, copy crash-capture-manifest.template.json to a
@@ -4025,6 +4045,7 @@ Have fun! -Lorsieab2 :)
     files = [
         "offline_vf2_patcher.py",
         "offline_vf2_patcher_gui.py",
+        *GUI_TOOL_FILES,
         "vf2_crash_capture.py",
         "crash-capture-manifest.template.json",
         *icon_files,
@@ -4054,6 +4075,7 @@ def clear_generated_runner_files(bundle_dir: Path) -> None:
         TRANSPARENCY_LOG_NAME,
         "offline_vf2_patcher.py",
         "offline_vf2_patcher_gui.py",
+        *GUI_TOOL_FILES,
         "vf2_crash_capture.py",
         "crash-capture-manifest.template.json",
     ):

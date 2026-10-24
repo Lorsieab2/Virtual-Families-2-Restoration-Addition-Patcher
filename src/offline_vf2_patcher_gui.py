@@ -22,6 +22,9 @@ from tkinter import font as tkfont
 from tkinter import filedialog, messagebox, ttk
 
 import offline_vf2_patcher as patcher
+import vf2_how_to_use
+import vf2_save_backup
+from vf2_tools_gui import ToolsTabMixin
 
 APP_DISPLAY_NAME = "Virtual Families 2 Restoration/Addition Patcher"
 PATCHER_RELEASES_URL = "https://github.com/Lorsieab2/Virtual-Families-2-Restoration-Addition-Patcher/"
@@ -404,7 +407,7 @@ class WaitWindow(tk.Toplevel):
             self.destroy()
 
 
-class VF2PatcherGUI:
+class VF2PatcherGUI(ToolsTabMixin):
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
         self.root.title(APP_DISPLAY_NAME)
@@ -436,6 +439,7 @@ class VF2PatcherGUI:
         self.window_icon_image: tk.PhotoImage | None = None
         self.title_icon_image: tk.PhotoImage | None = None
 
+        self._init_tools()
         self._load_saved_paths()
         self._load_icons()
         self._build_styles()
@@ -504,7 +508,7 @@ class VF2PatcherGUI:
         root_frame = ttk.Frame(self.root, padding=12)
         root_frame.grid(row=0, column=0, sticky="nsew")
         root_frame.columnconfigure(0, weight=1)
-        root_frame.rowconfigure(3, weight=1)
+        root_frame.rowconfigure(1, weight=1)
         self.root.columnconfigure(0, weight=1)
         self.root.rowconfigure(0, weight=1)
 
@@ -514,7 +518,10 @@ class VF2PatcherGUI:
         if self.title_icon_image is not None:
             ttk.Label(header, image=self.title_icon_image).grid(row=0, column=0, rowspan=4, sticky="w", padx=(0, 10))
         ttk.Label(header, text=APP_DISPLAY_NAME, style="Title.TLabel").grid(row=0, column=1, sticky="w")
-        ttk.Label(header, textvariable=self.version_var, style="Muted.TLabel").grid(row=0, column=2, sticky="e", padx=(12, 0))
+        version_box = ttk.Frame(header)
+        version_box.grid(row=0, column=2, sticky="e", padx=(12, 0))
+        ttk.Label(version_box, textvariable=self.version_var, style="Muted.TLabel").pack(side="left")
+        self._help_button(version_box, "getting_started").pack(side="left", padx=(6, 0))
         ttk.Label(
             header,
             text=PROJECT_CREATOR_MESSAGE,
@@ -522,13 +529,16 @@ class VF2PatcherGUI:
             justify="left",
             wraplength=660,
         ).grid(row=1, column=1, sticky="w", pady=(2, 0))
+        update_box = ttk.Frame(header)
+        update_box.grid(row=1, column=2, sticky="e", padx=(12, 0), pady=(2, 0))
         update_link = ttk.Label(
-            header,
+            update_box,
             text="Check for updates",
             style="Link.TLabel",
             cursor="hand2",
         )
-        update_link.grid(row=1, column=2, sticky="e", padx=(12, 0), pady=(2, 0))
+        update_link.pack(side="left")
+        self._help_button(update_box, "check_updates").pack(side="left", padx=(3, 0))
         update_link.bind("<Button-1>", lambda _event: self._open_updates_url())
         update_link.bind("<Enter>", lambda _event: update_link.configure(style="LinkHover.TLabel"))
         update_link.bind("<Leave>", lambda _event: update_link.configure(style="Link.TLabel"))
@@ -547,21 +557,34 @@ class VF2PatcherGUI:
             wraplength=660,
         ).grid(row=3, column=1, columnspan=2, sticky="w", pady=(2, 0))
 
-        self._build_file_section(root_frame).grid(row=1, column=0, sticky="ew")
-        self._build_settings_section(root_frame).grid(row=2, column=0, sticky="nsew", pady=(10, 0))
-        self._build_log_section(root_frame).grid(row=3, column=0, sticky="nsew", pady=(10, 0))
-        self._build_action_section(root_frame).grid(row=4, column=0, sticky="ew", pady=(10, 0))
+        # Patch selection keeps its own tab; the save and help tools are on the Tools tab.
+        self.notebook = ttk.Notebook(root_frame)
+        self.notebook.grid(row=1, column=0, sticky="nsew")
+        patches_tab = ttk.Frame(self.notebook, padding=(0, 10, 0, 0))
+        patches_tab.columnconfigure(0, weight=1)
+        patches_tab.rowconfigure(2, weight=1)
+        tools_tab = ttk.Frame(self.notebook, padding=(0, 10, 0, 0))
+        self.notebook.add(patches_tab, text="Patches")
+        self.notebook.add(tools_tab, text="Tools")
+        self.patches_tab = patches_tab
+        self.tools_tab = tools_tab
+
+        self._build_file_section(patches_tab).grid(row=0, column=0, sticky="ew")
+        self._build_settings_section(patches_tab).grid(row=1, column=0, sticky="nsew", pady=(10, 0))
+        self._build_log_section(patches_tab).grid(row=2, column=0, sticky="nsew", pady=(10, 0))
+        self._build_action_section(patches_tab).grid(row=3, column=0, sticky="ew", pady=(10, 0))
+        self._build_tools_tab(tools_tab)
 
     def _build_file_section(self, parent: tk.Widget) -> ttk.LabelFrame:
         frame = ttk.LabelFrame(parent, text="Patch Input", style="Section.TLabelframe", padding=10)
         frame.columnconfigure(1, weight=1)
 
-        self._path_row(frame, 0, "Vanilla game folder (optional if reconfiguring an existing modded folder)", self.game_dir_var, self._browse_game_dir)
-        self._path_row(frame, 1, "Patch manifest", self.manifest_var, self._browse_manifest)
-        self._path_row(frame, 2, "Save modified folders under", self.output_parent_dir_var, self._browse_output_parent_dir, optional=True)
-        self._path_row(frame, 3, "Modded output folder", self.output_dir_var, self._browse_output_dir, optional=True)
-        self._path_row(frame, 4, "Backup folder", self.backup_dir_var, self._browse_backup_dir, optional=True)
-        self._path_row(frame, 5, "Patch log", self.log_path_var, self._browse_log_path, optional=True)
+        self._path_row(frame, 0, "Vanilla game folder (optional if reconfiguring an existing modded folder)", self.game_dir_var, self._browse_game_dir, help_key="game_folder")
+        self._path_row(frame, 1, "Patch manifest", self.manifest_var, self._browse_manifest, help_key="manifest")
+        self._path_row(frame, 2, "Save modified folders under", self.output_parent_dir_var, self._browse_output_parent_dir, optional=True, help_key="output_folders")
+        self._path_row(frame, 3, "Modded output folder", self.output_dir_var, self._browse_output_dir, optional=True, help_key="output_folders")
+        self._path_row(frame, 4, "Backup folder", self.backup_dir_var, self._browse_backup_dir, optional=True, help_key="backup_folder")
+        self._path_row(frame, 5, "Patch log", self.log_path_var, self._browse_log_path, optional=True, help_key="patch_log")
         return frame
 
     def _build_settings_section(self, parent: tk.Widget) -> ttk.LabelFrame:
@@ -576,6 +599,7 @@ class VF2PatcherGUI:
         self._button(controls, "Defaults", self.select_default_settings).grid(row=0, column=1, padx=(0, 6))
         self._button(controls, "Enable All", self.select_all_settings).grid(row=0, column=2, padx=(0, 6))
         self._button(controls, "Disable All", self.clear_all_settings).grid(row=0, column=3, padx=(0, 6))
+        self._help_button(controls, "patch_selection").grid(row=0, column=4, sticky="w")
         self._button(controls, "Enable All Main Patches", lambda: self.select_category_settings("main")).grid(row=1, column=0, padx=(0, 6), pady=(6, 0))
         self._button(controls, "Enable all Optional Content", lambda: self.select_category_settings("optional")).grid(row=1, column=1, padx=(0, 6), pady=(6, 0))
 
@@ -615,8 +639,14 @@ class VF2PatcherGUI:
     def _build_action_section(self, parent: tk.Widget) -> ttk.Frame:
         frame = ttk.Frame(parent)
         frame.columnconfigure(3, weight=1)
-        self._button(frame, "Dry Run (Validate Only)", lambda: self.start_apply(dry_run=True)).grid(row=0, column=0, padx=(0, 8))
-        self._apply_button(frame, "Enable/Disable Patches", lambda: self.start_apply(dry_run=False)).grid(row=0, column=1, padx=(0, 8))
+        dry_box = ttk.Frame(frame)
+        dry_box.grid(row=0, column=0, padx=(0, 8))
+        self._button(dry_box, "Dry Run (Validate Only)", lambda: self.start_apply(dry_run=True)).pack(side="left")
+        self._help_button(dry_box, "dry_run").pack(side="left", padx=(3, 0))
+        apply_box = ttk.Frame(frame)
+        apply_box.grid(row=0, column=1, padx=(0, 8))
+        self._apply_button(apply_box, "Enable/Disable Patches", lambda: self.start_apply(dry_run=False)).pack(side="left")
+        self._help_button(apply_box, "apply").pack(side="left", padx=(3, 0))
         ttk.Label(
             frame,
             text="Dry Run validates that the patcher's working. It does not actually change or write files.",
@@ -632,7 +662,10 @@ class VF2PatcherGUI:
         ttk.Label(restore_frame, text="Restore log").grid(row=1, column=0, sticky="w", padx=(0, 8), pady=(6, 0))
         ttk.Entry(restore_frame, textvariable=self.restore_log_var).grid(row=1, column=1, sticky="ew", padx=(0, 6), pady=(6, 0))
         self._button(restore_frame, "Save As", self._browse_restore_log).grid(row=1, column=2, padx=(0, 8), pady=(6, 0))
-        self._button(restore_frame, "Restore Backup", self.start_restore).grid(row=0, column=3, rowspan=2, sticky="ns")
+        restore_box = ttk.Frame(restore_frame)
+        restore_box.grid(row=0, column=3, rowspan=2, sticky="ns")
+        self._button(restore_box, "Restore Backup", self.start_restore).pack(side="left", fill="y")
+        self._help_button(restore_box, "restore_backup").pack(side="left", padx=(3, 0))
 
         ttk.Label(frame, textvariable=self.status_var, style="Status.TLabel").grid(
             row=0, column=3, sticky="ew", padx=(8, 0)
@@ -648,11 +681,14 @@ class VF2PatcherGUI:
         command: object,
         *,
         optional: bool = False,
+        help_key: str | None = None,
     ) -> None:
         suffix = " (optional)" if optional else ""
         ttk.Label(parent, text=f"{label}{suffix}").grid(row=row, column=0, sticky="w", padx=(0, 8), pady=3)
         ttk.Entry(parent, textvariable=variable).grid(row=row, column=1, sticky="ew", padx=(0, 6), pady=3)
         self._button(parent, "Browse", command).grid(row=row, column=2, sticky="ew", pady=3)
+        if help_key is not None:
+            self._help_button(parent, help_key).grid(row=row, column=3, sticky="w", padx=(4, 0), pady=3)
 
     def _button(self, parent: tk.Widget, text: str, command: object) -> ttk.Button:
         button = ttk.Button(parent, text=text, command=command)
