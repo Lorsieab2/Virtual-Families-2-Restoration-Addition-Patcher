@@ -46,7 +46,7 @@ not 30%; the plain fraction is given where the difference is under 0.1 point.
 |---|---|---|---|---|
 | Speed option | gs+0x25B18. Stock code only ever writes **10** (new player, change player, unpause). Values 5 and 20 change the catch-up caps (below) but **nothing in B200 sets them**. | | file 0x25B20 | VERIFIED-C (every writer listed: theCreateNickNameDlg, theChangePlayerDlg, theOptionsDialog, theMainScene pause, store time-skip) |
 | Pause | Pause adds 999 to the option and calls `CGameTime::SetSpeed(999)` (stored as speed 0). Unpause subtracts 999; a result of 0 becomes 10. Options dialog unpause writes 10. | | | VERIFIED-C (theMainScene handler 0x4A2xxx `$LN43`, theOptionsDialog) |
-| Game seconds | `CGameTime::Seconds()` 0x468B00 = saved base + (real seconds since the last speed change) / (speed/10). At speed 10 one game second = one real second; paused = frozen. | 1 game s = 1 real s | CGameTime file 0x16404 | VERIFIED-C |
+| Game seconds | `CGameTime::Seconds()` 0x468B00 = saved base + (real seconds since the last speed change) / (speed/10). At speed 10 one game second = one real second; paused = frozen. | 1 game s = 1 real s | CGameTime file 0x16404 | VERIFIED-E (2026-10-25: `SetSpeed(999)` 0x468B80 run as linked stores speed 0 and banks Seconds(); Seconds() then returns the banked 4,500 at real 5,000, 20,000 and 90,000; after `SetSpeed(10)` it carries on from 4,500) |
 | Real seconds | `GetSecondsFromGameStart` = wall clock minus the save header's start time (header +4); **keeps running while the game is closed**. Used by aging, food groups, symptom expiry, collectible expiry, pregnancy cooldown. | | header 0x04 | VERIFIED-C |
 | Age unit | `AllVillagersTimeflowUpkeep` adds real seconds since the villager's stamp (state+0x04) to an accumulator (state+0x00), ages by accumulator / 60 / option, keeps the remainder. | **1 unit = 10 real min; 1 year (20 units) = 3 h 20 min** on speed 10 | rec 0x0A8/0x0AC | VERIFIED-C |
 | Catch-up cap | `AllVillagersTimeflowUpkeep` 0x4C4D29..0x4C4D8F: the accumulator gains the real seconds since the stamp. **Over 86,400 s it is set to 86,400 and the speed rule is skipped** (`jbe` at 0x4C4D39, `jmp 0x4C4D99` at 0x4C4D45). Otherwise, in the normal 2-second path (argument false), if it is over 31,000 (option 10 or any other), 38,200 (option 5) or 23,800 (option 20) it is set to **31,000**. Every test is "greater than". | at speed 10: up to 31,000 s away is credited in full; **31,000-86,400 s away credits 31,000 s (51 units, 2.55 years)**; **more than 86,400 s away credits 86,400 s (144 units, 7.2 years)** | | **VERIFIED-E** (2026-10-25): the B200 core exe's own `AllVillagersTimeflowUpkeep` run as linked in unicorn, one family member, speed option 10, argument false, accumulator credited at the `IncrementAge` call 0x4C4DEF: 30,000 s away -> 30,000 s (50 units); 50,000 -> 31,000 (51 units, 400 s kept); 86,400 -> 31,000 (51 units, 400 s kept); 200,000 -> 86,400 (144 units). With argument true (the catch-up call) only the 86,400 cap applies (50,000 -> 50,000). Option 1009 (paused) -> 0. Same result as VF1's emulation of its identical code (0x489DF5). *Superseded, wrong:* "capped at 86,400 s; then ... set to 31,000", i.e. at most 31,000 s (2.58 years) per catch-up, which missed the jump past the speed rule. |
@@ -112,6 +112,19 @@ happiness +0..2). `FoodGroupsActive` 0x4CB870 counts **five** slots: the fifth r
 expiry time as its flag and the dword after the four expiries (the career id) as its expiry, so a villager with
 no career (-1) and an active first group counts one extra group. Emulated (`t_life.py`): a careerless villager
 with N >= 1 groups is treated as N+1. VERIFIED-E. (Code as built; see Open questions.)
+
+**Re-verified 2026-10-25 (VERIFIED-E, `FoodGroupsActive` 0x4CB870 and the physiology upkeep run as linked):** the
+first slot is **Grains** (item 4 "Groceries: Grains", string 0x39C, and item 8 "Organics: Grains" both call
+`UpdateNutritionAllVillagers(0, ...)` from `theMainScene::HandleMouseDown` 0x49F9A1 / 0x49F9EF). The extra group
+needs the **Grains** expiry's low byte to be non-zero, not "any group": careerless with Grains only counts 2,
+with Dairy only 1, with all four 5; careerless whose Grains **ran out** (stale expiry) and no group active
+still counts **1**; a Grains expiry ending in byte 0 (1 time in 256) gives no extra. For a family member with a
+career the fifth pass writes 0 into that low byte (Grains then lasts up to 255 s less). Through the real upkeep
+(site 0x4C47A8): careerless with N groups dies on the N+1 schedule (e.g. 2 groups: 0% at 58, 20% at 60, as an
+employed member with 3), and through `UpdateDisease` 0x4CBD29 the base chance is 10 / 1000 with 3 groups
+(counted 4, so no -2) and 5 / 1000 with 4 (counted 5). The same count feeds `UpdateHealthState` 0x4CC616 and
+`UpdateHappinessState` 0x4CBF00. *Superseded, imprecise:* "a careerless villager with N >= 1 groups is treated
+as N+1".
 
 ## 3. Sickness and symptoms (every 3 units, `UpdateDisease` 0x4CBBE0) VERIFIED-E
 
@@ -220,7 +233,7 @@ GameStats+0x20 (file 0x163E8) is updated in years. Real time per year: 3 h 20 mi
 | Balance | double; floor 0, ceiling 4,000,000,000 (`CMoney::Adjust` 0x4818B0) | file 0x168BC | VERIFIED-C |
 | Interest | `UpdateInterest` 0x481D80: whole game days (86,400 game s) since the last payment; pays balance x rate x min(days, 2); the date advances by all elapsed days. **At most 2 days are paid after any gap.** Called from the happiness state (every 30 min) and elsewhere. | CMoney+0x0C at file 0x168C4 | VERIFIED-C |
 | Rate | default **0.10 per game day** (`Reset` writes 0x3DCCCCCD); saved as percent x 100 in the low 16 bits | file 0x168C0 | VERIFIED-C |
-| Brokerage Account (0x117, patcher-visible) | not owned (rate <= 0.1001): rate + 0.02, capped 0.11 -> **11%**. Buying it again removes it: rate = **0.01** (1%) | rate field | VERIFIED-C (code at 0x4B8B7D) |
+| Brokerage Account (0x117, patcher-visible) | not owned (rate <= 0.1001): rate + 0.02, capped 0.11 -> **11%**. Buying it again removes it: rate = **0.01** (1%) | rate field | VERIFIED-E (2026-10-25: `CScrollingStoreScene::HandlePurchaseItem` 0x48C110, from `HandleMouse` 0x48BAEE / 0x48BC78, charges `CalcPrice` then calls 0x4B8B50 for items 0x117..0x11A; run as linked from 0.10, seven purchases give 0.11, 0.01, 0.03, 0.05, 0.07, 0.09, 0.11: after the 1% each purchase adds 2 points until 11% again). `UpdateInterest` run as linked, balance 1,000 at 0.10: 1 day +100.005, 2 days +200.005, 3 or 10 days +200.005 with the date moved by all of them. |
 | Food Club (0x118) | `JoinFoodClub`: active byte FoodStore+0x7C, delivery now; `CFoodStore::Update` delivers 500 food x whole game days missed (no cap) and refreshes all 4 food groups; also +60 food whenever a villager finds food < 60. Removing clears the flag. | FoodStore file 0xE3BC.. | VERIFIED-C |
 | Health Plan (0x119) | gs+0x25B1D; stock `GetPrice` divides items 0x18..0x21 (medicine) by 4; ownership stored by the patcher in hidden achievement record 0xA8+0x08 bit 0 | | UNCONFIRMED (price path is player input) |
 | Lucky Rock (0x11A) | CCollectableItem+0x8A8: collectible spawn roll rand(3,300) < 3 instead of rand(6,600) < 3 per frame (section 15) | | VERIFIED-C |
@@ -370,7 +383,7 @@ the 11 malfunction props 0x17, 0x1A-0x1D, 0x1F-0x21, 0x48-0x4A). The meaning of 
 
 | Item | Rule | Real time | Status |
 |---|---|---|---|
-| Flea Market | `CInventoryManager::MaybeUpdateRotatingItems` 0x46BEB0 (from the store's item count and `CInventoryManager::Update`): when real time passes the stamp (+0x4A0), 5 of the 36 `gGoodiesList` items (owned upgrades and flagged items left out) are shuffled in; next change **now + 21,600 real s** | **every 6 real hours** (the in-game tip says 3 times a day) | VERIFIED-C |
+| Flea Market | B200 lists **all 36 `gGoodiesList` items at all times; it never rotates.** `CInventoryManager::GetCategoryItemCount` 0x46B6D0 first calls the patcher's `VF2GetExpandedFleaMarketCount` 0x4B9A90, which returns 36 for category 15 (the Flea Market) unconditionally, and `GetCategoryItem` 0x46B210 likewise returns `gGoodiesList[i]` from `VF2GetExpandedFleaMarketItem` 0x4B9AB0. `MaybeUpdateRotatingItems` 0x46BEB0 has one caller, the category-15 case at 0x46B7A3, which is therefore never reached. | never changes (the in-game tips 0x873 / 0xA16 still say it changes 3 / several times a day) | VERIFIED-E (2026-10-25: count and items emulated at real s 100,000, +21,601 and +86,400: 36 each time, equal to `gGoodiesList`, the rotation never ran). *Superseded, wrong for B200:* "5 of the 36 shuffled in, next change now + 21,600 real s, every 6 real hours" (the stock code, now dead). |
 | On Sale | `MaybeUpdateSaleItems` 0x46C000: every **86,400 game s**, 3 unlocked, non-pet furniture items 0x1AD..0x2A8 | every 24 real hours on speed 10 | VERIFIED-C (the discount is in the price code: UNCONFIRMED) |
 | Renovations | the 10 house renovations 0xE1..0xEA each add +5 happiness trend every 30 min (section 2); 0xE6 enables the north-bathroom leaks | | VERIFIED-C |
 
@@ -398,7 +411,7 @@ and while paused), **G** = game seconds (`CGameTime::Seconds`, frozen while paus
 | Collectible spawn | per frame | F | 3 / 6,600 (Lucky Rock 3 / 3,300) | mean 73 s / 37 s | VERIFIED-C |
 | House malfunction | per step | S | 1 / 800 | mean 26.7 min, also while paused | VERIFIED-C |
 | Weather spell | Weather+0x08 | G | Normal 900..2,399 s, others 360..719 s | 15-40 min / 6-12 min | VERIFIED-C |
-| Flea Market | InventoryManager+0x4A0 | R | 21,600 s | 6 h | VERIFIED-C |
+| Flea Market | InventoryManager+0x4A0 | R | none in B200 (stock 21,600 s; that code is unreachable, section 16) | never | VERIFIED-E |
 | On Sale | InventoryManager+0x484 | G | 86,400 s | 24 h | VERIFIED-C |
 | Day / night | PC local clock | wall clock | | follows the PC clock | VERIFIED-C |
 | Villager positions refresh | gs+0x25CD4 | R | 40 s (`TakePositions`) | 40 s | VERIFIED-C |
@@ -462,7 +475,13 @@ UNCONFIRMED here.
 3. **Catch-up cap for option 20** compares against 23,800 s but then sets 31,000 s (stock code). Not reachable in
    B200 (nothing sets option 20); relevant only if Time Controls (B201) ships.
 4. **Flea Market** rotates every 6 real hours while the game's own tip says three times a day.
+   *Answered 2026-10-25: false for B200.* The expanded Flea Market lists all 36 items and the rotation is never
+   reached (section 16).
 5. House malfunction rolls run while the game is paused (the 2-second step has no pause check).
+   *Re-verified 2026-10-25 (VERIFIED-E):* the step 0x4A266E..0x4A28F9 run as linked with the speed option at 10
+   and at 1009 (paused) both reach `GetRandom(800)` and then the malfunction pick `GetRandom(14)`; the step's clock
+   `ldwEventManager::GetSeconds` 0x474600 is `_time64` (wall clock). The only pause checks in `UpdateScene`
+   (0x4A25FC, 0x4A264C, 0x4A30AD) lie outside the step.
 
 ## 21. Scripts and data (the analysis scripts are kept outside the repo; careers.tsv, events_registry.tsv, events_emulated.txt and rand_index.tsv are in this folder)
 
