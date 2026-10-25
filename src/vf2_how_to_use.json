@@ -1,0 +1,137 @@
+{
+  "_comment": "The patcher window's \"?\" guides. One short, plain guide for every button, tool and setting the window shows, by control key. Each guide is a list of short lines: what it does, how to use it, and what to watch out for. tests/test_how_to_use.py refuses a control without one, and a guide that is too long.",
+  "controls": {
+    "getting_started": {
+      "section": "Patching",
+      "title": "Getting started",
+      "guide": [
+        "This patcher makes a separate modded copy of your Virtual Families 2 folder. Your original game folder and your original saves are left alone.",
+        "1. Pick your vanilla Virtual Families 2 folder (the one holding Virtual Families 2.exe). 2. Tick the patches you want. 3. Click Dry Run, then Enable/Disable Patches.",
+        "Vanilla Virtual Families 2 saves work with the modded game. The modded game keeps its saves in its own folder, so use Back Up Saves on the Tools tab before trying a new build."
+      ]
+    },
+    "game_folder": {
+      "section": "Patching",
+      "title": "Vanilla game folder",
+      "guide": [
+        "The folder of your official Virtual Families 2 install: it holds Virtual Families 2.exe, Images, Sounds, Assets and the game's other program files.",
+        "Click Browse and pick it. The patcher checks it looks right before it changes anything.",
+        "Leave it empty only when you are re-configuring a modded folder you already made."
+      ]
+    },
+    "manifest": {
+      "section": "Patching",
+      "title": "Patch manifest",
+      "guide": [
+        "The list of patches this patcher can apply. manifest.json loads by itself when the patcher starts.",
+        "Only pick another manifest if someone gave you one.",
+        "Load Manifest Settings reads it again and redraws the patch list."
+      ]
+    },
+    "output_folders": {
+      "section": "Patching",
+      "title": "Modded output folder",
+      "guide": [
+        "Where the modded copy of the game goes. It is made next to your vanilla folder unless you pick another place.",
+        "Save modified folders under: the folder the new modded folder is made in. Modded output folder: an exact folder, such as one you made before.",
+        "Never pick your vanilla folder as the output folder."
+      ]
+    },
+    "backup_folder": {
+      "section": "Patching",
+      "title": "Backup folder",
+      "guide": [
+        "Each time you rebuild an existing modded folder, the patcher first saves a complete copy of the old one (about 230 MB).",
+        "By default each copy goes in a new dated folder under .vf2_patch_backups. Pick a folder here to put them somewhere else.",
+        "The patcher never deletes these copies: delete old ones yourself to free disk space.",
+        "These are copies of the game files. Your saves are backed up by Back Up Saves on the Tools tab."
+      ]
+    },
+    "patch_log": {
+      "section": "Patching",
+      "title": "Patch log",
+      "guide": [
+        "A text record of exactly what a run changed.",
+        "Leave it empty for the default place, or Browse to choose a file.",
+        "Send it along if you ask for help with a patch problem."
+      ]
+    },
+    "patch_selection": {
+      "section": "Patching",
+      "title": "Choosing patches",
+      "guide": [
+        "Tick the patches you want. Main Patches are the core fixes, Optional Patches add extra content, and Experimental patches are unfinished (shown in red, and off unless you tick them).",
+        "Defaults ticks the recommended set. Enable All ticks everything except Experimental. Disable All clears every tick.",
+        "Some patches need another one. Ticking one ticks what it needs, and unticking a needed patch unticks what depends on it."
+      ]
+    },
+    "dry_run": {
+      "section": "Patching",
+      "title": "Dry Run (Validate Only)",
+      "guide": [
+        "Checks that your game folder and your patch choices work, without writing anything.",
+        "Click it before Enable/Disable Patches, especially the first time.",
+        "If it reports a problem, nothing was changed; fix what it names and run it again."
+      ]
+    },
+    "apply": {
+      "section": "Patching",
+      "title": "Enable/Disable Patches",
+      "guide": [
+        "Builds the modded folder from your vanilla game with exactly the patches that are ticked.",
+        "Changed your mind later? Tick or untick patches and click it again: the modded folder is rebuilt from vanilla with the new choices.",
+        "An existing modded folder is copied to the Backup folder first. You can bring it back with Restore Backup."
+      ]
+    },
+    "restore_backup": {
+      "section": "Patching",
+      "title": "Restore Backup",
+      "guide": [
+        "Puts back a game-folder copy the patcher made before a rebuild.",
+        "Browse to the dated backup folder and click Restore Backup. It is restored into the folder it was taken from, never into your vanilla folder.",
+        "Restore log: where to write the record of the restore (optional).",
+        "This is for game files. To bring back saved families, use Restore Saves on the Tools tab."
+      ]
+    },
+    "check_updates": {
+      "section": "Patching",
+      "title": "Check for updates",
+      "guide": [
+        "Opens the patcher's download page in your web browser.",
+        "Compare the build number at the top right of this window with the newest one listed there.",
+        "Back up your saves before moving to a new build."
+      ]
+    },
+    "back_up_saves": {
+      "section": "Tools",
+      "title": "Back Up Saves",
+      "guide": [
+        "Copies your family saves into a dated folder inside the save folder: Documents\\LDW\\<game>\\Backups\\Backup <date and time>.",
+        "It copies the game's save files and the patcher's own files too (the Virtual Families 2 Patcher Data folder, which holds the extra children).",
+        "Click it, tick the save folders to copy, click Back Up Selected. If the game is running it is paused for the copy and resumes by itself.",
+        "The game saves only when you quit normally, so a backup of a running game holds your families as of the last save.",
+        "Every copied file is checked against the original. An older backup is never written over."
+      ]
+    },
+    "restore_saves": {
+      "section": "Tools",
+      "title": "Restore Saves",
+      "guide": [
+        "Brings back a backup made by Back Up Saves: the whole save folder, or just one family's save slot.",
+        "Quit the game first. Pick a backup (newest first), choose the whole folder or one slot, and click Restore.",
+        "You are shown exactly which files will be replaced, added or removed, and nothing changes until you say yes.",
+        "Your saves as they are now are backed up first as \"Backup <date> (before restore)\", so a restore can always be undone.",
+        "Delete Backup... removes a backup you no longer need."
+      ]
+    },
+    "how_to_use": {
+      "section": "Tools",
+      "title": "How to Use guide",
+      "guide": [
+        "Opens the full guide: every button and tool in this patcher, one short page each.",
+        "Pick a topic on the left to read it.",
+        "Every \"?\" button in the window opens the page for the control beside it."
+      ]
+    }
+  }
+}
