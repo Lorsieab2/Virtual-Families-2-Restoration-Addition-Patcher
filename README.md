@@ -92,6 +92,32 @@ Note that VF2 derives its save folder from the executable's own filename: saves 
 - Supports dry-run validation, backups, restore, and machine-readable logs.
 - Uses offline file patching; it does not inject into a running process.
 
+### Patches tab and Tools tab
+
+The window has two tabs. **Patches** is patch selection and the Dry Run / Enable-Disable / Restore Backup
+actions, as before. **Tools** holds:
+
+- **Back Up Saves...** lists every `Documents\LDW\Virtual Families 2...` save folder (the patcher's own
+  `- Modded` folders are ticked, the stock and copied folders are listed unticked) and copies each ticked one
+  into `<save folder>\Backups\Backup <date and time>`. The copy takes everything in the folder except
+  `Backups`: the game's `Virtual Families 2<N>.ldw` saves and their `- Copy` files, `ldwLog.txt`, and the
+  patcher's own `Virtual Families 2 Patcher Data` folder (the Children sidecar and any other file a patch keeps
+  beside a save). A running game is paused for the copy and resumed; every file is verified by size and
+  SHA-256, file times are kept, an existing backup is never written into, and a failed copy is set aside as
+  `... INCOMPLETE` and never offered.
+- **Restore Saves...** lists the backups, newest first, and restores the whole save folder or one family slot
+  (its save, the `- Copy`, the previous save at slot + 20 and its sidecar). It refuses while the game runs,
+  shows exactly which files will be replaced, added and removed, restores only after the player says yes, and
+  first backs up the current saves as `Backup <date> (before restore)`, so a restore can be undone. It rolls
+  back if a file fails. **Delete Backup...** removes one backup.
+- **How to Use...** opens the guide: one short page per control. A small **?** button beside each control
+  opens the page for it. The pages are `src/vf2_how_to_use.json`, read by `src/vf2_how_to_use.py`.
+
+The code is `src/vf2_save_backup.py` (no Tk), `src/vf2_tools_gui.py` (the Tools tab) and the two guide files;
+`work/` holds the copies the exporter ships (`GUI_TOOL_FILES` in `work/export_offline_patch_bundle.py`), and a
+test keeps the two trees identical. Tests: `tests/test_save_backup.py`, `tests/test_tools_tab.py` and
+`tests/test_how_to_use.py`.
+
 After extracting a release, run `Launch_GUI.bat`. The exported bundle also contains `How to Use.txt` with player-facing instructions.
 Release bundles include the instruction-only `vf2_crash_capture.py` helper and
 an unfilled exact-build manifest template for optional crash QA. Neither the
@@ -693,6 +719,7 @@ These three do more than change eligibility or wording:
 
 - `src/offline_vf2_patcher.py` - command-line patcher and validation/apply/restore engine.
 - `src/offline_vf2_patcher_gui.py` - Tkinter GUI, plus its icon assets under `src/assets/`.
+- `src/vf2_tools_gui.py`, `src/vf2_save_backup.py`, `src/vf2_how_to_use.py` and `src/vf2_how_to_use.json` - the GUI's Tools tab, Back Up / Restore Saves and the How to Use guides.
 - `tests/` - the patcher, exporter, and GUI test modules that run against `src/`.
 - `work/` - the reverse-engineering and build tree: disassembly dumps, analysis and
   export scripts, and the full test suite the shipped tools are synced from.

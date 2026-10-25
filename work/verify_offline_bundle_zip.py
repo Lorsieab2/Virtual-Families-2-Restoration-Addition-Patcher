@@ -65,6 +65,10 @@ SOUND_ROUTE_NAMES = {"beaker", "Child3", "Child7", "Child8"}
 REQUIRED_RUNNERS = {
     "offline_vf2_patcher.py",
     "offline_vf2_patcher_gui.py",
+    "vf2_tools_gui.py",
+    "vf2_save_backup.py",
+    "vf2_how_to_use.py",
+    "vf2_how_to_use.json",
     "vf2_crash_capture.py",
     "crash-capture-manifest.template.json",
     "Launch_GUI.bat",
