@@ -94,6 +94,51 @@ class ToolsTabTests(unittest.TestCase):
         self.assertIn("Back Up Saves...", labels)
         self.assertIn("Restore Saves...", labels)
         self.assertIn("How to Use...", labels)
+        self.assertIn("Update Family Logs", labels)
+
+    def _family_save(self, slot: int = 2) -> None:
+        sys.path.insert(0, str(ROOT / "tests"))
+        from vf2_save_builder import SaveBuilder
+        b = SaveBuilder(nickname="Smiths").villager(0, "Ann", 1, 30).generation(0, ("Ann", 1, 0))
+        b.write(self.folder / f"Virtual Families 2{slot}.ldw")
+
+    def test_opening_the_tools_tab_updates_the_family_logs_quietly(self):
+        self._family_save()
+        self.app.notebook.select(self.app.patches_tab)
+        self.app._tools_tab_changed()
+        self.assertFalse((self.folder / "Virtual Families 2 Patcher").exists())   # not on the Patches tab
+        self.app.notebook.select(self.app.tools_tab)
+        self.app._tools_tab_changed()
+        history = self.folder / "Virtual Families 2 Patcher" / "Save 2" / "Logs" / "Family History" / "Family History 1.txt"
+        self.assertTrue(history.read_bytes().startswith(b"Family: Smiths (Save 2)\r\n"))
+        self.assertIn("Family Logs:", self.app.status_var.get())
+        self.info.assert_not_called()
+        self.error.assert_not_called()
+
+    def test_update_family_logs_button_shows_each_slot(self):
+        self._family_save()
+        with mock.patch.object(self.app, "_show_family_logs_results") as shown:
+            outcomes = self.app.update_family_logs()
+        folder, results, error = outcomes[0]
+        self.assertEqual(folder.name, FOLDER)
+        self.assertIsNone(error)
+        self.assertEqual({r.slot: r.status for r in results}[2], "backfilled")
+        self.assertEqual({r.slot: r.status for r in results}[1], "unreadable")   # setUp's placeholder file
+        shown.assert_called_once()
+        dialog = self.app._show_family_logs_results(outcomes)
+        dialog.destroy()
+
+    def test_update_family_logs_is_refused_while_the_game_runs(self):
+        class Running(NoGame):
+            def find_game(self, save_folder_name):
+                return [(42, FOLDER + ".exe")]
+        self._family_save()
+        with mock.patch.object(sb, "WindowsProcesses", Running), mock.patch.object(self.app, "_show_family_logs_results"):
+            outcomes = self.app.update_family_logs()
+        self.assertIsNone(outcomes[0][1])
+        self.assertIn("running", outcomes[0][2])
+        self.assertFalse((self.folder / "Virtual Families 2 Patcher").exists())
+        self.assertIn("Not updated while the game is running", self.app.status_var.get())
 
     def test_every_guide_has_a_question_mark_button_that_opens_it(self):
         self.assertEqual(self.app.help_keys - {"getting_started"}, set(guides.keys()) - {"getting_started"})

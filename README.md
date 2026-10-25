@@ -109,7 +109,12 @@ actions, as before. **Tools** holds:
   (its save, the `- Copy`, the previous save at slot + 20 and its sidecar). It refuses while the game runs,
   shows exactly which files will be replaced, added and removed, restores only after the player says yes, and
   first backs up the current saves as `Backup <date> (before restore)`, so a restore can be undone. It rolls
-  back if a file fails. **Delete Backup...** removes one backup.
+  back if a file fails. **Delete Backup...** removes one backup. A one-slot restore also brings back that
+  slot's Family Logs (`Virtual Families 2 Patcher\Save <N>\`).
+- **Family Logs** (`src/vf2_family_logs.py`, `docs/FAMILY_LOGS.md`): the VF1 Family Logs files and formats,
+  written in Python by comparing each slot's save (and the game's previous save, slot + 20) with the snapshot
+  the patcher kept; no game code is hooked. They update when the Tools tab opens and from **Update Family
+  Logs**, and never while the game is running.
 - **How to Use...** opens the guide: one short page per control. A small **?** button beside each control
   opens the page for it. The pages are `src/vf2_how_to_use.json`, read by `src/vf2_how_to_use.py`.
 
@@ -720,6 +725,7 @@ These three do more than change eligibility or wording:
 - `src/offline_vf2_patcher.py` - command-line patcher and validation/apply/restore engine.
 - `src/offline_vf2_patcher_gui.py` - Tkinter GUI, plus its icon assets under `src/assets/`.
 - `src/vf2_tools_gui.py`, `src/vf2_save_backup.py`, `src/vf2_how_to_use.py` and `src/vf2_how_to_use.json` - the GUI's Tools tab, Back Up / Restore Saves and the How to Use guides.
+- `src/vf2_family_logs.py` and `src/vf2_save_reader.py` - the Family Logs (from save comparisons) and the read-only save reader they use.
 - `tests/` - the patcher, exporter, and GUI test modules that run against `src/`.
 - `work/` - the reverse-engineering and build tree: disassembly dumps, analysis and
   export scripts, and the full test suite the shipped tools are synced from.

@@ -124,6 +124,19 @@
         "Delete Backup... removes a backup you no longer need."
       ]
     },
+    "update_family_logs": {
+      "section": "Tools",
+      "title": "Family Logs",
+      "guide": [
+        "Writes each family's story beside its save: Family History, Births and Conceptions, Deaths, Events, and Population and Statistics pages.",
+        "It runs when the Tools tab opens and when you click Update Family Logs. It never runs while the game is running: quit the game first.",
+        "The logs come from comparing the saves the game writes when you quit (and the save before) with the ones logged last time.",
+        "Events are dated by the save they first appear in. Something that starts and ends between two saves cannot be seen.",
+        "A family logged for the first time gets its past from the family tree, marked \"backfilled, no date\".",
+        "The save does not say why someone left home or what caused a death, so the logs say \"left home\" and \"cause not recorded\".",
+        "Start Over or a new family starts fresh logs; the old ones move to Save <N>\\Backups."
+      ]
+    },
     "how_to_use": {
       "section": "Tools",
       "title": "How to Use guide",

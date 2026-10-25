@@ -775,7 +775,8 @@ def _step(logs: SlotLogs, a: Snapshot, save: R.FamilySave, save_folder: Path, sl
         shift = None
     step = Step(logs, a, b)
     step.cause = cause
-    step.tree(shift)
+    # EvictFamily leaves the flag set, so the next founder of an evicted household follows the eviction
+    step.tree(shift, after_eviction=not a.gens and bool(b.evicted))
     step.household()
     return b, "updated"
 

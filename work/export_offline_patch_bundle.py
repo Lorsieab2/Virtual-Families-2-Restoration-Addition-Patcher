@@ -28,6 +28,8 @@ GUI_TOOL_FILES = (
     "vf2_save_backup.py",
     "vf2_how_to_use.py",
     "vf2_how_to_use.json",
+    "vf2_save_reader.py",
+    "vf2_family_logs.py",
 )
 ROOT = SOURCE_DIR.parent
 DEFAULT_BASE_PAYLOAD = SOURCE_DIR / "vanilla_runtime_payload"
@@ -4013,6 +4015,14 @@ Back Up Saves copies the save folder, including the patcher's own files in
 "Virtual Families 2 Patcher Data", into its Backups folder (the game is paused
 for the copy if it is running). Restore Saves shows exactly what will change,
 asks first, and backs up your current saves before it restores anything.
+
+Family Logs:
+The Tools tab also keeps Family Logs for every family, in
+"Virtual Families 2 Patcher/Save <N>/Logs" beside its save. They are worked out
+by comparing saves (the game saves when you quit), so each event is dated by the
+save it first appears in, and something that starts and ends between two saves
+cannot be seen. They update when the Tools tab opens or when you click Update
+Family Logs, and never while the game is running.
 
 Crash capture QA only (optional):
 The patcher never changes Windows Error Reporting settings or launches the

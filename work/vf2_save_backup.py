@@ -74,6 +74,8 @@ _BACKUP_NAME = re.compile(
 _SAVE_NAME = re.compile(r"^Virtual Families 2(0|[1-9]\d*)\.ldw$", re.I)
 _SIDECAR_NAME = re.compile(r"^Virtual Families 2(0|[1-9]\d*)\.ldw\.dat$", re.I)
 SHARED_FILES = ("wc.dat",)      # beside ldwLog.txt, shared by every family
+LOGS_FOLDER = "Virtual Families 2 Patcher"     # the Family Logs (vf2_family_logs): "<this>\\Save N\\..."
+_LOGS_SLOT = re.compile(r"^Save ([1-5])$", re.I)
 
 
 class BackupError(Exception):
@@ -607,7 +609,7 @@ def file_slot(relative: Path) -> int | str | None:
 
     A slot file is exactly "Virtual Families 2<N>.ldw" at the top of the save folder (N + 20 is the
     previous save of slot N, for slots 1-5 only); the patcher's sidecar is that name + ".dat" in
-    "<Patcher Data>\\Children".  Slot 0 ("settings"), ldwLog.txt ("engine log") and wc.dat ("shared") belong
+    "<Patcher Data>\\Children", and its Family Logs are "Virtual Families 2 Patcher\\Save N\\...".  Slot 0 ("settings"), ldwLog.txt ("engine log") and wc.dat ("shared") belong
     to no family, and every other name is unknown (None): only a whole-folder restore touches those.
     """
     parts = relative.parts
@@ -620,6 +622,10 @@ def file_slot(relative: Path) -> int | str | None:
         match = _SAVE_NAME.match(relative.name)
     elif len(parts) == 3 and parts[0].casefold() == DATA_FOLDER.casefold() and parts[1].casefold() == "children":
         match = _SIDECAR_NAME.match(relative.name)
+    elif len(parts) >= 3 and parts[0].casefold() == LOGS_FOLDER.casefold():
+        # The Family Logs of slot N ("Virtual Families 2 Patcher\\Save N\\..."): they follow that slot's save.
+        logs = _LOGS_SLOT.match(parts[1])
+        return int(logs.group(1)) if logs else None
     if match:
         number = int(match.group(1))
         if 21 <= number <= 25 and len(parts) == 1:      # the game keeps the previous save of slot N at N + 20

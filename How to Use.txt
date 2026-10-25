@@ -51,6 +51,14 @@ Back Up Saves copies the save folder, including the patcher's own files in
 for the copy if it is running). Restore Saves shows exactly what will change,
 asks first, and backs up your current saves before it restores anything.
 
+Family Logs:
+The Tools tab also keeps Family Logs for every family, in
+"Virtual Families 2 Patcher/Save <N>/Logs" beside its save. They are worked out
+by comparing saves (the game saves when you quit), so each event is dated by the
+save it first appears in, and something that starts and ends between two saves
+cannot be seen. They update when the Tools tab opens or when you click Update
+Family Logs, and never while the game is running.
+
 Crash capture QA only (optional):
 The patcher never changes Windows Error Reporting settings or launches the
 game. If a test build crashes, copy crash-capture-manifest.template.json to a

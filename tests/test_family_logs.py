@@ -271,7 +271,7 @@ class Events(Base):
         c.villager(0, "Eve", 1, 22).generation(0, ("Eve", 1, 0))
         self.save(c)
         self.run_slot()
-        self.assertEqual(self.dated()[-1], "Generation 1 began: Eve (Female, 22) was adopted and started the family")
+        self.assertEqual(self.dated()[-1], "Generation 1 began after the eviction: Eve (Female, 22) was adopted")
 
     def test_eviction_and_new_family_in_one_step(self):
         self.start()

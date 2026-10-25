@@ -13,6 +13,7 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import messagebox, ttk
 
+import vf2_family_logs
 import vf2_how_to_use
 import vf2_save_backup
 
@@ -104,8 +105,27 @@ class ToolsTabMixin:
         self._link(row, "Restore Saves...", self.restore_saves).pack(side="left", padx=(24, 0))
         self._help_button(row, "restore_saves").pack(side="left", padx=(3, 0))
 
+        logs = ttk.LabelFrame(tab, text="Family Logs", style="Section.TLabelframe", padding=10)
+        logs.grid(row=1, column=0, sticky="ew", pady=(10, 0))
+        ttk.Label(
+            logs,
+            text=(
+                "Each family's history, births, deaths and events, written beside its save in "
+                "Virtual Families 2 Patcher\\Save <N>\\Logs. They are worked out from the saves the game writes when "
+                "you quit, so they update when this tab opens and when you click Update Family Logs."
+            ),
+            style="Muted.TLabel", wraplength=WRAP, justify="left",
+        ).grid(row=0, column=0, sticky="w", pady=(0, 8))
+        row = ttk.Frame(logs)
+        row.grid(row=1, column=0, sticky="w")
+        self._link(row, "Update Family Logs", self.update_family_logs).pack(side="left")
+        self._help_button(row, "update_family_logs").pack(side="left", padx=(3, 0))
+        notebook = getattr(self, "notebook", None)
+        if notebook is not None:
+            notebook.bind("<<NotebookTabChanged>>", self._tools_tab_changed, add="+")
+
         guide = ttk.LabelFrame(tab, text="Help", style="Section.TLabelframe", padding=10)
-        guide.grid(row=1, column=0, sticky="ew", pady=(10, 0))
+        guide.grid(row=2, column=0, sticky="ew", pady=(10, 0))
         row = ttk.Frame(guide)
         row.grid(row=0, column=0, sticky="w")
         self._link(row, "How to Use...", self.show_how_to_use_guide).pack(side="left")
@@ -200,6 +220,71 @@ class ToolsTabMixin:
         window._vf2_topics = topics
         window._vf2_page = page
         return window
+
+    # -- Family Logs ---------------------------------------------------------
+
+    def _tools_tab_changed(self, _event=None) -> None:
+        """Opening the Tools tab brings every family's logs up to date (quietly: the status line says how it went)."""
+        try:
+            if self.notebook.select() != str(self.tools_tab):
+                return
+        except (AttributeError, tk.TclError):
+            return
+        self.update_family_logs(quiet=True)
+
+    def update_family_logs(self, quiet: bool = False):
+        """Update the Family Logs of every save folder; refused for a folder whose game is running."""
+        documents = vf2_save_backup.documents_folder()
+        if documents is None:
+            if not quiet:
+                messagebox.showerror("Family Logs", "Windows did not report where your Documents folder is, so the save folders cannot be found.")
+            return None
+        try:
+            if quiet:
+                outcomes = vf2_family_logs.update_all(documents)
+            else:
+                outcomes = self._run_with_wait("Updating Family Logs...", lambda: vf2_family_logs.update_all(documents))
+        except OSError as exc:
+            self.status_var.set(f"Family Logs: not updated ({exc}).")
+            if not quiet:
+                messagebox.showerror("Family Logs", f"The Family Logs could not be updated:\n\n{exc}")
+            return None
+        changed = sum(1 for _f, results, _e in outcomes for r in results or () if r.lines)
+        refused = [f.name for f, results, _e in outcomes if results is None]
+        text = f"Family Logs: {len(outcomes) - len(refused)} save folder(s) checked, {changed} family log(s) updated."
+        if refused:
+            text += f" Not updated while the game is running: {', '.join(refused)}."
+        self.status_var.set(text)
+        if not quiet:
+            self._show_family_logs_results(outcomes)
+        return outcomes
+
+    def _show_family_logs_results(self, outcomes) -> tk.Toplevel:
+        dialog, frame = self._scrolling_dialog("Family Logs")
+        if not outcomes:
+            ttk.Label(frame, text="No Virtual Families 2 save folders were found in your Documents\\LDW folder.",
+                      wraplength=WRAP, justify="left").pack(anchor="w")
+        words = {"updated": "updated", "unchanged": "no change since the last update", "started": "logs started",
+                 "backfilled": "logs started from the family tree", "new family": "a new family: logs started again",
+                 "unreadable": "the save could not be read; nothing was changed"}
+        for folder, results, error in outcomes:
+            ttk.Label(frame, text=folder.name, font=("", 10, "bold")).pack(anchor="w", pady=(8, 0))
+            if results is None:
+                ttk.Label(frame, text=f"NOT updated: {error}", wraplength=WRAP, justify="left", foreground="#a01010").pack(
+                    anchor="w", padx=(14, 0))
+                continue
+            lines = [f"Save {r.slot}: {words.get(r.status, r.status)}"
+                     + (f" ({r.lines} new line(s))" if r.lines else "") for r in results if r.status != "no save"]
+            ttk.Label(frame, text="\n".join(lines) or "No family saves.", wraplength=WRAP, justify="left").pack(
+                anchor="w", padx=(14, 0))
+            logs = folder / vf2_family_logs.PATCHER_FOLDER
+            if logs.is_dir():
+                self._link(frame, "Open Family Logs Folder", lambda path=logs: self._open_folder(path)).pack(
+                    anchor="w", padx=(14, 0), pady=(2, 0))
+        ttk.Button(frame, text="Close", command=dialog.destroy).pack(pady=(16, 0))
+        dialog.protocol("WM_DELETE_WINDOW", dialog.destroy)
+        self._hold(dialog)
+        return dialog
 
     # -- Back Up Saves ------------------------------------------------------
 

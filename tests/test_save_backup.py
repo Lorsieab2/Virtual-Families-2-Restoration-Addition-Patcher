@@ -208,6 +208,11 @@ class Slots(unittest.TestCase):
         self.assertEqual(slot("Virtual Families 20.ldw"), "settings")
         self.assertEqual(slot("Virtual Families 2 Patcher Data/Children/Virtual Families 23.ldw.dat"), 3)
         self.assertIsNone(slot("Virtual Families 2 Patcher Data/Children/notes.txt"))
+        # the Family Logs of slot N follow that slot's save
+        self.assertEqual(slot("Virtual Families 2 Patcher/Save 3/Logs/Family History/Family History 1.txt"), 3)
+        self.assertEqual(slot("Virtual Families 2 Patcher/Save 1/Data/Log Checks/x.dat"), 1)
+        self.assertIsNone(slot("Virtual Families 2 Patcher/Save 6/Logs/a.txt"))
+        self.assertIsNone(slot("Virtual Families 2 Patcher/notes.txt"))
         self.assertEqual(sb.file_slot(Path("ldwLog.txt")), "engine log")
         self.assertIsNone(sb.file_slot(Path("sub/ldwLog.txt")))
 
