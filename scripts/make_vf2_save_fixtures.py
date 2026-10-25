@@ -22,6 +22,11 @@ FIXTURES = {
     "pending_birth_slot1.ldw.gz": "b171/Virtual Families 21.ldw",
     "settings_slot0.ldw.gz": "b202/Virtual Families 20.ldw",
     "legacy_header_slot5.ldw.gz": "main/virtual families 25.ldw",
+    # one family over three builds (slot 1): B171 (= pending_birth_slot1) -> B192 previous save and save ->
+    # B202 previous save; the Family Logs tests read them as real before/after pairs
+    "b192_slot1_previous.ldw.gz": "b192/Virtual Families 221.ldw",
+    "b192_slot1.ldw.gz": "b192/Virtual Families 21.ldw",
+    "b202_slot1_previous.ldw.gz": "b202/Virtual Families 221.ldw",
 }
 
 
