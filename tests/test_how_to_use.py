@@ -38,9 +38,12 @@ class GuideContentTests(unittest.TestCase):
                 self.assertNotRegex(guides.guide(key).text, r"(?i)villag")
 
     def test_the_new_tools_are_covered(self):
-        for key in ("back_up_saves", "restore_saves", "how_to_use", "check_updates", "restore_backup", "dry_run", "apply"):
+        for key in ("back_up_saves", "restore_saves", "rename_family", "how_to_use", "check_updates", "restore_backup",
+                    "dry_run", "apply"):
             self.assertIn(key, guides.keys())
         self.assertIn("(before restore)", guides.guide("restore_saves").text)
+        self.assertIn("(before rename)", guides.guide("rename_family").text)
+        self.assertIn("19", guides.guide("rename_family").text)
         self.assertIn("Patcher Data", guides.guide("back_up_saves").text)
 
     def test_unknown_key_fails_loudly(self):

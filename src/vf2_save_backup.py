@@ -57,6 +57,7 @@ DATA_FOLDER = "Virtual Families 2 Patcher Data"
 ENGINE_LOG = "ldwLog.txt"
 HASH_CHUNK = 1024 * 1024
 BEFORE_RESTORE = "(before restore)"
+BEFORE_RENAME = "(before rename)"    # Rename Family makes this backup before it writes the new name
 INCOMPLETE = " INCOMPLETE"
 IN_PROGRESS = " (in progress)"
 DELETING = " (deleting)"
@@ -64,7 +65,7 @@ DELETE_ATTEMPTS = 5
 DELETE_RETRY_SECONDS = 0.5
 
 _BACKUP_NAME = re.compile(
-    r"^Backup (\d{4}-\d{2}-\d{2} \d{2}-\d{2}-\d{2})(?: \((\d+)\))?(?: (\(before restore\)))?$"
+    r"^Backup (\d{4}-\d{2}-\d{2} \d{2}-\d{2}-\d{2})(?: \((\d+)\))?(?: (\(before restore\)|\(before rename\)))?$"
 )
 # The game's save files are exactly "Virtual Families 2" + N + ".ldw" (one space, N without leading zeros):
 # 0 is the shared settings, 1-5 are families, N + 20 is the previous save of slot N (made for 1-5 only).
@@ -582,12 +583,15 @@ class BackupInfo:
     file_count: int
     size: int
     slots: list[int]
+    before_rename: bool = False
 
     @property
     def label(self) -> str:
         text = self.when.strftime("%Y-%m-%d %H:%M:%S")
         if self.before_restore:
             text += " " + BEFORE_RESTORE
+        elif self.before_rename:
+            text += " " + BEFORE_RENAME
         return text
 
 
@@ -648,7 +652,8 @@ def list_backups(save_folder: Path) -> list[BackupInfo]:
         when, sequence, label = parsed
         files = files_to_back_up(entry)
         size = sum((entry / relative).stat().st_size for relative in files)
-        found.append((when, sequence, BackupInfo(entry, when, label == BEFORE_RESTORE, len(files), size, slots_in(files))))
+        found.append((when, sequence, BackupInfo(entry, when, label == BEFORE_RESTORE, len(files), size, slots_in(files),
+                                                     label == BEFORE_RENAME)))
     found.sort(key=lambda item: (item[0], item[1]), reverse=True)
     return [info for _when, _sequence, info in found]
 

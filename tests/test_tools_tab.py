@@ -196,6 +196,85 @@ class ToolsTabTests(unittest.TestCase):
         # The patch buttons are still registered as busy controls (disabled during a run).
         self.assertTrue(self.app.busy_controls)
 
+    # -- Rename Family ------------------------------------------------------
+
+    def _real_saves(self):
+        """Slot 1 becomes a copy of a real family save; slot 0 a copy of a real settings file."""
+        import gzip
+        fixtures = ROOT / "tests" / "fixtures" / "vf2_saves"
+        (self.folder / "Virtual Families 20.ldw").write_bytes(gzip.decompress((fixtures / "settings_slot0.ldw.gz").read_bytes()))
+        (self.folder / "Virtual Families 21.ldw").write_bytes(
+            gzip.decompress((fixtures / "one_generation_slot3.ldw.gz").read_bytes()))
+
+    def _snapshot(self):
+        return {p.relative_to(self.folder): p.read_bytes() for p in self.folder.rglob("*") if p.is_file()}
+
+    def test_rename_family_is_on_the_tools_tab_with_a_guide(self):
+        labels = []
+
+        def walk(widget):
+            for child in widget.winfo_children():
+                try:
+                    labels.append(str(child.cget("text")))
+                except Exception:
+                    pass
+                walk(child)
+
+        walk(self.app.tools_tab)
+        self.assertIn("Rename Family...", labels)
+        self.assertIn("rename_family", self.app.help_keys)
+
+    def test_rename_dialog_offers_only_loadable_slots_and_checks_the_name(self):
+        self._real_saves()
+        dialog = self.app.rename_family()
+        try:
+            self.assertEqual(dialog._vf2_slot_var.get(), 1)            # slot 5 holds b"family five": not offered
+            self.assertEqual(dialog._vf2_name_var.get(), "Lorsieab2")
+            self.assertIn("already", dialog._vf2_problem_var.get())
+            dialog._vf2_name_var.set("A" * 20)
+            self.assertIn("19", dialog._vf2_problem_var.get())
+            dialog._vf2_name_var.set("NEW PLAYER")
+            self.assertIn("empty slot", dialog._vf2_problem_var.get())
+            before = self._snapshot()
+            dialog._vf2_start()                                        # refused: nothing is written
+            self.assertEqual(self._snapshot(), before)
+        finally:
+            if dialog.winfo_exists():
+                dialog.destroy()
+
+    def test_a_confirmed_rename_backs_up_and_renames(self):
+        import vf2_save_reader as reader
+        self._real_saves()
+        dialog = self.app.rename_family()
+        dialog._vf2_name_var.set("The Smiths")
+        with mock.patch.object(gui.messagebox, "askyesno", return_value=True):
+            dialog._vf2_start()
+        save = reader.read_family_save(self.folder / "Virtual Families 21.ldw")
+        self.assertEqual(save.nickname, "The Smiths")
+        self.assertEqual(reader.read_settings(self.folder / "Virtual Families 20.ldw").player_names[0], "The Smiths")
+        backups = sb.list_backups(self.folder)
+        self.assertTrue(backups and backups[0].before_rename)
+        self.assertEqual(self.app.status_var.get(), "Rename Family: family slot 1 is now called The Smiths.")
+        self.info.assert_called()
+
+    def test_a_running_game_stops_the_rename(self):
+        self._real_saves()
+        before = self._snapshot()
+
+        class Running(NoGame):
+            def find_game(self, save_folder_name):
+                return [(7, save_folder_name + ".exe")]
+
+        dialog = self.app.rename_family()
+        dialog._vf2_name_var.set("The Smiths")
+        with mock.patch.object(sb, "WindowsProcesses", Running), \
+                mock.patch.object(gui.messagebox, "askyesno", return_value=True):
+            dialog._vf2_start()
+        self.assertEqual(self._snapshot(), before)
+        self.error.assert_called_once()
+        self.assertIn("Close the game first", self.error.call_args[0][1])
+        self.assertEqual(self.app.status_var.get(), "Rename Family: nothing was renamed.")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -28,6 +28,8 @@ GUI_TOOL_FILES = (
     "vf2_save_backup.py",
     "vf2_how_to_use.py",
     "vf2_how_to_use.json",
+    "vf2_rename_family.py",
+    "vf2_save_reader.py",
 )
 ROOT = SOURCE_DIR.parent
 DEFAULT_BASE_PAYLOAD = SOURCE_DIR / "vanilla_runtime_payload"
