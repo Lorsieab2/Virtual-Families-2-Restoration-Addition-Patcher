@@ -52,6 +52,7 @@ save folder with a fake process list.
 from __future__ import annotations
 
 import os
+import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -214,7 +215,7 @@ def _with_name(data: bytes, offset: int, width: int, name: str) -> bytes:
 
 def _write_atomically(path: Path, data: bytes) -> None:
     """Replace ``path`` with ``data`` through a temporary file, then verify."""
-    temporary = path.with_name(path.name + ".rename-tmp")
+    temporary = path.with_name(f"{path.name}.rename-{uuid.uuid4().hex[:12]}.tmp")   # a leftover never blocks a rename
     try:
         with temporary.open("xb") as handle:
             handle.write(data)
