@@ -879,7 +879,10 @@ def delete_backup(save_folder: Path, backup: Path) -> None:
     last: OSError | None = None
     for _attempt in range(DELETE_ATTEMPTS):
         try:
-            shutil.rmtree(doomed, onexc=retry_writable)
+            if sys.version_info >= (3, 12):
+                shutil.rmtree(doomed, onexc=retry_writable)
+            else:                                         # onexc is new in 3.12; the README promises 3.9
+                shutil.rmtree(doomed, onerror=retry_writable)
             return
         except FileNotFoundError:
             return
