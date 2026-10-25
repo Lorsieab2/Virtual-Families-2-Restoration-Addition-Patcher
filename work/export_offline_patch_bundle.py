@@ -30,6 +30,8 @@ GUI_TOOL_FILES = (
     "vf2_how_to_use.json",
     "vf2_rename_family.py",
     "vf2_game_speed.py",
+    "vf2_game_mechanics.py",
+    "vf2_game_mechanics_window.py",
     "vf2_save_reader.py",
 )
 ROOT = SOURCE_DIR.parent

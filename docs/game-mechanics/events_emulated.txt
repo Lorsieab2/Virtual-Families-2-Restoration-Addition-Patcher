@@ -1,0 +1,883 @@
+
+## 1 Subject: A Secret Admirer  canfire=0 email=1
+   choice0: 100.00%   => ?
+   choice1: 100.00%   => ?
+
+## 2 Subject: I Ate Soup!  canfire=1 email=1
+   choice0: 100.00%   => ?
+   choice1: 100.00%   => ?
+
+## 3 Subject: I am on a BOAT!  canfire=1 email=1
+   award: 100.00%  0
+   impact: 100.00%  AdjustHappinessTrend@CVillagerState(-10)
+
+## 4 Subject: So Many Babies!  canfire=1 email=1
+   award: 100.00%  0
+   impact: 100.00%  AdjustHappinessTrend@CVillagerState(-10)
+
+## 5 Subject: Oh So Clever!  canfire=1 email=1
+   award: 100.00%  0
+   impact:  84.99%  AdjustHappinessTrend@CVillagerState(-10)
+   impact:  15.01%  AdjustHappinessTrend@CVillagerState(-10); SetSymptom@CVillagerState(2)
+
+## 6 Subject: Status-Single  canfire=1 email=1
+   award: 100.00%  0
+   impact: 100.00%  AdjustHappinessTrend@CVillagerState(10); StartNewBehavior(7604236)
+
+## 7 Subject: I Lost My Pants!  canfire=1 email=1
+   award: 100.00%  0
+   impact: 100.00%  AdjustHappinessTrend@CVillagerState(10)
+
+## 8 Subject: Boring  canfire=1 email=1
+   award: 100.00%  0
+   impact: 100.00%  AdjustEnergy@CVillagerState(-20); NewBehavior(131,806354679)
+
+## 9 Subject: Likes  canfire=1 email=1
+   choice0: 100.00%   => ?
+   choice1: 100.00%   => ?
+
+## 10 Subject: Electric Bill Correction!  canfire=1 email=1
+   award:   5.00%  5
+   award:   5.00%  6
+   award:   5.00%  7
+   award:   5.00%  8
+   award:   5.00%  9
+   award:   5.00%  10
+   award:   5.00%  11
+   award:   5.00%  12
+   award:   5.00%  13
+   award:   5.00%  14
+   award:   5.00%  15
+   award:   5.00%  16
+   award:   5.00%  17
+   award:   5.00%  18
+   award:   5.00%  19
+   award:   5.00%  20
+   award:   5.00%  21
+   award:   5.00%  22
+   award:   5.00%  23
+   award:   5.00%  24
+   impact: 100.00%  Adjust@CMoney(-20,1)
+
+## 11 Subject: Electric Bill Correction!  canfire=1 email=1
+   award:   5.00%  5
+   award:   5.00%  6
+   award:   5.00%  7
+   award:   5.00%  8
+   award:   5.00%  9
+   award:   5.00%  10
+   award:   5.00%  11
+   award:   5.00%  12
+   award:   5.00%  13
+   award:   5.00%  14
+   award:   5.00%  15
+   award:   5.00%  16
+   award:   5.00%  17
+   award:   5.00%  18
+   award:   5.00%  19
+   award:   5.00%  20
+   award:   5.00%  21
+   award:   5.00%  22
+   award:   5.00%  23
+   award:   5.00%  24
+   impact: 100.00%  Adjust@CMoney(20,1)
+
+## 12 Subject: Funny  canfire=1 email=0
+   award: 100.00%  0
+   impact: 100.00%  Adjust@CMoney(0,1)
+
+## 13 Subject: Professional Association Fee  canfire=1 email=1
+   award:  33.33%  5
+   award:  33.33%  8
+   award:  33.33%  11
+   impact: 100.00%  Adjust@CMoney(-5,1)
+
+## 14 Subject: Professional Association Rebate  canfire=1 email=1
+   award:  10.00%  5
+   award:  10.00%  8
+   award:  10.00%  11
+   award:  10.00%  14
+   award:  10.00%  17
+   award:  10.00%  20
+   award:  10.00%  23
+   award:  10.00%  26
+   award:  10.00%  29
+   award:  10.00%  32
+   impact: 100.00%  Adjust@CMoney(26,1)
+
+## 15 Subject: Professional Network  canfire=1 email=1
+   award: 100.00%  0
+   impact: 100.00%  AdvanceCareer@CVillagerSkills(7604236,0,0); AdvanceCareer@CVillagerSkills(7604236,0,0); AdvanceCareer@CVillagerSkills(7604236,0,0); AdvanceCareer@CVillagerSkills(7604236,0,0); AdvanceCareer@CVillagerSkills(7604236,0,0); AdvanceCareer@CVillagerSkills(7604236,0,0); AdvanceCareer@CVillagerSkills(7604236,0,0); AdvanceCareer@CVillagerSkills(7604236,0,0); AdvanceCareer@CVillagerSkills(7604236,0,0); AdvanceCareer@CVillagerSkills(7604236,0,0); AdvanceCareer@CVillagerSkills(7604236,0,0); AdvanceCareer@CVillagerSkills(7604236,0,0); AdvanceCareer@CVillagerSkills(7604236,0,0); AdvanceCareer@CVillagerSkills(7604236,0,0); AdvanceCareer@CVillagerSkills(7604236,0,0); AdvanceCareer@CVillagerSkills(7604236,0,0); AdvanceCareer@CVillagerSkills(7604236,0,0); AdvanceCareer@CVillagerSkills(7604236,0,0); AdvanceCareer@CVillagerSkills(7604236,0,0); AdvanceCareer@CVillagerSkills(7604236,0,0)
+
+## 16 Subject: Professional Association Award!  canfire=1 email=1
+   award: 100.00%  0
+   impact: 100.00%  AdvanceCareer@CVillagerSkills(7604236,0,1)
+
+## 17 Subject: Infringement Complaint  canfire=1 email=1
+   award: 100.00%  0
+   impact: 100.00%  
+
+## 18 Subject: Tax Audit  canfire=1 email=1
+   award:   1.33%  40
+   award:   1.33%  41
+   award:   1.33%  42
+   award:   1.33%  43
+   award:   1.33%  44
+   award:   1.33%  45
+   award:   1.33%  46
+   award:   1.33%  47
+   award:   1.33%  48
+   award:   1.33%  49
+   award:   1.33%  50
+   award:   1.33%  51
+   award:   1.33%  52
+   award:   1.33%  53
+   award:   1.33%  54
+   award:   1.33%  55
+   award:   1.33%  56
+   award:   1.33%  57
+   award:   1.33%  58
+   award:   1.33%  59
+   award:   1.33%  60
+   award:   1.33%  61
+   award:   1.33%  62
+   award:   1.33%  63
+   award:   1.33%  64
+   award:   1.33%  65
+   award:   1.33%  66
+   award:   1.33%  67
+   award:   1.33%  68
+   award:   1.33%  69
+   award:   1.33%  70
+   award:   1.33%  71
+   award:   1.33%  72
+   award:   1.33%  73
+   award:   1.33%  74
+   award:   1.33%  75
+   award:   1.33%  76
+   award:   1.33%  77
+   award:   1.33%  78
+   award:   1.33%  79
+   award:   1.33%  80
+   award:   1.33%  81
+   award:   1.33%  82
+   award:   1.33%  83
+   award:   1.33%  84
+   award:   1.33%  85
+   award:   1.33%  86
+   award:   1.33%  87
+   award:   1.33%  88
+   award:   1.33%  89
+   award:   1.33%  90
+   award:   1.33%  91
+   award:   1.33%  92
+   award:   1.33%  93
+   award:   1.33%  94
+   award:   1.33%  95
+   award:   1.33%  96
+   award:   1.33%  97
+   award:   1.33%  98
+   award:   1.33%  99
+   award:   1.33%  100
+   award:   1.33%  101
+   award:   1.33%  102
+   award:   1.33%  103
+   award:   1.33%  104
+   award:   1.33%  105
+   award:   1.33%  106
+   award:   1.33%  107
+   award:   1.33%  108
+   award:   1.33%  109
+   award:   1.33%  110
+   award:   1.33%  111
+   award:   1.33%  112
+   award:   1.33%  113
+   award:   1.33%  114
+   impact: 100.00%  Adjust@CMoney(-62,1)
+
+## 19 Subject: Tax Audit  canfire=1 email=1
+   award: 100.00%  500
+   impact: 100.00%  Adjust@CMoney(500,1)
+
+## 20 Subject: Want a bigger brain?!  canfire=1 email=1
+   choice0: 100.00%   => ?
+   choice1: 100.00%   => ?
+
+## 21 Subject: Congratulations you won the Nigerian Lottery!!  canfire=1 email=1
+   choice0: 100.00%   => ?
+   choice1: 100.00%   => ?
+
+## 22 Subject: Save money on your car insurance!  canfire=1 email=1
+   choice0: 100.00%   => ?
+   choice1: 100.00%   => ?
+
+## 23 Subject: Congratulations you are in 'What's What'!  canfire=1 email=1
+   choice0: 100.00%   => ?
+   choice1: 100.00%   => ?
+
+## 24 Subject: How've you been?  canfire=1 email=1
+   choice0: 100.00%   => ?
+   choice1: 100.00%   => ?
+
+## 25 Subject: How've you been?  canfire=1 email=1
+   choice0: 100.00%   => ?
+   choice1: 100.00%   => ?
+
+## 26 Subject: Remember me?  canfire=1 email=1
+   choice0: 100.00%   => ?
+   choice1: 100.00%   => ?
+
+## 27 Subject: Oh! A collectible!  canfire=1 email=1
+   award: 100.00%  0
+   impact: 100.00%  Add@CCollectableItem(-1,0,0,1)
+
+## 28 Subject: My Weather Machine  canfire=1 email=1
+   award: 100.00%  0
+   impact:  33.33%  SetCurrent@CWeather(2,0); SetNext@CWeather(2)
+   impact:  33.33%  SetCurrent@CWeather(5,0); SetNext@CWeather(5)
+   impact:  33.33%  SetCurrent@CWeather(4,0); SetNext@CWeather(4)
+
+## 29 Subject: An extra hammock  canfire=0 email=1
+   award: 100.00%  0
+   impact: 100.00%  MakeAllVillagersRunTo@CVillagerManager(750,184,834,240)
+
+## 30 Subject: Happy Birthday!!!  canfire=1 email=1
+   award:  20.00%  10
+   award:  20.00%  20
+   award:  20.00%  30
+   award:  20.00%  40
+   award:  20.00%  50
+   impact: 100.00%  Adjust@CMoney(30,1)
+
+## 31 Subject: Preferred Customer Rebate  canfire=1 email=1
+   award:   1.33%  5
+   award:   1.33%  6
+   award:   1.33%  7
+   award:   1.33%  8
+   award:   1.33%  9
+   award:   1.33%  10
+   award:   1.33%  11
+   award:   1.33%  12
+   award:   1.33%  13
+   award:   1.33%  14
+   award:   1.33%  15
+   award:   1.33%  16
+   award:   1.33%  17
+   award:   1.33%  18
+   award:   1.33%  19
+   award:   1.33%  20
+   award:   1.33%  21
+   award:   1.33%  22
+   award:   1.33%  23
+   award:   1.33%  24
+   award:   1.33%  25
+   award:   1.33%  26
+   award:   1.33%  27
+   award:   1.33%  28
+   award:   1.33%  29
+   award:   1.33%  30
+   award:   1.33%  31
+   award:   1.33%  32
+   award:   1.33%  33
+   award:   1.33%  34
+   award:   1.33%  35
+   award:   1.33%  36
+   award:   1.33%  37
+   award:   1.33%  38
+   award:   1.33%  39
+   award:   1.33%  40
+   award:   1.33%  41
+   award:   1.33%  42
+   award:   1.33%  43
+   award:   1.33%  44
+   award:   1.33%  45
+   award:   1.33%  46
+   award:   1.33%  47
+   award:   1.33%  48
+   award:   1.33%  49
+   award:   1.33%  50
+   award:   1.33%  51
+   award:   1.33%  52
+   award:   1.33%  53
+   award:   1.33%  54
+   award:   1.33%  55
+   award:   1.33%  56
+   award:   1.33%  57
+   award:   1.33%  58
+   award:   1.33%  59
+   award:   1.33%  60
+   award:   1.33%  61
+   award:   1.33%  62
+   award:   1.33%  63
+   award:   1.33%  64
+   award:   1.33%  65
+   award:   1.33%  66
+   award:   1.33%  67
+   award:   1.33%  68
+   award:   1.33%  69
+   award:   1.33%  70
+   award:   1.33%  71
+   award:   1.33%  72
+   award:   1.33%  73
+   award:   1.33%  74
+   award:   1.33%  75
+   award:   1.33%  76
+   award:   1.33%  77
+   award:   1.33%  78
+   award:   1.33%  79
+   impact: 100.00%  Adjust@CMoney(47,1)
+
+## 32 Subject: The Craft Fair  canfire=1 email=1
+   award:  33.33%  35
+   award:  33.33%  40
+   award:  33.33%  45
+   impact: 100.00%  Adjust@CMoney(40,1)
+
+## 33 Subject: The Rebate  canfire=0 email=1
+   award: 100.00%  0
+   impact: 100.00%  
+
+## 34 Subject: The Rebate  canfire=0 email=1
+   award: 100.00%  50
+   impact: 100.00%  Adjust@CMoney(50,1)
+
+## 35 Subject: Thanks for the help!  canfire=1 email=1
+   award:   2.00%  5
+   award:   2.00%  6
+   award:   2.00%  7
+   award:   2.00%  8
+   award:   2.00%  9
+   award:   2.00%  10
+   award:   2.00%  11
+   award:   2.00%  12
+   award:   2.00%  13
+   award:   2.00%  14
+   award:   2.00%  15
+   award:   2.00%  16
+   award:   2.00%  17
+   award:   2.00%  18
+   award:   2.00%  19
+   award:   2.00%  20
+   award:   2.00%  21
+   award:   2.00%  22
+   award:   2.00%  23
+   award:   2.00%  24
+   award:   2.00%  25
+   award:   2.00%  26
+   award:   2.00%  27
+   award:   2.00%  28
+   award:   2.00%  29
+   award:   2.00%  30
+   award:   2.00%  31
+   award:   2.00%  32
+   award:   2.00%  33
+   award:   2.00%  34
+   award:   2.00%  35
+   award:   2.00%  36
+   award:   2.00%  37
+   award:   2.00%  38
+   award:   2.00%  39
+   award:   2.00%  40
+   award:   2.00%  41
+   award:   2.00%  42
+   award:   2.00%  43
+   award:   2.00%  44
+   award:   2.00%  45
+   award:   2.00%  46
+   award:   2.00%  47
+   award:   2.00%  48
+   award:   2.00%  49
+   award:   2.00%  50
+   award:   2.00%  51
+   award:   2.00%  52
+   award:   2.00%  53
+   award:   2.00%  54
+   impact: 100.00%  Adjust@CMoney(35,1)
+
+## 36 Subject: The Bad Cookies  canfire=1 email=1
+   award:   5.00%  5
+   award:   5.00%  10
+   award:   5.00%  15
+   award:   5.00%  20
+   award:   5.00%  25
+   award:   5.00%  30
+   award:   5.00%  35
+   award:   5.00%  40
+   award:   5.00%  45
+   award:   5.00%  50
+   award:   5.00%  55
+   award:   5.00%  60
+   award:   5.00%  65
+   award:   5.00%  70
+   award:   5.00%  75
+   award:   5.00%  80
+   award:   5.00%  85
+   award:   5.00%  90
+   award:   5.00%  95
+   award:   5.00%  100
+   impact: 100.00%  Adjust@CMoney(-50,1)
+
+## 37 Subject: The Office Collection  canfire=1 email=1
+   award:  10.00%  4
+   award:  10.00%  8
+   award:  10.00%  12
+   award:  10.00%  16
+   award:  10.00%  20
+   award:  10.00%  24
+   award:  10.00%  28
+   award:  10.00%  32
+   award:  10.00%  36
+   award:  10.00%  40
+   impact: 100.00%  Adjust@CMoney(-32,1)
+
+## 38 Subject: The Office Collection  canfire=1 email=1
+   award:  10.00%  5
+   award:  10.00%  10
+   award:  10.00%  15
+   award:  10.00%  20
+   award:  10.00%  25
+   award:  10.00%  30
+   award:  10.00%  35
+   award:  10.00%  40
+   award:  10.00%  45
+   award:  10.00%  50
+   impact: 100.00%  Adjust@CMoney(-35,1)
+
+## 39 Subject: Best Landscape Award  canfire=1 email=1
+   award: 100.00%  60
+   impact: 100.00%  Adjust@CMoney(60,1)
+
+## 40 Subject: Neighborhood Kite Contest  canfire=1 email=1
+   award:  10.00%  8
+   award:  10.00%  16
+   award:  10.00%  24
+   award:  10.00%  32
+   award:  10.00%  40
+   award:  10.00%  48
+   award:  10.00%  56
+   award:  10.00%  64
+   award:  10.00%  72
+   award:  10.00%  80
+   impact: 100.00%  Adjust@CMoney(56,1)
+
+## 41 Subject: Overdue Book  canfire=1 email=1
+   award:  10.00%  5
+   award:  10.00%  10
+   award:  10.00%  15
+   award:  10.00%  20
+   award:  10.00%  25
+   award:  10.00%  30
+   award:  10.00%  35
+   award:  10.00%  40
+   award:  10.00%  45
+   award:  10.00%  50
+   impact: 100.00%  Adjust@CMoney(-35,1)
+
+## 42 Subject: Hot Dog Eating Contest  canfire=1 email=1
+   award:  10.00%  5
+   award:  10.00%  10
+   award:  10.00%  15
+   award:  10.00%  20
+   award:  10.00%  25
+   award:  10.00%  30
+   award:  10.00%  35
+   award:  10.00%  40
+   award:  10.00%  45
+   award:  10.00%  50
+   impact: 100.00%  Adjust@CMoney(35,1)
+
+## 43 Subject: Community Bake Sale  canfire=1 email=1
+   award:  10.00%  6
+   award:  10.00%  12
+   award:  10.00%  18
+   award:  10.00%  24
+   award:  10.00%  30
+   award:  10.00%  36
+   award:  10.00%  42
+   award:  10.00%  48
+   award:  10.00%  54
+   award:  10.00%  60
+   impact: 100.00%  Adjust@CMoney(-42,1)
+
+## 44 The Neighborhood Childrens Association  canfire=1 email=0
+   award: 100.00%  20
+   impact: 100.00%  Adjust@CMoney(-20,1)
+
+## 45 The angry note  canfire=1 email=0
+   choice0: 100.00%   => ?
+   choice1: 100.00%   => ?
+
+## 46 The Sad Note  canfire=1 email=0
+   choice0: 100.00%   => ?
+   choice1: 100.00%   => ?
+
+## 47 The Room Specification  canfire=1 email=0
+   choice0: 100.00%   => ?
+   choice1: 100.00%   => ?
+
+## 48 The RSVP  canfire=1 email=0
+   choice0: 100.00%   => ?
+   choice1: 100.00%   => ?
+
+## 49 The Funeral Book  canfire=1 email=0
+   choice0: 100.00%   => ?
+   choice1: 100.00%   => ?
+
+## 50 The Adoption Response  canfire=1 email=0
+   choice0: 100.00%   => ?
+   choice1: 100.00%   => ?
+
+## 51 The Deed  canfire=1 email=0
+   choice0: 100.00%   => ?
+   choice1: 100.00%   => ?
+
+## 52 The Earthquake  canfire=0 email=0
+   award: 100.00%  0
+   impact: 100.00%  
+
+## 53 The Neighborhood Aesthetic Society  canfire=0 email=0
+   award: 100.00%  0
+   impact: 100.00%  Adjust@CMoney(0,1)
+
+## 54 The Birdwatcher Society  canfire=1 email=0
+   award:  25.00%  25
+   award:  25.00%  50
+   award:  25.00%  75
+   award:  25.00%  100
+   impact: 100.00%  Adjust@CMoney(50,1)
+
+## 55 Allergy Season  canfire=1 email=0
+   award: 100.00%  0
+   impact: 100.00%  SetSymptom@CVillagerState(6); SetSymptom@CVillagerState(6); SetSymptom@CVillagerState(6)
+
+## 56 Adoption Day  canfire=1 email=0
+   award: 100.00%  0
+   impact: 100.00%  
+
+## 57 TV Night!  canfire=0 email=0
+   award: 100.00%  0
+   impact: 100.00%  
+
+## 58 BBQ Party  canfire=0 email=0
+   award: 100.00%  0
+   impact: 100.00%  
+
+## 59 The Broken Window  canfire=1 email=0
+   award: 100.00%  0
+   impact:   3.34%  Adjust@CMoney(1,1)
+   impact:   3.34%  Adjust@CMoney(2,1)
+   impact:   3.34%  Adjust@CMoney(3,1)
+   impact:   3.34%  Adjust@CMoney(4,1)
+   impact:   3.34%  Adjust@CMoney(5,1)
+   impact:   3.34%  Adjust@CMoney(6,1)
+   impact:   3.34%  Adjust@CMoney(7,1)
+   impact:   3.34%  Adjust@CMoney(8,1)
+   impact:   3.33%  Adjust@CMoney(9,1)
+   impact:   3.33%  Adjust@CMoney(10,1)
+   impact:   3.33%  Adjust@CMoney(11,1)
+   impact:   3.33%  Adjust@CMoney(12,1)
+   impact:   3.33%  Adjust@CMoney(13,1)
+   impact:   3.33%  Adjust@CMoney(14,1)
+   impact:   3.33%  Adjust@CMoney(15,1)
+   impact:   3.33%  Adjust@CMoney(16,1)
+   impact:   3.33%  Adjust@CMoney(17,1)
+   impact:   3.33%  Adjust@CMoney(18,1)
+   impact:   3.33%  Adjust@CMoney(19,1)
+   impact:   3.33%  Adjust@CMoney(20,1)
+   impact:   3.33%  Adjust@CMoney(21,1)
+   impact:   3.33%  Adjust@CMoney(22,1)
+   impact:   3.33%  Adjust@CMoney(23,1)
+   impact:   3.33%  Adjust@CMoney(24,1)
+   impact:   3.33%  Adjust@CMoney(25,1)
+   impact:   3.33%  Adjust@CMoney(26,1)
+   impact:   3.33%  Adjust@CMoney(27,1)
+   impact:   3.33%  Adjust@CMoney(28,1)
+   impact:   3.33%  Adjust@CMoney(29,1)
+   impact:   3.33%  Adjust@CMoney(30,1)
+
+## 60 The Photo Contest  canfire=1 email=0
+   award:  20.00%  25
+   award:  20.00%  50
+   award:  20.00%  75
+   award:  20.00%  100
+   award:  20.00%  125
+   impact: 100.00%  Adjust@CMoney(25,1)
+
+## 61 The Community Association  canfire=1 email=0
+   award:  20.00%  20
+   award:  20.00%  40
+   award:  20.00%  60
+   award:  20.00%  80
+   award:  20.00%  100
+   impact: 100.00%  Adjust@CMoney(-40,1)
+
+## 62 The Blowing Trash  canfire=1 email=0
+   award: 100.00%  0
+   impact: 100.00%  
+
+## 63 The Free Lawn Service  canfire=1 email=0
+   award: 100.00%  0
+   impact: 100.00%  
+
+## 64 The Little Visitor  canfire=1 email=0
+   choice0: 100.00%  SpawnSpecificPeep(1,0,60); AddOffspring@CFamilyTree(7486464) => eEventTheLittleVisitor1ResultA
+   choice1: 100.00%   => eEventTheLittleVisitor1ResultB
+
+## 65 The Little Visitor  canfire=1 email=0
+   choice0: 100.00%  SpawnSpecificPeep(1,1,60); AddOffspring@CFamilyTree(7486464) => eEventTheLittleVisitor2ResultA
+   choice1: 100.00%   => eEventTheLittleVisitor2ResultB
+
+## 66 The EPA Visit  canfire=1 email=0
+   choice0: 100.00%  Adjust@CMoney(1312,1) => eEventEPAVisitResultA
+   choice1:  75.05%  SetSymptom@CVillagerState(5); SetSymptom@CVillagerState(5); SetSymptom@CVillagerState(5); SetSymptom@CVillagerState(5) => eEventEPAVisitResultB
+   choice1:  24.95%   => eEventEPAVisitResultB
+
+## 67 The Chemical Manifest  canfire=1 email=0
+   choice0:  75.05%  Adjust@CMoney(-40,1); SetSymptom@CVillagerState(5); SetSymptom@CVillagerState(5); SetSymptom@CVillagerState(5); SetSymptom@CVillagerState(5) => eEventChemicalManifestResultA
+   choice0:  24.95%  Adjust@CMoney(-40,1) => eEventChemicalManifestResultA
+   choice1:  75.05%  SetSymptom@CVillagerState(5); SetSymptom@CVillagerState(5); SetSymptom@CVillagerState(5); SetSymptom@CVillagerState(5) => eEventChemicalManifestResultB
+   choice1:  24.95%   => eEventChemicalManifestResultB
+
+## 68 Little Boy Selling Cupcakes  canfire=1 email=0
+   choice0:  50.05%  Adjust@CMoney(-10,1); SetSymptom@CVillagerState(2) => eEventBoySellingCupcakesResultA
+   choice0:  49.95%  Adjust@CMoney(-10,1) => eEventBoySellingCupcakesResultA
+   choice1: 100.00%  Adjust@CMoney(-45,1) => eEventBoySellingCupcakesResultB
+
+## 69 Little Girl Selling Magazines  canfire=0 email=0
+   choice0: 100.00%  Adjust@CMoney(-20,1) => eEventGirlSellingMagazinesResultA
+   choice1: 100.00%   => eEventGirlSellingMagazinesResultB
+
+## 70 Ran Out Of Diapers  canfire=1 email=0
+   choice0: 100.00%  Adjust@CMoney(-60,1) => eEventRanOutOfDiapersResultA
+   choice1: 100.00%   => eEventRanOutOfDiapersResultB
+
+## 71 The Bug Whisperer  canfire=1 email=0
+   choice0:   0.80%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1829,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.80%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1830,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.80%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1831,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.80%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1832,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.80%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1833,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.80%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1834,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.80%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1835,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.80%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1836,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1837,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1838,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1839,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1840,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1841,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1842,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1843,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1844,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1845,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1846,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1847,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1848,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1849,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1850,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1851,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1852,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1853,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1854,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1855,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1856,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1857,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1858,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1859,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1860,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1861,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1862,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1863,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1864,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1865,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1866,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1867,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1868,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1869,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1870,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1871,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1872,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1873,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1874,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1875,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1876,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1877,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1878,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1879,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1880,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1881,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1882,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1883,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1884,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1885,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1886,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1887,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1888,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1889,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1890,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1891,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1892,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1893,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1894,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1895,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1896,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1897,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1898,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1899,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1900,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1901,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1902,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1903,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1904,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1905,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1906,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1907,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1908,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1909,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1910,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1911,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1912,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1913,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1914,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1915,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1916,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1917,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1918,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1919,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1920,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1921,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1922,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1923,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1924,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1925,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1926,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1927,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1928,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1929,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1930,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1931,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1932,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1933,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1934,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1935,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1936,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1937,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1938,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1939,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1940,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1941,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1942,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1943,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1944,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1945,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1946,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1947,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1948,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1949,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1950,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1951,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1952,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1953,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice0:   0.79%  Adjust@CMoney(-75,1); Add@CCollectableItem(90,1471,1954,0); Add@CCollectableItem(90,1471,1954,0) => eEventTheBugWhispererResultA
+   choice1: 100.00%   => eEventTheBugWhispererResultB
+
+## 72 Diaper Rash  canfire=1 email=0
+   choice0: 100.00%  Adjust@CMoney(-40,1) => eEventDiaperRashResultA
+   choice1: 100.00%  AdjustEnergy@CVillagerState(-10); AdjustEnergy@CVillagerState(-10) => eEventDiaperRashResultB
+
+## 73 The Lost Binky  canfire=1 email=0
+   choice0: 100.00%  AdjustHappinessTrend@CVillagerState(15); AdjustHappinessTrend@CVillagerState(15); AdjustHappinessTrend@CVillagerState(15); AdjustHappinessTrend@CVillagerState(15) => eEventBinkyResultA
+   choice1: 100.00%   => eEventBinkyResultB
+
+## 74 The  Collecting Contest  canfire=1 email=0
+   choice0: 100.00%  Adjust@CMoney(10,1) => eEventCollectingContestResultA1
+   choice1: 100.00%   => eEventCollectingContestResultB
+
+## 75 Adult-proof  canfire=1 email=0
+   choice0: 100.00%  Adjust@CMoney(-50,1) => eEventAdultProofResultA
+   choice1: 100.00%   => eEventAdultProofResultB
+
+## 76 A Small Package  canfire=0 email=0
+   choice0: 100.00%   => eEventASmallPackageResultA
+   choice1: 100.00%   => eEventASmallPackageResultB
+
+## 77 A Medium Brown Box  canfire=0 email=0
+   choice0: 100.00%   => eEventAMediumBrownBoxResultA
+   choice1: 100.00%   => eEventAMediumBrownBoxResultB
+
+## 78 A Sealed Green Bag  canfire=0 email=0
+   choice0: 100.00%   => eEventACealedGreenBagResultA
+   choice1: 100.00%   => eEventACealedGreenBagResultB
+
+## 79 A Tiny White Box  canfire=1 email=0
+   choice0: 100.00%  Adjust@CFoodStore(-266) => eEventATinyWhiteBoxResultA
+   choice1: 100.00%   => eEventATinyWhiteBoxResultB
+
+## 80 A Scratch-Off Lottery Ticket  canfire=1 email=0
+   choice0: 100.00%   => eEventASratchOffLotteryTicketResultA1
+   choice1: 100.00%   => eEventASratchOffLotteryTicketResultB
+
+## 81 The Wrong Address  canfire=1 email=0
+   choice0: ERROR Invalid memory read (UC_ERR_READ_UNMAPPED)
+   choice1: 100.00%   => eEventTheWrongAddressResultB
+
+## 82 The Delivery Truck  canfire=1 email=0
+   choice0: ERROR Invalid memory read (UC_ERR_READ_UNMAPPED)
+   choice1: 100.00%  Adjust@CMoney(0,1) => eEventTheDeliveryTruckResultB
+
+## 83 The Talent Scout  canfire=1 email=0
+   choice0: 100.00%  SetLeftHome@CVillager(); Adjust@CMoney(0,1) => eEventTheTalentScoutResultA
+   choice1: 100.00%   => eEventTheTalentScoutResultB
+
+## 84 The Beauty Contest  canfire=1 email=0
+   choice0: 100.00%  Adjust@CMoney(-10,1); Adjust@CMoney(0,1) => eEventTheBeautyContestResultA2
+   choice1: 100.00%   => eEventTheBeautyContestResultB
+
+## 85 The Landscaping Service  canfire=1 email=0
+   choice0: 100.00%  Adjust@CMoney(-20,1) => eEventLandscapingServicesResultA
+   choice1: 100.00%   => eEventLandscapingServicesResultB
+
+## 86 Housekeeping Services  canfire=1 email=0
+   choice0: 100.00%  Adjust@CMoney(-20,1) => eEventHouseKeepingServicesResultA
+   choice1: 100.00%   => eEventHouseKeepingServicesResultB
+
+## 87 Total House Care Package Services  canfire=1 email=0
+   choice0: 100.00%  Adjust@CMoney(-50,1) => eEventTotalHouseCarePackageServicesResultA
+   choice1: 100.00%   => eEventTotalHouseCarePackageServicesResultB
+
+## 88 The Mysterious Collector  canfire=0 email=0
+   choice0: 100.00%  Adjust@CMoney(0,1) => eEventTheCollectorResultA
+   choice1: 100.00%   => eEventTheCollectorResultB
+
+## 89 The Water Pressure Surge  canfire=1 email=0
+   choice0: 100.00%   => eEventTheWaterPressureSurgeResultA
+   choice1: 100.00%  SetProp@CEnvironment(28); SetProp@CEnvironment(29); SetProp@CEnvironment(31); SetProp@CEnvironment(26); SetProp@CEnvironment(27) => eEventTheWaterPressureSurgeResultB
+
+## 90 Professional Career Training  canfire=1 email=0
+   choice0: 100.00%  Adjust@CMoney(-250,1); AdvanceCareer@CVillagerSkills(7604236,0,1) => eEventProfessionalCareerTrainingResultA
+   choice1: 100.00%   => eEventProfessionalCareerTrainingResultB
+
+## 91 The Trainer  canfire=1 email=0
+   choice0: 100.00%  Adjust@CMoney(-5,1); Adjust@CFoodStore(-800) => eEventTheTrainerResultA
+   choice1: 100.00%   => eEventTheTrainerResultB
+
+## 92 The Cooking Class  canfire=1 email=0
+   choice0: 100.00%  SetProp@CEnvironment(48); SetProp@CEnvironment(15); SetProp@CEnvironment(14); SetProp@CEnvironment(34) => eEventTheCookingClassResultA
+   choice1: 100.00%   => eEventTheCookingClassResultB
+
+## 93 The Power Failure  canfire=1 email=0
+   choice0: 100.00%  SetProp@CEnvironment(23) => eEventThePowerFailureResultA
+   choice1:  50.00%  SetProp@CEnvironment(23) => eEventThePowerFailureResultB1
+   choice1:  25.00%  SetProp@CEnvironment(23); SetSymptom@CVillagerState(2) => eEventThePowerFailureResultB1
+   choice1:  25.00%  SetProp@CEnvironment(23); SetSymptom@CVillagerState(2); SetSymptom@CVillagerState(2) => eEventThePowerFailureResultB1
+
+## 94 The Career Change Counselor  canfire=1 email=0
+   choice0: 100.00%  ResetCareer@CVillagerSkills() => eEventCareerChangeCouncelorResultA
+   choice1: 100.00%   => eEventCareerChangeCouncelorResultB
+
+## 95 The Rare Bird  canfire=0 email=0
+   choice0: 100.00%  Adjust@CMoney(0,1); MakeAllVillagersRunTo@CVillagerManager(174,269,240,309) => eEventTheRareBirdResultA
+   choice1: 100.00%   => eEventTheRareBirdResultB
+
+## 96 The School Fund-raiser  canfire=1 email=0
+   choice0: 100.00%  Adjust@CMoney(-25,1); Adjust@CFoodStore(100) => eEventTheSchoolFundraiserResultA
+   choice1: 100.00%   => eEventTheSchoolFundraiserResultB

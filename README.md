@@ -132,6 +132,22 @@ actions, as before. **Tools** holds:
   up first as `Backup <date> (before speed change)`, writes only the slot save, reads it back, checks no other
   byte changed and puts it back on failure; no log, no data file. Slow and Fast are not offered: the game sets
   no speed but 10 and the +999 pause. Code: `src/vf2_game_speed.py`; tests: `tests/test_game_speed.py`.
+- **Game Mechanics...** (the Game section) opens a read-only window of how Virtual Families 2 works underneath,
+  laid out as the Virtual Villagers patcher's: a link to each group at the top (time and ageing, needs and upkeep,
+  health and sickness, old age, pregnancy and babies, careers, money and interest, leaving home, dating, marriage
+  and the next generation, island events, weather, messes and malfunctions, collectibles, the Flea Market and On
+  Sale, and a chance-and-timer index), every time a real time at normal speed and every chance the game's exact
+  one. Each line shows its label: **VERIFIED-E** (the B200 core exe's own routine run as linked in unicorn and
+  every outcome counted), **VERIFIED-C** (read from the exe's own code on a traced call path) or **UNCONFIRMED**.
+  Patcher options (0 in the core exe) are shown as options, both ways. The facts come from
+  `docs/game-mechanics/spec.md`; the rules settled for the window are pinned against the exe by
+  `tests/test_game_mechanics_b200_exe.py` (set `VF2_B200_CORE_EXE`): time away (up to 31,000 s in full, 31,000 s
+  up to 24 h away, 24 h when longer), a paused clock that stops, the Grains-slot extra food group for family
+  members without a career, interest of at most 2 missed days, Brokerage bought again giving 1%, malfunctions that
+  roll while paused, and a Flea Market that never rotates in B200. It reads no save and writes nothing.
+  `python scripts/export_game_mechanics_claims.py <folder>` writes every line with its label and evidence.
+  Code: `src/vf2_game_mechanics.py` (the lines) and `src/vf2_game_mechanics_window.py`; the window:
+  `docs/game-mechanics-window.md`; tests: `tests/test_game_mechanics.py`.
 - **How to Use...** opens the guide: one short page per control. A small **?** button beside each control
   opens the page for it. The pages are `src/vf2_how_to_use.json`, read by `src/vf2_how_to_use.py`.
 
