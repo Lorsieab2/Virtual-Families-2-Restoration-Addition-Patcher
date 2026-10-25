@@ -1,9 +1,9 @@
-"""The Tools tab of the patcher window: Back Up Saves, Restore Saves, Rename Family and the How to Use guide.
+"""The Tools tab of the patcher window: Back Up Saves, Restore Saves, Rename Family, Game Speed and the guide.
 
 A mixin for VF2PatcherGUI (offline_vf2_patcher_gui.py), kept in its own file so the window's patching code
 stays as it was.  It needs from the window: ``root``, ``status_var``, ``_run_with_wait`` and the
-``Link.TLabel`` / ``LinkHover.TLabel`` styles.  The saves themselves are handled by vf2_save_backup and
-vf2_rename_family (no Tk there); the guides live in vf2_how_to_use.json.
+``Link.TLabel`` / ``LinkHover.TLabel`` styles.  The saves themselves are handled by vf2_save_backup,
+vf2_rename_family and vf2_game_speed (no Tk there); the guides live in vf2_how_to_use.json.
 """
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import messagebox, ttk
 
+import vf2_game_speed
 import vf2_how_to_use
 import vf2_rename_family
 import vf2_save_backup
@@ -95,7 +96,7 @@ class ToolsTabMixin:
             text=(
                 "Your families live in Documents\\LDW\\<game folder name>. Back Up Saves copies them (and the "
                 "patcher's own files beside them) into a Backups folder in there; Restore Saves brings one back. "
-                "Rename Family changes the name a family slot is shown under."
+                "Rename Family changes the name a family slot is shown under; Game Speed pauses or unpauses a family."
             ),
             style="Muted.TLabel", wraplength=WRAP, justify="left",
         ).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 8))
@@ -107,6 +108,8 @@ class ToolsTabMixin:
         self._help_button(row, "restore_saves").pack(side="left", padx=(3, 0))
         self._link(row, "Rename Family...", self.rename_family).pack(side="left", padx=(24, 0))
         self._help_button(row, "rename_family").pack(side="left", padx=(3, 0))
+        self._link(row, "Game Speed...", self.game_speed).pack(side="left", padx=(24, 0))
+        self._help_button(row, "game_speed").pack(side="left", padx=(3, 0))
 
         guide = ttk.LabelFrame(tab, text="Help", style="Section.TLabelframe", padding=10)
         guide.grid(row=1, column=0, sticky="ew", pady=(10, 0))
@@ -668,5 +671,149 @@ class ToolsTabMixin:
             "Rename Family",
             f"Family slot {slot} was \"{result.old_name}\" and is now \"{result.new_name}\" ({files}; every file was "
             f"read back and checked).\n\nBackup: {result.backup.backup_folder}",
+        )
+        return result
+
+    # -- Game Speed ---------------------------------------------------------
+
+    def game_speed(self) -> tk.Toplevel | None:
+        """Let the player pick a family slot and Paused or Normal, then write that speed into the closed game's save."""
+        folders = self._tool_save_folders()
+        if folders is None:
+            return None
+        folders = [folder for folder in folders
+                   if any(s.state is not None for s in vf2_game_speed.read_slots(folder))]
+        if not folders:
+            messagebox.showinfo(
+                "Game Speed",
+                "No Virtual Families 2 family saves were found in your Documents\\LDW folder.\n\n"
+                "The game makes a family's save the first time it saves that family.",
+            )
+            return None
+        return self._show_speed_dialog(folders)
+
+    def _show_speed_dialog(self, folders: list[Path]) -> tk.Toplevel:
+        dialog, frame = self._scrolling_dialog("Game Speed")
+        ttk.Label(frame, text="Set a family's game speed:", font=("", 10, "bold")).pack(anchor="w")
+        ttk.Label(
+            frame,
+            text=(
+                "Quit the game from its own menu first: a running game would put the old speed back. Your saves are "
+                "backed up first, as \"Backup <date> (before speed change)\". Paused works as if you paused just "
+                "before the game last saved; Normal as if you unpaused it now, so the paused time is never aged in."
+            ),
+            wraplength=WRAP, justify="left",
+        ).pack(anchor="w", pady=(4, 10))
+        by_name = {folder.name: folder for folder in folders}
+        folder_var = tk.StringVar(value=folders[0].name)
+        if len(folders) > 1:
+            row = ttk.Frame(frame)
+            row.pack(anchor="w", pady=(0, 6))
+            ttk.Label(row, text="Save folder").pack(side="left", padx=(0, 8))
+            ttk.Combobox(row, textvariable=folder_var, values=list(by_name), state="readonly", width=48).pack(side="left")
+        slot_var = tk.IntVar(value=0)
+        slots_box = ttk.Frame(frame)
+        slots_box.pack(anchor="w", pady=(0, 6))
+        target_var = tk.StringVar(value="")
+        problem_var = tk.StringVar()
+        slots: dict[int, vf2_game_speed.SlotSpeed] = {}
+
+        def fill_slots(*_args) -> None:
+            for child in slots_box.winfo_children():
+                child.destroy()
+            slots.clear()
+            first = 0
+            for info in vf2_game_speed.read_slots(by_name[folder_var.get()]):
+                slots[info.slot] = info
+                usable = info.state is not None and info.problem is None
+                ttk.Radiobutton(slots_box, text=info.label, value=info.slot, variable=slot_var,
+                                state="normal" if usable else "disabled").pack(anchor="w")
+                if usable and not first:
+                    first = info.slot
+            slot_var.set(first)
+
+        def check(*_args) -> None:
+            info = slots.get(slot_var.get())
+            target = target_var.get()
+            if info is None or info.state is None:
+                problem = "Choose a family."
+            elif info.problem:
+                problem = info.problem
+            elif not target:
+                problem = "Choose Paused or Normal."
+            elif info.state.label == target:
+                problem = f"This family is {target} already."
+            else:
+                problem = ""
+            problem_var.set(problem)
+
+        def picked(*_args) -> None:
+            info = slots.get(slot_var.get())
+            if info is not None and info.state is not None and info.problem is None:
+                target_var.set(vf2_game_speed.NORMAL_NAME if info.state.kind == "paused" else vf2_game_speed.PAUSED)
+            check()
+
+        ttk.Label(frame, text="New speed").pack(anchor="w")
+        targets = ttk.Frame(frame)
+        targets.pack(anchor="w", pady=(2, 0))
+        for name in vf2_game_speed.TARGETS:
+            ttk.Radiobutton(targets, text=name, value=name, variable=target_var).pack(side="left", padx=(0, 14))
+        ttk.Label(frame, textvariable=problem_var, foreground="#a01010", wraplength=WRAP, justify="left").pack(
+            anchor="w", pady=(2, 0))
+        folder_var.trace_add("write", fill_slots)
+        slot_var.trace_add("write", picked)
+        target_var.trace_add("write", check)
+        fill_slots()
+        picked()
+        buttons = ttk.Frame(frame)
+        buttons.pack(fill="x", pady=(14, 0))
+
+        def start() -> None:
+            folder = by_name[folder_var.get()]
+            slot = slot_var.get()
+            target = target_var.get()
+            check()
+            if slot not in slots or problem_var.get():
+                messagebox.showinfo("Game Speed", problem_var.get() or "Choose a family.", parent=dialog)
+                return
+            info = slots[slot]
+            if not messagebox.askyesno(
+                "Game Speed",
+                f"Set family slot {slot}, \"{vf2_rename_family.shown(info.name)}\", from {info.state.label} to "
+                f"{target}?\n\nYour saves are backed up first. The game must be closed.",
+                parent=dialog,
+            ):
+                return
+            dialog.destroy()
+            self._run_game_speed(folder, slot, target)
+
+        ttk.Button(buttons, text="Set Speed", command=start).pack(side="left")
+        ttk.Button(buttons, text="Cancel", command=dialog.destroy).pack(side="left", padx=(8, 0))
+        dialog.protocol("WM_DELETE_WINDOW", dialog.destroy)
+        dialog._vf2_folder_var = folder_var
+        dialog._vf2_slot_var = slot_var
+        dialog._vf2_target_var = target_var
+        dialog._vf2_problem_var = problem_var
+        dialog._vf2_start = start
+        self._hold(dialog)
+        return dialog
+
+    def _run_game_speed(self, folder: Path, slot: int, target: str):
+        def work():
+            try:
+                return vf2_game_speed.set_speed(folder, slot, target), None
+            except (vf2_game_speed.SpeedError, vf2_save_backup.BackupError, OSError) as exc:
+                return None, str(exc)
+
+        result, error = self._run_with_wait("Backing up your saves, then writing the new speed into the save...", work)
+        if error is not None:
+            self.status_var.set("Game Speed: nothing was changed.")
+            messagebox.showerror("Game Speed", error)
+            return None
+        self.status_var.set(f"Game Speed: family slot {slot} is now {result.after}.")
+        messagebox.showinfo(
+            "Game Speed",
+            f"Family slot {slot} was {result.before} and is now {result.after} ({result.changed.name} was read back "
+            f"and checked).\n\nBackup: {result.backup.backup_folder}",
         )
         return result

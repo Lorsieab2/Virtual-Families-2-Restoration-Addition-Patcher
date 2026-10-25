@@ -275,6 +275,75 @@ class ToolsTabTests(unittest.TestCase):
         self.assertIn("Close the game first", self.error.call_args[0][1])
         self.assertEqual(self.app.status_var.get(), "Rename Family: nothing was renamed.")
 
+    # -- Game Speed ---------------------------------------------------------
+
+    def _speed_saves(self):
+        """Slot 1: a copy of a real paused family save; slot 2: a real one at normal speed."""
+        import gzip
+        fixtures = ROOT / "tests" / "fixtures" / "vf2_saves"
+        (self.folder / "Virtual Families 21.ldw").write_bytes(
+            gzip.decompress((fixtures / "one_generation_slot3.ldw.gz").read_bytes()))
+        (self.folder / "Virtual Families 22.ldw").write_bytes(
+            gzip.decompress((fixtures / "pending_birth_slot1.ldw.gz").read_bytes()))
+
+    def test_game_speed_is_on_the_tools_tab_with_a_guide(self):
+        labels = []
+
+        def walk(widget):
+            for child in widget.winfo_children():
+                try:
+                    labels.append(str(child.cget("text")))
+                except Exception:
+                    pass
+                walk(child)
+
+        walk(self.app.tools_tab)
+        self.assertIn("Game Speed...", labels)
+        self.assertIn("game_speed", self.app.help_keys)
+
+    def test_game_speed_dialog_shows_each_speed_and_sets_one(self):
+        import vf2_game_speed as gsp
+        self._speed_saves()
+        dialog = self.app.game_speed()
+        try:
+            self.assertEqual(dialog._vf2_slot_var.get(), 1)
+            self.assertEqual(dialog._vf2_target_var.get(), "Normal")       # slot 1 is paused
+            dialog._vf2_target_var.set("Paused")
+            self.assertIn("already", dialog._vf2_problem_var.get())
+            before = self._snapshot()
+            dialog._vf2_start()                                          # refused: nothing is written
+            self.assertEqual(self._snapshot(), before)
+            dialog._vf2_slot_var.set(2)
+            self.assertEqual(dialog._vf2_target_var.get(), "Paused")
+            with mock.patch.object(gui.messagebox, "askyesno", return_value=True) as ask:
+                dialog._vf2_start()
+            self.assertIn("from Normal to Paused", ask.call_args[0][1])
+        finally:
+            if dialog.winfo_exists():
+                dialog.destroy()
+        states = {s.slot: s.state.label for s in gsp.read_slots(self.folder) if s.state}
+        self.assertEqual(states, {1: "Paused", 2: "Paused"})
+        self.assertTrue(sb.list_backups(self.folder)[0].before_speed_change)
+        self.assertEqual(self.app.status_var.get(), "Game Speed: family slot 2 is now Paused.")
+        self.info.assert_called()
+
+    def test_a_running_game_stops_the_speed_change(self):
+        self._speed_saves()
+        before = self._snapshot()
+
+        class Running(NoGame):
+            def find_game(self, save_folder_name):
+                return [(7, save_folder_name + ".exe")]
+
+        dialog = self.app.game_speed()
+        with mock.patch.object(sb, "WindowsProcesses", Running), \
+                mock.patch.object(gui.messagebox, "askyesno", return_value=True):
+            dialog._vf2_start()
+        self.assertEqual(self._snapshot(), before)
+        self.error.assert_called_once()
+        self.assertIn("Close the game first", self.error.call_args[0][1])
+        self.assertEqual(self.app.status_var.get(), "Game Speed: nothing was changed.")
+
 
 if __name__ == "__main__":
     unittest.main()

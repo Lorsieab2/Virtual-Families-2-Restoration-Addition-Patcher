@@ -120,11 +120,23 @@ actions, as before. **Tools** holds:
   `Backup <date> (before rename)`, reads every file back and puts everything back if one fails. It writes no
   log and no data file. Evidence with exe addresses: `docs/vf2-save-format.md` section 11. Code:
   `src/vf2_rename_family.py`; tests: `tests/test_rename_family.py`.
+- **Game Speed...** shows each family's saved speed (Paused, Normal, or any other value raw) and sets it to
+  **Paused** or **Normal** in a closed game's save, writing what the game's own Pause / Unpause write (traced in
+  the stock exe: Options 0x42269B / 0x4226EA, Space 0x43BC52 / 0x43BC7B, `CGameTime::SetSpeed` 0x427A50, which
+  stores 0 for 999): the speed option gs+0x25B18 (10, or +999 when paused) and the saved CGameTime. Paused acts
+  as if the game was paused just before it saved; Normal as if the paused family were unpaused now, so the clock
+  carries on from where it stopped and each living family member's ageing stamp is set to now, as the paused
+  game's two-second update keeps it (0x499872): the paused time is never aged in. It refuses any other speed, an
+  unpause that would have removed a dead body meanwhile, and a Pause the stock and the patched game would work
+  out differently (more than 2^24 s since the last speed change; the patched build rounds to a float). It backs
+  up first as `Backup <date> (before speed change)`, writes only the slot save, reads it back, checks no other
+  byte changed and puts it back on failure; no log, no data file. Slow and Fast are not offered: the game sets
+  no speed but 10 and the +999 pause. Code: `src/vf2_game_speed.py`; tests: `tests/test_game_speed.py`.
 - **How to Use...** opens the guide: one short page per control. A small **?** button beside each control
   opens the page for it. The pages are `src/vf2_how_to_use.json`, read by `src/vf2_how_to_use.py`.
 
-The code is `src/vf2_save_backup.py` and `src/vf2_rename_family.py` (no Tk; the latter reads saves through
-`src/vf2_save_reader.py`), `src/vf2_tools_gui.py` (the Tools tab) and the two guide files;
+The code is `src/vf2_save_backup.py`, `src/vf2_rename_family.py` and `src/vf2_game_speed.py` (no Tk; the
+latter two read saves through `src/vf2_save_reader.py`), `src/vf2_tools_gui.py` (the Tools tab) and the two guide files;
 `work/` holds the copies the exporter ships (`GUI_TOOL_FILES` in `work/export_offline_patch_bundle.py`), and a
 test keeps the two trees identical. Tests: `tests/test_save_backup.py`, `tests/test_rename_family.py`,
 `tests/test_tools_tab.py` and `tests/test_how_to_use.py`.

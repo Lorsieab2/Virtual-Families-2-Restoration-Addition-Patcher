@@ -43,8 +43,8 @@ https://github.com/Lorsieab2/Virtual-Families-2-Restoration-Addition-Patcher/
 
 Tools tab:
 The patcher window has two tabs. Patches is where you choose and apply patches.
-Tools holds Back Up Saves, Restore Saves and Rename Family for your Virtual
-Families 2 families (they live in Documents/LDW/<game folder name>), and a How
+Tools holds Back Up Saves, Restore Saves, Rename Family and Game Speed for your
+Virtual Families 2 families (they live in Documents/LDW/<game folder name>), and a How
 to Use guide for
 every button. Small ? buttons beside controls open the page for that control.
 Back Up Saves copies the save folder, including the patcher's own files in
@@ -56,6 +56,11 @@ has no family surname: a slot is shown under the player name typed when it was
 started. Quit the game first; the new name can have up to 19 characters (the
 game keeps no more), and your saves are backed up first as
 "Backup <date> (before rename)".
+Game Speed pauses or unpauses a family in its save. Quit the game first, pick
+the family (each shows its speed now) and choose Paused or Normal. Paused works
+as if you paused just before the game last saved; Normal as if you unpaused it
+right now, so the time it spent paused never counts. Your saves are backed up
+first as "Backup <date> (before speed change)".
 
 Crash capture QA only (optional):
 The patcher never changes Windows Error Reporting settings or launches the
