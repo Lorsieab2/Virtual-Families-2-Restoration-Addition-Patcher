@@ -3597,6 +3597,8 @@ class TestSuiteCopiesInSyncTests(unittest.TestCase):
             "vf2_save_backup.py",
             "vf2_how_to_use.py",
             "vf2_how_to_use.json",
+            "vf2_rename_family.py",
+            "vf2_save_reader.py",
             "vf2_crash_capture.py",
         ):
             src_path = ROOT / "src" / name

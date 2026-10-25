@@ -1,9 +1,9 @@
-"""The Tools tab of the patcher window: Back Up Saves, Restore Saves and the How to Use guide.
+"""The Tools tab of the patcher window: Back Up Saves, Restore Saves, Rename Family and the How to Use guide.
 
 A mixin for VF2PatcherGUI (offline_vf2_patcher_gui.py), kept in its own file so the window's patching code
 stays as it was.  It needs from the window: ``root``, ``status_var``, ``_run_with_wait`` and the
-``Link.TLabel`` / ``LinkHover.TLabel`` styles.  The saves themselves are handled by vf2_save_backup (no Tk
-there); the guides live in vf2_how_to_use.json.
+``Link.TLabel`` / ``LinkHover.TLabel`` styles.  The saves themselves are handled by vf2_save_backup and
+vf2_rename_family (no Tk there); the guides live in vf2_how_to_use.json.
 """
 from __future__ import annotations
 
@@ -14,6 +14,7 @@ from pathlib import Path
 from tkinter import messagebox, ttk
 
 import vf2_how_to_use
+import vf2_rename_family
 import vf2_save_backup
 
 TOOLS_TITLE = "Virtual Families 2 Restoration/Addition Patcher"
@@ -93,7 +94,8 @@ class ToolsTabMixin:
             saves,
             text=(
                 "Your families live in Documents\\LDW\\<game folder name>. Back Up Saves copies them (and the "
-                "patcher's own files beside them) into a Backups folder in there; Restore Saves brings one back."
+                "patcher's own files beside them) into a Backups folder in there; Restore Saves brings one back. "
+                "Rename Family changes the name a family slot is shown under."
             ),
             style="Muted.TLabel", wraplength=WRAP, justify="left",
         ).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 8))
@@ -103,6 +105,8 @@ class ToolsTabMixin:
         self._help_button(row, "back_up_saves").pack(side="left", padx=(3, 0))
         self._link(row, "Restore Saves...", self.restore_saves).pack(side="left", padx=(24, 0))
         self._help_button(row, "restore_saves").pack(side="left", padx=(3, 0))
+        self._link(row, "Rename Family...", self.rename_family).pack(side="left", padx=(24, 0))
+        self._help_button(row, "rename_family").pack(side="left", padx=(3, 0))
 
         guide = ttk.LabelFrame(tab, text="Help", style="Section.TLabelframe", padding=10)
         guide.grid(row=1, column=0, sticky="ew", pady=(10, 0))
@@ -529,3 +533,140 @@ class ToolsTabMixin:
             parent=parent,
         )
         return True
+
+    # -- Rename Family ------------------------------------------------------
+
+    def rename_family(self) -> tk.Toplevel | None:
+        """Let the player pick a family slot and a new name, then rename it in the closed game's saves."""
+        folders = self._tool_save_folders()
+        if folders is None:
+            return None
+        folders = [folder for folder in folders
+                   if any(s.problem is None for s in vf2_rename_family.read_slots(folder))]
+        if not folders:
+            messagebox.showinfo(
+                "Rename Family",
+                "No Virtual Families 2 family saves were found in your Documents\\LDW folder.\n\n"
+                "The game makes a family's save the first time it saves that family.",
+            )
+            return None
+        return self._show_rename_dialog(folders)
+
+    def _show_rename_dialog(self, folders: list[Path]) -> tk.Toplevel:
+        dialog, frame = self._scrolling_dialog("Rename Family")
+        ttk.Label(frame, text="Rename a family:", font=("", 10, "bold")).pack(anchor="w")
+        ttk.Label(
+            frame,
+            text=(
+                "Virtual Families 2 has no family surname: a family slot is shown under the player name typed when it "
+                "was started (on the main menu and in Change Player). This changes that name. Quit the game from its "
+                "own menu first: a running game would put the old name back. Your saves are backed up first, as "
+                "\"Backup <date> (before rename)\"."
+            ),
+            wraplength=WRAP, justify="left",
+        ).pack(anchor="w", pady=(4, 10))
+        by_name = {folder.name: folder for folder in folders}
+        folder_var = tk.StringVar(value=folders[0].name)
+        if len(folders) > 1:
+            row = ttk.Frame(frame)
+            row.pack(anchor="w", pady=(0, 6))
+            ttk.Label(row, text="Save folder").pack(side="left", padx=(0, 8))
+            ttk.Combobox(row, textvariable=folder_var, values=list(by_name), state="readonly", width=48).pack(side="left")
+        slot_var = tk.IntVar(value=0)
+        slots_box = ttk.Frame(frame)
+        slots_box.pack(anchor="w", pady=(0, 6))
+        name_var = tk.StringVar()
+        problem_var = tk.StringVar()
+        slots: dict[int, vf2_rename_family.SlotInfo] = {}
+
+        def fill_slots(*_args) -> None:
+            for child in slots_box.winfo_children():
+                child.destroy()
+            slots.clear()
+            first = 0
+            for info in vf2_rename_family.read_slots(by_name[folder_var.get()]):
+                slots[info.slot] = info
+                usable = info.problem is None
+                ttk.Radiobutton(slots_box, text=info.label, value=info.slot, variable=slot_var,
+                                state="normal" if usable else "disabled").pack(anchor="w")
+                if usable and not first:
+                    first = info.slot
+            slot_var.set(first)
+
+        def picked(*_args) -> None:
+            info = slots.get(slot_var.get())
+            name_var.set(vf2_rename_family.shown(info.name) if info is not None and info.name else "")
+
+        def check(*_args) -> None:
+            name = name_var.get()
+            info = slots.get(slot_var.get())
+            problem = vf2_rename_family.name_problem(name)
+            if problem is None and info is not None and info.name == name.encode("ascii"):
+                problem = "That is the family's name already."
+            problem_var.set(problem or "")
+
+        ttk.Label(frame, text=f"New name (up to {vf2_rename_family.MAX_LENGTH} characters)").pack(anchor="w")
+        entry = ttk.Entry(frame, textvariable=name_var, width=40)
+        entry.pack(anchor="w", pady=(2, 0))
+        ttk.Label(frame, textvariable=problem_var, foreground="#a01010", wraplength=WRAP, justify="left").pack(
+            anchor="w", pady=(2, 0))
+        name_var.trace_add("write", check)
+        slot_var.trace_add("write", picked)
+        folder_var.trace_add("write", fill_slots)
+        fill_slots()
+        check()
+        buttons = ttk.Frame(frame)
+        buttons.pack(fill="x", pady=(14, 0))
+
+        def start() -> None:
+            folder = by_name[folder_var.get()]
+            slot = slot_var.get()
+            name = name_var.get()
+            check()
+            if slot not in slots or slots[slot].problem is not None or problem_var.get():
+                messagebox.showinfo("Rename Family", problem_var.get() or "Choose a family to rename.", parent=dialog)
+                return
+            old = vf2_rename_family.shown(slots[slot].name)
+            if not messagebox.askyesno(
+                "Rename Family",
+                f"Rename family slot {slot}, \"{old}\", to \"{name}\"?\n\nYour saves are backed up first. The game "
+                "must be closed.",
+                parent=dialog,
+            ):
+                return
+            dialog.destroy()
+            self._run_rename(folder, slot, name)
+
+        ttk.Button(buttons, text="Rename", command=start).pack(side="left")
+        ttk.Button(buttons, text="Cancel", command=dialog.destroy).pack(side="left", padx=(8, 0))
+        dialog.protocol("WM_DELETE_WINDOW", dialog.destroy)
+        dialog._vf2_folder_var = folder_var
+        dialog._vf2_slot_var = slot_var
+        dialog._vf2_name_var = name_var
+        dialog._vf2_problem_var = problem_var
+        dialog._vf2_start = start
+        self._hold(dialog)
+        with contextlib.suppress(tk.TclError):
+            entry.focus_set()
+        return dialog
+
+    def _run_rename(self, folder: Path, slot: int, name: str):
+        def work():
+            try:
+                return vf2_rename_family.rename_family(folder, slot, name), None
+            except (vf2_rename_family.RenameError, vf2_save_backup.BackupError, OSError) as exc:
+                return None, str(exc)
+
+        result, error = self._run_with_wait("Backing up your saves, then writing the new name into them...", work)
+        if error is not None:
+            self.status_var.set("Rename Family: nothing was renamed.")
+            messagebox.showerror("Rename Family", error)
+            return None
+        self.status_var.set(f"Rename Family: family slot {slot} is now called {result.new_name}.")
+        files = ", ".join(path.name for path in result.changed)
+        messagebox.showinfo(
+            "Rename Family",
+            f"Family slot {slot} was \"{result.old_name}\" and is now \"{result.new_name}\" ({files}; every file was "
+            f"read back and checked).\n\nBackup: {result.backup.backup_folder}",
+        )
+        return result

@@ -110,13 +110,24 @@ actions, as before. **Tools** holds:
   shows exactly which files will be replaced, added and removed, restores only after the player says yes, and
   first backs up the current saves as `Backup <date> (before restore)`, so a restore can be undone. It rolls
   back if a file fails. **Delete Backup...** removes one backup.
+- **Rename Family...** changes the name a family slot is shown under. Virtual Families 2 has no family
+  surname: the slot is shown under the player name typed when it was started (main menu `Player:`, Change
+  Player, the daily email). The tool writes that name (gs+0x25ABC) in the slot's save, its entry in the slot
+  menu (`Virtual Families 20.ldw`) and the previous save at slot + 20 when it still holds the old name. The
+  rule is the game's own: at most 19 characters (the box takes 20 keys but the game keeps 19), never empty or
+  only spaces, never `NEW PLAYER` (the game's text for an empty slot); only printable ASCII is accepted, since
+  whether other keys reach the box is UNCONFIRMED. It refuses while the game runs, backs up first as
+  `Backup <date> (before rename)`, reads every file back and puts everything back if one fails. It writes no
+  log and no data file. Evidence with exe addresses: `docs/vf2-save-format.md` section 11. Code:
+  `src/vf2_rename_family.py`; tests: `tests/test_rename_family.py`.
 - **How to Use...** opens the guide: one short page per control. A small **?** button beside each control
   opens the page for it. The pages are `src/vf2_how_to_use.json`, read by `src/vf2_how_to_use.py`.
 
-The code is `src/vf2_save_backup.py` (no Tk), `src/vf2_tools_gui.py` (the Tools tab) and the two guide files;
+The code is `src/vf2_save_backup.py` and `src/vf2_rename_family.py` (no Tk; the latter reads saves through
+`src/vf2_save_reader.py`), `src/vf2_tools_gui.py` (the Tools tab) and the two guide files;
 `work/` holds the copies the exporter ships (`GUI_TOOL_FILES` in `work/export_offline_patch_bundle.py`), and a
-test keeps the two trees identical. Tests: `tests/test_save_backup.py`, `tests/test_tools_tab.py` and
-`tests/test_how_to_use.py`.
+test keeps the two trees identical. Tests: `tests/test_save_backup.py`, `tests/test_rename_family.py`,
+`tests/test_tools_tab.py` and `tests/test_how_to_use.py`.
 
 After extracting a release, run `Launch_GUI.bat`. The exported bundle also contains `How to Use.txt` with player-facing instructions.
 Release bundles include the instruction-only `vf2_crash_capture.py` helper and
@@ -719,7 +730,7 @@ These three do more than change eligibility or wording:
 
 - `src/offline_vf2_patcher.py` - command-line patcher and validation/apply/restore engine.
 - `src/offline_vf2_patcher_gui.py` - Tkinter GUI, plus its icon assets under `src/assets/`.
-- `src/vf2_tools_gui.py`, `src/vf2_save_backup.py`, `src/vf2_how_to_use.py` and `src/vf2_how_to_use.json` - the GUI's Tools tab, Back Up / Restore Saves and the How to Use guides.
+- `src/vf2_tools_gui.py`, `src/vf2_save_backup.py`, `src/vf2_rename_family.py`, `src/vf2_save_reader.py`, `src/vf2_how_to_use.py` and `src/vf2_how_to_use.json` - the GUI's Tools tab, Back Up / Restore Saves, Rename Family and the How to Use guides.
 - `tests/` - the patcher, exporter, and GUI test modules that run against `src/`.
 - `work/` - the reverse-engineering and build tree: disassembly dumps, analysis and
   export scripts, and the full test suite the shipped tools are synced from.

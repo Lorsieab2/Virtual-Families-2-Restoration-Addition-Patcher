@@ -124,6 +124,16 @@
         "Delete Backup... removes a backup you no longer need."
       ]
     },
+    "rename_family": {
+      "section": "Tools",
+      "title": "Rename Family",
+      "guide": [
+        "Virtual Families 2 has no family surname: each family slot is shown under the player name typed when it was started, on the main menu and in Change Player. This changes that name.",
+        "Quit the game first, from its own menu. Click Rename Family..., pick the family, type the new name (up to 19 letters, digits, spaces and keyboard symbols), then Rename.",
+        "The game itself keeps at most 19 characters, and \"NEW PLAYER\" cannot be used: the game shows that for an empty slot.",
+        "Your saves are backed up first, as \"Backup <date> (before rename)\", so Restore Saves can undo it."
+      ]
+    },
     "how_to_use": {
       "section": "Tools",
       "title": "How to Use guide",

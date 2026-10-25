@@ -308,3 +308,29 @@ caught when the game makes it:
 
 - `docs/discoveries.md` (2026-08-06 child-limit notes) called the Family Tree block's first dword "a
   four-byte generation count". It is `CFamilyTree+0`, the eviction flag; corrected in place.
+
+## 11. The name a family slot is shown under (Rename Family, `src/vf2_rename_family.py`)
+
+VF2 has no family surname (section 4). The one name the player types for a family slot, and the one the game
+shows for it, is the **player name**. Addresses are in the stock `Virtual Families 2.exe` (found by matching
+the desktop objects' code; the vanilla build is compiled differently, so the object offsets do not carry
+over). Every row is VERIFIED from code, and real saves agree: in all nine of the owner's VF2 folders that have a settings file each in-use
+slot-menu entry equals that slot save's gs+0x25ABC, and every empty slot holds `NEW PLAYER` (copies read only).
+
+| What | Where | Evidence |
+|---|---|---|
+| Typed | new-player box, prompt `Please enter your name...` (string 0xA32 at 0x4FB84C) | `theCreateNickNameDlg` ctor `SetCanEdit(1, 0x14)` at 0x41F92A; `theChangePlayerDlg` ctor at 0x41EE0C (one box per slot) |
+| Box limit | 20 keys | `ldwTextControl::SetCanEdit` 0x40DE40 stores the limit (`+0x28`, capped at 0x4B0) at 0x40DE95; `HandleKey` 0x40E540 refuses a key once the length reaches it (0x40E5D3) |
+| Keys | 0x20..0xFF | `HandleKey` 0x40E5DF..0x40E5EA (non-numeric box); Backspace 0x40E59F, Enter/Tab end the edit 0x40E5C9..0x40E5D1 |
+| Stored | gs+0x25ABC, 20 bytes, **at most 19 characters** | `ldwTextControl::GetText` 0x40E210: `strncpy(buf, text, n)` then `buf[n-1] = 0` (0x40E22B); called with n = 0x14 at 0x41F9D2..0x41F9DB (first player) and 0x41F471..0x41F47B (Change Player, NEW PLAYER box) |
+| Slot menu | settings file `Virtual Families 20.ldw`, gs+0x25B30 + 0x15 x (N-1) | the OK handlers copy the name there (0x41F9E0..0x41F9FA, 0x41F480..0x41F49C); `theGameState::Load` 0x42A2E0 loads every slot at start and copies each save's gs+0x25ABC into its entry (0x42A3BD..0x42A4EE), or `NEW PLAYER` (0xA34) when the save does not load |
+| Shown | main menu `Player: ` (0xA31) + gs+0x25ABC | `theMenuScene::UpdateShowPlayer` 0x443B80 (0x443BAC); Change Player lists the entries (0x41EDE6); the daily email greets the player with it (0x417B40) |
+| Empty name | refused | Change Player puts `NEW PLAYER` back into an emptied box |
+| `NEW PLAYER` | means an empty slot | Change Player compares the box with string 0xA34 (0x41F315..0x41F359) and treats a match as a new slot |
+| In-game rename | none | clicking an existing player only switches to it (0x41F370..0x41F396) |
+
+UNCONFIRMED (not traced): whether keys 0x80..0xFF reach the box from a keyboard, and which of them the
+game's font draws. Rename Family therefore accepts only printable ASCII 0x20..0x7E, 1 to 19 characters, not
+only spaces and never exactly `NEW PLAYER`; a longer name is refused, never cut. It writes the slot save's
+gs+0x25ABC, the slot's entry in the settings file, and the previous save N+20 only when it still holds the
+old name, after a `Backup <date> (before rename)`.
