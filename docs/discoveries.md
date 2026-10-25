@@ -2491,8 +2491,12 @@
 - The tree owns 30 records. Its `.bss` is `0xCB80`, with the `CFamilyTree`
   global at `+8`; 30 times `0x6C8` is `0xCB70`. The serialized Family Tree
   block in `theGameData` starts at `+0x1840` and the next component starts at
-  `+0xE3B4`, leaving exactly `0xCB74` bytes: a four-byte generation count plus
-  the 30 stock records and no spare tail. A naive 12-child inline record would
+  `+0xE3B4`, leaving exactly `0xCB74` bytes: a four-byte header dword plus
+  the 30 stock records and no spare tail. (Corrected 2026-10-24: this said the
+  dword is a "generation count", which is wrong. `CFamilyTree::SaveState` writes
+  `CFamilyTree+0` there, the flag `EvictFamily` sets to 1 and the Settings Evict
+  gate reads; the generation count `CFamilyTree+4` is not saved and `LoadState`
+  rebuilds it by counting present records. See `docs/vf2-save-format.md`.) A naive 12-child inline record would
   be `0xBD8`; 30 such records require `0x16350`, adding `0x97E0` bytes and
   shifting every later save component. That is not compatible with stock
   saves without a versioned migration.
