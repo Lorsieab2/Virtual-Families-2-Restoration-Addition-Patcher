@@ -20,7 +20,7 @@ FOLDER = "Virtual Families 2 - Modded B202"
 
 
 class NoGame:
-    def find(self, exe_name):
+    def find_game(self, save_folder_name):
         return []
 
     def suspend(self, pid, exe_name):

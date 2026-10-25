@@ -17,16 +17,19 @@ FOLDER = "Virtual Families 2 - Modded B202"
 
 
 class FakeProcesses:
-    def __init__(self, running=0):
+    def __init__(self, running=0, exes=None):
         self.running = running
+        self.exes = exes if exes is not None else [FOLDER + ".exe"]     # every running exe, as the OS lists them
         self.suspended = []
         self.resumed = []
         self.refuse = False
         self.fail_resume = False
 
-    def find(self, exe_name):
-        self.last_exe = exe_name
-        return list(range(100, 100 + self.running))
+    def find_game(self, save_folder_name):
+        self.last_folder = save_folder_name
+        # like the real thing: an exe belongs to the folder named by its name cut at the first dot
+        mine = [e for e in self.exes if e.casefold().endswith(".exe") and e.split(".", 1)[0].casefold() == save_folder_name.casefold()]
+        return [(100 + i, mine[i % len(mine)]) for i in range(self.running)] if mine else []
 
     def suspend(self, pid, exe_name):
         if self.refuse:
@@ -89,8 +92,25 @@ class FindingFolders(TempSaves):
         self.assertEqual(sb.find_save_folders(None), [])
         self.assertEqual(sb.find_save_folders(Path(self._tmp.name) / "nowhere"), [])
 
-    def test_exe_name_is_the_folder_name(self):
-        self.assertEqual(sb.game_exe_name(self.folder), FOLDER + ".exe")
+    def test_exe_name_is_cut_at_its_first_dot_to_find_the_folder(self):
+        self.assertEqual(sb.exe_save_folder_name(FOLDER + ".exe"), FOLDER)
+        self.assertEqual(sb.exe_save_folder_name("Virtual Families 2.B202.test.exe"), "Virtual Families 2")
+        self.assertFalse(hasattr(sb, "game_exe_name"))     # the exe is never guessed from a folder
+
+    def test_a_dotted_exe_is_found_by_its_cut_name_and_a_lookalike_is_not(self):
+        folder = self.docs / "LDW" / "Virtual Families 2"
+        folder.mkdir()
+        procs = FakeProcesses(running=1, exes=["Virtual Families 2.B202.exe", "Virtual Families 2 - Modded.exe", "Other.exe"])
+        self.assertEqual(sb.running_games(folder, procs), [(100, "Virtual Families 2.B202.exe")])
+        self.assertEqual(sb.running_game_names(folder, procs), "Virtual Families 2.B202.exe")
+        self.assertEqual(sb.running_game_count(folder, procs), 1)
+        self.assertEqual(sb.running_games(self.folder, procs), [])       # "- Modded" is another folder
+        (folder / "Virtual Families 21.ldw").write_bytes(b"one")
+        procs = FakeProcesses(running=1, exes=["Virtual Families 2.B202.exe"])
+        self.assertEqual(sb.back_up_save_folder(folder, procs, self.clock).paused, 1)
+        self.assertEqual(procs.resumed, procs.suspended)
+        with self.assertRaises(sb.RestoreRefused):
+            sb.restore_backup(folder, sb.list_backups(folder)[0].path, None, procs, self.tick())
 
 
 class Backing(TempSaves):
@@ -127,7 +147,7 @@ class Backing(TempSaves):
         result = sb.back_up_save_folder(self.folder, procs, self.clock)
         self.assertEqual(result.paused, 2)
         self.assertEqual(sorted(procs.resumed), sorted(procs.suspended))
-        self.assertEqual(procs.last_exe, FOLDER + ".exe")
+        self.assertEqual(procs.last_folder, FOLDER)
 
     def test_game_that_cannot_be_paused_is_never_copied(self):
         self.populate()
@@ -182,13 +202,53 @@ class Slots(unittest.TestCase):
     def test_slot_attribution(self):
         slot = lambda name: sb.file_slot(Path(name))
         self.assertEqual(slot("Virtual Families 25.ldw"), 5)
-        self.assertEqual(slot("virtual families 25 - Copy.ldw"), 5)
+        self.assertEqual(slot("virtual families 25.ldw"), 5)
         self.assertEqual(slot("Virtual Families 225.ldw"), 5)            # slot 5's previous save
+        self.assertEqual(slot("Virtual Families 221.ldw"), 1)
         self.assertEqual(slot("Virtual Families 20.ldw"), "settings")
         self.assertEqual(slot("Virtual Families 2 Patcher Data/Children/Virtual Families 23.ldw.dat"), 3)
         self.assertIsNone(slot("Virtual Families 2 Patcher Data/Children/notes.txt"))
         self.assertEqual(sb.file_slot(Path("ldwLog.txt")), "engine log")
         self.assertIsNone(sb.file_slot(Path("sub/ldwLog.txt")))
+
+    def test_a_name_without_the_exact_pattern_is_unknown(self):
+        slot = lambda name: sb.file_slot(Path(name))
+        for name in ("Virtual Families221.ldw",          # the player's own copy: no space after "Families"
+                     "Virtual Families21.ldw", "Virtual Families 21 - Copy.ldw", "Virtual Families 205.ldw",
+                     "Virtual Families 226.ldw", "Virtual Families 220.ldw", "Virtual Families 245.ldw",
+                     "Virtual Families 26.ldw", "Virtual Families 2 1.ldw", "Virtual Families 21.ldw.bak",
+                     "Virtual Families 21.ldw.dat", "Virtual Families 2 Patcher Data/Virtual Families 21.ldw.dat",
+                     "Virtual Families 2 Patcher Data/Children/Virtual Families 221.ldw.dat",
+                     "Virtual Families 2 Patcher Data/Children/Virtual Families 21 - Copy.ldw.dat",
+                     "sub/Virtual Families 21.ldw"):
+            self.assertIsNone(slot(name), name)
+
+    def test_shared_files_belong_to_no_family(self):
+        self.assertEqual(sb.file_slot(Path("wc.dat")), "shared")
+        self.assertEqual(sb.file_slot(Path("WC.DAT")), "shared")
+        self.assertIsNone(sb.file_slot(Path("sub/wc.dat")))
+        self.assertEqual(sb.slots_in([Path("wc.dat"), Path("Virtual Families 20.ldw"), Path("ldwLog.txt"),
+                                      Path("Virtual Families221.ldw"), Path("Virtual Families 223.ldw")]), [3])
+
+
+class SlotRestoreLeavesUnknownAndSharedFiles(TempSaves):
+    def test_a_slot_restore_never_touches_unknown_or_shared_files_but_a_whole_restore_does(self):
+        self.populate()
+        self.write("Virtual Families221.ldw", b"player copy")
+        self.write("wc.dat", b"wc")
+        self.write("Virtual Families 20.ldw", b"settings")
+        backup = sb.copy_save_folder(self.folder, self.clock).backup_folder
+        for name in ("Virtual Families221.ldw", "wc.dat", "Virtual Families 20.ldw", "Virtual Families 21.ldw"):
+            self.write(name, b"CHANGED")
+        plan = sb.plan_restore(self.folder, backup, 1)
+        self.assertEqual({p.name for p in plan.replace}, {"Virtual Families 21.ldw"})
+        sb.restore_backup(self.folder, backup, 1, FakeProcesses(), self.tick())
+        for name in ("Virtual Families221.ldw", "wc.dat", "Virtual Families 20.ldw"):
+            self.assertEqual((self.folder / name).read_bytes(), b"CHANGED", name)
+        sb.restore_backup(self.folder, backup, None, FakeProcesses(), self.tick())
+        self.assertEqual((self.folder / "Virtual Families221.ldw").read_bytes(), b"player copy")
+        self.assertEqual((self.folder / "wc.dat").read_bytes(), b"wc")
+        self.assertEqual((self.folder / "Virtual Families 20.ldw").read_bytes(), b"settings")
 
 
 class Restoring(TempSaves):

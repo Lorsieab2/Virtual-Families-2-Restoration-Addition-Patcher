@@ -1,9 +1,12 @@
 """Back Up Saves / Restore Saves for Virtual Families 2.
 
 Where the saves are
-    Virtual Families 2 saves into Documents\\LDW\\<its exe's name without .exe>.
+    Virtual Families 2 saves into Documents\\LDW\\<its exe's name cut at the FIRST dot>.
     The stock game is "Virtual Families 2"; a patched game is named after the
-    modded exe the patcher built ("Virtual Families 2 - Modded B202", ...). Inside
+    modded exe the patcher built ("Virtual Families 2 - Modded B202", ...). An exe
+    named "Foo.B202.exe" saves into "Foo", so the exe's name can never be read back
+    from the folder: a running game is recognised by cutting each running exe's name
+    the same way and comparing it with the folder, never the reverse. Inside
     that folder are the game's per-family save files ("Virtual Families 2<N>.ldw",
     with a "- Copy" beside each), its ldwLog.txt, and the patcher's own
     "Virtual Families 2 Patcher Data" folder (the Children sidecar and any other
@@ -63,10 +66,14 @@ DELETE_RETRY_SECONDS = 0.5
 _BACKUP_NAME = re.compile(
     r"^Backup (\d{4}-\d{2}-\d{2} \d{2}-\d{2}-\d{2})(?: \((\d+)\))?(?: (\(before restore\)))?$"
 )
-# "Virtual Families 25.ldw" is family slot 5; a ".ldw" with " - Copy" and the patcher's sidecars
-# (named after the save file) belong to the same slot.  "Virtual Families 2 Patcher Data" has a space
-# after the 2, so it is never mistaken for a slot.
-_SLOT_IN_NAME = re.compile(r"virtual families ?2(\d+)", re.I)
+# The game's save files are exactly "Virtual Families 2" + N + ".ldw" (one space, N without leading zeros):
+# 0 is the shared settings, 1-5 are families, N + 20 is the previous save of slot N (made for 1-5 only).
+# The patcher's sidecar is that file's name + ".dat" under "<Patcher Data>\\Children".  Any other name
+# (a player's own "Virtual Families221.ldw", "... - Copy.ldw", ...) is unknown and only a whole-folder
+# restore touches it.
+_SAVE_NAME = re.compile(r"^Virtual Families 2(0|[1-9]\d*)\.ldw$", re.I)
+_SIDECAR_NAME = re.compile(r"^Virtual Families 2(0|[1-9]\d*)\.ldw\.dat$", re.I)
+SHARED_FILES = ("wc.dat",)      # beside ldwLog.txt, shared by every family
 
 
 class BackupError(Exception):
@@ -154,9 +161,14 @@ def find_save_folders(documents: Path | None) -> list[Path]:
     return sorted(found, key=order)
 
 
-def game_exe_name(save_folder: Path) -> str:
-    """The exe that saves into ``save_folder``: the game names the folder after itself."""
-    return f"{save_folder.name}.exe"
+def exe_save_folder_name(exe_name: str) -> str:
+    """The Documents\\LDW folder an exe saves into: its name cut at the first dot."""
+    return exe_name.split(".", 1)[0]
+
+
+def running_games(save_folder: Path, processes: "ProcessController") -> list[tuple[int, str]]:
+    """(pid, exe name) of every running process that saves into ``save_folder`` (no exe name is guessed)."""
+    return list(processes.find_game(save_folder.name))
 
 
 # ---------------------------------------------------------------------------
@@ -370,7 +382,7 @@ def copy_save_folder(save_folder: Path, now: datetime | None = None, suffix: str
 
 
 class ProcessController(Protocol):
-    def find(self, exe_name: str) -> list[int]: ...
+    def find_game(self, save_folder_name: str) -> list[tuple[int, str]]: ...
     def suspend(self, pid: int, exe_name: str) -> object: ...
     def resume(self, handle: object) -> None: ...
 
@@ -425,7 +437,8 @@ class WindowsProcesses:
         k.Process32NextW.argtypes = [wintypes.HANDLE, ctypes.POINTER(PROCESSENTRY32W)]
         k.Process32NextW.restype = wintypes.BOOL
 
-    def find(self, exe_name: str) -> list[int]:
+    def find_game(self, save_folder_name: str) -> list[tuple[int, str]]:
+        """(pid, exe name) of every running exe whose name cut at its first dot is ``save_folder_name``."""
         k = self._kernel32
         snapshot = k.CreateToolhelp32Snapshot(self.TH32CS_SNAPPROCESS, 0)
         if not snapshot or snapshot == self._wintypes.HANDLE(-1).value:
@@ -433,14 +446,15 @@ class WindowsProcesses:
                 "Could not list the running programs to check whether the game is running "
                 f"(error {ctypes.get_last_error()})."
             )
-        pids: list[int] = []
+        pids: list[tuple[int, str]] = []
         try:
             entry = self._entry_type()
             entry.dwSize = ctypes.sizeof(entry)
             more = k.Process32FirstW(snapshot, ctypes.byref(entry))
             while more:
-                if entry.szExeFile.casefold() == exe_name.casefold():
-                    pids.append(int(entry.th32ProcessID))
+                name = entry.szExeFile
+                if name.casefold().endswith(".exe") and exe_save_folder_name(name).casefold() == save_folder_name.casefold():
+                    pids.append((int(entry.th32ProcessID), name))
                 more = k.Process32NextW(snapshot, ctypes.byref(entry))
             error = ctypes.get_last_error()
             if error != self.ERROR_NO_MORE_FILES:
@@ -499,13 +513,13 @@ class Pause:
 
 
 @contextmanager
-def paused_game(exe_name: str, processes: ProcessController) -> Iterator[Pause]:
-    """Suspend every running process of ``exe_name``; always resume them."""
+def paused_game(save_folder: Path, processes: ProcessController) -> Iterator[Pause]:
+    """Suspend every running process that saves into ``save_folder``; always resume them."""
     pause = Pause()
     paused: list[object] = []
     failure: BaseException | None = None
     try:
-        for pid in processes.find(exe_name):
+        for pid, exe_name in running_games(save_folder, processes):
             paused.append(processes.suspend(pid, exe_name))
         pause.count = len(paused)
         yield pause
@@ -531,7 +545,7 @@ def back_up_save_folder(
 ) -> BackupResult:
     """Pause the game that uses ``save_folder`` (if running), copy, resume."""
     controller = processes if processes is not None else WindowsProcesses()
-    with paused_game(game_exe_name(save_folder), controller) as pause:
+    with paused_game(save_folder, controller) as pause:
         result = copy_save_folder(save_folder, now)
     result.paused = pause.count
     result.resume_problems = list(pause.problems)
@@ -542,7 +556,7 @@ def running_game_count(save_folder: Path, processes: ProcessController | None = 
     """How many processes of the game that saves here are running (0 if none or unknown)."""
     try:
         controller = processes if processes is not None else WindowsProcesses()
-        return len(controller.find(game_exe_name(save_folder)))
+        return len(running_games(save_folder, controller))
     except (OSError, BackupError, AttributeError):
         return 0
 
@@ -589,18 +603,26 @@ def _parse_backup_name(name: str) -> tuple[datetime, int, str] | None:
 
 
 def file_slot(relative: Path) -> int | str | None:
-    """The family slot (1-5) a file belongs to, "engine log" for ldwLog.txt, "settings" for slot 0, else None.
+    """The family slot (1-5) a file belongs to; "engine log", "settings" or "shared" for shared files; else None.
 
-    A slot file is "Virtual Families 2<N>.ldw" (with " - Copy" or not; N + 20 is the slot's previous
-    save); a sidecar under the patcher's data folder is named after the save file it sits beside, so it
-    names the same slot.
+    A slot file is exactly "Virtual Families 2<N>.ldw" at the top of the save folder (N + 20 is the
+    previous save of slot N, for slots 1-5 only); the patcher's sidecar is that name + ".dat" in
+    "<Patcher Data>\\Children".  Slot 0 ("settings"), ldwLog.txt ("engine log") and wc.dat ("shared") belong
+    to no family, and every other name is unknown (None): only a whole-folder restore touches those.
     """
-    if len(relative.parts) == 1 and relative.name.casefold() == ENGINE_LOG.casefold():
+    parts = relative.parts
+    if len(parts) == 1 and relative.name.casefold() == ENGINE_LOG.casefold():
         return "engine log"
-    match = _SLOT_IN_NAME.search(relative.name)
+    if len(parts) == 1 and relative.name.casefold() in SHARED_FILES:
+        return "shared"
+    match = None
+    if len(parts) == 1:
+        match = _SAVE_NAME.match(relative.name)
+    elif len(parts) == 3 and parts[0].casefold() == DATA_FOLDER.casefold() and parts[1].casefold() == "children":
+        match = _SIDECAR_NAME.match(relative.name)
     if match:
         number = int(match.group(1))
-        if 21 <= number <= 25:      # the game keeps the previous save of slot N at N + 20
+        if 21 <= number <= 25 and len(parts) == 1:      # the game keeps the previous save of slot N at N + 20
             number -= 20
         if 1 <= number <= 5:
             return number
@@ -738,8 +760,18 @@ class RestoreResult:
     before_restore: BackupResult | None
 
 
+def running_game_names(save_folder: Path, processes: ProcessController | None = None) -> str:
+    """The running exe name(s) that save into ``save_folder``, for messages (a plain description if none)."""
+    try:
+        controller = processes if processes is not None else WindowsProcesses()
+        names = sorted({name for _pid, name in running_games(save_folder, controller)}, key=str.casefold)
+    except (OSError, BackupError, AttributeError):
+        names = []
+    return " and ".join(names) if names else f"The game that saves into {save_folder.name}"
+
+
 def _game_running(save_folder: Path, processes: ProcessController) -> int:
-    return len(processes.find(game_exe_name(save_folder)))
+    return len(running_games(save_folder, processes))
 
 
 def _roll_back(save_folder: Path, before: BackupResult | None, done: list[Path]) -> list[str]:
@@ -773,7 +805,7 @@ def restore_backup(
     controller = processes if processes is not None else WindowsProcesses()
     if _game_running(save_folder, controller):
         raise RestoreRefused(
-            f"{game_exe_name(save_folder)} is running. Quit the game from its own menu first: a running "
+            f"{running_game_names(save_folder, controller)} is running. Quit the game from its own menu first: a running "
             "game writes its families over the restored save when it quits. Nothing was changed."
         )
     plan = plan_restore(save_folder, backup, slot)
@@ -784,12 +816,12 @@ def restore_backup(
         before = copy_save_folder(save_folder, now, suffix=BEFORE_RESTORE)
     if _game_running(save_folder, controller):
         raise RestoreRefused(
-            f"{game_exe_name(save_folder)} was started during the restore, so it was stopped before "
+            f"{running_game_names(save_folder, controller)} was started during the restore, so it was stopped before "
             f"anything was changed. Your current saves are also in "
             f"{before.backup_folder if before else 'the save folder'}."
         )
     done: list[Path] = []
-    started = f"{game_exe_name(save_folder)} was started during the restore. Quit it from its own menu and restore again."
+    started = f"{running_game_names(save_folder, controller)} was started during the restore. Quit it from its own menu and restore again."
     try:
         for relative in plan.replace + plan.add:
             if _game_running(save_folder, controller):

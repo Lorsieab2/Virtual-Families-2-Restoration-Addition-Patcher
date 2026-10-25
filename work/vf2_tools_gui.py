@@ -475,7 +475,7 @@ class ToolsTabMixin:
         if vf2_save_backup.running_game_count(folder):
             messagebox.showerror(
                 "Restore Saves",
-                f"{vf2_save_backup.game_exe_name(folder)} is running.\n\nQuit the game from its own menu first, then "
+                f"{vf2_save_backup.running_game_names(folder, None)} is running.\n\nQuit the game from its own menu first, then "
                 "restore: a running game writes its families over the restored save when it quits. Nothing was changed.",
                 parent=parent,
             )
