@@ -61,6 +61,8 @@ The patcher's own Time Controls speeds, and why they are not offered here (VERIF
     * NONE OF THEM IS EVER SAVED. theGameState::Save (vtable slot 14) is wrapped from the module's first commit
       (289ef7e): any option but 10 / 1009 is saved as 10 (after SetSpeed(10)) or 1009 when paused, and the live
       speed is put back after the save; Load (slot 13) turns any such value into 10 (with SetSpeed(10)) or 1009.
+      Also in the bytes of the B202 release's TimeControls\vf2time_b200.dll (SHA-256 3EA0A2A5...D35E, base
+      0x10000000): Load 0x1000162F..0x10001675 (stores 0x3F1 or 0xA), Save 0x100016AA..0x10001723.
     So no installed game can produce a Time Controls speed in a save, and one written there would be turned back to
     Normal at the next load by a game with Time Controls: this tool offers only Paused and Normal. A save holding
     one with a matching clock (no known build writes it) is named in words and refused. A paused save holding 999 +
