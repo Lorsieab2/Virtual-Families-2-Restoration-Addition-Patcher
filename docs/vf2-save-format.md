@@ -256,6 +256,20 @@ also copied to slot 0's player-name list; `RestartCurrentGame` keeps it.
 stops aging; `theCreateNickNameDlg` resets >= 999 to 10 for a new player. Names of the settings
 UNCONFIRMED.
 
+**Pause / Unpause (VERIFIED in the stock exe, traced for Game Speed, `src/vf2_game_speed.py`).** Options Yes:
+UpdateAll 0x42ACB0, `CGameTime::SetSpeed(999)` 0x42269B, gs+0x25B18 += 999 (0x4226A6), UpdateAll; Options No:
+UpdateAll, `SetSpeed(10)` 0x4226EA, gs+0x25B18 = 10 (0x4226F5), UpdateAll; Space 0x43BC2D the same without
+UpdateAll (unpause stores option - 999, 10 if 0). `SetSpeed` 0x427A50 returns at once for the current speed, else
+banks `Seconds()` 0x427920 in +0x0C, stamps +0x08, moves +0x00 to +0x04 and stores the new speed, **except that
+999 stores 0** (`xor ebp, ebp` 0x427A6F): a paused clock is stopped (real saves: 1009 / 0 / 10). Those four are
+the only callers of SetSpeed and the game writes no speed option but 10, +999, option - 999 and the store time
+skip's temporary - 999 / restore (0x432A2F / 0x432A86): there is no Slow or Fast. While paused the two-second
+update still restamps each active, at-home, living villager's state+4 and zeroes state+0 (0x4997E9..0x499872);
+UpdateAll also writes gs+0x25AF4 = now (0x42ACF7, no reader). The stock Seconds() is x87 at the CRT's 53-bit
+default (0x4C8CB5); the patched build's (relinked SSE object code, B202 0x468B50) rounds the elapsed seconds to
+a float, which agrees only below 2^24 s. Note: the reader's `game_seconds_at_save` uses the float form, so for
+the stock exe it can be off by a few seconds past 2^24 s since the last speed change (no real save is).
+
 Not saved: the life-event queue (gs+0x25CE8, 20 x 0x3C) and the email queue lie past gs+0x25B20.
 
 ## 7. Settings file, slot 0 (0x90 from gs+0x25B20) (VERIFIED unless marked)

@@ -44,6 +44,8 @@ class GuideContentTests(unittest.TestCase):
         self.assertIn("(before restore)", guides.guide("restore_saves").text)
         self.assertIn("(before rename)", guides.guide("rename_family").text)
         self.assertIn("19", guides.guide("rename_family").text)
+        self.assertIn("game_speed", guides.keys())
+        self.assertIn("(before speed change)", guides.guide("game_speed").text)
         self.assertIn("Patcher Data", guides.guide("back_up_saves").text)
 
     def test_unknown_key_fails_loudly(self):

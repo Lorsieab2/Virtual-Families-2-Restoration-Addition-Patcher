@@ -3598,6 +3598,7 @@ class TestSuiteCopiesInSyncTests(unittest.TestCase):
             "vf2_how_to_use.py",
             "vf2_how_to_use.json",
             "vf2_rename_family.py",
+            "vf2_game_speed.py",
             "vf2_save_reader.py",
             "vf2_crash_capture.py",
         ):
