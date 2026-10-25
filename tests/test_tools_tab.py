@@ -301,6 +301,33 @@ class ToolsTabTests(unittest.TestCase):
         self.assertIn("Game Speed...", labels)
         self.assertIn("game_speed", self.app.help_keys)
 
+    # -- Game Mechanics -----------------------------------------------------
+
+    def test_game_mechanics_is_on_the_tools_tab_with_a_guide_and_opens_once(self):
+        labels = []
+
+        def walk(widget):
+            for child in widget.winfo_children():
+                try:
+                    labels.append(str(child.cget("text")))
+                except Exception:
+                    pass
+                walk(child)
+
+        walk(self.app.tools_tab)
+        self.assertIn("Game Mechanics...", labels)
+        self.assertIn("game_mechanics", self.app.help_keys)
+        before = self._snapshot()
+        window = self.app.game_mechanics()
+        try:
+            self.assertEqual(window.title(), "Game Mechanics")
+            self.assertIs(self.app.game_mechanics(), window)        # a second click brings the same window
+            self.assertIn("UNCONFIRMED", window.mechanics_page.get("1.0", "end"))
+        finally:
+            window.destroy()
+        self.assertEqual(self._snapshot(), before)                   # the saves are untouched
+        self.assertIsNot(self.app.game_mechanics(), window)          # closed: a new one opens
+
     def test_game_speed_dialog_shows_each_speed_and_sets_one(self):
         import vf2_game_speed as gsp
         self._speed_saves()

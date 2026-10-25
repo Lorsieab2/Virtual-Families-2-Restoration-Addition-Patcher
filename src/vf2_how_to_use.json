@@ -146,6 +146,17 @@
         "A family at any other speed is shown but not changed here; change it in the game instead."
       ]
     },
+    "game_mechanics": {
+      "section": "Tools",
+      "title": "Game Mechanics",
+      "guide": [
+        "Shows how Virtual Families 2 works underneath: ageing, needs, illness, old age, babies, careers, money, leaving home, dating, events, weather, messes and the store.",
+        "Every time is real time at the game's normal speed. Every chance is the game's own exact chance.",
+        "Each line is marked VERIFIED-E (the game's own code was run and counted), VERIFIED-C (read from the game's own code) or UNCONFIRMED (not yet shown either way).",
+        "Click a heading at the top to jump to it.",
+        "It only shows text: it reads no save and changes nothing, so the game may be running."
+      ]
+    },
     "how_to_use": {
       "section": "Tools",
       "title": "How to Use guide",

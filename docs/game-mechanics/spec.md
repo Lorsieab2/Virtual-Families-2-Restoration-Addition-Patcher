@@ -151,7 +151,7 @@ Two infections: mild (state+0x80, "penicillin") and serious (state+0x81, "vancom
 
 | Cause | Rule | Status |
 |---|---|---|
-| Old age (stock, `.vf2mort` = 0) | On each birthday unit, with N = food groups counted: if years > 55 + N, death chance = 10% x (years - 55 - N). N = 0: 10% at 56 ... 100% at 65; N = 4: 10% at 61 ... 100% at 70 (a careerless villager with groups counts one more). SetHealth(0, cause 2). | VERIFIED-E (`t_life.py`, every residue) |
+| Old age (stock, `.vf2mort` = 0) | On each birthday unit, with N = food groups counted: if years > 55 + N, death chance = 10% x (years - 55 - N). N = 0: 10% at 56 ... 100% at 65; N = 4: 10% at 60 ... 100% at 69; N = 5 (a careerless villager with all four, section 2): 10% at 61 ... 100% at 70. SetHealth(0, cause 2). *Superseded, wrong:* "N = 4: 10% at 61 ... 100% at 70" (that run's villager had no career, so 4 groups counted 5; re-run 2026-10-25 with a career: 60 / 64 / 69 give 10 / 50 / 100%). | VERIFIED-E (`t_life.py`, every residue; tests/test_game_mechanics_b200_exe.py) |
 | Old age (Older Villager Mortality option, `.vf2mort` = 1) | Same birthday check, `VF2RollOlderVillagerMortality` 0x4BA410: effective age = years - N (N clamped 0..4); death if GetRandom(1,000,000) < table[effective age]. Emulated per-birthday odds (N=0): 55: 0%, 60: 1.81%, 65: 3.59%, 70: 5.33%, 75: 7.04%, 80: 8.72%, 90: 11.99%, 100: 15.15%, 110: 18.19%, 115: 40.49%, 120: 56.71%, 125: 68.51%, 150: 93.59%, 200: 99.73%. No age cap. | VERIFIED-E |
 | Disease | Health reaches 0 through the sickness loss (cause 0) | VERIFIED-C |
 | Starvation | Health reaches 0 through the eating / no-food losses (cause 1) | VERIFIED-C |

@@ -1,0 +1,192 @@
+#!/usr/bin/env python3
+"""Game Mechanics (src/vf2_game_mechanics.py and its window): the page's groups, labels, words and settled rules.
+
+The rules themselves are pinned against the B200 core executable in tests/test_game_mechanics_b200_exe.py; here
+the page must say what those runs showed, keep every label visible, use family wording and stay read-only.
+"""
+import re
+import sys
+import unittest
+from pathlib import Path
+from unittest import mock
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
+import vf2_game_mechanics as gm  # noqa: E402
+
+
+class PageTests(unittest.TestCase):
+    def setUp(self):
+        self.facts = gm.facts()
+        self.text = gm.render(self.facts)
+
+    def test_groups_are_the_owners_list_in_order(self):
+        self.assertEqual(gm.GROUPS, (
+            "Time and ageing", "Needs and upkeep", "Health and sickness", "Old age", "Pregnancy and babies",
+            "Careers", "Money and interest", "Leaving home", "Dating, marriage and the next generation",
+            "Island events", "Weather", "Messes and malfunctions", "Collectibles", "Flea Market and On Sale",
+            "Chance and timer index"))
+        seen = []
+        for fact in self.facts:
+            if not seen or seen[-1] != fact.group:
+                seen.append(fact.group)
+        self.assertEqual(tuple(seen), gm.GROUPS, "each group once, in GROUPS order")
+
+    def test_every_line_shows_its_label_after_the_bullet(self):
+        for fact in self.facts:
+            self.assertIn(fact.label, gm.LABELS, fact.text)
+        lines = [line for line in self.text.splitlines() if line.startswith((gm.BULLET, gm.SUB_BULLET))]
+        self.assertEqual(len(lines), len(self.facts))
+        for line in lines:
+            body = line[len(gm.SUB_BULLET):] if line.startswith(gm.SUB_BULLET) else line[len(gm.BULLET):]
+            self.assertRegex(body, r"^(VERIFIED-E|VERIFIED-C|UNCONFIRMED)  \S")
+        for label in gm.LABELS:
+            self.assertIn(label, self.text)
+
+    def test_family_wording(self):
+        text = self.text
+        for name in gm.OPTION_NAMES:          # the patcher options' own names, as the Patches tab shows them
+            text = text.replace(name, "")
+        self.assertNotRegex(text, r"(?i)villag|tribe|peep")
+        self.assertIn("family member", self.text)
+        self.assertNotRegex(gm.INTRO + gm.LABEL_NOTE, r"(?i)villag")
+
+    def test_time_away_is_the_emulated_cap(self):
+        self.assertIn("up to 31,000 seconds (8 hours 36 minutes 40 seconds) away is made up in full", self.text)
+        self.assertIn("from 31,000 seconds up to and including 24 hours away, 31,000 seconds are made up", self.text)
+        self.assertIn("more than 24 hours away, exactly 24 hours are made up: 144 age units, 7.2 years", self.text)
+        self.assertNotIn("2.58", self.text)
+        for fact in self.facts:
+            if "made up" in fact.text and fact.group == gm.TIME and "31,000" in fact.text:
+                self.assertEqual(fact.label, gm.VERIFIED_E)
+
+    def test_a_paused_clock_stops(self):
+        line = next(f for f in self.facts if f.text.startswith("Pause stops the game clock completely"))
+        self.assertEqual(line.label, gm.VERIFIED_E)
+
+    def test_the_owners_three_true_rules_are_shown_plainly(self):
+        grains = next(f for f in self.facts if "count one extra food group" in f.text)
+        self.assertEqual(grains.label, gm.VERIFIED_E)
+        self.assertIn("Grains", grains.text)
+        self.assertIn("Dairy alone as 1", grains.text)
+        interest = next(f for f in self.facts if f.text.startswith("Interest: 10%"))
+        self.assertIn("only 2 days are paid", interest.text)
+        self.assertEqual(interest.label, gm.VERIFIED_E)
+        broker = next(f for f in self.facts if f.text.startswith("Brokerage Account"))
+        self.assertIn("Buying it again sets interest to 1%", broker.text)
+        self.assertEqual(broker.label, gm.VERIFIED_E)
+        malfunction = next(f for f in self.facts if f.text.startswith("House malfunctions"))
+        self.assertIn("while the game is paused too", malfunction.text)
+        self.assertEqual(malfunction.label, gm.VERIFIED_E)
+        # The window describes the game: it never claims to fix anything.
+        self.assertNotRegex(self.text, r"(?i)\b(a bug|is a bug|fix(es|ed)? (it|this|the game)|fixed by)\b")
+
+    def test_the_flea_market_never_changes_and_the_six_hours_claim_is_left_out(self):
+        flea = next(f for f in self.facts if f.text.startswith("The Flea Market"))
+        self.assertIn("never changes", flea.text)
+        self.assertEqual(flea.label, gm.VERIFIED_E)
+        self.assertNotRegex(self.text, r"6 (real )?hours|21,600|six hours")
+
+    def test_patcher_options_are_shown_both_ways(self):
+        for name in gm.OPTION_NAMES:
+            states = [f.text for f in self.facts if f'"{name}", off' in f.text or f'"{name}", on' in f.text]
+            self.assertTrue(any(", off" in t for t in states), name)
+            self.assertTrue(any(", on" in t for t in states), name)
+        older = next(f for f in self.facts if f'"{gm.OPTION_PREGNANCIES}", on: with a parent 50' in f.text)
+        self.assertEqual(older.label, gm.UNCONFIRMED)
+
+    def test_old_age_matches_the_formula(self):
+        line = next(f for f in self.facts if f.text.startswith("With no food groups"))
+        self.assertIn("10% at 56, 50% at 60, 100% at 65", line.text)
+        self.assertIn("10% at 60, 50% at 64, 100% at 69", line.text)
+
+    def test_careers_list_every_career_once(self):
+        self.assertEqual(len(gm.CAREERS), 132)
+        self.assertEqual([c[0] for c in gm.CAREERS], list(range(132)))
+        counts = {w: sum(1 for c in gm.CAREERS if c[1] == w) for w in (1, 2, 3)}
+        self.assertEqual(counts, {1: 38, 2: 57, 3: 37})
+        for _cid, _w, name, salaries in gm.CAREERS:
+            self.assertEqual(len(salaries), 8)
+            self.assertEqual(sum(1 for f in self.facts if f.text.startswith(name + ":")), 1, name)
+        # pay per real hour is half the salary: Pastry Designer 30 -> $15
+        self.assertIn("Pastry Designer: $15 per real hour as a Beginner, $50 as a Master", self.text)
+
+    def test_unconfirmed_lines_stay_unconfirmed(self):
+        for start in ("Medicines and the stethoscope", "The store's time-skip item", "Lotto Ticket",
+                      "Health Plan", "Boarding School", "What that waiting time holds back",
+                      "The Mysterious Collector", "The Wrong Address"):
+            fact = next(f for f in self.facts if f.text.startswith(start))
+            self.assertEqual(fact.label, gm.UNCONFIRMED, start)
+
+    def test_every_fact_keeps_its_evidence_for_the_export(self):
+        for fact in self.facts:
+            if not fact.sub:
+                self.assertTrue(fact.evidence.strip(), fact.text)
+
+
+class ClaimsExportTests(unittest.TestCase):
+    def test_the_export_lists_every_line_with_its_label_and_evidence(self):
+        import importlib.util
+        import tempfile
+        spec = importlib.util.spec_from_file_location("export_claims", ROOT / "scripts" / "export_game_mechanics_claims.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(module.main(["export", tmp]), 0)
+            text = (Path(tmp) / module.FILE_NAME).read_text(encoding="utf-8")
+        facts = gm.facts()
+        self.assertEqual(len(re.findall(r"^\s*\[(VERIFIED-E|VERIFIED-C|UNCONFIRMED)\] ", text, re.M)), len(facts))
+        self.assertIn("evidence: AllVillagersTimeflowUpkeep 0x4C4D29..0x4C4D8F", text)
+        for group in gm.GROUPS:
+            self.assertIn("\n" + group + "\n", text)
+
+
+class WindowTests(unittest.TestCase):
+    def setUp(self):
+        try:
+            import tkinter as tk
+        except ImportError:  # pragma: no cover
+            self.skipTest("tkinter is not available")
+        try:
+            self.root = tk.Tk()
+        except Exception:
+            self.skipTest("no display available for Tk")
+        self.root.withdraw()
+        import vf2_game_mechanics_window as gmw
+        self.gmw = gmw
+
+    def tearDown(self):
+        try:
+            self.root.destroy()
+        except Exception:
+            pass
+
+    def test_the_window_shows_every_group_and_label_and_writes_nothing(self):
+        refused = AssertionError("the Game Mechanics window must not write")
+        with mock.patch("pathlib.Path.write_bytes", side_effect=refused), \
+                mock.patch("pathlib.Path.write_text", side_effect=refused), \
+                mock.patch("builtins.open", side_effect=refused):
+            window = self.gmw.open_game_mechanics(self.root)
+        try:
+            page = window.mechanics_page
+            text = page.get("1.0", "end-1c")
+            self.assertEqual(text.count(gm.UNCONFIRMED), gm.render().count(gm.UNCONFIRMED))
+            for group in gm.GROUPS:
+                self.assertIn(group, window.mechanics_marks)
+            self.assertEqual(str(page.cget("state")), "disabled")
+            links = [child.cget("text") for child in window.mechanics_links.winfo_children()]
+            self.assertEqual(links, list(gm.GROUPS))
+            # every label is drawn in its own colour
+            for label in gm.LABELS:
+                self.assertTrue(page.tag_ranges(label), label)
+                self.assertEqual(page.tag_cget(label, "foreground"), self.gmw.LABEL_COLOURS[label])
+            window.mechanics_jump(gm.STORE)
+            window.update_idletasks()
+            self.assertLessEqual(window.mechanics_links.winfo_reqwidth(), self.gmw.MIN_WIDTH - 2 * self.gmw.PADDING,
+                                 "every group link fits the window at its smallest")
+        finally:
+            window.destroy()
+
+
+if __name__ == "__main__":
+    unittest.main()

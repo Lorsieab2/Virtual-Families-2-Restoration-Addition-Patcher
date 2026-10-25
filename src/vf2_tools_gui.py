@@ -1,9 +1,10 @@
-"""The Tools tab of the patcher window: Back Up Saves, Restore Saves, Rename Family, Game Speed and the guide.
+"""The Tools tab: Back Up Saves, Restore Saves, Rename Family, Game Speed, Game Mechanics and the guide.
 
 A mixin for VF2PatcherGUI (offline_vf2_patcher_gui.py), kept in its own file so the window's patching code
 stays as it was.  It needs from the window: ``root``, ``status_var``, ``_run_with_wait`` and the
 ``Link.TLabel`` / ``LinkHover.TLabel`` styles.  The saves themselves are handled by vf2_save_backup,
-vf2_rename_family and vf2_game_speed (no Tk there); the guides live in vf2_how_to_use.json.
+vf2_rename_family and vf2_game_speed (no Tk there); Game Mechanics is a read-only window of text
+(vf2_game_mechanics_window, its lines in vf2_game_mechanics); the guides live in vf2_how_to_use.json.
 """
 from __future__ import annotations
 
@@ -13,6 +14,7 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import messagebox, ttk
 
+import vf2_game_mechanics_window
 import vf2_game_speed
 import vf2_how_to_use
 import vf2_rename_family
@@ -111,8 +113,21 @@ class ToolsTabMixin:
         self._link(row, "Game Speed...", self.game_speed).pack(side="left", padx=(24, 0))
         self._help_button(row, "game_speed").pack(side="left", padx=(3, 0))
 
+        game = ttk.LabelFrame(tab, text="Game", style="Section.TLabelframe", padding=10)
+        game.grid(row=1, column=0, sticky="ew", pady=(10, 0))
+        row = ttk.Frame(game)
+        row.grid(row=0, column=0, sticky="w")
+        self._link(row, "Game Mechanics...", self.game_mechanics).pack(side="left")
+        self._help_button(row, "game_mechanics").pack(side="left", padx=(3, 0))
+        ttk.Label(
+            game,
+            text="How the game works underneath: ageing, needs, illness, careers, money, events and their chances "
+                 "and timers, in real time. It only shows text and changes nothing.",
+            style="Muted.TLabel", wraplength=WRAP, justify="left",
+        ).grid(row=1, column=0, sticky="w", pady=(6, 0))
+
         guide = ttk.LabelFrame(tab, text="Help", style="Section.TLabelframe", padding=10)
-        guide.grid(row=1, column=0, sticky="ew", pady=(10, 0))
+        guide.grid(row=2, column=0, sticky="ew", pady=(10, 0))
         row = ttk.Frame(guide)
         row.grid(row=0, column=0, sticky="w")
         self._link(row, "How to Use...", self.show_how_to_use_guide).pack(side="left")
@@ -122,6 +137,21 @@ class ToolsTabMixin:
             text="Every button in the patcher, one short page each. The small ? buttons open the page for the control beside them.",
             style="Muted.TLabel", wraplength=WRAP, justify="left",
         ).grid(row=1, column=0, sticky="w", pady=(6, 0))
+
+    # -- Game Mechanics -----------------------------------------------------
+
+    def game_mechanics(self) -> tk.Toplevel:
+        """The read-only Game Mechanics window (one at a time: a second click brings it to the front)."""
+        existing = getattr(self, "_game_mechanics_window", None)
+        if existing is not None:
+            with contextlib.suppress(tk.TclError):
+                if existing.winfo_exists():
+                    existing.deiconify()
+                    existing.lift()
+                    return existing
+        window = vf2_game_mechanics_window.open_game_mechanics(self.root)
+        self._game_mechanics_window = window
+        return window
 
     # -- How to Use ---------------------------------------------------------
 
