@@ -127,6 +127,46 @@ class ValueTests(unittest.TestCase):
         with self.assertRaisesRegex(gs.SpeedError, "194 days"):
             gs.seconds_at(gs.SpeedState(10, 10, 0, 0, 100, (1 << 24) + 1), (1 << 24) + 1)
 
+    def test_a_time_controls_speed_is_named_in_words_and_never_offered(self):
+        # Time Controls saves every family at 10 / 1009 and loads any other value as 10 / 1009, so none is a target.
+        self.assertEqual(gs.TARGETS, ("Paused", "Normal"))
+        for value, name in ((20, "Slow"), (5, "Fast"), (2, "5x"), (1, "10x")):
+            with self.subTest(value=value):
+                data = bytearray(fixture(NORMAL))
+                struct.pack_into("<i", data, gs.OPTION_AT, value)
+                struct.pack_into("<i", data, gs.CLOCK_AT, value)
+                state = gs.read_state(bytes(data))
+                self.assertTrue(state.time_controls)
+                self.assertEqual((state.kind, state.label), ("other", f"{name} (a Time Controls speed)"))
+                self.assertNotIn(name, gs.TARGETS)
+                for target in gs.TARGETS:
+                    with self.assertRaisesRegex(gs.SpeedError, "Time Controls speed"):
+                        gs.changed_bytes(bytes(data), target, unix_after(bytes(data), 60))
+                struct.pack_into("<i", data, gs.CLOCK_AT, 10)      # option and clock disagree: raw, as before
+                self.assertEqual(gs.read_state(bytes(data)).label, f"other (speed value {value}, clock speed 10)")
+
+    def test_paused_from_a_time_controls_speed_is_paused_and_unpauses_to_normal(self):
+        # 999 + speed with a stopped clock: a game with Time Controls loads it as 1009, so its unpause gives Normal.
+        for value in (20, 5, 2, 1):
+            with self.subTest(value=value):
+                data = bytearray(fixture(PAUSED))
+                struct.pack_into("<i", data, gs.OPTION_AT, 999 + value)
+                struct.pack_into("<i", data, gs.CLOCK_AT + 4, value)
+                self.assertEqual(gs.read_state(bytes(data)).label, "Paused")
+                out = gs.read_state(gs.changed_bytes(bytes(data), gs.NORMAL_NAME, unix_after(bytes(data), 60)))
+                self.assertEqual((out.option, out.clock_speed, out.clock_previous), (10, 10, 0))
+
+    def test_a_round_trip_through_every_offered_speed_has_no_clock_jump(self):
+        data = fixture(NORMAL)
+        paused = gs.changed_bytes(data, gs.PAUSED)
+        normal = gs.changed_bytes(paused, gs.NORMAL_NAME, unix_after(paused, 0))
+        again = gs.changed_bytes(normal, gs.PAUSED)
+        seconds = r.parse_family_save(data).clock.game_seconds_at_save
+        for out, label in ((paused, "Paused"), (normal, "Normal"), (again, "Paused")):
+            self.assertEqual(gs.read_state(out).label, label)
+            self.assertEqual(r.parse_family_save(out).clock.game_seconds_at_save, seconds)
+            self.assertTrue(gs.only_speed_fields_differ(data, out))
+
     def test_a_dead_body_the_pause_would_have_removed_is_refused(self):
         data = bytearray(fixture(PAUSED))
         rec = gs.VILLAGERS_AT + 29 * r.VILLAGER_RECORD_SIZE
@@ -159,6 +199,17 @@ class WriteTests(unittest.TestCase):
         self.assertTrue(slots[1].label.endswith("- Paused"))
         self.assertTrue(slots[2].label.endswith("- Normal"))
         self.assertEqual(slots[3].label, "Family slot 3: (empty)")
+
+    def test_listing_names_a_time_controls_speed_and_says_why_it_is_not_changed(self):
+        data = bytearray(fixture(NORMAL))
+        struct.pack_into("<i", data, gs.OPTION_AT, 2)
+        struct.pack_into("<i", data, gs.CLOCK_AT, 2)
+        (self.folder / r.save_file_name(3)).write_bytes(bytes(data))
+        info = {s.slot: s for s in gs.read_slots(self.folder)}[3]
+        self.assertTrue(info.label.endswith("- 5x (a Time Controls speed)"))
+        self.assertIn("loads this family at Normal", info.problem)
+        with self.assertRaises(gs.SpeedError):
+            gs.set_speed(self.folder, 3, "5x", NoGame(), WHEN)
 
     def test_set_speed_backs_up_writes_only_the_slot_save_and_reads_it_back(self):
         before = self.snapshot()

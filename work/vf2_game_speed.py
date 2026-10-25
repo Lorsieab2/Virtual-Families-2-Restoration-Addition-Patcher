@@ -46,6 +46,26 @@ What this tool writes, in the slot save "Virtual Families 2<N>.ldw" only (the ga
       or this PC's clock is earlier than the save.
     Nothing else changes. Any other combination is shown with its raw values and refused.
 
+The patcher's own Time Controls speeds, and why they are not offered here (VERIFIED)
+    Source runtime/native/b200time (b200time_time.inc, b200time.cpp; constants and pins in b200time_sites.h, proved
+    by runtime/tools/gen_b200_time_sites.py), exercised as the compiled vf2time_b200.dll on the real B200 code under
+    emulation by tests/test_b200_time_controls.py (scenario_save_normalises_the_speed among them).
+    * Time Controls (the optional time_controls setting; Settings button, id 9) sets Slow 20, Normal 10, Fast 5,
+      5x 2 and 10x 1 (B200TC_SPEED_*) with the game's own CGameTime::SetSpeed (B200 0x468B80) and the same value in
+      gs+0x25B18 (ChooseSpeed). Paused, it only changes the part below 999 (999 + speed). Pause / Resume are the
+      Space bar's: SetSpeed(999) and += 999; resume passes option - 999 (10 when that is 0) and stores it.
+    * SetSpeed for these speeds is the same as for 10: +0xC = Seconds(), +8 = now, +4 = old, +0x20 = the speed, so
+      Seconds() then counts (now - +8) / (speed / 10.0). The upkeep's catch-up cap (stock 0x49980F) is 0x9538 s
+      for option 5, 0x5CF8 for 20 and 0x7918 for 10 and every other value (2 and 1 included); ageing ticks are
+      banked / 60 / option (0x49988D), and a dead body goes once (now - stamp) / 60 / option reaches 240 (0x49973A..0x49978F).
+    * NONE OF THEM IS EVER SAVED. theGameState::Save (vtable slot 14) is wrapped from the module's first commit
+      (289ef7e): any option but 10 / 1009 is saved as 10 (after SetSpeed(10)) or 1009 when paused, and the live
+      speed is put back after the save; Load (slot 13) turns any such value into 10 (with SetSpeed(10)) or 1009.
+    So no installed game can produce a Time Controls speed in a save, and one written there would be turned back to
+    Normal at the next load by a game with Time Controls: this tool offers only Paused and Normal. A save holding
+    one with a matching clock (no known build writes it) is named in words and refused. A paused save holding 999 +
+    one of them is Paused; a game with Time Controls loads it as 1009, so Normal is what its unpause gives.
+
 Safety: the game must be closed; the save folder is backed up first ("(before speed change)"); the save is written
 atomically, read back, checked field by field (every other byte unchanged) and put back on any failure. No log and
 no data file is written. Nothing here touches Tk.
@@ -74,6 +94,8 @@ FLOAT_EXACT = 1 << 24       # the patched game's float elapsed seconds are exact
 PAUSED = "Paused"
 NORMAL_NAME = "Normal"
 TARGETS = (PAUSED, NORMAL_NAME)
+# The Time Controls dialog's own names for its speed values (b200time_time.inc; see the module notes). Never offered.
+TIME_CONTROLS_SPEEDS = {20: "Slow", 5: "Fast", 2: "5x", 1: "10x"}
 CLOCK_SIZE = 0x14
 _U32 = 0xFFFFFFFF
 REC_ACTIVE = 0x0            # villager+0x1BB84
@@ -114,7 +136,14 @@ class SpeedState:
             return PAUSED
         if self.kind == "normal":
             return NORMAL_NAME
+        if self.time_controls:
+            return f"{TIME_CONTROLS_SPEEDS[self.option]} (a Time Controls speed)"
         return f"other (speed value {self.option}, clock speed {self.clock_speed})"
+
+    @property
+    def time_controls(self) -> bool:
+        """True for a running save at one of Time Controls' speeds (which Time Controls itself never saves)."""
+        return self.option in TIME_CONTROLS_SPEEDS and self.clock_speed == self.option
 
 
 def _start_time(data: bytes) -> int | None:
@@ -255,7 +284,10 @@ def read_slots(folder: Path) -> list[SlotSpeed]:
             slots.append(SlotSpeed(slot, None, None, f"{path.name} is not a Virtual Families 2 save the game can load."))
             continue
         info = SlotSpeed(slot, rename_family.save_name(data), state)
-        if state.kind == "other":
+        if state.time_controls:
+            info.problem = (f"Its speed is {state.label}, which this tool does not change. Time Controls never "
+                            "keeps one in a save: with Time Controls installed, the game loads this family at Normal.")
+        elif state.kind == "other":
             info.problem = (f"Its speed is {state.label}, which this tool does not change. Change it in the game "
                             "(Options, Pause Game).")
         slots.append(info)

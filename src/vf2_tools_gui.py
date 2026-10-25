@@ -700,7 +700,9 @@ class ToolsTabMixin:
             text=(
                 "Quit the game from its own menu first: a running game would put the old speed back. Your saves are "
                 "backed up first, as \"Backup <date> (before speed change)\". Paused works as if you paused just "
-                "before the game last saved; Normal as if you unpaused it now, so the paused time is never aged in."
+                "before the game last saved; Normal as if you unpaused it now, so the paused time is never aged in. "
+                "Time Controls' Slow, Fast, 5x and 10x are not offered: the game never keeps them in a save and "
+                "always loads a family at Normal (or Paused)."
             ),
             wraplength=WRAP, justify="left",
         ).pack(anchor="w", pady=(4, 10))

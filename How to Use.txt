@@ -60,7 +60,9 @@ Game Speed pauses or unpauses a family in its save. Quit the game first, pick
 the family (each shows its speed now) and choose Paused or Normal. Paused works
 as if you paused just before the game last saved; Normal as if you unpaused it
 right now, so the time it spent paused never counts. Your saves are backed up
-first as "Backup <date> (before speed change)".
+first as "Backup <date> (before speed change)". Time Controls' Slow, Fast, 5x
+and 10x are not offered: the game never keeps them in a save and loads every
+family at Normal or Paused.
 
 Crash capture QA only (optional):
 The patcher never changes Windows Error Reporting settings or launches the

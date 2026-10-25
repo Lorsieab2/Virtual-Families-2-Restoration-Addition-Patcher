@@ -270,6 +270,15 @@ default (0x4C8CB5); the patched build's (relinked SSE object code, B202 0x468B50
 a float, which agrees only below 2^24 s. Note: the reader's `game_seconds_at_save` uses the float form, so for
 the stock exe it can be off by a few seconds past 2^24 s since the last speed change (no real save is).
 
+**Time Controls speeds are never saved (VERIFIED in `runtime/native/b200time/b200time_time.inc`, run as the
+compiled DLL on the real B200 code under emulation by `tests/test_b200_time_controls.py`).** The optional Time
+Controls sets 20 (Slow), 10, 5 (Fast), 2 (5x) or 1 (10x) with the game's own `SetSpeed` and the same value in
+gs+0x25B18; paused, it changes only the part below 999. Its theGameState::Save wrapper (vtable slot 14) writes any
+value but 10 / 1009 as 10 (after `SetSpeed(10)`) or 1009 and puts the live speed back afterwards; its Load wrapper
+(slot 13) turns any such value into 10 (`SetSpeed(10)`) or 1009. Both date from the module's first commit, so no
+build writes 20 / 5 / 2 / 1 to a save; Game Speed names such a value in words and refuses it. The stock catch-up cap
+(0x49980F) is 0x9538 s for 5, 0x5CF8 for 20 and 0x7918 for every other value, 2 and 1 included.
+
 Not saved: the life-event queue (gs+0x25CE8, 20 x 0x3C) and the email queue lie past gs+0x25B20.
 
 ## 7. Settings file, slot 0 (0x90 from gs+0x25B20) (VERIFIED unless marked)

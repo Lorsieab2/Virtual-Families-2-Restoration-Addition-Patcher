@@ -120,7 +120,8 @@ actions, as before. **Tools** holds:
   `Backup <date> (before rename)`, reads every file back and puts everything back if one fails. It writes no
   log and no data file. Evidence with exe addresses: `docs/vf2-save-format.md` section 11. Code:
   `src/vf2_rename_family.py`; tests: `tests/test_rename_family.py`.
-- **Game Speed...** shows each family's saved speed (Paused, Normal, or any other value raw) and sets it to
+- **Game Speed...** shows each family's saved speed (Paused, Normal, a Time Controls speed in words, or any
+  other value raw) and sets it to
   **Paused** or **Normal** in a closed game's save, writing what the game's own Pause / Unpause write (traced in
   the stock exe: Options 0x42269B / 0x4226EA, Space 0x43BC52 / 0x43BC7B, `CGameTime::SetSpeed` 0x427A50, which
   stores 0 for 999): the speed option gs+0x25B18 (10, or +999 when paused) and the saved CGameTime. Paused acts
@@ -130,8 +131,11 @@ actions, as before. **Tools** holds:
   unpause that would have removed a dead body meanwhile, and a Pause the stock and the patched game would work
   out differently (more than 2^24 s since the last speed change; the patched build rounds to a float). It backs
   up first as `Backup <date> (before speed change)`, writes only the slot save, reads it back, checks no other
-  byte changed and puts it back on failure; no log, no data file. Slow and Fast are not offered: the game sets
-  no speed but 10 and the +999 pause. Code: `src/vf2_game_speed.py`; tests: `tests/test_game_speed.py`.
+  byte changed and puts it back on failure; no log, no data file. The stock game sets no speed but 10 and the
+  +999 pause. The patcher's own Time Controls speeds (Slow 20, Fast 5, 5x 2, 10x 1) are not offered either:
+  vf2time_b200.dll saves every family at Normal (or Paused) and loads any save holding one of them at Normal
+  (theGameState Save / Load wrappers in `runtime/native/b200time/b200time_time.inc`), so no installed game can
+  produce one in a save. A save holding one is named in words and refused. Code: `src/vf2_game_speed.py`; tests: `tests/test_game_speed.py`.
 - **How to Use...** opens the guide: one short page per control. A small **?** button beside each control
   opens the page for it. The pages are `src/vf2_how_to_use.json`, read by `src/vf2_how_to_use.py`.
 
