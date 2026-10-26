@@ -167,12 +167,12 @@ class ReadmeCountsTests(unittest.TestCase):
             self.assertIn("%d arrive enabled" % len(on), README)
         with self.subTest("the README states the real default-off count"):
             off = len(self.manifest["settings"]) - len(on)
-            # Two since B202: Swap Invisible Furniture Graphics with
-            # Transparent Graphics, and Up to 28 Children (Experimental,
-            # off by default by the owner's decision).
+            # Three since B204: Swap Invisible Furniture Graphics with
+            # Transparent Graphics, and the Experimental Up to 28 Children
+            # and Family History log (off by default by the owner's decision).
             self.assertEqual(
-                2, off,
-                "the legend names exactly two default-off settings; update it "
+                3, off,
+                "the legend names exactly three default-off settings; update it "
                 "if the bundle ever ships a different number",
             )
 
