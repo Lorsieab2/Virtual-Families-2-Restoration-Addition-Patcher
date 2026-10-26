@@ -273,8 +273,9 @@ class ToolsTabMixin:
             text=(
                 "Each folder is copied into a new dated folder inside it: <save folder>\\Backups\\Backup <date and time>. "
                 "The patcher's own files (Virtual Families 2 Patcher Data) are copied too. If the game is running it is "
-                "paused for the copy and then resumes by itself. The game saves only when you quit normally, so a backup "
-                "of a running game holds your families as of its last save."
+                "paused for the copy and then resumes by itself. The game saves by itself every 2 minutes while it runs, "
+                "and when you quit normally, so a backup of a running game holds your families as of its last "
+                "save."
             ),
             wraplength=WRAP, justify="left",
         ).pack(anchor="w", pady=(4, 10))
@@ -338,7 +339,7 @@ class ToolsTabMixin:
             if result.paused:
                 lines.append(
                     "The game was running: it was paused for the copy and has resumed. The backup holds your families "
-                    "as of the game's last save (it saves when you quit normally)."
+                    "as of the game's last save (it saves by itself every 2 minutes, and when you quit normally)."
                 )
             else:
                 lines.append("The game was not running.")
@@ -513,7 +514,8 @@ class ToolsTabMixin:
             messagebox.showerror(
                 "Restore Saves",
                 f"{vf2_save_backup.running_game_names(folder, None)} is running.\n\nQuit the game from its own menu first, then "
-                "restore: a running game writes its families over the restored save when it quits. Nothing was changed.",
+                "restore: a running game writes its families over the restored save the next time it saves (by itself "
+                "every 2 minutes, or when it quits). Nothing was changed.",
                 parent=parent,
             )
             return False

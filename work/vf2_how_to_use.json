@@ -109,7 +109,7 @@
         "Copies your family saves into a dated folder inside the save folder: Documents\\LDW\\<game>\\Backups\\Backup <date and time>.",
         "It copies the game's save files and the patcher's own files too (the Virtual Families 2 Patcher Data folder, which holds the extra children).",
         "Click it, tick the save folders to copy, click Back Up Selected. If the game is running it is paused for the copy and resumes by itself.",
-        "The game saves only when you quit normally, so a backup of a running game holds your families as of the last save.",
+        "The game saves by itself every 2 minutes while it runs, and when you quit normally, so a backup of a running game holds your families as of the last save.",
         "Every copied file is checked against the original. An older backup is never written over."
       ]
     },

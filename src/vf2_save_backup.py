@@ -816,7 +816,8 @@ def restore_backup(
     if _game_running(save_folder, controller):
         raise RestoreRefused(
             f"{running_game_names(save_folder, controller)} is running. Quit the game from its own menu first: a running "
-            "game writes its families over the restored save when it quits. Nothing was changed."
+            "game writes its families over the restored save the next time it saves (by itself every 2 minutes, or when "
+            "it quits). Nothing was changed."
         )
     plan = plan_restore(save_folder, backup, slot)
     if plan.changes == 0:
