@@ -71,7 +71,7 @@ class NameRuleTests(unittest.TestCase):
         self.assertIn("at most 19", rf.name_problem("A" * 20))
 
     def test_refused_names(self):
-        for name in ("", "   ", "Café", "Tab\there", "NEW PLAYER"):
+        for name in ("", "   ", "CafÃ©", "Tab\there", "NEW PLAYER"):
             with self.subTest(name=name):
                 self.assertIsNotNone(rf.name_problem(name))
 
@@ -205,6 +205,47 @@ class RenameTests(Base):
         self.rename("The Smiths")
         outside_backups = {p for p in self.snapshot() if p.parts[0] != sb.BACKUPS_FOLDER}
         self.assertEqual(outside_backups, {Path("Virtual Families 20.ldw"), Path("Virtual Families 21.ldw")})
+
+
+class FamilyHistoryLineTests(Base):
+    """The Family History log patch's log gets the rename; a slot without a log gets none."""
+
+    def history(self, k=1):
+        return rf.history_folder(self.folder, 1) / f"Family History {k}.txt"
+
+    def test_no_log_is_started(self):
+        self.rename("The Smiths")
+        self.assertFalse(rf.history_folder(self.folder, 1).exists())
+
+    def test_the_rename_is_a_record_in_the_newest_file(self):
+        self.history().parent.mkdir(parents=True)
+        self.history().write_bytes(b"Family: Lorsieab2 (Save 1)\r\n[2026-10-24 10:00:00] Generation 1\r\n"
+                                   b"  Generation: 1\r\n\r\n")
+        self.rename("The Smiths")
+        self.assertTrue(self.history().read_bytes().endswith(
+            b"  Generation: 1\r\n\r\n[2026-10-25 12:00:00] Family Renamed 1\r\n"
+            b"  Old name: Lorsieab2\r\n  New name: The Smiths\r\n\r\n"))
+
+    def test_numbered_after_every_earlier_rename_and_old_files_kept(self):
+        self.history().parent.mkdir(parents=True)
+        old = (b"Family: A (Save 1)\r\n[2026-01-01 00:00:00] Family Renamed 4\r\n"
+               b"  Old name: A\r\n  New name: Lorsieab2\r\n\r\n")
+        self.history().write_bytes(old)
+        self.history(2).write_bytes(b"Family: Lorsieab2 (Save 1)\r\n")
+        self.rename("The Smiths")
+        self.assertEqual(self.history().read_bytes(), old)
+        self.assertEqual(self.history(2).read_bytes(),
+                         b"Family: Lorsieab2 (Save 1)\r\n[2026-10-25 12:00:00] Family Renamed 5\r\n"
+                         b"  Old name: Lorsieab2\r\n  New name: The Smiths\r\n\r\n")
+        self.assertFalse(self.history(3).exists())
+
+    def test_a_line_without_its_end_is_finished_first(self):
+        self.history().parent.mkdir(parents=True)
+        self.history().write_bytes(b"Family: Lorsieab2 (Save 1)")
+        self.rename("The Smiths")
+        self.assertEqual(self.history().read_bytes(),
+                         b"Family: Lorsieab2 (Save 1)\r\n[2026-10-25 12:00:00] Family Renamed 1\r\n"
+                         b"  Old name: Lorsieab2\r\n  New name: The Smiths\r\n\r\n")
 
 
 if __name__ == "__main__":

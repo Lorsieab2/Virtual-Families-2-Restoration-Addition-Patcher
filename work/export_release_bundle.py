@@ -73,12 +73,13 @@ def main() -> int:
     parser.add_argument("--asset-mode", default="additive", choices=["additive", "all", "full"],
                         help="additive (default) ships every addition; full also "
                              "redistributes the untouched base game")
-    # The companion DLLs the dormant .vf2time / .vf2kids loaders load. The
-    # exporter refuses a build that has a loader but no DLL, so a release made
-    # without these flags failed outright (B201 needed a hand edit here).
-    # Default: the release builds in runtime/build (build_b200time.bat,
-    # build_b200kids.bat). Each setting keeps the behaviour the exporter's
-    # catalog gives it (Time Controls a normal patch, Up to 28 Children
+    # The companion DLLs the dormant .vf2time / .vf2kids / .vf2hist loaders
+    # load. The exporter refuses a build that has a loader but no DLL, so a
+    # release made without these flags failed outright (B201 needed a hand
+    # edit here). Default: the release builds in runtime/build
+    # (build_b200time.bat, build_b200kids.bat, build_b200history.bat). Each
+    # setting keeps the behaviour the exporter's catalog gives it (Time
+    # Controls a normal patch, Up to 28 Children and Family History log
     # Experimental, off by default); this script only supplies the files.
     parser.add_argument("--time-controls-dll",
                         default=str(ROOT / "runtime" / "build" / "vf2time_b200.dll"),
@@ -86,6 +87,9 @@ def main() -> int:
     parser.add_argument("--up-to-28-children-dll",
                         default=str(ROOT / "runtime" / "build" / "vf2kids_b200.dll"),
                         help="Built vf2kids_b200.dll shipped behind the up_to_28_children setting")
+    parser.add_argument("--family-history-dll",
+                        default=str(ROOT / "runtime" / "build" / "vf2history_b200.dll"),
+                        help="Built vf2history_b200.dll shipped behind the family_history setting")
     args = parser.parse_args()
 
     outputs = ROOT / "outputs"
@@ -156,7 +160,8 @@ def main() -> int:
     # ("pass --time-controls-dll ...") rather than ship a setting that does
     # nothing.
     for flag, value in (("--time-controls-dll", args.time_controls_dll),
-                        ("--up-to-28-children-dll", args.up_to_28_children_dll)):
+                        ("--up-to-28-children-dll", args.up_to_28_children_dll),
+                        ("--family-history-dll", args.family_history_dll)):
         if flag not in flags:
             print(f"exporter has no {flag}; the companion DLL would be absent", file=sys.stderr)
             return 1

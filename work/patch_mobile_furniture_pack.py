@@ -475,6 +475,16 @@ UP_TO_28_CHILDREN_TABLE_SYMBOL = "_gVF2ExtraChildrenTable"
 UP_TO_28_CHILDREN_DLL_NAME = "vf2kids_b200.dll"
 UP_TO_28_CHILDREN_INI_NAME = "vf2kids.ini"
 UP_TO_28_CHILDREN_STARTUP = "B200Kids_Startup"
+# "Family History" (after B203): the companion DLL vf2history_b200.dll (runtime/native/b200history). One
+# dormant byte; zero never loads the DLL. It rides the same theGame::Init wrapper as Time Controls and Up to
+# 28 Children and is loaded after both, once. The DLL installs nothing unless its own pins match and
+# vf2history.ini says FamilyHistory=1. No generated code reads anything of it.
+FAMILY_HISTORY_SETTING = "family_history"
+FAMILY_HISTORY_FLAG_SECTION = ".vf2hist"
+FAMILY_HISTORY_FLAG_SYMBOL = "_gVF2FamilyHistory"
+FAMILY_HISTORY_DLL_NAME = "vf2history_b200.dll"
+FAMILY_HISTORY_INI_NAME = "vf2history.ini"
+FAMILY_HISTORY_STARTUP = "B200History_Startup"
 OLDER_MORTALITY_HELPER_SYMBOL = "_VF2RollOlderVillagerMortality"
 LONGEVITY_AGE_HELPER_SYMBOL = "_VF2AwardLongevityGoals"
 LONGEVITY_LOAD_HELPER_SYMBOL = "@VF2VillagerLoadStateAndReconcileLongevity@12"
@@ -16063,12 +16073,37 @@ static bool VF2IsExtraChildSlot(int slot) {
     return false;
 }
 
+// Family History loader (see FAMILY_HISTORY_* in the generator). Zero = never
+// loads the companion DLL. It is loaded by the same wrapper, after the Time
+// Controls and Up to 28 Children DLLs, once; nothing else reads the byte.
+#pragma section(".vf2hist", read, write)
+extern "C" __declspec(allocate(".vf2hist"))
+volatile unsigned char gVF2FamilyHistory = 0;
+
+static void VF2LoadFamilyHistoryDll() {
+    unsigned short path[512];
+    unsigned long length = GetModuleFileNameW(0, path, 400);
+    if (length == 0 || length >= 400) return;
+    unsigned long cut = length;
+    while (cut > 0 && path[cut - 1] != 92) --cut;
+    if (cut == 0) return;
+    const char *tail = "__VF2_FAMILY_HISTORY_RELATIVE_PATH__";
+    unsigned long out = cut;
+    for (const char *c = tail; *c; ++c) path[out++] = (unsigned short)(unsigned char)*c;
+    path[out] = 0;
+    void *module = LoadLibraryW(path);
+    if (!module) return;
+    void (__cdecl *startup)() = (void (__cdecl *)())GetProcAddress(module, "B200History_Startup");
+    if (startup) startup();
+}
+
 extern "C" void *__cdecl VF2GameStateGetAfterTimeControlsLoad() {
     static bool tried = false;
     if (!tried) {
         tried = true;
         if (gVF2TimeControls == 1) VF2LoadTimeControlsDll();
         if (gVF2UpTo28Children == 1) VF2LoadUpTo28ChildrenDll();
+        if (gVF2FamilyHistory == 1) VF2LoadFamilyHistoryDll();
     }
     return theGameState::Get();
 }
@@ -18541,6 +18576,10 @@ extern "C" void __cdecl VF2ApplyVisibleSpecialUpgrade(int itemId) {
     special_upgrade_helper_cpp = special_upgrade_helper_cpp.replace(
         "__VF2_UP_TO_28_CHILDREN_RELATIVE_PATH__",
         TIME_CONTROLS_PATCHER_FOLDER + "\\\\" + UP_TO_28_CHILDREN_DLL_NAME,
+    )
+    special_upgrade_helper_cpp = special_upgrade_helper_cpp.replace(
+        "__VF2_FAMILY_HISTORY_RELATIVE_PATH__",
+        TIME_CONTROLS_PATCHER_FOLDER + "\\\\" + FAMILY_HISTORY_DLL_NAME,
     )
     special_upgrade_helper_cpp = special_upgrade_helper_cpp.replace(
         "__VF2_TIME_CONTROLS_RELATIVE_PATH__",
@@ -25877,6 +25916,42 @@ def patch_up_to_28_children_manifest(manifest):
         "sidecar": "<save folder>\\Virtual Families 2 Patcher Data\\Children\\<save file>.dat",
         "save_format": "unchanged",
         "flag_off": "the DLL is never loaded and the table is never read: the game is the unmodified build",
+    }
+
+
+def patch_family_history_manifest(manifest):
+    """Family History: the dormant .vf2hist byte is compiled into every
+    executable (special upgrade helper C++); the loader is the Time Controls
+    wrapper on theGame::Init's first call, which loads the Family History DLL
+    after the Time Controls and Up to 28 Children DLLs. Requires
+    patch_time_controls_loader."""
+    if "TimeControls" not in manifest:
+        raise RuntimeError("Family History rides the Time Controls loader; patch it first")
+    manifest["FamilyHistory"] = {
+        "status": "dormant loader installed in every executable",
+        "offline_patcher_setting": FAMILY_HISTORY_SETTING,
+        "category": "experimental",
+        "default": False,
+        "hook": (
+            "theGame::Init's first call (theGameState::Get) -> "
+            "VF2GameStateGetAfterTimeControlsLoad, which loads "
+            f"{TIME_CONTROLS_PATCHER_FOLDER}\\{FAMILY_HISTORY_DLL_NAME} once when the byte is 1, "
+            "after the Time Controls and Up to 28 Children DLLs"
+        ),
+        "runtime_flag": {
+            "symbol": FAMILY_HISTORY_FLAG_SYMBOL,
+            "source_section": FAMILY_HISTORY_FLAG_SECTION,
+            "size": 1,
+            "default": "00",
+            "enabled": "01",
+            "linked_location_status": "pending_link_metadata",
+        },
+        "companion_dll": FAMILY_HISTORY_DLL_NAME,
+        "companion_ini": FAMILY_HISTORY_INI_NAME,
+        "startup_export": FAMILY_HISTORY_STARTUP,
+        "log": "<save folder>\\Virtual Families 2 Patcher\\Save <N>\\Logs\\Family History\\Family History <k>.txt",
+        "save_format": "unchanged",
+        "flag_off": "the DLL is never loaded: the game is the unmodified build",
     }
 
 
@@ -41884,6 +41959,8 @@ def main():
     patch_time_controls_loader(manifest)
     # Up to 28 Children (.vf2kids; the same loader loads its DLL after Time Controls).
     patch_up_to_28_children_manifest(manifest)
+    # Family History (.vf2hist; the same loader loads its DLL after Up to 28 Children).
+    patch_family_history_manifest(manifest)
     # Invisible furniture counts as its stock donor where stock code tests
     # the donor's item id (every executable).
     patch_invisible_furniture_parity(manifest)

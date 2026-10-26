@@ -55,7 +55,8 @@ FINAL_PLAYTEST_DEFAULT_ON_SETTINGS = frozenset({
     "ai_generated_bathroom2_renovations",
     "time_controls",
 })
-# up_to_28_children is Experimental: the final playtest profile leaves it off too, like Enable All.
+# up_to_28_children and family_history are Experimental: the final playtest profile leaves them off too,
+# like Enable All.
 # Empty by design. The owner's standing instruction is that a playtest ships
 # with every patch on -- "make sure your playtests ship and compile with every
 # single patch on. you have wasted too much of my life giving me playtests that
@@ -296,6 +297,7 @@ SOURCE_BACKED_OPTIONAL_SETTINGS = {
     "ai_generated_bathroom2_renovations",
     "time_controls",
     "up_to_28_children",
+    "family_history",
 }
 EXECUTABLE_OVERLAY_OPTIONAL_SETTINGS = {
     "island_events",
@@ -480,6 +482,13 @@ SETTINGS = [
         "id": "up_to_28_children",
         "label": "Up to 28 Children",
         "description": "Lets one generation have up to 28 children instead of 6. Only the first 6 children appear in the Family Tree, exactly as before; every child, including the 7th to the 28th, can be chosen to inherit the house in Next Generation. Twins and triplets never take a family past 28: with 27 children a twin or triplet pregnancy has one baby, with 26 a triplet pregnancy has two, and at 28 no more babies come (the normal twin and triplet chances are unchanged while there is room). Children 7 to 28 are remembered in a small file beside each save (the Virtual Families 2 Patcher Data\\Children folder in the save folder); the save file itself is not changed. Virtual Families 2 natively keeps up to 6 children per generation in its Family Tree, and a household holds at most 30 villagers (2 parents and 28 children). This patch keeps children 7 to 28 in a separate file beside the save, so they never overwrite Family Tree entries; storing more than 6 children in the Family Tree itself would overwrite its entries and glitch the game. Experimental: not yet tested in a running game. Back up your saves before using it. Installs a small companion DLL in the Virtual Families 2 Patcher Files folder next to the game; unticking the setting removes it and the game is unmodified again.",
+        "default": False,   # Experimental: default off, never ticked by Enable All
+        "category": "experimental",
+    },
+    {
+        "id": "family_history",
+        "label": "Family History log",
+        "description": "Keeps a Family History log for each family, one dated record per event, in the same format as the Virtual Families 1 patcher's Family History, with each family member written as the Virtual Villagers patcher writes a villager (name, age, sex, head and body): marriages and remarriages (same-sex ones too) with the current spouse, spouses lost to divorce or death, every conception and birth (twins and triplets marked), every death with its cause, children who join or leave home, each new generation and its heir, renames, a new family, Start Over and Evict Family, and every Random Event as an Email Event or a Popup Event with the title the player sees and the choice made. An existing family's past is filled in once from its Family Tree, marked \"backfilled, no date\". The log is a text file in the save folder, under Virtual Families 2 Patcher\\Save N\\Logs\\Family History; no other file is written. Starting a new family or Start Over in that save slot starts its log again. The save file itself is not changed. Experimental: not yet tested in a running game. Back up your saves before using it. Installs a small companion DLL in the Virtual Families 2 Patcher Files folder next to the game; unticking the setting removes it and the game is unmodified again.",
         "default": False,   # Experimental: default off, never ticked by Enable All
         "category": "experimental",
     },
@@ -1019,6 +1028,7 @@ RUNTIME_FLAG_SECTION_BY_SETTING = {
     "fix_vanilla_game_bugs": ".vf2bugs",
     "time_controls": ".vf2time",
     "up_to_28_children": ".vf2kids",
+    "family_history": ".vf2hist",
     "same_sex_marriage": ".vf2same",
     "holiday_furniture": ".vf2goal",
     "mobile_furniture_behaviors": ".vf2beh",
@@ -1307,6 +1317,89 @@ def up_to_28_children_asset_patches(
             "remove_when_disabled": True,
             "requires": ["core_executable", "up_to_28_children"],
             "note": note + " Disabling Up to 28 Children removes only this exact file.",
+        })
+    return records
+
+
+def family_history_post_asset_patches(
+    executable_sources: list[Path],
+    *,
+    output_exe_name: str,
+    build_manifest_data: dict[str, Any],
+) -> list[dict[str, Any]]:
+    contract = build_manifest_data.get("FamilyHistory")
+    if not isinstance(contract, dict):
+        return []
+    runtime_flag = contract.get("runtime_flag")
+    if not isinstance(runtime_flag, dict):
+        raise ValueError("Build manifest has an invalid FamilyHistory contract.")
+    return setting_runtime_flag_post_asset_patches(
+        executable_sources,
+        output_exe_name=output_exe_name,
+        runtime_flag=runtime_flag,
+        section_name=RUNTIME_FLAG_SECTION_BY_SETTING["family_history"],
+        setting_id="family_history",
+        feature_label="Family History log",
+    )
+
+
+FAMILY_HISTORY_DLL_NAME = "vf2history_b200.dll"
+FAMILY_HISTORY_INI_NAME = "vf2history.ini"
+FAMILY_HISTORY_INI_TEXT = "[Patches]\r\nFamilyHistory=1\r\n"
+
+
+def family_history_asset_patches(
+    bundle_dir: Path,
+    dll_path: Path | None,
+    build_manifest_data: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """The companion DLL and its one-line ini, placed beside the game only while Family History log is on.
+
+    The executable carries a dormant loader (.vf2hist byte, 0 in every build); the post-asset toggle sets it
+    to 1 and these two files are what that loader loads (after the Time Controls and Up to 28 Children DLLs).
+    With the setting off the files are removed and the byte stays 0: the game never looks for the DLL. A
+    build without the loader (B203 and earlier) has no FamilyHistory contract and gets no records.
+    """
+    contract = build_manifest_data.get("FamilyHistory")
+    if not isinstance(contract, dict):
+        return []
+    if (contract.get("companion_dll") != FAMILY_HISTORY_DLL_NAME
+            or contract.get("companion_ini") != FAMILY_HISTORY_INI_NAME):
+        raise ValueError("Build manifest's FamilyHistory contract names another companion file.")
+    if dll_path is None:
+        raise ValueError(
+            "This build has the Family History loader; pass --family-history-dll with the built "
+            f"{FAMILY_HISTORY_DLL_NAME} (runtime\\native\\build_b200history.bat) or the setting would do nothing."
+        )
+    if not dll_path.is_file() or dll_path.name != FAMILY_HISTORY_DLL_NAME:
+        raise ValueError(f"--family-history-dll must be an existing {FAMILY_HISTORY_DLL_NAME}: {dll_path}")
+    require_vf2_pe32_x86(dll_path, label="Family History DLL")
+    data = dll_path.read_bytes()
+    if b"B200History_Startup" not in data or b"B200History_TestPlan" in data:
+        raise ValueError(
+            "The Family History DLL must be the shipped build (exports B200History_Startup, no test entry points)."
+        )
+    payload_dir = bundle_dir / "payload" / "FamilyHistory"
+    payload_dir.mkdir(parents=True, exist_ok=True)
+    staged_dll = payload_dir / FAMILY_HISTORY_DLL_NAME
+    staged_dll.write_bytes(data)
+    staged_ini = payload_dir / FAMILY_HISTORY_INI_NAME
+    staged_ini.write_bytes(FAMILY_HISTORY_INI_TEXT.encode("ascii"))
+    records: list[dict[str, Any]] = []
+    for staged, note in (
+        (staged_dll, "Family History companion DLL, loaded by the executable's dormant .vf2hist loader."),
+        (staged_ini, "Family History switch (FamilyHistory=1) read by the companion DLL."),
+    ):
+        records.append({
+            "file_path": f"{TIME_CONTROLS_PATCHER_FOLDER}/{staged.name}",
+            "source_path": relative_posix(staged.relative_to(bundle_dir)),
+            "source_sha256": sha256_file(staged),
+            "source_size": staged.stat().st_size,
+            "overwrite_existing": True,
+            "allow_missing_target": True,
+            "remove_when_disabled": True,
+            "requires": ["core_executable", "family_history"],
+            "note": note + " Disabling Family History log removes only this exact file.",
         })
     return records
 
@@ -1642,6 +1735,11 @@ def b152_runtime_flag_post_asset_patches(
             build_manifest_data=build_manifest_data,
         ),
         *up_to_28_children_post_asset_patches(
+            executable_sources,
+            output_exe_name=output_exe_name,
+            build_manifest_data=build_manifest_data,
+        ),
+        *family_history_post_asset_patches(
             executable_sources,
             output_exe_name=output_exe_name,
             build_manifest_data=build_manifest_data,
@@ -4688,6 +4786,11 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
             Path(args.up_to_28_children_dll).resolve() if getattr(args, "up_to_28_children_dll", None) else None,
             build_manifest_data,
         ))
+        asset_patches.extend(family_history_asset_patches(
+            bundle_dir,
+            Path(args.family_history_dll).resolve() if getattr(args, "family_history_dll", None) else None,
+            build_manifest_data,
+        ))
     # Invisible Workspace Upgrades is emitted AFTER the misc/optional visual
     # records on purpose. Records that share a target with distinct requires
     # are a layered override and the patcher applies them in manifest order,
@@ -5252,6 +5355,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--mobile-sound-assets-dir", help="Folder containing all 67 pinned mobile behavior sound .ogg files to place behind the mobile_sound_assets setting.")
     parser.add_argument("--invisible-upgrades-dir", help="Folder containing invisible upgrade .png files to place in payload/OptionalVisualMods/Invisible Upgrades and target to Images/Upgrades.")
     parser.add_argument("--original-upgrades-dir", help="Folder containing original upgrade .png files to bundle as restore/reference sources for Invisible Upgrades.")
+    parser.add_argument("--family-history-dll", help="The built vf2history_b200.dll (runtime\\native\\build_b200history.bat) to ship behind the family_history setting. Required when the build has the Family History loader.")
     parser.add_argument("--up-to-28-children-dll", help="The built vf2kids_b200.dll (runtime\\native\\build_b200kids.bat) to ship behind the up_to_28_children setting. Required when the build has the Up to 28 Children loader.")
     parser.add_argument("--time-controls-dll", help="The built vf2time_b200.dll (runtime\\native\\build_b200time.bat) to ship behind the time_controls setting. Required when the build has the Time Controls loader.")
     parser.add_argument("--generation-locks-dir", help="Folder containing lock_02.png through lock_30.png; defaults to bundled workspace assets.")

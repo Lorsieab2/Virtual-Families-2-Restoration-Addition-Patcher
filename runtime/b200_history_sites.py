@@ -1,16 +1,17 @@
-"""Family Logs: every site in the B200 Virtual Families 2 executable (core variant).
+"""Family History: every site in the B200 Virtual Families 2 executable (core variant).
 
-Single source of truth for every address the companion DLL vf2logs_b200.dll touches or relies on. It
-is the Virtual Families 1 Family Logs DLL (vf1logs.dll) ported to Virtual Families 2: plain-text family
-logs written when the game makes each event, in the same files, folders, headers and line formats.
+Single source of truth for every address the companion DLL vf2history_b200.dll touches or relies on. It
+writes ONE log, the Family History, in the format of the Virtual Families 1 Family History log
+(vf1logs.dll, VF1 repository feat/family-logs): one dated line per event, in
+<save folder>\\Virtual Families 2 Patcher\\Save <N>\\Logs\\Family History\\Family History <k>.txt.
 
 Each pin is the exact bytes of the B200 link output (`Virtual Families 2 - B200.exe`, core variant,
 built by work/patch_mobile_furniture_pack.py) of one game function or of the run of a function around
 the call the DLL retargets. The image is relocated (DYNAMICBASE + .reloc) and every matrix variant
 links to different addresses, so the DLL holds no address: it searches the live image for each pinned
 run (relocated 32-bit fields and call/jmp rel32 displacements are wildcards) and derives every address
-from where the runs were found. runtime/tools/gen_b200_logs_sites.py proves every pin and derivation on
-the core variant with capstone + pefile and renders the C header the DLL is built from.
+from where the runs were found. runtime/tools/gen_b200_history_sites.py proves every pin and derivation
+on the core variant with capstone + pefile and renders the C header the DLL is built from.
 
 The other two companion DLLs are loaded first by the same loader (Time Controls, then Up to 28
 Children) and both have written their hooks before this DLL resolves anything:
@@ -21,29 +22,37 @@ Children) and both have written their hooks before this DLL resolves anything:
   that reach them, and the call then goes through Up to 28 Children's hook as before.
 * Time Controls replaces theGameState's Save and Load vtable slots (13 and 14) and retargets the
   IncrementAge call in AllVillagersTimeflowUpkeep (a call displacement: a wildcard here). This DLL
-  finds the vtable from theGameState's constructor and chains to whatever the slots hold.
+  finds the vtable from theGameState's constructor and chains to whatever the Load slot holds.
 
-How each event is seen (every call path traced in the core executable; see docs/FAMILY_LOGS.md):
+How each event is seen (every call path traced in the core executable; see docs/FAMILY_HISTORY.md):
 
-* conception: CVillager::Impregnate (entry hook). Its two callers (theMainScene's try-for-a-baby and
-  CVillagerPlans::ProcessCurrentPlan, through a jmp) both pass (1, "Joey", father's head, father's body,
-  0) with the mother as `this`; it returns al = 1 and pops 14h.
-* birth: the one call of AllVillagersRealtimePhysiologyAndProductivityUpkeep (theRealtimeManager::
-  UpdateAll). The only delivery is inside it: the reserved baby slots become active and are set to -1,
-  and the mother's pregnancy field (+6B18h) is written 0 there once.
-* death: the two calls of CFamilyTree::ReportDeath (AllVillagersTimeflowUpkeep, CVillagerPlans::
-  StartNewBehavior); both deactivate the villager right after it, so each death is reported once.
-* marriage: the one call of CFamilyTree::UpdateParents (CDatingScene).
+* conception (twins and triplets: the babies expected): CVillager::Impregnate (entry hook). Its two
+  callers (theMainScene's try-for-a-baby and CVillagerPlans::ProcessCurrentPlan, through a jmp) both pass
+  (1, "Joey", father's head, father's body, 0) with the mother as `this`; it returns al = 1, pops 14h.
+* birth (single, twins, triplets): the one call of AllVillagersRealtimePhysiologyAndProductivityUpkeep
+  (theRealtimeManager::UpdateAll). The only delivery is inside it: the reserved baby slots become active
+  and are set to -1, and the mother's pregnancy field (+6B18h) is written 0 there once.
+* death (a spouse, a child, anyone): the two calls of CFamilyTree::ReportDeath (AllVillagersTimeflowUpkeep,
+  CVillagerPlans::StartNewBehavior); both deactivate the villager right after it, so each death is
+  reported once. The cause is CVillagerState+10h, written only by SetHealth / AdjustHealth.
+* marriage and remarriage: the one call of CFamilyTree::UpdateParents (CDatingScene).
+* divorce: the patcher's Divorce Spouse (generated code in every variant): its call of
+  CVillager::DetachAll on the spouse, before the spouse is reset and the Family Tree's second parent
+  record is cleared.
 * a family begins / Next Generation: CAdoptionScene::HandleMessage's StartFamilyTree call (a new
   family, or the first one after Evict Family) and its Next Generation call.
 * a child joins: the AddOffspring calls of The Little Visitor (1 and 2) and Adoption Services.
 * leaving home: the three calls of CVillager::SetLeftHome (college in AllVillagersTimeflowUpkeep,
   Boarding School in the store, The Talent Scout).
+* a rename: theVillagerScene's two calls of CFamilyTree::ChangeName (the Details box, when it is closed or
+  the selection changes); a line only when the name really changes.
+* a Random Event (Email Event or Popup Event): CIslandEvents::FireEvent's one call of ldwDialog::DoModal, the moment the event's
+  dialog is shown (the title the player sees is the dialog's +54h, from the event's own title id).
 * Evict Family: theOptionsDialog::EvictFamily's call of CFamilyTree::EvictFamily (before the household
   is removed).
 * Start Over: the theGameState::Init call of the title menu's confirmed Start Over (B200's Fix Vanilla
   Game Bugs stub, the only Start Over the game has).
-* save / load: theGameState's vtable slots 14 / 13.
+* load: theGameState's vtable slot 13 (an existing family's past is backfilled once).
 """
 from __future__ import annotations
 
@@ -51,13 +60,14 @@ IMAGE_BASE = 0x400000
 B200_EXE_NAME = "Virtual Families 2 - B200.exe"
 
 PATCHER_FOLDER = "Virtual Families 2 Patcher Files"
-DLL_NAME = "vf2logs_b200.dll"
-INI_NAME = "vf2logs.ini"
-INI_KEY = "FamilyLogs"
-STARTUP_EXPORT = "B200Logs_Startup"
-STATUS_EXPORT = "B200Logs_Status"
-STATUS_MAGIC = 0x474C3242               # 'B2LG'
+DLL_NAME = "vf2history_b200.dll"
+INI_NAME = "vf2history.ini"
+INI_KEY = "FamilyHistory"
+STARTUP_EXPORT = "B200History_Startup"
+STATUS_EXPORT = "B200History_Status"
+STATUS_MAGIC = 0x49483242               # 'B2HI'
 LOGS_FOLDER = "Virtual Families 2 Patcher"   # <save folder>\Virtual Families 2 Patcher\Save <N>\...
+HISTORY_RECORDS_PER_FILE = 2000         # VF1: the Family History rolls to the next file after 2000 records
 
 # Layout constants (each proved by an operand of the pinned code, see the prover's cross-checks).
 TREE_EVICTED = 0x00                     # CFamilyTree+0: 1 after Evict Family (EvictFamily: Reset, then 1)
@@ -98,8 +108,13 @@ GAME_STATE_NICKNAME_LEN = 20
 GAME_STATE_SLOT = 0x25B20               # the current save slot (1..5), set after a successful load
 LDW_PATH_VSLOT = 0x0C                   # vtable +0Ch: MakeGameStatePath(slot)
 GS_LOAD_VSLOT = 0x34                    # theGameState vtable slot 13
-GS_SAVE_VSLOT = 0x38                    # theGameState vtable slot 14
-FOOD_OFFSET = 0x78                      # CFoodStore+78h: food (FoodStore::SaveState saves it, >= 0)
+DIALOG_EVENT = 0x50                     # CIslandEventDialog+50h: the CIslandEvent it shows (constructor arg)
+DIALOG_TITLE = 0x54                     # CIslandEventDialog+54h: the title text drawn at the top
+EVENT_IS_EMAIL_VSLOT = 0x14             # CIslandEvent vtable +14h: IsEmailEvent() (an Email Event, else Popup)
+EVENT_HAS_CHOICES_VSLOT = 0x10          # CIslandEvent vtable +10h: the event offers choice A and choice B
+DIALOG_CHOICE = 0x830                   # CIslandEventDialog+830h: the choice made, 0 A, 1 B
+VILLAGER_FATHER_HEAD = 0x6AF0           # Impregnate keeps the head it was given (the father's) on the mother
+VILLAGER_FATHER_BODY = 0x6AEC           # ... and the body
 UNITS_PER_YEAR = 20                     # theVillagerScene shows age / 20 (docs/vf2-save-format.md)
 PHYSIOLOGY_SPAN = 0x7E2                 # the physiology pass: the delivery lies inside its first 7E2h bytes
 
@@ -117,15 +132,15 @@ STRINGS = {
     "STR_CAUSE_LAST": (0x880, "eStringCauseOfDeathActOfNature", "Act of Nature"),
     "STR_NEW_GENERATION": (0x28A, "eString_NewGeneration", "New Generation"),
     "STR_COLLEGE_TITLE": (0x6F6, "eString_CollegeTitle", "{name} is going to college!"),
-    "STR_BOARDING_SCHOOL": (0x4AE, "eString_BoardingSchoolShortDesc", "Boarding School"),
     "STR_BOARDING_SENT": (0x4C8, "eString_BoardingSchoolCompleted", "%s has been sent away to school!"),
     "STR_ADOPTION": (0x4C0, "eString_AdoptionShortDesc", "Adoption Services"),
     "STR_LITTLE_VISITOR": (0x900, "eEventTheLittleVisitor1Title", "The Little Visitor"),
     "STR_TALENT_SCOUT": (0x97B, "eEventTheTalentScoutTitle", "The Talent Scout"),
 }
 # ECauseOfDeath: -1 unknown, 0 disease, 1 starvation, 2 old age, 3 work accident, 4 act of nature; the
-# string is STR_CAUSE_UNKNOWN + 1 + cause (the game's own callers: AdjustHealth(-1, 0) after IsSick,
-# (-1, 1) on hunger, SetHealth(0, 2) on the old-age roll).
+# string is STR_CAUSE_UNKNOWN + 1 + cause. The game's own writers: AdjustHealth(-1, 0) on the illness
+# step, (-1, 1) on the hunger step, SetHealth(0, 2) on the old-age roll, and -1 everywhere else; 3 and 4
+# are never written by the B200 code, so they appear only if a save already holds them.
 
 
 class Pin:
@@ -202,7 +217,7 @@ PINS = [
         "FEFF8B45F881C60CCC010083E8018945F80F85A9FDFFFF5F5E5B8BE55DC20400"
     ), SEARCH, "CVillagerManager::AllVillagersTimeflowUpkeep(bool): a dead villager (health <= 0) still "
                "active is deactivated and reported (+9Ch, ReportDeath); a villager reaching age 17Ch with no "
-               "career leaves for college (+1F4h, SetLeftHome); the oldest-age record [GameStats+20h]."),
+               "career leaves for college (+1F4h, SetLeftHome)."),
     Pin("vp_death", 0x4CAD70, (
         "8D04316AFF894738FFB348BB01006A04E89BE8FCFF8BC8E8C4F9FCFF53B908306600E8B9CCF8FF80BB85BB010000740A"
         "B9906F7000E8A6BDFFFF8B834CBB010083F8FF741250B9906F7000E850B1FFFFC68084BB0100005F5EC68384BB010000"
@@ -247,7 +262,22 @@ PINS = [
         "48BB0100898604010000C78608010000FFFFFFFF83C40C8BCBFF7508E8CF0A06005FC60601B0015E5B5DC20800"
     ), ("call", "ds_marry", 0x3D),
         "CFamilyTree::UpdateParents(CVillager &, CVillager &): the one not yet in the tree becomes parent 1 "
-        "or parent 2 (the spouse); ret 8."),
+        "when parent 1 is empty, else parent 2 (the spouse), overwriting whoever parent 2 was; ret 8."),
+    Pin("dv_divorce", 0x4B956E, (
+        "8BCEE80B1E00008BCEE85489000068D80000008D87DC0000006A0050E89170010083C40CB908306600E8C4E7F9FF"
+    ), SEARCH, "The patcher's Divorce Spouse (generated, in every variant): DetachAll(spouse) (+2h), "
+               "Reset(spouse), the current record's parent 2 (+DCh, D8h bytes) zeroed, then "
+               "UpdateCurrentFamilyRecord (+29h)."),
+    Pin("v_detach_all", 0x4BB380, (
+        "558BEC51568BF183BE30BC0100007E238B86D4BB01008BCE8945FC8D45FC50FFB6D0BB0100E826FFFFFF83BE30BC0100"
+        "007FDD5E8BE55DC3"
+    ), ("call", "dv_divorce", 0x2), "CVillager::DetachAll(): thiscall, no argument, plain ret."),
+    Pin("ft_update_current", 0x457D60, (
+        "53568BD9E8A7FBFFFF8BF085F67439578D56048BCB52E8E50B06008D8EDC000000518BCBE8D70B060081C6B8010000BF"
+        "06000000568BCBE8C40B060081C6D800000083EF0175ED5F5E5BC3"
+    ), ("call", "dv_divorce", 0x29),
+        "CFamilyTree::UpdateCurrentFamilyRecord(): the current record's parent 1 (+4), parent 2 (+DCh) and "
+        "six children (+1B8h, D8h each)."),
     Pin("ev_little_visitor1", 0x471910, (
         "558BEC837D080075426A3C6A006A01B9906F7000E82756050050B9906F7000E8DC45050050B908306600E8C15CFEFF6A"
         "016A0CB9B8F45900E8B302F9FF6A016A0DB9B8F45900E8A502F9FF5DC20400"
@@ -282,6 +312,55 @@ PINS = [
         "568BF1B938306800C68688BB010001E88C66FAFF89868CBB01005EC3"
     ), ("call", "ev_talent_scout", 0x1A),
         "CVillager::SetLeftHome(): left home (+1BB88h) = 1, the game time it happened; plain ret."),
+    Pin("ie_scan", 0x46F371, (
+        "8B0CB57057680085C9742F8B018B4004FFD084C074248B0CB5705768008B018B4014FFD084DB750684C07406EB0C84C0"
+        "740889B4BD6CFEFFFF4746"
+    ), SEARCH, "CIslandEvents::FireEvent's candidate scan: an event can fire when its vtable +4 (CanFire) is "
+               "true, and it is a candidate when its vtable +14h (IsEmailEvent) equals the e-mail argument "
+               "(bl): FireEmailEvent passes 1, the hourly FireEvent 0. CIslandEventDialog::DrawNoFadeScene "
+               "asks the same +14h to lay the dialog out as an e-mail."),
+    Pin("ied_handle_message", 0x470A10, (
+        "558BEC837D080856578BF10F85A10000008B7D0C83FF01753D8B4E508B018B4010FFD08B4E508B1184C07418FFB63008"
+        "0000FF52308BCEE8E4FE00005FB0015E5DC20800FF52348BCEE8D2FE00005FB0015E5DC2080083FF02740583FF037552"
+        "FFB660080000E855E30000FFB6640800008BCEE848E300008B4E5033D283FF020F95C28996300800008B0152FF50388B"
+        "4E50FFB6300800008B01FF502C508BCEE8ABE6FFFFFFB6680800008BCEE8AEE100005F32C05E5DC20800"
+    ), SEARCH, "CIslandEventDialog::HandleMessage(int, long): button 2 (choice A) or 3 (choice B) stores "
+               "0 or 1 in +830h; OK (1) runs ImpactGame(+830h) (vtable +30h) when the event has choices "
+               "(vtable +10h), else vtable +34h. Read, never written: it proves the choice field."),
+    Pin("ie_fire", 0x46F3C3, (
+        "57E8F763000083C4048D8D00F6FFFF8BB4856CFEFFFFFF34B570576800E8EBD1FFFF80BD4CF6FFFF00C745FC00000000"
+        "741E6A00FFB5FCF5FFFF8D8D00F6FFFFE8B8430000C686F858680001B301EB0232DB8D8D00F6FFFFE860EEFFFF"
+    ), SEARCH, "CIslandEvents::FireEvent(ldwScene *, bool email, bool probe), the firing: a random event of "
+               "those that can fire, its CIslandEventDialog (+1Dh), DoModal (+40h) when the dialog is "
+               "ready, then mEventHasFired = 1. The only CIslandEventDialog in the game; the public "
+               "FireEvent and FireEmailEvent both reach it (the probe returns before it)."),
+    Pin("ie_dialog_ctor", 0x46C5D0, (
+        "558BEC6AFF68F51B4F0064A1000000005083EC20535657A100C6590033C5508D45F464A3000000008BD9895DEC895DD4"
+        "6A01E8394101008B7D08C703A47F4F00C6434C00897B50C78334080000000000FFC7833808000000000000C7833C0800"
+        "0000000000C7834408000000000000C7834808000000000000C7834C08000000000000C7835008000000000000C78354"
+        "08000000000000C7835808000000000000C745FC00000000C7836008000000000000C7836408000000000000E83FE902"
+        "008945F0E807C103008BF08975E4E8BDFD00008B178BCF8945E8FF5208508BCEE88BC203006A018BCE894354"
+    ), ("call", "ie_fire", 0x1D),
+        "CIslandEventDialog::CIslandEventDialog(CIslandEvent *) head: the event into +50h, then its title "
+        "(the event's vtable +8, GetTitle) through theStringManager::GetString into +54h, which "
+        "DrawNoFadeScene draws as the dialog's title."),
+    Pin("dlg_do_modal", 0x4737C0, (
+        "558BEC538A5D0C568BF1578B7D086A01897E08885E0CE855B6000084DB750D56E8EB0C00008BC8E8F4100000"
+    ), ("call", "ie_fire", 0x40), "ldwDialog::DoModal(ldwScene *, bool): thiscall, returns int, ret 8."),
+    Pin("vs_rename_message", 0x4AAA72, (
+        "807DE80074248D45E8B9083066005057E879CCFAFF6A198D45E8508D87646A000050E8A7CD0200"
+    ), SEARCH, "theVillagerScene::HandleMessage: a name typed in the Details box (non-empty) goes to "
+               "CFamilyTree::ChangeName(villager edi, text) (+10h), then is copied into the villager's name "
+               "(+6A64h, 19h bytes)."),
+    Pin("vs_rename_selection", 0x4AB1ED, (
+        "807DE80074248D45E8B9083066005056E8FEC4FAFF6A198D45E8508D86646A000050E82CC60200"
+    ), SEARCH, "theVillagerScene::UpdateSelection: the same, for the villager the Details box showed before "
+               "the selection changes (villager esi, ChangeName at +10h)."),
+    Pin("ft_change_name", 0x457700, (
+        "558BEC51538B5D0856538BF1E86F01000085C00F849A0000006A19FF750C50E80C950200"
+    ), ("call", "vs_rename_message", 0x10),
+        "CFamilyTree::ChangeName(CVillager &, char const *): the villager's tree record gets the new name; "
+        "thiscall, ret 8. Up to 28 Children hooks its entry.", skip=KIDS_HOOKED),
     Pin("od_evict", 0x4A68E0, (
         "568BF1B908306600E8830FFBFFB9906F7000E8D9FF0100E854D2F5FFC7401C02000000E8182DFFFF8B88B85C0200"
     ), SEARCH, "theOptionsDialog::EvictFamily(): CFamilyTree::EvictFamily (+8h), then the household is "
@@ -315,16 +394,6 @@ PINS = [
         "008BE55DC204008D8D54A4FDFFE80EF4FFFF5668185B02008D8554A4FDFF8BCB50E80ABAFDFF84C0"
     ), SEARCH, "theGameState::Load(int slot), head: 0 = the settings file, 1..5 a family; ret 4.",
         skip=KIDS_HOOKED),
-    Pin("gs_save", 0x49AA00, (
-        "558BEC837D0800568BF175208BD68D86205B0200F7DA6A001BD2689000000023D052E8D9B5FDFF5E5DC204008D866801"
-        "0000B9B8F4590050E8C373F6FF8D86240F0000B9A0F05D0050E8B231FBFF8D868C170000B9F0FA650050E86170FBFF8D"
-        "8640180000B90830660050E890D1FBFF8D86B4E30000B91098670050E88FA4FCFF8D86C4E30000B9A898670050E89ED8"
-        "FCFF8D86C8630100B9C82F680050E8DDDEFCFF8D86FC630100B93830680050E80CE0FCFF8D8610640100B9C052680050"
-        "E8FB17FDFF8D86B4680100B98C65680050E82A72FEFF8D86C0680100B978E26F0050E8A94FFFFF8D86CC680100B90040"
-        "700050E8980F01008D8614690100B9B040700050E8271901008D86D86F0100B9D0C0690050E866DFFEFF8D86A8720100"
-        "B9906F700050E8F5BD0200FF75088D4608C786D85A0200E903000068185B0200508BCEE8B8B4FDFF5E5DC20400"
-    ), SEARCH, "theGameState::Save(int slot): every component, CFoodStore (+77h) and CMoney (+CCh) among "
-               "them; ret 4.", skip=KIDS_HOOKED),
     Pin("gs_get", 0x499620, (
         "558BEC6AFF68022C4F0064A1000000005051A100C6590033C5508D45F464A300000000A1885A680085C0753D68FC6102"
         "00E8EA51030083C4048945F0C745FC0000000085C0741B8BC8E842FDFFFFA3885A68008B4DF464890D00000000598BE5"
@@ -352,14 +421,6 @@ PINS = [
         "C974068BC15DC204008B40085DC20400B8A0EA52005DC20400"
     ), SEARCH, "theStringManager::GetString(id): static, stdcall (ret 4); the override text, else the "
                "text; a missing id returns the fixed fallback string at +41h."),
-    Pin("cm_save_state", 0x481D00, (
-        "558BEC56578BF9F20F1007F20F580568824F00E818CF04008B75088906F30F104708F30F5805B84D4F00F30F5905E04D"
-        "4F00E8A9CE04000D0000807F8946048B470C894608B0015F5E5DC20400"
-    ), SEARCH, "CMoney::SaveState: the balance is the double at CMoney+0 (saved as balance + 0.5, truncated)."),
-    Pin("fs_save_state", 0x464F10, (
-        "558BEC8B417833D285C00F4EC28B5508890233C038417C0F95C08942048B81800000008942080FB6818400000088420C"
-        "0FB6818500000088420D0FB6818600000088420E0FB6818700000088420FB0015DC20400"
-    ), SEARCH, "CFoodStore::SaveState: food is CFoodStore+78h, saved clamped to >= 0."),
 ]
 
 # Function entries the DLL calls or relies on: name -> pin (the entry is the pin's first byte).
@@ -369,12 +430,16 @@ FUNCTIONS = {
     "FT_START_FAMILY_TREE": "ft_start_family_tree",
     "GEN_NEXT_GENERATION": "gen_next_generation",
     "FT_UPDATE_PARENTS": "ft_update_parents",
+    "V_DETACH_ALL": "v_detach_all",
+    "FT_UPDATE_CURRENT": "ft_update_current",
     "FT_ADD_OFFSPRING": "ft_add_offspring",
     "V_SET_LEFT_HOME": "v_set_left_home",
+    "FT_CHANGE_NAME": "ft_change_name",
+    "IE_DIALOG_CTOR": "ie_dialog_ctor",
+    "DLG_DO_MODAL": "dlg_do_modal",
     "FT_EVICT": "ft_evict",
     "GS_INIT": "gs_init",
     "GS_LOAD": "gs_load",
-    "GS_SAVE": "gs_save",
     "GS_GET": "gs_get",
     "FT_REPORT_DEATH": "ft_report_death",
     "SM_GET": "sm_get",
@@ -389,21 +454,17 @@ GLOBALS = {
     "VILLAGER_MANAGER": ("ad_handle_message", 0x50),
     "GAME_STATE_INSTANCE": ("gs_get", 0x24),
     "GS_VTABLE": ("gs_ctor", 0x3A),
-    "GAME_STATS_BABIES": ("v_impregnate_tail", 0x08),
-    "GAME_STATS_OLDEST": ("vm_timeflow", 0x21D),
-    "MONEY": ("gs_save", 0xCC),
-    "FOOD_STORE": ("gs_save", 0x77),
     "STRING_MISSING": ("sm_get_string", 0x41),
 }
 # Every other place the same globals appear (the prover and the DLL check each one agrees).
 GLOBAL_ALSO = {
     "FAMILY_TREE": (("vm_timeflow", 0x98), ("vp_death", 0x1E), ("ds_marry", 0x39), ("ev_little_visitor1", 0x26),
                     ("ev_little_visitor2", 0x26), ("st_adoption", 0x1D), ("od_evict", 0x04),
-                    ("v_impregnate", 0x0C)),
+                    ("v_impregnate", 0x0C), ("dv_divorce", 0x25), ("vs_rename_message", 0x0A),
+                    ("vs_rename_selection", 0x0A)),
     "VILLAGER_MANAGER": (("rm_update_all", 0x05), ("rm_update_all", 0x11), ("ev_little_visitor1", 0x10),
                          ("st_adoption", 0x07), ("st_boarding", 0x11), ("od_evict", 0x0E),
                          ("v_impregnate", 0x20)),
-    "MONEY": (("ds_marry", 0x28), ("ev_talent_scout", 0x2B)),
 }
 # Core-variant values (evidence, checked by the prover; never given to the DLL).
 CORE_VALUES = {
@@ -411,10 +472,6 @@ CORE_VALUES = {
     "VILLAGER_MANAGER": 0x706F90,
     "GAME_STATE_INSTANCE": 0x685A88,
     "GS_VTABLE": 0x4FC554,
-    "GAME_STATS_BABIES": 0x682FD0,
-    "GAME_STATS_OLDEST": 0x682FE8,
-    "MONEY": 0x68658C,
-    "FOOD_STORE": 0x679810,
     "STRING_MISSING": 0x52EAA0,
 }
 CORE_MAKE_GAME_STATE_PATH = 0x475B40
@@ -428,11 +485,15 @@ CALL_HOOKS = {
     "CALL_BOARDING_SCHOOL": ("st_boarding", 0x3A, "V_SET_LEFT_HOME"),
     "CALL_TALENT_SCOUT": ("ev_talent_scout", 0x1A, "V_SET_LEFT_HOME"),
     "CALL_MARRIAGE": ("ds_marry", 0x3D, "FT_UPDATE_PARENTS"),
+    "CALL_DIVORCE": ("dv_divorce", 0x02, "V_DETACH_ALL"),
     "CALL_NEW_FAMILY": ("ad_handle_message", 0x146, "FT_START_FAMILY_TREE"),
     "CALL_NEXT_GENERATION": ("ad_handle_message", 0x16C, "GEN_NEXT_GENERATION"),
     "CALL_LITTLE_VISITOR1": ("ev_little_visitor1", 0x2A, "FT_ADD_OFFSPRING"),
     "CALL_LITTLE_VISITOR2": ("ev_little_visitor2", 0x2A, "FT_ADD_OFFSPRING"),
     "CALL_ADOPTION": ("st_adoption", 0x21, "FT_ADD_OFFSPRING"),
+    "CALL_RANDOM_EVENT": ("ie_fire", 0x40, "DLG_DO_MODAL"),
+    "CALL_RENAME_MESSAGE": ("vs_rename_message", 0x10, "FT_CHANGE_NAME"),
+    "CALL_RENAME_SELECTION": ("vs_rename_selection", 0x10, "FT_CHANGE_NAME"),
     "CALL_EVICT": ("od_evict", 0x08, "FT_EVICT"),
     "CALL_START_OVER": ("mn_start_over", 0x3F, "GS_INIT"),
 }
@@ -440,6 +501,8 @@ CALL_HOOKS = {
 CALLS = (
     ("ad_handle_message", 0x39, "GS_GET"),
     ("gs_ctor", 0xBF, "GS_LOAD"),
+    ("ie_fire", 0x1D, "IE_DIALOG_CTOR"),
+    ("dv_divorce", 0x29, "FT_UPDATE_CURRENT"),
 )
 # Entry hooks: a 5-byte jmp to the DLL and a trampoline of the first `steal` bytes (whole,
 # position-independent instructions) that continues at entry + steal.
