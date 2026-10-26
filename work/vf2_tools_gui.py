@@ -208,9 +208,9 @@ class ToolsTabMixin:
                 topics.itemconfigure("end", foreground="#555555")
             topics.insert("end", "  " + vf2_how_to_use.control_title(key))
             index_of[topics.size() - 1] = key
-        page = tk.Text(window, wrap="word", state="disabled", padx=10, pady=8)
+        page = tk.Text(window, wrap="word", state="disabled", padx=10, pady=8, font=("Segoe UI", 10))   # as VF1
         page.grid(row=0, column=1, sticky="nsew", padx=(6, 12), pady=12)
-        page.tag_configure("title", font=("", 12, "bold"), spacing3=8)
+        page.tag_configure("title", font=("Segoe UI", 12, "bold"), spacing3=8)
         page.tag_configure("line", spacing3=8)
 
         def show(key: str) -> None:
