@@ -12,6 +12,13 @@ Each record is the Virtual Villagers patcher's layout: a heading "[YYYY-MM-DD HH
 The kinds: Conception, Birth, Death, Marriage, Divorce, Arrived, Left Home, Generation, New Generation, Random
 Event (an "Email Event" or a "Popup Event"), Roll the Dice, Evict Family, Start Over, Family Renamed, Family Tree.
 Only the records after the last Evict Family belong to the family in the save.
+
+Virtual Families 2's own (VF2 origin/feat/family-history 9bfd948, docs/FAMILY_HISTORY.md): an e-mail is "Email
+Event: Subject: <subject>" (shown "Email Event: <subject>"); "Renamed <n>" records a family member renamed in the
+Details box (Old name, New name, Age, Sex, Head, Body, Generation): the same person, under the new name in every
+record before it; a child who arrives or leaves with a Random Event is recorded right after the event's record;
+"Earlier spouse: X" carries "(died)" or "(divorced)" only when the log proves it; Start Over precedes the new
+family's Generation 1.
 """
 from __future__ import annotations
 
@@ -93,7 +100,9 @@ class History:
     left: list[tuple] = field(default_factory=list)        # (name, sex, years, what happened, generation)
     heirs: list[tuple] = field(default_factory=list)       # (name, sex, years, how, generation)
     events: list[Event] = field(default_factory=list)
-    renames: list[tuple[str, str]] = field(default_factory=list)
+    renames: list[tuple[str, str]] = field(default_factory=list)          # Family Renamed (the player name)
+    renamed: list[tuple[str, str, str]] = field(default_factory=list)     # Renamed: (old, new, sex)
+    last_event: Event | None = None                                       # the record before: a Random Event
     backfilled: bool = False                               # the log began after the family did
     evictions: int = 0
     files: list[Path] = field(default_factory=list)
@@ -149,6 +158,7 @@ def _take(h: History, e: Entry) -> None:
         return
     h.entries.append(e)
     g = e.generation() or 0
+    event, h.last_event = h.last_event, None              # a Random Event's own Arrived / Left Home follow it
     if e.backfilled:
         h.backfilled = True
     if e.kind == "Marriage":
@@ -183,17 +193,42 @@ def _take(h: History, e: Entry) -> None:
     elif e.kind == "Arrived":
         parents = [v for k, v in e.sub("Parents").items() if k in ("Mother", "Father")]
         h.joined.append((e.get("Name", ""), e.get("Sex", ""), _years(e.get("Age at arrival")), e.get("How", ""),
-                         parents, g))
+                         parents, g, event))
     elif e.kind == "Left Home":
-        h.left.append((e.get("Name", ""), e.get("Sex", ""), _years(e.get("Age")), e.get("What happened", ""), g))
+        h.left.append((e.get("Name", ""), e.get("Sex", ""), _years(e.get("Age")), e.get("What happened", ""), g,
+                       event))
     elif e.kind in ("Generation", "New Generation"):
         h.heirs.append((e.get("Name", ""), e.get("Sex", ""), _years(e.get("Age")), e.get("How", ""), g))
     elif e.kind == "Random Event":
         for label, value, _sub in e.fields:
             if label in EVENT_KINDS:
-                h.events.append(Event(label, value, e.get("Choice"), e.when))
+                title = value[len("Subject: "):] if value.startswith("Subject: ") else value   # an e-mail's subject
+                h.events.append(Event(label, title, e.get("Choice"), e.when))
+                h.last_event = h.events[-1]
+    elif e.kind == "Renamed":
+        _rename(h, e.get("Old name", ""), e.get("New name", ""), e.get("Sex", ""))
     elif e.kind == "Family Renamed":
         h.renames.append((e.get("Old name", ""), e.get("New name", "")))
+
+
+def _rename(h: History, old: str, new: str, sex: str) -> None:
+    """A family member renamed in the Details box: every record before this one names them by the new name (the
+    save holds the new one), and the rename is kept so the tree can say who they were."""
+    if not old or not new or old == new:
+        return
+    h.renamed.append((old, new, sex))
+    swap = lambda name, s="": new if name == old and (not s or not sex or s == sex) else name  # noqa: E731
+    h.marriages = [Marriage(m.again, swap(m.head, m.head_sex), m.head_sex, swap(m.spouse, m.spouse_sex), m.spouse_sex,
+                            m.spouse_years, m.generation, swap(m.earlier) if m.earlier else m.earlier, m.earlier_how,
+                            m.backfilled) for m in h.marriages]
+    h.divorces = [(swap(d[0], d[1]), d[1], d[2], swap(d[3]), d[4]) for d in h.divorces]
+    h.deaths = [(swap(d[0], d[1]),) + d[1:] for d in h.deaths]
+    for b in h.births:
+        b.mother, b.father = swap(b.mother), swap(b.father) if b.father else b.father
+        b.babies = [(swap(n, s), s) for n, s in b.babies]
+    h.joined = [(swap(j[0], j[1]),) + j[1:] for j in h.joined]
+    h.left = [(swap(x[0], x[1]),) + x[1:] for x in h.left]
+    h.heirs = [(swap(x[0], x[1]),) + x[1:] for x in h.heirs]
 
 
 def read(folder: Path, slot: int) -> History | None:
@@ -347,11 +382,13 @@ def apply(village: gen.Village, h: History) -> None:
                 c.litter = litter
 
     # Who joined: Adoption Services and the Random Events' children ("Adopted (Popup Event: The Little Visitor)").
-    for name, sex, _years, how, _parents, _g in h.joined:
+    for name, sex, _years, how, _parents, _g, event in h.joined:
         p = _one(people, name, sex, lambda q: not q.upcoming)
         if p is None:
             continue
-        title = event_of(how)
+        # The event before it brought them, unless the record names its own way in (Adoption Services).
+        own = how.startswith("Adopted (") and not event_of(how)
+        title = event_of(how) or (f"{event.kind}: {event.title}" if event and not own else "")
         if how.startswith("Adopted"):
             p.adopted, p.arrived, p.how = True, True, "Adopted"
             p.event = title or (how[len("Adopted ("):-1] if how.startswith("Adopted (") else "Adopted")
@@ -364,12 +401,13 @@ def apply(village: gen.Village, h: History) -> None:
 
     # Who left home, and how ("Eve is going to college!", "Left home with The Talent Scout (Popup Event)",
     # "Sent to Boarding School", "Left the house (Popup Event: <title>)").
-    for name, sex, _years, what, _g in h.left:
+    for name, sex, _years, what, _g, event in h.left:
         p = _one(people, name, sex, lambda q: not q.upcoming)
         if p is None:
             continue
         p.left_how = what
-        title = event_of(what)
+        own = what.endswith("is going to college!") or "Boarding School" in what
+        title = event_of(what) or (f"{event.kind}: {event.title}" if event and not own else "")
         if title:
             _set_event(p, title)
         elif what.endswith("is going to college!"):
@@ -377,6 +415,13 @@ def apply(village: gen.Village, h: History) -> None:
         elif "Boarding School" in what:
             p.left_why = "Boarding School"
         p.sources.append(f"{what} (Family History log).")
+
+    # Renamed in the Details box: one person, now under the new name (the tree file links the two by their seat).
+    for old, new, sex in h.renamed:
+        p = _one(people, new, sex or None)
+        if p is not None and old not in p.former:
+            p.former.append(old)
+            p.sources.append(f"Renamed from {old} in the Details box (Family History log).")
 
     village.history_events = [f"{e.when}: {e.kind}: {e.title}" for e in h.events]
     village.notes = [n for n in village.notes if not n.startswith("The save keeps no history")]

@@ -379,3 +379,149 @@ def test_the_log_folder_is_beside_the_save(tmp_path):
     h = fh.read(tmp_path, 1)
     assert len(h.files) == 2 and h.deaths[-1][0] == "Moe"
     assert struct.calcsize("<i") == 4                       # (the save reader's own sizes are its tests')
+
+
+# ---------------------------------------------------------------- the VF2 DLL's own forms (origin/feat/family-history 9bfd948)
+# Records exactly as runtime/native/b200history writes them (its tests/b200_history_scenarios.py expectations):
+# Start Over before Generation 1, an e-mail's "Subject:", the Random Event's child right after it, Renamed, and an
+# earlier spouse whose going the log never saw.
+VF2_LOG = """Family: Ana Player (Save 1)
+[2026-10-25 21:07:05] Start Over 1
+  The earlier family's history was cleared.
+
+[2026-10-25 21:07:05] Generation 1
+  Name: Ana
+  Age: 25
+  Sex: Female
+  Head: 3
+  Body: 4
+  How: Founder (adopted and started the family)
+  Generation: 1
+
+[2026-10-25 21:07:05] Marriage 1
+  Family member: Ana
+    Age: 25
+    Sex: Female
+    Head: 3
+    Body: 4
+  Married: Ben
+    Age: 26
+    Sex: Male
+    Head: 3
+    Body: 4
+  Current spouse of Ana: Ben
+  Generation: 1
+
+[2026-10-25 21:07:05] Random Event 1
+  Popup Event: The Little Visitor
+  Choice: A
+  Generation: 1
+
+[2026-10-25 21:07:05] Arrived 1
+  Name: Visitor
+  Age at arrival: 3
+  Sex: Male
+  Head: 3
+  Body: 4
+  How: Adopted (Popup Event: The Little Visitor)
+  Family role: Child
+  Generation: 1
+
+[2026-10-25 21:07:05] Arrived 2
+  Name: Adoptee
+  Age at arrival: 3
+  Sex: Female
+  Head: 3
+  Body: 4
+  How: Adopted (Adoption Services)
+  Family role: Child
+  Generation: 1
+
+[2026-10-25 21:07:05] Random Event 2
+  Email Event: Subject: A Secret Admirer
+  Generation: 1
+
+[2026-10-25 21:07:05] Random Event 3
+  Popup Event: The Talent Scout
+  Choice: A
+  Generation: 1
+
+[2026-10-25 21:07:05] Left Home 1
+  Name: Visitor
+  Age: 3
+  Sex: Male
+  Head: 3
+  Body: 4
+  What happened: Left home with The Talent Scout (Popup Event)
+  Generation: 1
+
+[2026-10-25 21:07:05] Left Home 2
+  Name: Adoptee
+  Age: 3
+  Sex: Female
+  Head: 3
+  Body: 4
+  What happened: Sent to Boarding School
+  Generation: 1
+
+[2026-10-25 21:07:05] Renamed 1
+  Old name: Adoptee
+  New name: Zed
+  Age: 3
+  Sex: Female
+  Head: 3
+  Body: 4
+  Generation: 1
+
+[2026-10-25 21:07:05] Marriage 2
+  Family member: Ana
+    Age: 30
+    Sex: Female
+    Head: 3
+    Body: 4
+  Married: Dan
+    Age: 31
+    Sex: Male
+    Head: 3
+    Body: 4
+  Remarried: yes
+  Earlier spouse: Ben
+  Current spouse of Ana: Dan
+  Generation: 1
+
+"""
+
+
+def test_the_vf2_logs_own_forms(tmp_path):
+    h = fh.parse(VF2_LOG)
+    assert [e.kind for e in h.entries][:2] == ["Start Over", "Generation"]
+    assert [(e.kind, e.title, e.choice) for e in h.events] == [("Popup Event", "The Little Visitor", "A"),
+                                                               ("Email Event", "A Secret Admirer", None),
+                                                               ("Popup Event", "The Talent Scout", "A")]
+    assert h.renamed == [("Adoptee", "Zed", "Female")]
+    assert [j[0] for j in h.joined] == ["Visitor", "Zed"] and h.joined[0][6].title == "The Little Visitor"
+    assert [x[0] for x in h.left] == ["Visitor", "Zed"] and h.left[0][5].title == "The Talent Scout"
+    assert (h.marriages[1].again, h.marriages[1].earlier, h.marriages[1].earlier_how) == (True, "Ben", None)
+    # The family in the save: Ana and Dan, and their children Visitor and Zed (renamed), both away.
+    path = gen.slot_root(tmp_path, 1) / "Logs" / "Family History" / "Family History 1.txt"
+    path.parent.mkdir(parents=True)
+    path.write_text(VF2_LOG, encoding="cp1252")
+    b = blank_save("Ana Player")
+    for slot, name, sex, head in ((0, "Ana", 1, 3), (1, "Dan", 0, 5)):
+        villager(b, slot, name, sex=sex, head=head, body=4)
+        peep(b, 0, slot, name, sex=sex, head=head, body=4, slot=slot)
+    for k, (slot, name, sex) in enumerate(((2, "Visitor", 0), (3, "Zed", 1))):
+        villager(b, slot, name, sex=sex, head=3, body=4, age=60, left=1, father="", mother="")
+        peep(b, 0, 2 + k, name, sex=sex, head=3, body=4, slot=slot)
+    write_save(tmp_path, bytes(b))
+    v = gen.load_village(tmp_path, gen.GAME, 1)
+    ben, dan, zed, visitor = (by_name(v, n) for n in ("Ben", "Dan", "Zed", "Visitor"))
+    assert not ben.divorced and "Divorced" not in text(v, "Ben")          # the log never saw him go
+    assert (ben.spouse_number, dan.spouse_number) == (1, 2) and "Husband 2" in text(v, "Dan")
+    assert "Remarried" in text(v, "Ana")
+    assert zed.former == ["Adoptee"] and "Adopted (Adoption Services)" in text(v, "Zed")
+    assert zed.alive and "Left home (Boarding School)" in text(v, "Zed")      # away (the save's left-home flag)
+    assert "Popup Event: The Talent Scout" in text(v, "Visitor")
+    assert zed.left_why == "Boarding School" and (visitor.event_kind, visitor.event_title) == ("Popup",
+                                                                                             "The Talent Scout")
+    assert any("Email Event: A Secret Admirer" in e for e in v.history_events)
