@@ -88,9 +88,9 @@ class NameRuleTests(unittest.TestCase):
 class ReadTests(Base):
     def test_slots_show_the_name_from_each_save(self):
         infos = rf.read_slots(self.folder)
-        self.assertEqual(infos[0].label, "Family slot 1: Lorsieab2")
+        self.assertEqual(infos[0].label, "Save 1: Lorsieab2")
         self.assertIsNone(infos[0].problem)
-        self.assertEqual(infos[1].label, "Family slot 2: (empty)")
+        self.assertEqual(infos[1].label, "Save 2: (empty)")
         self.assertIsNotNone(infos[1].problem)
 
     def test_a_save_the_game_cannot_load_is_not_offered(self):

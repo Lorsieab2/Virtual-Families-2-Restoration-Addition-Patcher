@@ -124,6 +124,8 @@
         "It copies the game's save files and the patcher's own files too (the Virtual Families 2 Patcher Data folder, which holds the extra children).",
         "Click it, tick the save folders to copy, click Back Up Selected. If the game is running it is paused for the copy and resumes by itself.",
         "The game saves by itself every 2 minutes while it runs, and when you quit normally, so a backup of a running game holds your families as of the last save.",
+        "Game speed is set to Paused in the backup's family saves (your own saves are unchanged), so a restored backup opens paused and never catches up on the time since it was made.",
+        "Only a family at Normal is paused. A save at another speed, or one that cannot be read, is copied exactly as it is.",
         "Every copied file is checked against the original. An older backup is never written over."
       ]
     },
@@ -132,7 +134,7 @@
       "title": "Restore Saves",
       "guide": [
         "Brings back a backup made by Back Up Saves: the whole save folder, or just one family's save slot.",
-        "Quit the game first. Pick a backup (newest first), choose the whole folder or one slot, and click Restore.",
+        "Quit the game first. Pick a backup (newest first), choose the whole folder or one slot, and click Restore...",
         "You are shown exactly which files will be replaced, added or removed, and nothing changes until you say yes.",
         "Your saves as they are now are backed up first as \"Backup <date> (before restore)\", so a restore can always be undone.",
         "Delete Backup... removes a backup you no longer need."
@@ -156,7 +158,7 @@
         "Quit the game first, from its own menu. Click Game Speed..., pick the family (each shows its speed now), choose Paused or Normal, then Set Speed.",
         "Paused works as if you paused just before the game last saved. Normal works as if you unpaused it right now, so the time it spent paused never counts.",
         "Set Normal just before you play: like any family at normal speed, it catches up on the time the game is closed after that.",
-        "Your saves are backed up first, as \"Backup <date> (before speed change)\", so Restore Saves can undo it.",
+        "Your saves are backed up first, as \"Backup <date> (before speed change)\". Like every backup, its families are Paused, so restoring it brings a family back Paused.",
         "A family at any other speed is shown but not changed here; change it in the game instead."
       ]
     },
@@ -167,7 +169,7 @@
         "Shows how Virtual Families 2 works underneath: ageing, needs, illness, old age, babies, careers, money, leaving home, dating, events, weather, messes and the store.",
         "Every time is real time at the game's normal speed. Every chance is the game's own exact chance.",
         "Each line is marked VERIFIED-E (the game's own code was run and counted), VERIFIED-C (read from the game's own code) or UNCONFIRMED (not yet shown either way).",
-        "Click a heading at the top to jump to it.",
+        "Click a topic's button at the top to jump to it.",
         "It only shows text: it reads no save and changes nothing, so the game may be running."
       ]
     },

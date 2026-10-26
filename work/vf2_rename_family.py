@@ -171,9 +171,9 @@ class SlotInfo:
     def label(self) -> str:
         if self.name is None:
             if self.problem == "This slot has no family.":
-                return f"Family slot {self.slot}: (empty)"
-            return f"Family slot {self.slot}: (a save the game cannot load)"
-        return f"Family slot {self.slot}: {shown(self.name)}"
+                return f"Save {self.slot}: (empty)"
+            return f"Save {self.slot}: (a save the game cannot load)"
+        return f"Save {self.slot}: {shown(self.name)}"
 
 
 def read_slots(folder: Path) -> list[SlotInfo]:
@@ -251,6 +251,7 @@ class RenameResult:
     new_name: str
     backup: save_backup.BackupResult
     changed: list[Path] = field(default_factory=list)
+    notes: list[Path] = field(default_factory=list)     # the Family History files that noted the rename
 
 
 def _refuse_if_running(folder: Path, processes: save_backup.ProcessController) -> None:
@@ -408,8 +409,11 @@ def rename_family(
         raise RenameError(
             f"The rename failed ({exc}); every file was put back as it was. A backup is in {backup.backup_folder}."
         ) from exc
+    notes: list[Path] = []
     try:
-        log_rename(folder, slot, shown(old), new_name, when)
+        noted = log_rename(folder, slot, shown(old), new_name, when)
+        if noted is not None:
+            notes.append(noted)
     except OSError:
         pass            # the rename itself is done; a log the patcher cannot write is left as it is
-    return RenameResult(folder, slot, shown(old), new_name, backup, [change.path for change in changes])
+    return RenameResult(folder, slot, shown(old), new_name, backup, [change.path for change in changes], notes)

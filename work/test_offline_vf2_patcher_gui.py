@@ -878,11 +878,15 @@ class PleaseWaitFeedbackTests(unittest.TestCase):
         # double-click on Apply could start two patch workers against the same
         # output folder. The window waits for visibility and then grabs for
         # real, so a failure here is an error rather than a silent no-op.
+        # Since the Virtual Villagers patcher's Windows-style hold replaced the Tk grab, the hold is what
+        # blocks a second Apply: every other patcher window is disabled while the wait window is up.
         wait = gui.WaitWindow(self.root, "Please wait", "Please wait" + ELLIPSIS)
         try:
-            self.assertEqual(str(wait.grab_current()), str(wait))
+            self.assertTrue(self.root.wm_attributes("-disabled"),
+                            "the main window stays usable while the work runs")
         finally:
             wait.close()
+        self.assertFalse(self.root.wm_attributes("-disabled"), "the main window stays disabled afterwards")
 
     def test_centering_keeps_negative_virtual_desktop_coordinates(self):
         # On a monitor left of or above the primary one the parent's root

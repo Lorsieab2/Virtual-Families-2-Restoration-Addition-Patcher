@@ -4158,8 +4158,11 @@ Tools holds Back Up Saves and Restore Saves for your Virtual Families 2 families
 every button. Small ? buttons beside controls open the page for that control.
 Back Up Saves copies the save folder, including the patcher's own files in
 "Virtual Families 2 Patcher Data", into its Backups folder (the game is paused
-for the copy if it is running). Restore Saves shows exactly what will change,
-asks first, and backs up your current saves before it restores anything.
+for the copy if it is running). Game speed is set to Paused in the backup's
+family saves (your own saves are unchanged), so a restored backup opens paused
+and never catches up on the time since it was made. Restore Saves shows
+exactly what will change, asks first, and backs up your current saves before
+it restores anything.
 
 Crash capture QA only (optional):
 The patcher never changes Windows Error Reporting settings or launches the

@@ -233,9 +233,9 @@ class SlotSpeed:
     def label(self) -> str:
         if self.state is None:
             if self.problem == "This slot has no family.":
-                return f"Family slot {self.slot}: (empty)"
-            return f"Family slot {self.slot}: (a save the game cannot load)"
-        return f"Family slot {self.slot}: {rename_family.shown(self.name)} - {self.state.label}"
+                return f"Save {self.slot}: (empty)"
+            return f"Save {self.slot}: (a save the game cannot load)"
+        return f"Save {self.slot}: {rename_family.shown(self.name)} - {self.state.label}"
 
 
 def read_slots(folder: Path) -> list[SlotSpeed]:
