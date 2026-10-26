@@ -88,7 +88,13 @@ class Person:
     adopted: bool = False               # joined as an adopted child (no parents in their bio)
     heir: bool = False                  # inherited the house: parent 1 of a later generation
     cause: str = ""                     # the cause of death
-    career: int | None = None
+    career: int | None = None           # ECareer (CVillagerSkills+0): -1 none; see career_words
+    career_level: int | None = None     # CVillagerSkills+4 (only from their own villager record)
+    event_title: str = ""               # the Random Event that brought them in or took them away (the log)
+    event_kind: str = ""                # "Email" or "Popup": the kind of Random Event it is
+    divorced: bool = False              # a spouse lost to divorce (the log, or the tree file's memory)
+    spouse_number: int | None = None    # their place in their partner's marriages, 1 first (the log, see spouses)
+    remarried: bool = False             # the head of the family married again
     slot: int | None = None             # the villager record they are matched to, if any
     unknowns: list[str] = field(default_factory=list)   # what the records do not say (shown, never guessed)
     sources: list[str] = field(default_factory=list)    # where each fact came from
@@ -272,6 +278,70 @@ CAUSES = {0: "Disease", 1: "Starvation", 2: "Old age"}
 CAUSES_UNCONFIRMED = {-1: "Unknown causes", 3: "Work accident", 4: "Act of Nature"}
 
 
+# CVillagerSkills::GetCareerName(ECareer): a table of 0x84 string ids (VillagerSkills.obj, its __static table),
+# indexed by career % 0x84 -- strings 0x1A7 + career, in order (VERIFIED: the table and the strings read from the
+# desktop objects).  GetCareerLevelName: string 0x281 + (level & 7).  GetJobName shows "<level> <career>".
+CAREER_NAMES = (
+    "Pastry Designer", "Wine Critic", "BBQ Sauce Creator", "Food Critic", "Cocktail Inventor", "Soup Taster",
+    "Caterer", "Cake Designer", "Mustard Bottler", "Coffee Blender", "Personal Cook", "Fresh Pasta Maker",
+    "Doughnut Decorator", "Candy Designer", "Food Photographer", "Fruit Examiner", "Salad Packager", "Meat Grader",
+    "Mail-order Butcher", "Nut Processor", "Dry Fruit Packager", "Mail-order Baker", "Soup Inventor",
+    "Recipe Inventor", "Vitamin Inventor", "Pesto Sauce Creator", "Ketchup Bottler", "Trail Mix Creator",
+    "Chewing Gum Designer", "Food Sculptor", "Truffle Critic", "Fish Cleaner", "Pickler", "Coffee Critic",
+    "Cupcake Designer", "Sauce Designer", "Jerky Maker", "Spice Mixer", "Engineer", "Architect",
+    "Domain Name Seller", "Video Game Designer", "Tech Consultant", "Hacker", "Fiction Writer", "Journalist",
+    "Lawyer", "Screenplay Writer", "Envelope Stuffer", "Graphic Designer", "Day Trader", "Poet", "Lyricist",
+    "Programmer", "Accountant", "Publicist", "Nonfiction Writer", "Fairy Tale Writer", "Translator", "QA Engineer",
+    "Telemarketer", "Talent Agent", "Recruiter", "Video Game Reviewer", "Essay Writer", "Web Designer", "Art Critic",
+    "Music Critic", "Book Reviewer", "Online Gold Farmer", "Marketing Agent", "Paralegal", "Census Taker",
+    "Digital Photo Editor", "Magazine Editor", "Rocket Scientist", "Lobbyist", "Math Tutor", "History Tutor",
+    "English Tutor", "Statistician", "Online Store Operator", "Travel Agent", "Technical Writer",
+    "Sustainability Consultant", "Artist", "Online Security", "Video Editor", "Toy Collector", "Comic Collector",
+    "Online Poker Pro", "Composer", "Blogger", "Film Critic", "Spammer", "Wood Sculptor", "Dress Maker",
+    "Toaster Repairer", "Dress Designer", "Candle Maker", "Jewelry Maker", "Film Processor", "Inventor",
+    "Board Game Designer", "Model Builder", "Basket Maker", "Knife Sharpener", "Glue Mixer", "Silverware Polisher",
+    "Tool Maker", "Toy Maker", "Box Maker", "Shoe Maker", "Dental Tool Maker", "Lens Crafter", "Key Maker",
+    "Picture Framer", "Soap Inventor", "Eyeglass Repairer", "Ceramics Designer", "Denture Maker", "Camera Repairer",
+    "Watch Fixer", "Puzzle Maker", "Chair Maker", "Shoe Repairer", "Toy Refurbisher", "Jewelry Cleaner",
+    "Jewelry Smelter", "Cosmetics Designer", "Phone Repairer", "Pen Designer")
+CAREER_LEVELS = ("Beginner", "Novice", "Apprentice", "Licensed", "Practiced", "Accomplished", "Exceptional", "Master")
+# The Random Events that bring a family member in or take one away (the log's own titles), each an Email Event or a
+# Popup Event: both are pop-ups (VERIFIED-E, docs/game-mechanics/spec.md section 11: Little Visitor, Talent Scout).
+RANDOM_EVENTS = {"The Little Visitor": "Popup", "The Talent Scout": "Popup"}
+
+
+def event_words(p: "Person") -> str:
+    """"Popup Event: The Little Visitor" -- the Random Event that brought them in or took them away, with its kind
+    ("Random Event: ..." when no record says which kind)."""
+    if not p.event_title:
+        return ""
+    return f"{p.event_kind or 'Random'} Event: {p.event_title}"
+
+
+def career_words(p: "Person") -> str:
+    """The career as the game words it (GetJobName: "<level> <career>"), or "" when they have none or it is not
+    known.  The level only when their own villager record gave it."""
+    if p.career is None or not 0 <= p.career < len(CAREER_NAMES):
+        return ""
+    name = CAREER_NAMES[p.career]
+    return f"{CAREER_LEVELS[p.career_level & 7]} {name}" if p.career_level is not None else name
+
+
+def spouses(village: "Village") -> None:
+    """Remarried, from what the save and the tree file prove: a head of the family with two or more spouses known
+    in one generation (the save holds one at a time; the tree file keeps those it saw before)."""
+    by_gen: dict[int, list] = {}
+    for q in village.people.values():
+        m = re.fullmatch(r"g(\d+)\.p2(?:#\w+)?", q.seat or "")
+        if m:
+            by_gen.setdefault(int(m.group(1)), []).append(q)
+    for g, wed in by_gen.items():
+        couple = village.couples.get(g) or []
+        heads = [q for q in couple if village.people[q].seat != f"g{g}.p2"]
+        if len(wed) >= 2 and heads:
+            village.people[heads[0]].remarried = True
+
+
 def is_runner(likes: list[str] | None) -> bool:
     """Likes running: the word in the likes the save's Family Tree keeps for them (SPeepRecord +0x34, written by
     UpdatePeepRecord from CLikeList::GetListAsString, the villager's own likes; VERIFIED)."""
@@ -285,7 +355,6 @@ def _words(text: str) -> list[str] | None:
 
 def _peep_person(pid: int, peep: reader.PeepRecord) -> Person:
     p = Person(pid, peep.name, peep.head, peep.body, sex=SEX_WORDS.get(peep.gender))
-    p.career = peep.career_id
     p.likes = _words(peep.likes)
     p.dislikes = _words(peep.dislikes)
     p.runner = is_runner(p.likes)
@@ -329,6 +398,8 @@ def cause_words(cause: int) -> str:
 def _apply_villager(p: Person, v: reader.Villager, unborn: set[int]) -> None:
     p.slot = v.slot
     p.age = v.age_units
+    if v.career_id >= 0:                    # CVillagerSkills+0 / +4, their own record (VERIFIED)
+        p.career, p.career_level = v.career_id, v.career_level
     if v.slot in unborn and not v.active:
         p.upcoming = True
         p.alive = False
@@ -511,6 +582,10 @@ def build_family(save: reader.FamilySave, slot: int, data: bytes | None = None,
                         "died with no children -- the save does not say which.")
             fresh = _peep_person(-1, rec.parent1)
             p1.likes, p1.dislikes = fresh.likes or p1.likes, fresh.dislikes or p1.dislikes
+            # A parent's career as the tree record keeps it (UpdatePeepRecord, written while they exist; a
+            # child's entry may never have been written, so a child's comes only from their villager record).
+            if rec.parent1.career_id >= 0 and p1.career is None:
+                p1.career = rec.parent1.career_id
             p1.runner = is_runner(p1.likes)
             settle(p1, rec.parent1)
         p2 = None
@@ -518,6 +593,8 @@ def build_family(save: reader.FamilySave, slot: int, data: bytes | None = None,
             p2 = new(rec.parent2, f"g{g}.p2")
             p2.arrived, p2.how, p2.event = True, "Married in", "Married in"
             settle(p2, rec.parent2)
+            if rec.parent2.career_id >= 0 and p2.career is None:
+                p2.career = rec.parent2.career_id
         elif rec.parent2.name and not shifted:
             dead_spouse(rec.parent2, g)
         couple = [p.id for p in (p1, p2) if p is not None]
@@ -565,7 +642,6 @@ def build_family(save: reader.FamilySave, slot: int, data: bytes | None = None,
         if v.active and v.health > 0 and v.slot not in held and v.name:
             peep = _peep(v.name, v.gender, v.head, v.body, v.slot)
             p = new(peep, f"house.{v.slot}")
-            p.career = v.career_id
             _apply_villager(p, v, unborn)
             p.unknowns.append("In the house, but the save's Family Tree does not record them, so their family is "
                               "not known.")
@@ -588,6 +664,7 @@ def build_family(save: reader.FamilySave, slot: int, data: bytes | None = None,
 
 def finish(village: Village) -> None:
     """Each member's generation and number (after the Family History and the tree file added what they know)."""
+    spouses(village)
     _generations(village)
     number_people(village)
 
@@ -799,6 +876,9 @@ def describe_person(village: Village, p: Person) -> str:
         bits.append("left home")
     if p.how and p.how != "Founder":
         bits.append(p.how.lower())
+    for words in (event_words(p), career_words(p)):
+        if words:
+            bits.append(words)
     return ", ".join(bits)
 
 

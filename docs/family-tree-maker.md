@@ -63,4 +63,5 @@ Families 1 Family History log in four places: a Death line ends `; Family role: 
 no current spouse]`; a marriage may be `remarried:` with `; earlier spouse: <name>[ (died|divorced)]` and `; current
 spouse of <a>: <b>`; a divorce is its own line, `Divorce: <head> (<sex>) and <who> divorced, generation <g>`; and an
 adopted child's title is in brackets on the joined line, `adopted (<title>)`, while Event lines carry only the
-island event's title. The Virtual Families 1 forms are read too.
+Random Event's title; the new `Email Event: <title>` and `Popup Event: <title>` lines are read as well. The
+Virtual Families 1 forms are read too.

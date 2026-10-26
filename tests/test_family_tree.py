@@ -43,7 +43,7 @@ def put_str(b: bytearray, off: int, text: str, size: int) -> None:
 
 def villager(b: bytearray, slot: int, name: str, sex: int = 0, age: int = 600, head: int = 1, body: int = 1,
              active: int = 1, left: int = 0, health: int = 90, cause: int = -1, father: str = "Joey",
-             mother: str = "Mum", preg: int = 0, babies: int = 0) -> None:
+             mother: str = "Mum", preg: int = 0, babies: int = 0, career: int = -1, level: int = 0) -> None:
     v = r.gs_to_file(r.GS_VILLAGERS) + slot * r.VILLAGER_RECORD_SIZE
     b[v], b[v + 1] = active, left
     struct.pack_into("<ii", b, v + 8, age, sex)
@@ -53,18 +53,19 @@ def villager(b: bytearray, slot: int, name: str, sex: int = 0, age: int = 600, h
     put_str(b, v + 8 + 0x4E, mother, 25)
     struct.pack_into("<ii", b, v + 0xA8 + 0x0C, health, cause)
     struct.pack_into("<ii", b, v + 0xA8 + 0x24, preg, babies)
-    struct.pack_into("<i", b, v + 0x140, -1)
+    struct.pack_into("<ii", b, v + 0x140, career, level)
 
 
 def peep(b: bytearray, record: int, place: int, name: str, sex: int = 0, head: int = 1, body: int = 1,
-         slot: int = 0, heir: int = -1, present: int = 1, likes: str = "", dislikes: str = "") -> None:
+         slot: int = 0, heir: int = -1, present: int = 1, likes: str = "", dislikes: str = "",
+         career: int = -1) -> None:
     """place 0 = parent 1, 1 = parent 2, 2 + k = child k (the child count follows)."""
     rec = r.gs_to_file(r.GS_FAMILY_TREE) + 4 + record * r.FAMILY_RECORD_SIZE
     b[rec] = 1
     at = rec + (0x04, 0xDC)[place] if place < 2 else rec + 0x1B8 + (place - 2) * r.PEEP_RECORD_SIZE
     put_str(b, at, name, 25)
     b[at + 0x1A] = present
-    struct.pack_into("<iiiiii", b, at + 0x1C, sex, head, body, slot, heir, -1)
+    struct.pack_into("<iiiiii", b, at + 0x1C, sex, head, body, slot, heir, career)
     put_str(b, at + 0x34, likes, 0x28)
     put_str(b, at + 0x5D, dislikes, 0x28)
     if place >= 2:
@@ -320,7 +321,7 @@ def test_descriptors_in_family_words_and_no_masters():
     ft.arrange(v, edits)
     lay = ft.layout(v, edits)
     text = {p.name: ft.default_text(lay, p) for p in v.known()}
-    assert "Founder" in text["Ann"] and "(deceased)" in text["Ann"]
+    assert "Founder" in text["Ann"] and "Deceased: Old age" in text["Ann"] and "(deceased)" not in text["Ann"]
     assert "Married in" in text["Bob"] and "Heir" in text["Cal"] and "Adopted" in text["Ivy"]
     assert "(no longer in the house)" in text["Dee"]
     assert not any("Master" in line or "game units" in line for lines in text.values() for line in lines)
@@ -329,6 +330,8 @@ def test_descriptors_in_family_words_and_no_masters():
     assert "Heir" in ft.default_text(ft.layout(v, edits), by_name(v, "Cal"))
     edits.show_heir = False
     assert "Heir" not in ft.default_text(ft.layout(v, edits), by_name(v, "Cal"))
+    edits.show_deceased = False                     # the patcher's own "(deceased)" again
+    assert "(deceased)" in ft.default_text(ft.layout(v, edits), by_name(v, "Ann"))
     # An older tree kept the Heir option under show_masters.
     assert ft.Edits.from_data({"format": 1, "show_masters": False}).show_heir is False
 
@@ -520,3 +523,61 @@ def test_tools_tab_has_the_family_tree_maker(tk_root, tmp_path, monkeypatch):
         assert tools.load_tree_settings() == {"style": {"font": "Arial"}, "window": {"zoom": 2}}
     finally:
         top.destroy()
+
+
+# ---------------------------------------------------------------- the owner's Virtual Families labels
+def labels(v: gen.Village, name: str, **options) -> list[str]:
+    edits = ft.Edits(**options)
+    ft.arrange(v, edits)
+    return ft.default_text(ft.layout(v, edits), by_name(v, name))
+
+
+def test_every_label_is_a_ticked_descriptor_option():
+    keys = dict(ft.DESCRIPTOR_OPTIONS)
+    new = ("show_adopted", "show_event", "show_spouse_number", "show_remarried", "show_divorced", "show_career",
+           "show_deceased")
+    assert all(k in keys and getattr(ft.Edits(), k) is True for k in new)
+    data = ft.Edits(show_career=False, show_divorced=False).to_data()
+    back = ft.Edits.from_data(data)
+    assert back.show_career is False and back.show_divorced is False and back.show_event is True
+    assert all(k in ft.STYLE_KEYS and k in ft.GROUP_FIELDS for k in new)
+
+
+def test_career_as_the_game_words_it_only_from_a_record_of_theirs():
+    b = bytearray(two_generations())
+    villager(b, 1, "Bob", head=2, body=2, age=700, career=38, level=1)      # Engineer, Novice
+    peep(b, 0, 0, "Ann", sex=1, head=1, body=1, slot=-1, career=39)          # a dead parent: the tree record's
+    peep(b, 1, 2, "Gus", head=8, body=8, slot=7, heir=0, career=0)           # an unborn child's entry: never written
+    v = family(bytes(b))
+    assert gen.career_words(by_name(v, "Bob")) == "Novice Engineer"
+    assert gen.career_words(by_name(v, "Ann")) == "Architect"
+    assert gen.career_words(by_name(v, "Gus")) == "" and gen.career_words(by_name(v, "Ivy")) == ""
+    assert "Novice Engineer" in labels(v, "Bob") and "Novice Engineer" not in labels(v, "Bob", show_career=False)
+    assert (len(gen.CAREER_NAMES), gen.CAREER_NAMES[0], gen.CAREER_NAMES[131]) == (132, "Pastry Designer",
+                                                                                     "Pen Designer")
+
+
+def test_deceased_keeps_the_cause_and_says_when_it_is_unconfirmed():
+    v = family(two_generations())
+    assert "Deceased: Disease" in labels(v, "Fay")
+    by_name(v, "Fay").cause = gen.cause_words(3)
+    assert "Deceased: Work accident (unconfirmed)" in labels(v, "Fay")
+    by_name(v, "Fay").cause = ""
+    assert "Deceased" in labels(v, "Fay")
+
+
+def test_a_same_sex_couple_is_drawn_like_any_other():
+    b = blank_save()
+    villager(b, 0, "Ann", sex=1, head=1)
+    villager(b, 1, "Zoe", sex=1, head=2, body=2)
+    villager(b, 2, "Kit", sex=0, head=3, age=100)
+    peep(b, 0, 0, "Ann", sex=1, head=1, slot=0)
+    peep(b, 0, 1, "Zoe", sex=1, head=2, body=2, slot=1)
+    peep(b, 0, 2, "Kit", head=3, slot=2)
+    v = family(bytes(b))
+    kit, ann, zoe = by_name(v, "Kit"), by_name(v, "Ann"), by_name(v, "Zoe")
+    assert {kit.father, kit.mother} == {ann.id, zoe.id} and ann.generation == zoe.generation == 1
+    assert "Married in" in labels(v, "Zoe")
+    edits = ft.Edits()
+    ft.arrange(v, edits)
+    assert "<svg" in ft.to_svg(ft.scene(ft.layout(v, edits), gen.GAME_TITLE, {}), {})

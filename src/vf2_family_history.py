@@ -14,7 +14,8 @@ writes (runtime/native/b200history/b200history.cpp, vf2history_b200.dll), "Who" 
     <Who> remarried: <Who>, generation <g>; earlier spouse: <e>[ (died)|(divorced)][; current spouse of ...]
     Divorce: <head> (<sex>) and <Who> divorced, generation <g>[; <head> has no current spouse]  OnDivorce
     <Who> joined the family as a child, adopted[ (<title>)], generation <g>                     OnJoined
-    Event <n>: <the island event's own title>                                                   OnIslandEvent
+    Event <n>: <the Random Event's own title>                                                   OnIslandEvent
+    Email Event[ <n>]: <title>[: <name>]  /  Popup Event[ <n>]: <title>[: <name>]               (the new forms)
     <name> is going to college! (<sex>, <years>, left home)                                     OnLeftHome
     <name> has been sent away to school! (<sex>, <years>, left home)                            OnLeftHome
     <name> left home with The Talent Scout (<sex>, <years>, left home)                          OnLeftHome
@@ -44,7 +45,11 @@ _DIVORCE = re.compile(rf"^Divorce: (.+?)(?: \((\w+)\))? and {_WHO} divorced, gen
                       r"(?:; .+ has no current spouse)?$")
 _JOINED = re.compile(rf"^{_WHO} joined the family as a child(?: of (.+) and (.+)|(, adopted)(?: \((.+)\))?)?, "
                      r"generation (\d+)$")
+_KIND_EVENT = re.compile(r"^(Email|Popup) Event(?: (\d+))?: ([^:]+?)(?:: (.+?))?$")
 _EVENT = re.compile(r"^Event (\d+): ([^:(]+?)(?:: (.+?))?(?: \(\$-?\d+\))?$")
+# OnGeneration: who became the head of the family ("... began: <Who> was adopted ..." / "... inherited the house").
+_BEGAN = re.compile(rf"^(?:Generation 1 began(?: after the eviction)?|.+: generation (\d+) began): {_WHO} "
+                    r"(?:was adopted.*|inherited the house)$")
 _LEFT = re.compile(r"^(?:(.+) is going to college!|(.+) has been sent away to school!|(.+) left home with (.+?)) "
                    r"\((\w+), (\d+), left home\)$")
 UNKNOWN_FATHER = "(unknown)"            # PersonName: the DLL's words for a father it could not name
@@ -59,8 +64,11 @@ class History:
                                                            #  earlier spouse or "", "died"/"divorced"/"")
     divorces: list[tuple] = field(default_factory=list)    # (head, spouse, spouse's sex, years, generation)
     joined: list[tuple] = field(default_factory=list)      # (name, sex, years, adopted, generation, title or "")
-    events: list[tuple] = field(default_factory=list)      # (n, title, name or "", line index)
+    events: list[tuple] = field(default_factory=list)      # (n, title, name or "", kind "Email"/"Popup"/"")
     left: list[tuple] = field(default_factory=list)        # (name, sex, years, why)
+    began: list[tuple] = field(default_factory=list)       # (name, sex, line number): became the head of the family
+    married_at: list[int] = field(default_factory=list)    # each marriage's line number (as marriages)
+    lines: int = 0
     family: str = ""                                       # the header's player name
     files: list[Path] = field(default_factory=list)
 
@@ -85,6 +93,7 @@ def parse(text: str, history: History | None = None) -> History:
         if not m:
             continue
         body = m.group("text")
+        h.lines += 1
         if b := _BIRTH.match(body):
             h.births.append((int(b.group(1)), b.group(2), b.group(3), b.group(4), b.group(5), b.group(6) or ""))
         elif d := _DEATH.match(body):
@@ -92,13 +101,18 @@ def parse(text: str, history: History | None = None) -> History:
         elif w := _MARRIED.match(body):
             h.marriages.append((w.group(1), w.group(2), int(w.group(3)), w.group(5), w.group(6), int(w.group(7)),
                                 int(w.group(8)), w.group(9) or "", w.group(10) or ""))
+            h.married_at.append(h.lines)
+        elif g := _BEGAN.match(body):
+            h.began.append((g.group(2), g.group(3), h.lines))
         elif v := _DIVORCE.match(body):
             h.divorces.append((v.group(1), v.group(3), v.group(4), int(v.group(5)), int(v.group(6))))
         elif j := _JOINED.match(body):
             h.joined.append((j.group(1), j.group(2), int(j.group(3)), bool(j.group(6)), int(j.group(8)),
                              j.group(7) or ""))
+        elif k := _KIND_EVENT.match(body):
+            h.events.append((int(k.group(2) or 0), k.group(3).strip(), (k.group(4) or "").strip(), k.group(1)))
         elif e := _EVENT.match(body):
-            h.events.append((int(e.group(1)), e.group(2).strip(), (e.group(3) or "").strip(), len(h.events)))
+            h.events.append((int(e.group(1)), e.group(2).strip(), (e.group(3) or "").strip(), ""))
         elif lh := _LEFT.match(body):
             if lh.group(1):
                 name, why = lh.group(1), "College"
@@ -140,6 +154,7 @@ def _partner_row(p: gen.Person) -> int:
 
 def _divorced(p: gen.Person) -> None:
     p.event = "Divorce Spouse"
+    p.divorced = True
     p.alive, p.gone = False, "left"
     p.unknowns = [u for u in p.unknowns if "Divorce" not in u and not u.startswith(("No longer in", "Married "))]
     p.unknowns.append("Divorced (the patcher's Divorce Spouse, Family History log).")
@@ -261,4 +276,36 @@ def apply(village: gen.Village, h: History) -> None:
         if title:
             p.event = title
             p.unknowns = [u for u in p.unknowns if not u.startswith("Adopted:")]
+    # Random Event titles and their kind (the save never names an event): the log's own kind first, else the
+    # game's (gen.RANDOM_EVENTS).
+    kinds = {title: kind for _n, title, _name, kind in h.events if kind}
+    for _n, title, name, kind in h.events:
+        p = _one(people, name) if name else None
+        if p is not None and not p.event_title and title in gen.RANDOM_EVENTS:
+            p.event_title, p.event_kind = title, kind
+    for p in people.values():
+        for why in (p.event, p.left_why):
+            if why in gen.RANDOM_EVENTS and not p.event_title:
+                p.event_title = why
+        if p.event_title and not p.event_kind:
+            p.event_kind = kinds.get(p.event_title) or gen.RANDOM_EVENTS.get(p.event_title, "")
+
+    # Each head's marriages in order (whatever the spouses' sexes): "Husband 2", "Wife 1"... numbered only when the
+    # log saw them become the head of the family before their first marriage, so no earlier one can be missing.
+    wed: dict[int, list] = {}
+    for (a, sa, _ya, b, sb, _yb, _g, earlier, _how), at in zip(h.marriages, h.married_at):
+        head, spouse = _one(people, a, sa), _one(people, b, sb)
+        if head is None:
+            continue
+        wed.setdefault(head.id, []).append((at, spouse, bool(earlier)))
+    for pid, marriages in wed.items():
+        head = people[pid]
+        if len(marriages) > 1 or any(again for _at, _s, again in marriages):
+            head.remarried = True
+        start = [at for name, sex, at in h.began if name == head.name and sex == head.sex]
+        if not start or min(start) > marriages[0][0] or marriages[0][2]:
+            continue                                # the log does not reach back to their first marriage
+        for k, (_at, spouse, _again) in enumerate(marriages, start=1):
+            if spouse is not None and spouse.spouse_number is None:
+                spouse.spouse_number = k
     village.sources.extend(str(p) for p in h.files)

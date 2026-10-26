@@ -454,6 +454,15 @@ class Edits:
     show_arrived: bool = True           # "Event names": the event that brought them in (arrival_words)
     show_left_home: bool = True         # "Left home" for a living family member who left home (Virtual Families)
     show_heir: bool = True              # "Heir" for whoever inherited the house (parent 1 of a later generation)
+    # The owner's Virtual Families labels (2026-10-26), each where it applies: "Adopted", the Random Event,
+    # "Husband 2" / "Wife 1", "Remarried", "Divorced", the career, "Deceased: <cause>".
+    show_adopted: bool = True
+    show_event: bool = True
+    show_spouse_number: bool = True
+    show_remarried: bool = True
+    show_divorced: bool = True
+    show_career: bool = True
+    show_deceased: bool = True
     show_masters: bool = True           # (Virtual Villagers' "Master Farmer"; never drawn: kept so older trees read)
     fit_width: int = 0                  # 0, or shrink every portrait so the widest row fits this many pixels
     # The canvas (the owner, 2026-10-09): 0 x 0 is Automatic, the page as large as the tree; else every
@@ -657,6 +666,8 @@ class Edits:
         out.show_masters = data.get("show_masters") is not False
         # The Heir option was kept under "show_masters" before it had a field of its own.
         out.show_heir = data.get("show_heir", data.get("show_masters")) is not False
+        for key in ('show_adopted', 'show_event', 'show_spouse_number', 'show_remarried', 'show_divorced', 'show_career', 'show_deceased'):
+            setattr(out, key, data.get(key) is not False)
         out.page_generations = int(_number(data.get("page_generations"), PAGE_GENS_MIN, PAGE_GENS_MAX, PAGE_GENS))
         fit = data.get("fit_width")
         out.fit_width = int(_number(fit, FIT_MIN, FIT_MAX, 0)) if isinstance(fit, (int, float)) and fit else 0
@@ -841,6 +852,7 @@ class Edits:
                 "show_units": self.show_units, "show_years": self.show_years, "show_twins": self.show_twins, "show_runner": self.show_runner, "number_names": self.number_names,
                 "number_names_v2": True, "descriptors_v2": True, "show_arrived": self.show_arrived, "show_left_home": self.show_left_home,
                 "show_masters": self.show_masters, "show_heir": self.show_heir,
+                **{key: getattr(self, key) for key in ('show_adopted', 'show_event', 'show_spouse_number', 'show_remarried', 'show_divorced', 'show_career', 'show_deceased')},
                 "number_order": self.number_order,
                 "sort": self.sort, "positioning": self.positioning,
                 "numbering": self.numbering,
@@ -869,7 +881,7 @@ class Edits:
 # one portrait.  Each is checked as the tree's own is (_group_value).
 GROUP_FIELDS = ("text_align", "text_valign", "centre_heads", "text_room", "flip_words", "turn_words",
                 "text_inside", "fixed_face_size", "picture_size", "text_size", "text_wrap", "show_units", "show_years",
-                "show_twins", "show_founder", "show_runner", "show_arrived", "show_masters", "show_heir", "show_left_home", "detail_lines",
+                "show_twins", "show_founder", "show_runner", "show_arrived", "show_masters", "show_heir", "show_left_home", "show_adopted", "show_event", "show_spouse_number", "show_remarried", "show_divorced", "show_career", "show_deceased", "detail_lines",
                 "detail_colour", "detail_opacity", "detail_width", "portrait_fill", "text_box_colour", "text_box_opacity",
                 "text_box_over", "text_box_border", "text_box_border_colour", "text_box_border_width")
 TEXT_BOX_BORDER_WIDTHS = (0.0, 20.0)    # a text box border's weight: 0 draws none
@@ -1528,7 +1540,7 @@ STYLE_KEYS = (
     "centre_heads", "text_align", "text_inside", "fixed_face_size", "turn_words", "flip_words", "text_room", "special_mode", "special_pick", "special_palette",
     "special_count", "hibiscus", "special_opacity", "rainbow_strength", "schemes", "detail_lines", "detail_colour", "detail_opacity", "detail_width", "text_box_colour", "text_box_opacity", "text_box_over", "text_box_border", "text_box_border_colour", "text_box_border_width", "text_valign", "text_wrap", "row_align", "row_valign", "row_limit", "keep_families", "others_columns", "others_side", "packing", "lines_behind", "picture_size", "text_size", "portrait_gap", "row_gap", "show_founder", "fit_width", "canvas_w", "canvas_h", "page_generations", "diagonal_lines",
     "show_units", "show_years", "show_twins", "show_runner", "show_arrived", "show_masters", "show_heir",
-    "show_left_home",
+    "show_left_home", "show_adopted", "show_event", "show_spouse_number", "show_remarried", "show_divorced", "show_career", "show_deceased",
     "descriptors_v2",
     "number_names", "number_names_v2", "number_order", "sort", "positioning", "numbering",
     "background", "background2", "rainbow", "background_image", "background_fit", "background_opacity",
@@ -5055,6 +5067,8 @@ def default_text(lay: Layout, p: gen.Person) -> list[str]:
             [] if p.age is None else
             ([f"{p.age} game units"] if units else []) + ([f"{p.years} years old"] if years else []))
     extra = gen.status_words(p)
+    if p.gone == "died" and lay.opt(p, "show_deceased"):
+        extra = ""                              # said by the Deceased descriptor, with the cause
     return [f"{p.number}. {lay.names.get(p.id, p.name)}"] + ages + descriptors(lay, p) + ([extra] if extra else [])
 
 
@@ -5067,12 +5081,37 @@ def is_founder(village: gen.Village, p: gen.Person) -> bool:
 
 
 def arrival_words(village: gen.Village, p: gen.Person) -> str:
-    """The event that brought them into the family or changed it for them ("Event names"), as the save (or the
-    Family History log) proves it: "Married in", "Adoption Services", "The Little Visitor"...;
-    "" for the founder and anyone born into the family, or when no record names the event."""
+    """"Married in" for one who married into the family (the save's own Family Tree says so); "" for anyone else.
+    (Adopted, the Random Event and Divorced have descriptors of their own.)"""
     if p.upcoming:
         return ""
-    return getattr(p, "event", "") or ""
+    return "Married in" if getattr(p, "how", "") == "Married in" else ""
+
+
+def adopted_words(p: gen.Person) -> str:
+    """"Adopted" for a child who joined without being born to the family, "(Adoption Services)" when the log names
+    the store's service (a Random Event is the Event descriptor's)."""
+    if p.upcoming or not (getattr(p, "adopted", False) or getattr(p, "how", "") == "Adopted"):
+        return ""
+    how = getattr(p, "event", "")
+    return f"Adopted ({how})" if how == "Adoption Services" else "Adopted"
+
+
+def spouse_words(p: gen.Person) -> str:
+    """"Husband 2", "Wife 1": their place in their partner's marriages, worded by their own sex (the log's order)."""
+    n = getattr(p, "spouse_number", None)
+    if not n or p.sex not in ("Male", "Female"):
+        return ""
+    return f"{'Husband' if p.sex == 'Male' else 'Wife'} {n}"
+
+
+def deceased_words(p: gen.Person) -> str:
+    """"Deceased", with the cause when a record gives it (an unconfirmed cause says so)."""
+    if p.gone != "died" or p.upcoming:
+        return ""
+    cause = (getattr(p, "cause", "") or "").split(" (UNCONFIRMED")[0]
+    unconfirmed = "UNCONFIRMED" in (getattr(p, "cause", "") or "")
+    return f"Deceased: {cause}" + (" (unconfirmed)" if unconfirmed else "") if cause else "Deceased"
 
 
 def status_descriptors(lay: Layout, p: gen.Person) -> list[str]:
@@ -5089,25 +5128,45 @@ def descriptors(lay: Layout, p: gen.Person) -> list[str]:
     Builder"... (the Virtual Villagers Family Tree Maker's own rule since 555023e0; Virtual Families has no
     masters): show_masters is kept only so older trees still read."""
     v = lay.village
+    # Virtual Villagers' own order first (Founder, Runner, twins, how they arrived), then Virtual Families' own.
     out = ["Founder"] if lay.opt(p, "show_founder") and is_founder(v, p) else []
-    out += ["Heir"] if lay.opt(p, "show_heir") and getattr(p, "heir", False) else []
     out += ["Runner"] if lay.opt(p, "show_runner") and p.runner else []
     out += born_with(lay, p)
     arrived = arrival_words(v, p) if lay.opt(p, "show_arrived") else ""
     out += [arrived] if arrived else []
+    out += ["Heir"] if lay.opt(p, "show_heir") and getattr(p, "heir", False) else []
+
+    def add(option: str, words: str) -> None:
+        if words and lay.opt(p, option) and words not in out:
+            out.append(words)
+    add("show_spouse_number", spouse_words(p))
+    add("show_remarried", "Remarried" if getattr(p, "remarried", False) else "")
+    add("show_divorced", "Divorced" if getattr(p, "divorced", False) else "")
+    add("show_adopted", adopted_words(p))
+    add("show_event", gen.event_words(p))
+    add("show_career", gen.career_words(p))
     if lay.opt(p, "show_left_home") and getattr(p, "left_home", False) and p.alive:
         why = getattr(p, "left_why", "")       # only when the Family History log says (the save does not)
+        why = "" if why == getattr(p, "event_title", "") and lay.opt(p, "show_event") else why
         out += [f"Left home ({why})" if why else "Left home"]
+    add("show_deceased", deceased_words(p))
     return out + [s for s in status_descriptors(lay, p) if s not in out]
 
 
 # The descriptor options (the Faces & Text tab's tick boxes): (Edits field, words).
-DESCRIPTOR_OPTIONS = (("show_founder", "Founder (the one who started the family)"),
-                      ("show_heir", "Heir (inherited the house)"),
-                      ("show_runner", "Runner (likes running)"),
+DESCRIPTOR_OPTIONS = (("show_founder", "Founder (the family's founder)"),
+                      ("show_runner", "Runner (family members who like running)"),
                       ("show_twins", "Twins and triplets (\"Happi's twin\")"),
-                      ("show_arrived", "Event names (\"Married in\", \"The Little Visitor\")"),
-                      ("show_left_home", "Left home"))
+                      ("show_arrived", "How they arrived (\"Married in\")"),
+                      ("show_heir", "Heir (inherited the house)"),
+                      ("show_spouse_number", "Husband / Wife and their number (\"Wife 2\")"),
+                      ("show_remarried", "Remarried"),
+                      ("show_divorced", "Divorced"),
+                      ("show_adopted", "Adopted"),
+                      ("show_event", "Random Event, Email or Popup (\"Popup Event: The Little Visitor\")"),
+                      ("show_career", "Career (\"Novice Engineer\")"),
+                      ("show_left_home", "Left home"),
+                      ("show_deceased", "Deceased, with the cause"))
 
 
 def status_options(edits: Edits, village: gen.Village) -> list[tuple[str, bool]]:

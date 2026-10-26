@@ -162,6 +162,8 @@ def _record(member: dict, p: gen.Person, now: dict) -> None:
     member.update(name=p.name, sex=p.sex, head=p.head, body=p.body, state=_state(p), age=p.age, cause=p.cause,
                   slot=p.slot, left_home=p.left_home, heir=p.heir, how=p.how, event=p.event, runner=p.runner,
                   likes=p.likes, dislikes=p.dislikes, adopted=p.adopted)
+    if p.career is not None:                    # the last career a record gave them (kept once they are gone)
+        member.update(career=p.career, career_level=p.career_level)
     member["last_seen"] = now
     if changed:
         member["changed"] = now
@@ -294,7 +296,8 @@ def _add_remembered(village: gen.Village, members: list[dict], mid_of: dict[int,
         p.age, p.cause, p.how, p.event = m.get("age"), m.get("cause") or "", m.get("how") or "", m.get("event") or ""
         p.heir, p.adopted, p.runner = bool(m.get("heir")), bool(m.get("adopted")), bool(m.get("runner"))
         p.likes, p.dislikes = m.get("likes"), m.get("dislikes")
-        p.arrived = p.how in ("Married in", "Adopted", "Adopt New Person")
+        p.career, p.career_level = m.get("career"), m.get("career_level")
+        p.arrived = p.how in ("Married in", "Adopted")
         p.former = list(m.get("former") or [])
         p.birth_record = order
         state = m.get("state")
@@ -303,7 +306,7 @@ def _add_remembered(village: gen.Village, members: list[dict], mid_of: dict[int,
         if m.get("left"):
             p.unknowns.append(m["left"])
             if m["left"].startswith("Divorced"):
-                p.event = "Divorce Spouse"
+                p.event, p.divorced = "Divorce Spouse", True
         elif state != "died":
             p.unknowns.append(f"No longer in the save (last seen in the save of {m['last_seen']['saved_at']}); the "
                               "save does not say what became of them.")
