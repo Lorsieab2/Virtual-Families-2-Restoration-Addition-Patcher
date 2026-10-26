@@ -65,7 +65,12 @@ The format is the Virtual Families 1 Family History log's, the Virtual Villagers
 Kinds: Conception, Birth, Death, Marriage, Divorce, Arrived, Left Home, Generation / New Generation, Random Event
 (`Email Event:` / `Popup Event:`), Roll the Dice, Evict Family, Start Over, Family Renamed, and the backfill's
 Family Tree. `src/vf2_family_history.py` is VF1's reader ported; the older one-line forms are not read (no
-Virtual Families 2 log ever wrote them).
+Virtual Families 2 log ever wrote them). It matches VF2's own log (`origin/feat/family-history` 9bfd948,
+`docs/FAMILY_HISTORY.md`): an e-mail reads `Email Event: Subject: <subject>` and is shown "Email Event:
+<subject>"; `Renamed <n>` (the Details box) makes the earlier records name the person by the new name, and the old
+one is kept as a former name; an Arrived or Left Home record right after a Random Event is that event's, unless it
+names its own way (Adoption Services, college, Boarding School); `Earlier spouse: X` with no "(died)" or
+"(divorced)" labels nothing; Start Over comes before the new family's Generation 1.
 
 Labels from the log: Husband N / Wife N (each spouse's own sex) only when the log saw the head's first marriage
 itself, not a backfill; otherwise "Married in". Without the log only what the save and the tree file prove:
