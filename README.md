@@ -154,7 +154,11 @@ actions, as before. **Tools** holds:
   children 7 to 28 from the Up to 28 Children file of that very save), each face the game's own head sprite
   (`Images\male_heads00.png` / `female_heads00.png`, column 5, the row the head value), with marks, shapes,
   colours, stickers (the Virtual Families, Virtual Families 2, Fish Tycoon and Plant Tycoon logos), backgrounds (the owner's 27 pictures), pages and PNG/JPG
-  export. The save is only read. What no record says is shown as unknown, never guessed. The tree file
+  export. Under each portrait, where they apply (each a tick box, on by default): Founder, Runner, twins, Married
+  in, Heir, Husband N / Wife N (by each spouse's own sex; numbered only when the Family History log saw the first
+  marriage), Remarried, Divorced, Adopted, the Random Event ("Popup Event: The Little Visitor"), the career as the
+  game words it ("Novice Engineer"), Left home and "Deceased: <cause>". The save is only read. What no record says
+  is shown as unknown, never guessed. The tree file
   (`Virtual Families 2 Patcher\Save <N>\Data\Family Tree\Virtual Families 2 Family Tree - Save <N>.tree`) keeps the
   player's edits and every member the tree has ever seen in that save, so a spouse who died with no children, an
   earlier spouse after a remarriage, a divorced spouse and a founder who died childless stay on the tree once seen.
