@@ -124,6 +124,8 @@
         "It copies the game's save files and the patcher's own files too (the Virtual Families 2 Patcher Data folder, which holds the extra children).",
         "Click it, tick the save folders to copy, click Back Up Selected. If the game is running it is paused for the copy and resumes by itself.",
         "The game saves by itself every 2 minutes while it runs, and when you quit normally, so a backup of a running game holds your families as of the last save.",
+        "Game speed is set to Paused in the backup's family saves (your own saves are unchanged), so a restored backup opens paused and never catches up on the time since it was made.",
+        "Only a family at Normal is paused. A save at another speed, or one that cannot be read, is copied exactly as it is.",
         "Every copied file is checked against the original. An older backup is never written over."
       ]
     },
@@ -156,7 +158,7 @@
         "Quit the game first, from its own menu. Click Game Speed..., pick the family (each shows its speed now), choose Paused or Normal, then Set Speed.",
         "Paused works as if you paused just before the game last saved. Normal works as if you unpaused it right now, so the time it spent paused never counts.",
         "Set Normal just before you play: like any family at normal speed, it catches up on the time the game is closed after that.",
-        "Your saves are backed up first, as \"Backup <date> (before speed change)\", so Restore Saves can undo it.",
+        "Your saves are backed up first, as \"Backup <date> (before speed change)\". Like every backup, its families are Paused, so restoring it brings a family back Paused.",
         "A family at any other speed is shown but not changed here; change it in the game instead."
       ]
     },

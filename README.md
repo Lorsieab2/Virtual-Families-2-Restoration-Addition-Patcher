@@ -104,7 +104,10 @@ actions, as before. **Tools** holds:
   patcher's own `Virtual Families 2 Patcher Data` folder (the Children sidecar and any other file a patch keeps
   beside a save). A running game is paused for the copy and resumed; every file is verified by size and
   SHA-256, file times are kept, an existing backup is never written into, and a failed copy is set aside as
-  `... INCOMPLETE` and never offered.
+  `... INCOMPLETE` and never offered. Game speed is set to Paused in the backup's family saves
+  (`Virtual Families 2<1-5>.ldw`; the copies only, your own saves are unchanged), so a restored backup opens
+  paused and never catches up on the time since it was made. Only a family at Normal is paused; a save at
+  another speed, one that cannot be read, and the previous saves `<N+20>` are copied exactly as they are.
 - **Restore Saves...** lists the backups, newest first, and restores the whole save folder or one family slot
   (its save, the `- Copy`, the previous save at slot + 20 and its sidecar). It refuses while the game runs,
   shows exactly which files will be replaced, added and removed, restores only after the player says yes, and
