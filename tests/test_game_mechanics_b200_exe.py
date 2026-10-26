@@ -412,4 +412,18 @@ def test_the_flea_market_never_rotates(emu):
     finally:
         emu.watch = {}
         emu.stubs.pop(0x4B9A90, None)
-    assert "never changes" in next(f.text for f in gm.facts() if f.text.startswith("The Flea Market"))
+    assert "never changes" in next(f.text for f in gm.facts() if f.text.startswith(gm.WITH_PATCHER + "the Flea Market"))
+
+
+# ------------------------------------------------------------------ the Special Upgrades page
+SPECIAL_UPGRADES, SERVICES_LIST = 0x14, 0x56F100
+
+
+def test_the_special_upgrades_page_sells_the_four_added_upgrades(emu):
+    count = emu.call(CATEGORY_COUNT, (SPECIAL_UPGRADES,), ecx=INVENTORY)
+    items = [emu.call(CATEGORY_ITEM, (SPECIAL_UPGRADES, i), ecx=INVENTORY) for i in range(count)]
+    assert count == 10
+    assert items == [0x111, 0x112, 0x113, 0x115, 0x116, 0x114, 0x117, 0x118, 0x119, 0x11A]
+    assert items == [emu.r32(SERVICES_LIST + 4 * i) for i in range(10)]
+    line = next(f for f in gm.facts() if f.text.startswith(gm.WITH_PATCHER + "the store's Special Upgrades page"))
+    assert "10 items in all" in line.text and line.label == gm.VERIFIED_E

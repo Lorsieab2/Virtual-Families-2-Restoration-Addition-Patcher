@@ -72,7 +72,7 @@ class PageTests(unittest.TestCase):
         interest = next(f for f in self.facts if f.text.startswith("Interest: 10%"))
         self.assertIn("only 2 days are paid", interest.text)
         self.assertEqual(interest.label, gm.VERIFIED_E)
-        broker = next(f for f in self.facts if f.text.startswith("Brokerage Account"))
+        broker = next(f for f in self.facts if f.text.startswith(gm.WITH_PATCHER + "Brokerage Account"))
         self.assertIn("Buying it again sets interest to 1%", broker.text)
         self.assertEqual(broker.label, gm.VERIFIED_E)
         malfunction = next(f for f in self.facts if f.text.startswith("House malfunctions"))
@@ -81,11 +81,59 @@ class PageTests(unittest.TestCase):
         # The window describes the game: it never claims to fix anything.
         self.assertNotRegex(self.text, r"(?i)\b(a bug|is a bug|fix(es|ed)? (it|this|the game)|fixed by)\b")
 
-    def test_the_flea_market_never_changes_and_the_six_hours_claim_is_left_out(self):
-        flea = next(f for f in self.facts if f.text.startswith("The Flea Market"))
-        self.assertIn("never changes", flea.text)
-        self.assertEqual(flea.label, gm.VERIFIED_E)
-        self.assertNotRegex(self.text, r"6 (real )?hours|21,600|six hours")
+    def test_the_intro_says_the_page_is_the_patched_game_with_the_unpatched_differences(self):
+        self.assertIn("The page describes the game with the patcher applied, and gives the unpatched game's "
+                      "behaviour wherever it differs.", gm.INTRO)
+
+    def _pair(self, patched_start):
+        """The "With the patcher:" line starting so, and the "Unpatched game:" line right after it."""
+        index = next(i for i, f in enumerate(self.facts) if f.text.startswith(gm.WITH_PATCHER + patched_start))
+        patched, unpatched = self.facts[index], self.facts[index + 1]
+        self.assertTrue(unpatched.text.startswith(gm.UNPATCHED), unpatched.text)
+        self.assertEqual(patched.group, unpatched.group)
+        self.assertFalse(patched.sub or unpatched.sub)
+        return patched, unpatched
+
+    def test_the_flea_market_both_ways(self):
+        patched, unpatched = self._pair("the Flea Market")
+        self.assertIn("shows all 36 of its goods at all times; it never changes", patched.text)
+        self.assertEqual(patched.label, gm.VERIFIED_E)
+        self.assertIn("0x4B9A90", patched.evidence)
+        self.assertIn("the Flea Market shows 5 of its 36 goods, picked at random, and changes them every 6 real "
+                      "hours", unpatched.text)
+        self.assertIn("more than 6 real hours after the last change", unpatched.text)
+        self.assertIn("while the game is closed", unpatched.text)
+        self.assertEqual(unpatched.label, gm.VERIFIED_E)
+        for needle in ("1582d9e8", "0x4BA710", "0x432050", "0x5346E0", "T + 21,600", "T + 21,601", "T + 86,400"):
+            self.assertIn(needle, unpatched.evidence)
+        # the 6-hour rule appears only as the unpatched game's
+        for fact in self.facts:
+            if re.search(r"6 (real )?hours|21,600|six hours", fact.text):
+                self.assertRegex(fact.text, r"(?i)unpatched", fact.text)
+        index = [(f.text, f.label) for f in self.facts if f.group == gm.INDEX and "Flea Market" in f.text]
+        self.assertEqual(index, [("the Flea Market, with the patcher: never changes;", gm.VERIFIED_E),
+                                 ("the Flea Market, unpatched game: every 6 hours (real time);", gm.VERIFIED_E)])
+
+    def test_the_special_upgrades_page_both_ways(self):
+        patched, unpatched = self._pair("the store's Special Upgrades page")
+        for name in ("Brokerage Account", "Food Club", "Health Plan", "Lucky Rock"):
+            self.assertIn(name, patched.text)
+            self.assertIn(name, unpatched.text)
+        self.assertIn("10 items in all", patched.text)
+        self.assertIn("has 6 items and sells none of", unpatched.text)
+        self.assertEqual((patched.label, unpatched.label), (gm.VERIFIED_E, gm.VERIFIED_E))
+        self.assertIn("0x46B6D0", patched.evidence)
+        for needle in ("1582d9e8", "0x4BB0A0", "0x4BAA50", "0x556E3C"):
+            self.assertIn(needle, unpatched.evidence)
+        # the patcher-only purchase rule says it is the patcher's
+        broker = next(f for f in self.facts if "Brokerage Account: buying it" in f.text)
+        self.assertTrue(broker.text.startswith(gm.WITH_PATCHER))
+
+    def test_every_unpatched_line_follows_its_patched_line(self):
+        for index, fact in enumerate(self.facts):
+            if fact.text.startswith(gm.UNPATCHED):
+                self.assertTrue(self.facts[index - 1].text.startswith(gm.WITH_PATCHER), fact.text)
+                self.assertTrue(fact.evidence.startswith("stock exe sha256 1582d9e8"), fact.text)
 
     def test_patcher_options_are_shown_both_ways(self):
         for name in gm.OPTION_NAMES:
