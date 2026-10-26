@@ -148,6 +148,23 @@ actions, as before. **Tools** holds:
   `python scripts/export_game_mechanics_claims.py <folder>` writes every line with its label and evidence.
   Code: `src/vf2_game_mechanics.py` (the lines) and `src/vf2_game_mechanics_window.py`; the window:
   `docs/game-mechanics-window.md`; tests: `tests/test_game_mechanics.py`.
+- **Family Tree Maker...** (the Family Tree Maker section) draws a family's tree from its save, the Virtual
+  Villagers / Virtual Families 1 Family Tree Maker ported to Virtual Families 2 (VV main cdcface3): one row per
+  generation of the save's own Family Tree (parents, the heir and the one who married in, up to six children, and
+  children 7 to 28 from the Up to 28 Children file of that very save), each face the game's own head sprite
+  (`Images\male_heads00.png` / `female_heads00.png`, column 5, the row the head value), with marks, shapes,
+  colours, stickers (the Virtual Families, Virtual Families 2, Fish Tycoon and Plant Tycoon logos), backgrounds (the owner's 27 pictures), pages and PNG/JPG
+  export. The save is only read. What no record says is shown as unknown, never guessed. The tree file
+  (`Virtual Families 2 Patcher\Save <N>\Data\Family Tree\Virtual Families 2 Family Tree - Save <N>.tree`) keeps the
+  player's edits and every member the tree has ever seen in that save, so a spouse who died with no children, an
+  earlier spouse after a remarriage, a divorced spouse and a founder who died childless stay on the tree once seen.
+  When the Family History log is there (`...\Save <N>\Logs\Family History`), it adds twins and triplets, causes
+  and ages at death, earlier marriages, why someone left home and which event brought an adopted child. Code:
+  `src/vf2_genealogy.py` (the family), `src/vf2_family_history.py` (the log), `src/vf2_tree_memory.py` (the tree
+  file), `src/vf2_family_tree.py` (the picture), `src/vf2_family_tree_window.py`, `src/vf2_member_info.py`,
+  `src/vf2_tree_editor_tools.py`, `src/vf2_line_colours.py`, `src/vf2_gdiplus.py` and the pictures in
+  `src/family_tree_backgrounds/`; the evidence: `docs/family-tree-maker.md`; tests: `tests/test_family_tree.py`
+  and `tests/test_family_tree_memory.py`.
 - **How to Use...** opens the guide: one short page per control. A small **?** button beside each control
   opens the page for it. The pages are `src/vf2_how_to_use.json`, read by `src/vf2_how_to_use.py`.
 
@@ -759,6 +776,7 @@ These three do more than change eligibility or wording:
 - `src/offline_vf2_patcher.py` - command-line patcher and validation/apply/restore engine.
 - `src/offline_vf2_patcher_gui.py` - Tkinter GUI, plus its icon assets under `src/assets/`.
 - `src/vf2_tools_gui.py`, `src/vf2_save_backup.py`, `src/vf2_rename_family.py`, `src/vf2_save_reader.py`, `src/vf2_how_to_use.py` and `src/vf2_how_to_use.json` - the GUI's Tools tab, Back Up / Restore Saves, Rename Family and the How to Use guides.
+- `src/vf2_genealogy.py`, `src/vf2_family_history.py`, `src/vf2_tree_memory.py`, `src/vf2_family_tree.py`, `src/vf2_family_tree_window.py`, `src/vf2_member_info.py`, `src/vf2_tree_editor_tools.py`, `src/vf2_line_colours.py`, `src/vf2_gdiplus.py` and `src/family_tree_backgrounds/` - the Family Tree Maker.
 - `tests/` - the patcher, exporter, and GUI test modules that run against `src/`.
 - `work/` - the reverse-engineering and build tree: disassembly dumps, analysis and
   export scripts, and the full test suite the shipped tools are synced from.
