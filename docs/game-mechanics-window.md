@@ -21,6 +21,11 @@ executable (every patcher option byte 0). It is modelled on the Virtual Villager
   Collectibles; Flea Market and On Sale; Chance and timer index.
 - Times are real times at the game's normal speed. Game-clock timers stop while paused; real-time ones do not.
 - Patcher options (Older Villager Mortality Curve, Allow Older Pregnancies) are shown as options, both ways.
+- The page describes the game with the patcher applied (the intro says so). Where the unpatched game differs, a
+  "With the patcher:" line is followed by an "Unpatched game:" line, each with its own label and evidence. The
+  unpatched game is the stock executable, `work/vanilla_runtime_payload/Virtual Families 2.exe` (sha256
+  1582d9e8...), compared routine by routine (spec section 22). Two rules differ: the Flea Market and the Special
+  Upgrades page. Everything else on the page is the same unpatched, and adds nothing.
 
 ## What it does not do
 
@@ -46,6 +51,16 @@ Each was run as linked on the B200 core executable and is pinned by `tests/test_
 | Brokerage Account | owned and bought again: 1%; then +2 points per purchase back to 11% | `HandlePurchaseItem` 0x48C110 -> 0x4B8B50 |
 | Malfunctions | the 2-second step rolls 1 in 800 and picks one at speed 10 and while paused | `UpdateScene` 0x4A266E..0x4A28F9 |
 | Flea Market | lists all 36 goods; never rotates (the stock 6-hour rotation is unreachable in B200) | `VF2GetExpandedFleaMarketCount` 0x4B9A90 |
+| Special Upgrades page | 10 items, with the Brokerage Account, Food Club, Health Plan and Lucky Rock | `GetCategoryItemCount` 0x46B6D0, category 0x14 |
+
+The unpatched game's lines are pinned the same way on the stock executable by
+`tests/test_game_mechanics_stock_exe.py` (it uses `work/vanilla_runtime_payload/Virtual Families 2.exe`, or
+`VF2_STOCK_EXE`; skipped otherwise):
+
+| Rule | Unpatched result | Where (stock exe) |
+|---|---|---|
+| Flea Market | 5 of the 36 goods; the same 5 until it is opened more than 21,600 real s after the last pick, then 5 new; reached from the store menu's Flea Market row | `SetStoreCategory` 0x432050 -> `GetCategoryItemCount` 0x4BB0A0 -> `MaybeUpdateRotatingItems` 0x4BA710 |
+| Special Upgrades page | 6 items, none of the four above | `GetCategoryItemCount` 0x4BB0A0, list 0x556E3C |
 
 `python scripts/export_game_mechanics_claims.py <folder>` writes every line with its label and evidence for
 review.

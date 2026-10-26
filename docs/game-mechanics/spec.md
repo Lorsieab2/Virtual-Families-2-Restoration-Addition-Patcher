@@ -3,7 +3,8 @@
 Target: the B200 **core** executable `outputs/VF2-B200-matrix-core/Virtual Families 2 - B200.exe` (built by the matrix build)
 (analysed from a copy). Every address below is in that file. The patcher's
 post-install flag bytes are all 0 in it (`.vf2beh`, `.vf2goal`, `.vf2preg`, `.vf2mort`, `.vf2bugs`, `.vf2scrl`);
-where a patcher option flips one of them the rule is given for both states.
+where a patcher option flips one of them the rule is given for both states. The unpatched game (the stock
+executable) was compared routine by routine in section 22; where it differs, both are given.
 Names come from the desktop object files the patcher relinks (`work/desktop_obj_files`), mapped
 onto the exe by `coffmap.py` (masked byte match of every function, 2,867 functions placed).
 
@@ -233,6 +234,7 @@ GameStats+0x20 (file 0x163E8) is updated in years. Real time per year: 3 h 20 mi
 | Balance | double; floor 0, ceiling 4,000,000,000 (`CMoney::Adjust` 0x4818B0) | file 0x168BC | VERIFIED-C |
 | Interest | `UpdateInterest` 0x481D80: whole game days (86,400 game s) since the last payment; pays balance x rate x min(days, 2); the date advances by all elapsed days. **At most 2 days are paid after any gap.** Called from the happiness state (every 30 min) and elsewhere. | CMoney+0x0C at file 0x168C4 | VERIFIED-C |
 | Rate | default **0.10 per game day** (`Reset` writes 0x3DCCCCCD); saved as percent x 100 in the low 16 bits | file 0x168C0 | VERIFIED-C |
+| Special Upgrades page (category 0x14) | B200 core: 10 items, `gServicesList` 0x56F100 = 0x111, 0x112, 0x113, 0x115, 0x116, 0x114 and the patcher's always-on rows 0x117..0x11A (Brokerage Account, Food Club, Health Plan, Lucky Rock). **Unpatched game: 6 items** (0x111, 0x112, 0x113, 0x115, 0x116, 0x114), none of the four (section 22). | | VERIFIED-E both (2026-10-25: `GetCategoryItemCount` / `GetCategoryItem` run as linked in each exe) |
 | Brokerage Account (0x117, patcher-visible) | not owned (rate <= 0.1001): rate + 0.02, capped 0.11 -> **11%**. Buying it again removes it: rate = **0.01** (1%) | rate field | VERIFIED-E (2026-10-25: `CScrollingStoreScene::HandlePurchaseItem` 0x48C110, from `HandleMouse` 0x48BAEE / 0x48BC78, charges `CalcPrice` then calls 0x4B8B50 for items 0x117..0x11A; run as linked from 0.10, seven purchases give 0.11, 0.01, 0.03, 0.05, 0.07, 0.09, 0.11: after the 1% each purchase adds 2 points until 11% again). `UpdateInterest` run as linked, balance 1,000 at 0.10: 1 day +100.005, 2 days +200.005, 3 or 10 days +200.005 with the date moved by all of them. |
 | Food Club (0x118) | `JoinFoodClub`: active byte FoodStore+0x7C, delivery now; `CFoodStore::Update` delivers 500 food x whole game days missed (no cap) and refreshes all 4 food groups; also +60 food whenever a villager finds food < 60. Removing clears the flag. | FoodStore file 0xE3BC.. | VERIFIED-C |
 | Health Plan (0x119) | gs+0x25B1D; stock `GetPrice` divides items 0x18..0x21 (medicine) by 4; ownership stored by the patcher in hidden achievement record 0xA8+0x08 bit 0 | | UNCONFIRMED (price path is player input) |
@@ -383,7 +385,7 @@ the 11 malfunction props 0x17, 0x1A-0x1D, 0x1F-0x21, 0x48-0x4A). The meaning of 
 
 | Item | Rule | Real time | Status |
 |---|---|---|---|
-| Flea Market | B200 lists **all 36 `gGoodiesList` items at all times; it never rotates.** `CInventoryManager::GetCategoryItemCount` 0x46B6D0 first calls the patcher's `VF2GetExpandedFleaMarketCount` 0x4B9A90, which returns 36 for category 15 (the Flea Market) unconditionally, and `GetCategoryItem` 0x46B210 likewise returns `gGoodiesList[i]` from `VF2GetExpandedFleaMarketItem` 0x4B9AB0. `MaybeUpdateRotatingItems` 0x46BEB0 has one caller, the category-15 case at 0x46B7A3, which is therefore never reached. | never changes (the in-game tips 0x873 / 0xA16 still say it changes 3 / several times a day) | VERIFIED-E (2026-10-25: count and items emulated at real s 100,000, +21,601 and +86,400: 36 each time, equal to `gGoodiesList`, the rotation never ran). *Superseded, wrong for B200:* "5 of the 36 shuffled in, next change now + 21,600 real s, every 6 real hours" (the stock code, now dead). |
+| Flea Market | B200 lists **all 36 `gGoodiesList` items at all times; it never rotates.** `CInventoryManager::GetCategoryItemCount` 0x46B6D0 first calls the patcher's `VF2GetExpandedFleaMarketCount` 0x4B9A90, which returns 36 for category 15 (the Flea Market) unconditionally, and `GetCategoryItem` 0x46B210 likewise returns `gGoodiesList[i]` from `VF2GetExpandedFleaMarketItem` 0x4B9AB0. `MaybeUpdateRotatingItems` 0x46BEB0 has one caller, the category-15 case at 0x46B7A3, which is therefore never reached. | never changes (the in-game tips 0x873 / 0xA16 still say it changes 3 / several times a day) | VERIFIED-E (2026-10-25: count and items emulated at real s 100,000, +21,601 and +86,400: 36 each time, equal to `gGoodiesList`, the rotation never ran). *Superseded, wrong for B200:* "5 of the 36 shuffled in, next change now + 21,600 real s, every 6 real hours" (the stock code, now dead). **Unpatched game** (stock exe, section 22): 5 of the 36 shuffled in, picked again when the Flea Market is opened more than 21,600 real s after the last pick (real seconds since the family's start: they count while paused and while closed); VERIFIED-E (2026-10-25: from the store menu's Flea Market row, `SetStoreCategory(15)` 0x432050 -> `GetCategoryItemCount` 0x4BB0A0 -> `MaybeUpdateRotatingItems` 0x4BA710, run as linked after `Reset` 0x4BA8F0: 5 goods at T, the same 5 at T + 21,600, 5 new at T + 21,601 and at T + 86,400). |
 | On Sale | `MaybeUpdateSaleItems` 0x46C000: every **86,400 game s**, 3 unlocked, non-pet furniture items 0x1AD..0x2A8 | every 24 real hours on speed 10 | VERIFIED-C (the discount is in the price code: UNCONFIRMED) |
 | Renovations | the 10 house renovations 0xE1..0xEA each add +5 happiness trend every 30 min (section 2); 0xE6 enables the north-bathroom leaks | | VERIFIED-C |
 
@@ -412,6 +414,7 @@ and while paused), **G** = game seconds (`CGameTime::Seconds`, frozen while paus
 | House malfunction | per step | S | 1 / 800 | mean 26.7 min, also while paused | VERIFIED-C |
 | Weather spell | Weather+0x08 | G | Normal 900..2,399 s, others 360..719 s | 15-40 min / 6-12 min | VERIFIED-C |
 | Flea Market | InventoryManager+0x4A0 | R | none in B200 (stock 21,600 s; that code is unreachable, section 16) | never | VERIFIED-E |
+| Flea Market, unpatched game | InventoryManager+0x4A0 | R | 21,600 s, checked when the Flea Market is opened (stock exe, section 22) | 6 h | VERIFIED-E |
 | On Sale | InventoryManager+0x484 | G | 86,400 s | 24 h | VERIFIED-C |
 | Day / night | PC local clock | wall clock | | follows the PC clock | VERIFIED-C |
 | Villager positions refresh | gs+0x25CD4 | R | 40 s (`TakePositions`) | 40 s | VERIFIED-C |
@@ -476,7 +479,7 @@ UNCONFIRMED here.
    B200 (nothing sets option 20); relevant only if Time Controls (B201) ships.
 4. **Flea Market** rotates every 6 real hours while the game's own tip says three times a day.
    *Answered 2026-10-25: false for B200.* The expanded Flea Market lists all 36 items and the rotation is never
-   reached (section 16).
+   reached (section 16). *True for the unpatched game* (section 22): the window shows both.
 5. House malfunction rolls run while the game is paused (the 2-second step has no pause check).
    *Re-verified 2026-10-25 (VERIFIED-E):* the step 0x4A266E..0x4A28F9 run as linked with the speed option at 10
    and at 1009 (paused) both reach `GetRandom(800)` and then the malfunction pick `GetRandom(14)`; the step's clock
@@ -492,3 +495,53 @@ UNCONFIRMED here.
 `events_dump.txt`, `rindex.py` -> `rand_sites.tsv`, `rand_reach.py` -> `rand_index.tsv`, `frame_sites.txt`.
 Nothing in any repo, save or install was changed; no game was launched.
 
+## 22. The unpatched game (stock executable), 2026-10-25
+
+Target: `work/vanilla_runtime_payload/Virtual Families 2.exe` (the patcher's vanilla payload, sha256
+1582d9e84e1c32f5...). It is a different compile of the same game (frame-pointer omission, no symbols; the desktop
+objects place only 67 functions in it), so every routine below was located by matching the B200 routine's constants,
+struct offsets and call shape, and then compared instruction by instruction. Nothing was inferred from names.
+
+**Same in the stock exe (adds nothing to the window):** `UpdateScene` 0x4400F0 (2-second step, island-event timer
+66% / 3,600 game s, malfunction 1 in 800 then 1 of 14 or 17 with the same 17-case table 0x441160, service-worker
+timers, pause checks); `AllVillagersTimeflowUpkeep` 0x499700 (86,400 / 31,000 / 38,200 / 23,800 caps, paused zero,
+college at 380 units, body removal at 240 units); the physiology upkeep 0x49B840 (hunger, salary x 6 / 24, poo,
+eating, waste, no food, sickness, recovery, old age 1,100 + 20N units, birth and the baby waiting time, catch-up
+work, longevity goals); `FoodGroupsActive` 0x4A0A80 (five slots: the Grains quirk is stock); `UpdateDisease`
+0x4A13F0; `UpdateEnergyState` 0x4A1320; `UpdateHealthState` 0x4A0AD0; `UpdateHappinessState` 0x4A0B80 (the same 10
+renovations 0xE1..0xEA); `SetSymptom` 0x4A09D0; `ChanceOfPregnancy` 0x4A0810; `Impregnate` 0x495360;
+`AddOffspring` 0x490360 and the 6-child limit 0x48FEC0; `ReportDeath` 0x4905D0; `CVillagerSkills::Reset` 0x49FAF0
+and `AdvanceCareer` 0x4A01B0 (6% pay, 3,000 progress); `RealtimeWorkDone` 0x4985A0; `CMoney::Reset` 0x427C20 (rate
+0.10), `UpdateInterest` 0x428150 (at most 2 days), `Adjust` 0x428050 (0 .. 4,000,000,000); start money rand(140) + 50
+(0x42AA62); `CFoodStore::Update` / `JoinFoodClub`; the dating and founder candidates 0x42FD80 / 0x42DF60; `CWeather`
+0x4A3F80 / 0x4A3DA0 (900 + rand(1,500), 360 + rand(360)); `CCollectableItem::Update` 0x415310 (rand(6,600 / 3,300),
+messes every 300 / 150 game minutes) and `Add` 0x415090 (4 / 13%, Lucky Rock 8 / 26%); `MaybeUpdateSaleItems`
+0x4BAFA0; `HandleUpgrade` 0x432530 (time skip 3,660 x option, the $750 cap, the Lotto table); the speed option's
+writers (10, +999, -999 then 0 -> 10). The 96 island events are registered in the same order (`CIslandEvents`
+constructor 0x41C8E0) and every `CanFire`, `CalcAward` and `ImpactGame` matched by title key has the same constants
+and calls.
+
+**Different (each shown both ways in the window):**
+
+| Item | B200 core (with the patcher) | Unpatched game (stock exe) | Status |
+|---|---|---|---|
+| Flea Market | all 36 goods, never changes (`VF2GetExpandedFleaMarketCount` 0x4B9A90, always on) | 5 of the 36 goods, re-picked when opened more than 21,600 real s after the last pick (`MaybeUpdateRotatingItems` 0x4BA710) | VERIFIED-E both |
+| Special Upgrades page | 10 items: the stock 6 and the Brokerage Account, Food Club, Health Plan, Lucky Rock (`patch_visible_special_upgrades`, always on) | 6 items (0x556E3C): none of the four | VERIFIED-E both |
+
+**Reachability of the stock Flea Market** (VERIFIED-C path, VERIFIED-E outcome): `theMainScene::HandleMessage`
+0x441EAB opens the store on its menu, `SetStoreCategory(0x17)`; `CScrollingStoreScene::HandleMouse` 0x4340E0, on
+the menu (0x434227), reads the clicked row's category from table 0x5346E0 (0x4345CA) and calls
+`SetStoreCategory` 0x432050; row 1 is string 0x487 "Flea Market", category 15. `SetStoreCategory` calls
+`GetCategoryItemCount` 0x4BB0A0, whose case 15 (jump table 0x4BB17C) calls the rotation and returns +0x49C (5).
+Emulated from that caller after `CInventoryManager::Reset` 0x4BA8F0 (a new family: all 36 goods can be picked):
+real s 100,000 -> 5 goods, next change 121,600; 121,600 -> the same 5; 121,601 -> 5 new; 186,400 -> 5 new.
+
+**UNCONFIRMED (not on the window):** both exes also keep the game's "Coins and More!" store page (category 0x16,
+`HandlePurchaseItem` 0x433A60 stock / 0x48BF20 B200, identical code): coin packs, and the same four upgrades (the
+Brokerage Account there adds 2 points). It is reached through the purchase dialog's "Get more coins" button (result
+1 -> `HandleMoreBucksRequest` 0x432500); whether that button is ever shown was not traced. It is the same with and
+without the patcher, so the window adds nothing for it.
+
+Scripts (outside the repo, scratchpad `gm2`): `fp.py` / `sweep.py` (routine matching), `consts.py`, `evmap2.py`
+(events by title key), `stock_flea.py`, `special_upgrades.py`; the repo test is
+`tests/test_game_mechanics_stock_exe.py` (skipped without the stock exe).
