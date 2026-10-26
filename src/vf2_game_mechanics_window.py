@@ -1,7 +1,7 @@
 """The Game Mechanics window (the Tools tab's "Game Mechanics..." link): Virtual Families 2's hidden rules.
 
 Laid out as the Virtual Villagers patcher's Game Mechanics window: an intro, the line that explains the labels, a
-link to each group at the top, then the page in a read-only Text box with its own scroll bar that takes the rest
+button for each group at the top, then the page in a read-only Text box with its own scroll bar that takes the rest
 of the resizable window, each group under its heading and every line a bullet.  Each line carries its label right
 after the bullet -- VERIFIED-E, VERIFIED-C or UNCONFIRMED (src/vf2_game_mechanics.py) -- in capitals and in its
 own colour, so it is always visible.  Times are real times at the game's normal speed.
@@ -13,10 +13,10 @@ from __future__ import annotations
 
 import contextlib
 import tkinter as tk
-import tkinter.font as tkfont
 from tkinter import ttk
 
 import vf2_game_mechanics as gm
+from vf2_tree_editor_tools import TOOL_HEADING_SPACING, tool_fonts, tool_text
 
 TITLE = gm.TITLE
 WIDTH, HEIGHT = 900, 720
@@ -25,9 +25,7 @@ MIN_WIDTH, MIN_HEIGHT = 600, 600
 # 12-pixel padding each side); in 3 they need 511 (tests/test_game_mechanics.py).
 LINKS_PER_ROW = 3
 PADDING = 12
-LABEL_COLOURS = {gm.VERIFIED_E: "#1b6e20", gm.VERIFIED_C: "#1f4e9c", gm.UNCONFIRMED: "#b00020"}
-# The VF1 patcher's Game Mechanics fonts, so the two patchers' tools look the same (the owner prefers VF1's).
-PAGE_FONT, HEADING_FONT, LABEL_FONT = ("Segoe UI", 10), ("Segoe UI", 12, "bold"), ("Segoe UI", 9, "bold")
+LABEL_COLOURS = {gm.VERIFIED_E: "#1b6e20", gm.VERIFIED_C: "#245a9a", gm.UNCONFIRMED: "#b00020"}   # as VF1's page
 NOTE_RED = LABEL_COLOURS[gm.UNCONFIRMED]
 
 
@@ -60,18 +58,20 @@ def open_game_mechanics(parent: tk.Misc) -> tk.Toplevel:
     body = ttk.Frame(outer)
     body.pack(fill="both", expand=True)
 
-    page = tk.Text(body, wrap="word", padx=10, pady=8, cursor="arrow", borderwidth=1, relief="solid",
-                   font=PAGE_FONT)
+    # The tool windows' fonts (the VF1 patcher's, as the Virtual Villagers patcher's): Segoe UI 10, headings 12 bold,
+    # labels 9 bold.
+    fonts = tool_fonts(window)
+    page = tool_text(body, wrap="word", padx=8, pady=8, cursor="arrow", borderwidth=1, relief="solid")
     scroll = ttk.Scrollbar(body, orient="vertical", command=page.yview)
     page.configure(yscrollcommand=scroll.set)
     scroll.pack(side="right", fill="y")
     page.pack(side="left", fill="both", expand=True)
 
-    page.tag_configure("heading", font=HEADING_FONT, spacing1=10, spacing3=4)
+    page.tag_configure("heading", font=fonts["heading"], **TOOL_HEADING_SPACING)
     page.tag_configure("line", lmargin1=8, lmargin2=28, spacing3=2)
     page.tag_configure("sub", lmargin1=28, lmargin2=48, spacing3=1)
     for label, colour in LABEL_COLOURS.items():
-        page.tag_configure(label, foreground=colour, font=LABEL_FONT)
+        page.tag_configure(label, foreground=colour, font=fonts["label"])
 
     marks: dict[str, str] = {}
     for kind, label, text in gm.render_lines():
@@ -92,13 +92,12 @@ def open_game_mechanics(parent: tk.Misc) -> tk.Toplevel:
         page.see(marks[group])
         page.yview(marks[group])
 
-    link_font = tkfont.nametofont("TkDefaultFont").copy()   # underlined, as the patcher's own links
-    link_font.configure(underline=True)
-    window.mechanics_fonts = (link_font,)             # kept while the window is open
+    # A button for each group, as the Virtual Villagers patcher's window.
     for index, group in enumerate(gm.GROUPS):
-        link = ttk.Label(links, text=group, foreground="#0645ad", cursor="hand2", font=link_font)
-        link.grid(row=index // LINKS_PER_ROW, column=index % LINKS_PER_ROW, sticky="w", padx=(0, 18), pady=1)
-        link.bind("<Button-1>", lambda _event, g=group: jump(g))
+        ttk.Button(links, text=group, command=lambda g=group: jump(g)).grid(
+            row=index // LINKS_PER_ROW, column=index % LINKS_PER_ROW, sticky="we", padx=(0, 4), pady=(0, 2))
+    for column in range(LINKS_PER_ROW):
+        links.columnconfigure(column, weight=1)
 
     close = ttk.Button(buttons, text="Close", command=window.destroy)
     close.pack(side="right")

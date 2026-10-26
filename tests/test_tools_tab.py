@@ -91,9 +91,29 @@ class ToolsTabTests(unittest.TestCase):
                 walk(child)
 
         walk(self.app.tools_tab)
-        self.assertIn("Back Up Saves...", labels)
+        self.assertIn("Back Up Saves", labels)
         self.assertIn("Restore Saves...", labels)
         self.assertIn("How to Use...", labels)
+
+    def test_the_tools_tab_is_laid_out_as_the_virtual_villagers_patchers(self):
+        """One box for the game: the save folders found, then the save tools in a row and the family and game tools
+        in the next, each link with its "?"; then the guide (as the Virtual Families 1 patcher's tab)."""
+        found = []
+
+        def walk(widget):
+            for child in widget.winfo_children():
+                found.append(child)
+                walk(child)
+
+        walk(self.app.tools_tab)
+        links = [str(w.cget("text")) for w in found
+                 if w.winfo_class() == "TLabel" and str(w.cget("style")) == "Link.TLabel"]
+        self.assertEqual(links, ["Back Up Saves", "Restore Saves...", "Rename Family...", "Game Speed...",
+                                 "Family Tree Maker...", "Game Mechanics...", "How to Use..."])
+        boxes = [str(w.cget("text")) for w in found if w.winfo_class() == "TLabelframe"]
+        self.assertEqual(boxes, ["Virtual Families 2", "How to Use"])
+        self.app._refresh_saves_found()
+        self.assertEqual(self.app.saves_found_var.get(), "Save folders found: " + FOLDER)
 
     def test_every_guide_has_a_question_mark_button_that_opens_it(self):
         # A setting's guide has its "?" on the setting's row (see the next test); every other guide's "?" is
@@ -180,7 +200,7 @@ class ToolsTabTests(unittest.TestCase):
 
     def test_restore_with_no_backups_says_so(self):
         self.assertIsNone(self.app.restore_saves())
-        self.assertIn("no save backups", self.info.call_args.args[1])
+        self.assertIn("There are no backups of Virtual Families 2 yet", self.info.call_args.args[1])
 
     def _backed_up(self):
         info = sb.copy_save_folder(self.folder, datetime(2026, 10, 24, 12, 0, 0))
@@ -262,13 +282,22 @@ class ToolsTabTests(unittest.TestCase):
         self._real_saves()
         dialog = self.app.rename_family()
         try:
-            self.assertEqual(dialog._vf2_slot_var.get(), 1)            # slot 5 holds b"family five": not offered
-            self.assertEqual(dialog._vf2_name_var.get(), "Lorsieab2")
+            # Laid out as the Virtual Villagers patcher's Rename Tribe: a save folder, a list of families, a new name.
+            self.assertEqual(dialog._vf2_folder_box.get(), FOLDER)
+            self.assertEqual(dialog._vf2_slot_list.get(0), "Save 1: Lorsieab2")
+            self.assertEqual(dialog._vf2_slot_list.curselection(), (0,))   # slot 5 holds b"family five": not chosen
+            self.assertEqual(dialog._vf2_name_var.get(), "")
+            self.assertEqual(dialog._vf2_counter_var.get(), "0 / 19 characters")
+            self.assertEqual(str(dialog._vf2_rename_button.cget("state")), "disabled")
+            dialog._vf2_name_var.set("Lorsieab2")
             self.assertIn("already", dialog._vf2_problem_var.get())
             dialog._vf2_name_var.set("A" * 20)
             self.assertIn("19", dialog._vf2_problem_var.get())
             dialog._vf2_name_var.set("NEW PLAYER")
             self.assertIn("empty slot", dialog._vf2_problem_var.get())
+            dialog._vf2_choose(4)
+            self.assertIn("not a Virtual Families 2 save", dialog._vf2_problem_var.get())
+            self.assertEqual(str(dialog._vf2_rename_button.cget("state")), "disabled")
             before = self._snapshot()
             dialog._vf2_start()                                        # refused: nothing is written
             self.assertEqual(self._snapshot(), before)
@@ -281,15 +310,20 @@ class ToolsTabTests(unittest.TestCase):
         self._real_saves()
         dialog = self.app.rename_family()
         dialog._vf2_name_var.set("The Smiths")
-        with mock.patch.object(gui.messagebox, "askyesno", return_value=True):
+        with mock.patch.object(gui.messagebox, "askyesno", return_value=True) as ask:
             dialog._vf2_start()
+        self.assertIn('"Lorsieab2" (Save 1)', ask.call_args.args[1])
         save = reader.read_family_save(self.folder / "Virtual Families 21.ldw")
         self.assertEqual(save.nickname, "The Smiths")
         self.assertEqual(reader.read_settings(self.folder / "Virtual Families 20.ldw").player_names[0], "The Smiths")
         backups = sb.list_backups(self.folder)
         self.assertTrue(backups and backups[0].before_rename)
-        self.assertEqual(self.app.status_var.get(), "Rename Family: family slot 1 is now called The Smiths.")
+        self.assertEqual(self.app.status_var.get(), "Rename Family: Lorsieab2 is now The Smiths.")
         self.info.assert_called()
+        self.assertIn('"Lorsieab2" is now "The Smiths" (Save 1, ' + FOLDER + ")", self.info.call_args.args[1])
+        self.assertTrue(dialog.winfo_exists())                         # it stays open, as Rename Tribe does
+        self.assertEqual(dialog._vf2_slot_list.get(0), "Save 1: The Smiths")
+        dialog.destroy()
 
     def test_a_running_game_stops_the_rename(self):
         self._real_saves()
@@ -367,25 +401,28 @@ class ToolsTabTests(unittest.TestCase):
         self._speed_saves()
         dialog = self.app.game_speed()
         try:
-            self.assertEqual(dialog._vf2_slot_var.get(), 1)
+            self.assertEqual(dialog._vf2_slot_list.curselection(), (0,))
+            self.assertTrue(dialog._vf2_slot_list.get(0).startswith("Save 1: "))
             self.assertEqual(dialog._vf2_target_var.get(), "Normal")       # slot 1 is paused
             dialog._vf2_target_var.set("Paused")
             self.assertIn("already", dialog._vf2_problem_var.get())
+            self.assertEqual(str(dialog._vf2_set_button.cget("state")), "disabled")
             before = self._snapshot()
             dialog._vf2_start()                                          # refused: nothing is written
             self.assertEqual(self._snapshot(), before)
-            dialog._vf2_slot_var.set(2)
+            dialog._vf2_choose(1)
             self.assertEqual(dialog._vf2_target_var.get(), "Paused")
             with mock.patch.object(gui.messagebox, "askyesno", return_value=True) as ask:
                 dialog._vf2_start()
             self.assertIn("from Normal to Paused", ask.call_args[0][1])
+            self.assertTrue(dialog.winfo_exists())                       # it stays open, as Rename Family does
         finally:
             if dialog.winfo_exists():
                 dialog.destroy()
         states = {s.slot: s.state.label for s in gsp.read_slots(self.folder) if s.state}
         self.assertEqual(states, {1: "Paused", 2: "Paused"})
         self.assertTrue(sb.list_backups(self.folder)[0].before_speed_change)
-        self.assertEqual(self.app.status_var.get(), "Game Speed: family slot 2 is now Paused.")
+        self.assertEqual(self.app.status_var.get(), "Game Speed: Save 2 is now Paused.")
         self.info.assert_called()
 
     def test_a_running_game_stops_the_speed_change(self):

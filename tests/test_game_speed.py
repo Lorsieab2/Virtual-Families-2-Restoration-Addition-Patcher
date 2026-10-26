@@ -158,7 +158,7 @@ class WriteTests(unittest.TestCase):
         slots = {s.slot: s for s in gs.read_slots(self.folder)}
         self.assertTrue(slots[1].label.endswith("- Paused"))
         self.assertTrue(slots[2].label.endswith("- Normal"))
-        self.assertEqual(slots[3].label, "Family slot 3: (empty)")
+        self.assertEqual(slots[3].label, "Save 3: (empty)")
 
     def test_set_speed_backs_up_writes_only_the_slot_save_and_reads_it_back(self):
         before = self.snapshot()
