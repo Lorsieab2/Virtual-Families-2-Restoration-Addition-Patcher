@@ -26,6 +26,8 @@ MIN_WIDTH, MIN_HEIGHT = 600, 600
 LINKS_PER_ROW = 3
 PADDING = 12
 LABEL_COLOURS = {gm.VERIFIED_E: "#1b6e20", gm.VERIFIED_C: "#1f4e9c", gm.UNCONFIRMED: "#b00020"}
+# The VF1 patcher's Game Mechanics fonts, so the two patchers' tools look the same (the owner prefers VF1's).
+PAGE_FONT, HEADING_FONT, LABEL_FONT = ("Segoe UI", 10), ("Segoe UI", 12, "bold"), ("Segoe UI", 9, "bold")
 NOTE_RED = LABEL_COLOURS[gm.UNCONFIRMED]
 
 
@@ -58,23 +60,18 @@ def open_game_mechanics(parent: tk.Misc) -> tk.Toplevel:
     body = ttk.Frame(outer)
     body.pack(fill="both", expand=True)
 
-    page = tk.Text(body, wrap="word", padx=10, pady=8, cursor="arrow")
+    page = tk.Text(body, wrap="word", padx=10, pady=8, cursor="arrow", borderwidth=1, relief="solid",
+                   font=PAGE_FONT)
     scroll = ttk.Scrollbar(body, orient="vertical", command=page.yview)
     page.configure(yscrollcommand=scroll.set)
     scroll.pack(side="right", fill="y")
     page.pack(side="left", fill="both", expand=True)
 
-    probe_font = tkfont.nametofont(page.cget("font"))
-    bold = probe_font.copy()
-    bold.configure(weight="bold")
-    heading = probe_font.copy()
-    heading.configure(weight="bold", size=probe_font.cget("size") + 2)
-    window.mechanics_fonts = (bold, heading)          # kept while the window is open
-    page.tag_configure("heading", font=heading, spacing1=10, spacing3=4)
+    page.tag_configure("heading", font=HEADING_FONT, spacing1=10, spacing3=4)
     page.tag_configure("line", lmargin1=8, lmargin2=28, spacing3=2)
     page.tag_configure("sub", lmargin1=28, lmargin2=48, spacing3=1)
     for label, colour in LABEL_COLOURS.items():
-        page.tag_configure(label, foreground=colour, font=bold)
+        page.tag_configure(label, foreground=colour, font=LABEL_FONT)
 
     marks: dict[str, str] = {}
     for kind, label, text in gm.render_lines():
@@ -95,8 +92,11 @@ def open_game_mechanics(parent: tk.Misc) -> tk.Toplevel:
         page.see(marks[group])
         page.yview(marks[group])
 
+    link_font = tkfont.nametofont("TkDefaultFont").copy()   # underlined, as the patcher's own links
+    link_font.configure(underline=True)
+    window.mechanics_fonts = (link_font,)             # kept while the window is open
     for index, group in enumerate(gm.GROUPS):
-        link = ttk.Label(links, text=group, foreground="#1a5fb4", cursor="hand2")
+        link = ttk.Label(links, text=group, foreground="#0645ad", cursor="hand2", font=link_font)
         link.grid(row=index // LINKS_PER_ROW, column=index % LINKS_PER_ROW, sticky="w", padx=(0, 18), pady=1)
         link.bind("<Button-1>", lambda _event, g=group: jump(g))
 
