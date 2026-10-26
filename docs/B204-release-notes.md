@@ -40,4 +40,15 @@ A family started before the patch gets its earlier generations added once from i
 - Full test suite with release-only tests, against this matrix: 2265 passed, 36 skipped. Four test files failed first, none from the shipped code: two checked the README's setting counts (updated for the new setting, then 33 passed), and two said this checkout's generated build files were older than the generator, which #437 changed; at the same commit, in a worktree that had just run the generator, they passed (29 passed). The Family History tests ran in full, 160 passed, including the loader end to end in the built B204 executable.
 - The bundle reproduces the build on a clean install and passed the release gate: **RELEASE GATE PASSED**, with no features lost against 24 retained releases (B179 to B203).
 - **No live test** of the Family History log or the Family Tree Maker has been done.
-- Asset: `VF2-B204-Release.zip`, 163,938,534 bytes, SHA-256 `7c0f9eec9dbf18417f7a7da6eddb12c07eb2e41e99d444abcbefa9f60e7b3b1f`.
+- Asset: `VF2-B204-Release.zip`, 163,944,648 bytes, SHA-256 `082cb1291eb7212517680a2c891fbe6631cb4d768399192417e6070fa29e785e`.
+
+## Updated in place (2026-10-26)
+
+The bundle was re-exported from `main` at `f0911bd` (PR #440) from the same 32 executables and the same three DLLs (identities unchanged), and passed the release gate again (no features lost against 24 retained releases). The full suite: 2274 passed, 37 skipped; the only failures were the same two checkout-only "generated files older than the generator" tests as above (the generator has not changed since `412660f`, where they passed). Only the patcher's own tools changed, to work like the Virtual Villagers patcher's tools:
+
+- **Tools tab:** one box named for the game, with the save folders it found and a row of links, each with its "?". "Family slot N" now reads "Save N".
+- **Rename Family and Game Speed:** now use the Virtual Villagers patcher's Rename Tribe form: save folder, family list, a name box with a character counter, and the window stays open. Restore Saves scrolls.
+- **Back Up Saves:** like the Virtual Villagers patcher, it now sets the backed-up copy's game speed to Paused. A restored backup opens paused and never catches up on the time since it was made. Your own saves are never changed.
+- **Family Tree Maker fix:** it opened the last save folder in the list instead of the one chosen.
+- Every patcher window can be minimized and maximized.
+- The first B204 zip (SHA-256 `7c0f9eec...`) is replaced.
