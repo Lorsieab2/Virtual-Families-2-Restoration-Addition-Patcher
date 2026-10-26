@@ -1,8 +1,9 @@
-"""A release bundle carries both companion DLLs.
+"""A release bundle carries every companion DLL.
 
 Every executable since B201 has the dormant Time Controls loader (.vf2time) and,
-since Up to 28 Children, the .vf2kids loader too. The exporter refuses such a
-build unless it is handed the DLLs (--time-controls-dll, --up-to-28-children-dll),
+since Up to 28 Children, the .vf2kids loader too (and, from the Family History
+log on, the .vf2hist loader). The exporter refuses such a build unless it is
+handed the DLLs (--time-controls-dll, --up-to-28-children-dll, --family-history-dll),
 and export_release_bundle.py, the script a release is made with, passed
 neither: B201 was exported only after a hand edit to it that was never
 committed, and a B202 export from main stopped at "pass --time-controls-dll".
@@ -79,6 +80,7 @@ class TheReleaseScriptHandsOverBothDlls(unittest.TestCase):
     def test_the_exporter_knows_both_flags(self):
         self.assertIn("--time-controls-dll", self.help_text)
         self.assertIn("--up-to-28-children-dll", self.help_text)
+        self.assertIn("--family-history-dll", self.help_text)
 
     def test_by_default_the_runtime_build_dlls_are_passed(self):
         self.assertEqual(7, self._run(), "the exporter's exit code is the script's")
@@ -86,17 +88,27 @@ class TheReleaseScriptHandsOverBothDlls(unittest.TestCase):
                          (self.tmp / "runtime" / "build" / "vf2time_b200.dll").resolve())
         self.assertEqual(Path(self._value("--up-to-28-children-dll")),
                          (self.tmp / "runtime" / "build" / "vf2kids_b200.dll").resolve())
+        self.assertEqual(Path(self._value("--family-history-dll")),
+                         (self.tmp / "runtime" / "build" / "vf2history_b200.dll").resolve())
 
     def test_named_dlls_are_passed_as_given(self):
         time_dll = self.tmp / "staged" / "vf2time_b200.dll"
         kids_dll = self.tmp / "staged" / "vf2kids_b200.dll"
+        history_dll = self.tmp / "staged" / "vf2history_b200.dll"
         self.assertEqual(7, self._run("--time-controls-dll", str(time_dll),
-                                      "--up-to-28-children-dll", str(kids_dll)))
+                                      "--up-to-28-children-dll", str(kids_dll),
+                                      "--family-history-dll", str(history_dll)))
         self.assertEqual(Path(self._value("--time-controls-dll")), time_dll.resolve())
         self.assertEqual(Path(self._value("--up-to-28-children-dll")), kids_dll.resolve())
+        self.assertEqual(Path(self._value("--family-history-dll")), history_dll.resolve())
 
     def test_an_exporter_without_the_flag_is_refused(self):
         self.help_text = self.help_text.replace("--up-to-28-children-dll", "--something-else")
+        self.assertEqual(1, self._run())
+        self.assertIsNone(self.exporter_argv, "exported although the DLL could not be passed")
+
+    def test_an_exporter_without_the_family_history_flag_is_refused(self):
+        self.help_text = self.help_text.replace("--family-history-dll", "--something-else")
         self.assertEqual(1, self._run())
         self.assertIsNone(self.exporter_argv, "exported although the DLL could not be passed")
 

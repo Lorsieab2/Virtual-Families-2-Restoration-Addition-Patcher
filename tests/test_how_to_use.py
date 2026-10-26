@@ -51,6 +51,15 @@ class GuideContentTests(unittest.TestCase):
         self.assertIn("changes nothing", guides.guide("game_mechanics").text)
         self.assertIn("Patcher Data", guides.guide("back_up_saves").text)
 
+    def test_the_family_history_setting_is_covered(self):
+        self.assertIn("family_history", guides.keys())
+        self.assertEqual(guides.setting_keys(), ["family_history"])
+        text = guides.guide("family_history").text
+        for needle in ("Experimental", "Family History", "remarriage", "divorce", "Twins and triplets",
+                       "Email Event", "Popup Event", "current spouse", "backfilled, no date", "head and body",
+                       "Virtual Families 2 Patcher\\Save N\\Logs\\Family History", "back up your saves"):
+            self.assertIn(needle, text)
+
     def test_unknown_key_fails_loudly(self):
         with self.assertRaises(KeyError):
             guides.guide("no_such_control")

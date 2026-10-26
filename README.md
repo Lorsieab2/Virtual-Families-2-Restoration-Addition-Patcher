@@ -288,6 +288,33 @@ release bundle, like almost everything else)
   (`vf2kids_b200.dll`) in the Virtual Families 2 Patcher Files folder does the work; with the setting
   off it is not installed and the executable never loads it. **Not live tested yet** -- see
   `docs/b200-up-to-28-children.md` for the evidence and what is not covered.
+- **Family History log** (`.vf2hist`, in the **Experimental** section, off by default; Enable All and
+  `--enable-all` leave it off; added after B203, not yet in a release, and it needs executables built
+  with its loader, so it arrives with the next matrix build) - one Family History log per family, in the
+  format of the Virtual Families 1 patcher's Family History: one dated record per event, in
+  `Virtual Families 2 Patcher\Save N\Logs\Family History\Family History <k>.txt` in the save folder,
+  rolling to the next numbered file after 2000 records. Each record is the Virtual Villagers patcher's
+  layout: a heading `[YYYY-MM-DD HH:MM:SS] <Kind> <n>` (Conception, Birth, Death, Marriage, Divorce,
+  Arrived, Left Home, Generation, New Generation, Renamed, Random Event, Evict Family, Start Over, Family
+  Renamed, Family Tree), then `  Label: value` lines and a blank line; each family member is written as
+  that patcher writes a villager: the name, then the age, sex, head and body. It records
+  marriages and remarriages, same-sex ones included (naming the current spouse and the earlier one, and
+  whether that one died or was divorced), spouses lost to divorce (the patcher's Divorce Spouse) or death,
+  every conception and birth (twins and triplets marked, with both parents), every death with the game's own
+  cause and the person's age, children who join (Adoption Services, The Little Visitor) or leave home
+  (college, Boarding School, The Talent Scout), each new generation and its heir, a rename in the Details
+  box, a new family, Start Over and Evict Family, and every Random Event as `Email Event: <subject>` or
+  `Popup Event: <title>`, the text its dialog shows, with the choice made. Rename Family (Tools tab) adds a
+  `Family Renamed` record to a slot
+  that has a log. Virtual Families 2 has no family surname, so each file is headed with the player name the save holds. An
+  existing family's past is filled in once from its Family Tree, marked "backfilled, no date". No other
+  file is written: an earlier spouse and why they left (the game erases a childless spouse's Family Tree
+  record at death, and Divorce Spouse clears it) are read back from the log's own records. A new family or
+  Start Over in a save slot starts that slot's log again (a `Backups` folder in it is kept); Evict Family keeps it. The
+  save file is not changed. A companion DLL (`vf2history_b200.dll`) in the Virtual Families 2 Patcher Files
+  folder does the work; with the setting off it is not installed and the executable never loads it.
+  Experimental: not yet tested in a running game. Back up your saves before using it. **Not live tested
+  yet** -- see `docs/FAMILY_HISTORY.md` for every hook, its evidence and what is not covered.
 
 **Asset and UI mods**
 

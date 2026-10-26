@@ -96,14 +96,48 @@ class ToolsTabTests(unittest.TestCase):
         self.assertIn("How to Use...", labels)
 
     def test_every_guide_has_a_question_mark_button_that_opens_it(self):
-        self.assertEqual(self.app.help_keys - {"getting_started"}, set(guides.keys()) - {"getting_started"})
-        self.assertEqual(self.app.help_keys, set(guides.keys()))
+        # A setting's guide has its "?" on the setting's row (see the next test); every other guide's "?" is
+        # there from the start.
+        controls = set(guides.keys()) - set(guides.setting_keys())
+        self.assertEqual(self.app.help_keys - {"getting_started"}, controls - {"getting_started"})
+        self.assertEqual(self.app.help_keys, controls)
         for key in guides.keys():
             with self.subTest(key=key):
                 window = self.app._show_how_to_use(key)
                 self.assertIn(guides.control_title(key), window.title())
                 self.assertIs(self.app._show_how_to_use(key), window)     # one window per guide
                 window.destroy()
+
+    def test_a_setting_with_a_guide_has_its_question_mark_on_its_row(self):
+        import json
+        self.assertEqual(guides.setting_keys(), ["family_history"])
+        rows = [{"id": "family_history", "label": "Family History log", "description": "The log.",
+                 "default": False, "category": "experimental"},
+                {"id": "time_controls", "label": "Time Controls", "description": "Speeds.", "default": True,
+                 "category": "optional"}]
+        path = Path(self._tmp.name) / "manifest.json"
+        path.write_text(json.dumps({"manifest_version": 1, "settings": rows}), encoding="utf-8")
+        self.app.manifest_var.set(str(path))
+        self.app._run_with_wait = lambda message, work, keep_open=False: (work(), None) if keep_open else work()
+        self.assertTrue(self.app.load_manifest_settings())
+        self.assertIn("family_history", self.app.help_keys)
+        buttons = []
+
+        def walk(widget):
+            for child in widget.winfo_children():
+                if child.winfo_class() == "TButton" and str(child.cget("text")) == "?":
+                    buttons.append(child)
+                walk(child)
+        walk(self.app.settings_inner)
+        self.assertEqual(len(buttons), 1, "only the setting with a guide gets a ?")
+        row = buttons[0].master
+        self.assertIn("Family History log", [str(c.cget("text")) for c in row.winfo_children()
+                                             if c.winfo_class() == "TCheckbutton"])
+        buttons[0].invoke()
+        window = self.app._help_windows.get("family_history")
+        self.assertIsNotNone(window)
+        self.assertIn("Family History log", window.title())
+        window.destroy()
 
     def test_a_control_without_a_guide_fails_while_the_window_is_built(self):
         with self.assertRaises(KeyError):

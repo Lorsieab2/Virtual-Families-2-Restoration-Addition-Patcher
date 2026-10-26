@@ -151,6 +151,7 @@ class EveryPatchDefaultsOn(unittest.TestCase):
                     if row.get("category") == "experimental" and row["default"])
         self.assertEqual(on, [], "an Experimental setting must default off: %s" % on)
         self.assertIn("up_to_28_children", self.experimental_ids())
+        self.assertIn("family_history", self.experimental_ids())
 
     def test_every_setting_defaults_on(self):
         off = sorted(
@@ -472,11 +473,12 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
 
         self.assertNotIn("expand_game_map", settings_by_id)
         # B156 removed the old Experimental/Not Working section. The owner brought
-        # an Experimental category back on 2026-10-22 for Up to 28 Children alone
-        # (default off, never ticked by Enable All); nothing else may move there.
+        # an Experimental category back on 2026-10-22 for Up to 28 Children, and
+        # made the Family History log Experimental too (default off, never ticked
+        # by Enable All); nothing else may move there.
         self.assertEqual(
             {row["id"] for row in exporter.SETTINGS if row["category"] == "experimental"},
-            {"up_to_28_children"},
+            {"up_to_28_children", "family_history"},
         )
         for setting_id in (
             "allow_older_pregnancies",

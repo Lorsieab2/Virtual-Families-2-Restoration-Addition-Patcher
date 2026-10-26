@@ -65,6 +65,20 @@
         "Some patches need another one. Ticking one ticks what it needs, and unticking a needed patch unticks what depends on it."
       ]
     },
+    "family_history": {
+      "section": "Patching",
+      "title": "Family History log",
+      "setting": true,
+      "guide": [
+        "Experimental. Keeps a Family History log for each family: one dated record for each marriage, remarriage, divorce, conception, birth, death, rename and Random Event.",
+        "Each person is written with name, age, sex, head and body. Twins and triplets are marked, each death names its cause, and each marriage names the current spouse and any earlier one.",
+        "Random Events are marked Email Event or Popup Event, with the choice. Children who join or leave home, each new generation, a new family, Start Over and Evict Family are noted too.",
+        "A family you already have gets its past filled in once from its Family Tree, marked \"backfilled, no date\".",
+        "The log is a text file in your save folder: Virtual Families 2 Patcher\\Save N\\Logs\\Family History.",
+        "Tick it, then click Enable/Disable Patches. Unticking it and rebuilding turns it off; written logs are kept.",
+        "Starting a new family or Start Over in a save slot starts that slot's log again. It is not yet tested in a running game, so back up your saves first."
+      ]
+    },
     "dry_run": {
       "section": "Patching",
       "title": "Dry Run (Validate Only)",
