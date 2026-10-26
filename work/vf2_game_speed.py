@@ -298,8 +298,8 @@ def _refuse_if_running(folder: Path, processes: save_backup.ProcessController) -
     if running:
         names = ", ".join(sorted({name for _pid, name in running}))
         raise GameRunning(
-            f"{names} is running. Close the game first (quit it normally from its menu): it saves when it quits, "
-            "which would put the old speed back. Nothing was changed."
+            f"{names} is running. Close the game first (quit it normally from its menu): it saves by itself "
+            "every 2 minutes and when it quits, which would put the old speed back. Nothing was changed."
         )
 
 

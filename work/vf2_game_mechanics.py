@@ -590,6 +590,8 @@ def facts() -> list[Fact]:
             ("messes: every 5 hours, 2.5 with 4 or more in the family (game clock);", C),
             ("a collectible: about every 73 seconds (37 with the Lucky Rock);", C),
             ("a house malfunction: about every 27 minutes, also while paused;", E),
+            ("the autosave: every 2 minutes (real time), also while paused, to the same save file a quit "
+             "writes; the same in the unpatched game;", E),
             ("a weather spell: normal 15 to 40 minutes, others 6 to 12 (game clock);", C),
             ("On Sale: every 24 hours (game clock);", C),
             ("the Flea Market, with the patcher: never changes;", E),

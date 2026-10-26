@@ -37,8 +37,8 @@ What is written
     Nothing else changes. There is no checksum; the loader checks the "ldwg" magic and the payload size.
 
 Safety
-    * The game must be closed: it saves when it quits, which would put the old name straight back. Nothing here
-      ever closes or pauses a game.
+    * The game must be closed: it saves by itself every 2 minutes and when it quits, which would put the old
+      name straight back. Nothing here ever closes or pauses a game.
     * Before anything is written the whole save folder is backed up with Back Up Saves' own copier, labelled
       "(before rename)".
     * Every file is written beside itself and swapped in with os.replace, then read back. Any failure puts every
@@ -257,8 +257,8 @@ def _refuse_if_running(folder: Path, processes: save_backup.ProcessController) -
     if running:
         names = ", ".join(sorted({name for _pid, name in running}))
         raise GameRunning(
-            f"{names} is running. Close the game first (quit it normally from its menu): it saves when it quits, "
-            "which would put the old name back. Nothing was changed."
+            f"{names} is running. Close the game first (quit it normally from its menu): it saves by itself "
+            "every 2 minutes and when it quits, which would put the old name back. Nothing was changed."
         )
 
 

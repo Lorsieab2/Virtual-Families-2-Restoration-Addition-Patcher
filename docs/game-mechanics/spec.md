@@ -418,6 +418,7 @@ and while paused), **G** = game seconds (`CGameTime::Seconds`, frozen while paus
 | On Sale | InventoryManager+0x484 | G | 86,400 s | 24 h | VERIFIED-C |
 | Day / night | PC local clock | wall clock | | follows the PC clock | VERIFIED-C |
 | Villager positions refresh | gs+0x25CD4 | R | 40 s (`TakePositions`) | 40 s | VERIFIED-C |
+| Autosave | gs+0x25CE4 (not in the save) | wall clock (CRT `time()`: GetSystemTimeAsFileTime; no speed or pause check) | 120 s. `theGameState::AutoSaveGame` 0x4994E0 saves when the due time < now, then due = now + 120, `SaveCurrentGame` 0x49AB50 (Save(0), Save(slot): the slot file `theGame::Shutdown` 0x498230 writes on quit; it also sets due = now + 120, so any save restarts the wait) and shows on-screen message 0x1E (`0x4533C0`; its text not looked up). Called at 0x498046 by `theGame::GameUpdate` 0x497AF0 (vtable 0x4FC4E4 slot +0x1C; `ldwGame::Run` 0x4754B0 calls it every frame; its only `ret` is 0x49805A, every scene case reaches the check 0x49803D) once the start-up counter theGame+0x24 is past 6. Emulated (the check and AutoSaveGame run as linked in both exes; clock, save and message stubbed): overdue by 1 s -> SaveCurrentGame + message 30, next due +120; due = now or later -> no save; counter 6 -> no save. Stock exe: the same code at 0x4296A0 (clock 0x402820, save 0x429660, message 0x4478F0), called at 0x4290A6 by GameUpdate 0x428B70 (vtable 0x4E2998 slot +0x1C, Run 0x4035E0), emulated with the same results | 2 min, also while paused | VERIFIED-E (stock and B200) |
 | Store "time skip" | | | +3,660 x option s | 10 h 10 min of aging | UNCONFIRMED (purchase) |
 
 ## 18. Chance index (every rand call)
@@ -517,7 +518,7 @@ and `AdvanceCareer` 0x4A01B0 (6% pay, 3,000 progress); `RealtimeWorkDone` 0x4985
 0x4A3F80 / 0x4A3DA0 (900 + rand(1,500), 360 + rand(360)); `CCollectableItem::Update` 0x415310 (rand(6,600 / 3,300),
 messes every 300 / 150 game minutes) and `Add` 0x415090 (4 / 13%, Lucky Rock 8 / 26%); `MaybeUpdateSaleItems`
 0x4BAFA0; `HandleUpgrade` 0x432530 (time skip 3,660 x option, the $750 cap, the Lotto table); the speed option's
-writers (10, +999, -999 then 0 -> 10). The 96 island events are registered in the same order (`CIslandEvents`
+writers (10, +999, -999 then 0 -> 10); the autosave `AutoSaveGame` 0x4296A0 (120 s, section 17). The 96 island events are registered in the same order (`CIslandEvents`
 constructor 0x41C8E0) and every `CanFire`, `CalcAward` and `ImpactGame` matched by title key has the same constants
 and calls.
 

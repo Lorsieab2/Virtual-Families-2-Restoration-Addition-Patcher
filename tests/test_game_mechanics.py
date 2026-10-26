@@ -129,6 +129,13 @@ class PageTests(unittest.TestCase):
         broker = next(f for f in self.facts if "Brokerage Account: buying it" in f.text)
         self.assertTrue(broker.text.startswith(gm.WITH_PATCHER))
 
+    def test_the_autosave_line(self):
+        # theGameState::AutoSaveGame (B200 0x4994E0, stock 0x4296A0) from theGame::GameUpdate every frame: 120 s on
+        # the PC clock, no pause check, SaveCurrentGame writes the slot file a quit writes (spec 17, emulated)
+        index = [(f.text, f.label) for f in self.facts if f.group == gm.INDEX and "autosave" in f.text]
+        self.assertEqual(index, [("the autosave: every 2 minutes (real time), also while paused, to the same save "
+                                  "file a quit writes; the same in the unpatched game;", gm.VERIFIED_E)])
+
     def test_every_unpatched_line_follows_its_patched_line(self):
         for index, fact in enumerate(self.facts):
             if fact.text.startswith(gm.UNPATCHED):
