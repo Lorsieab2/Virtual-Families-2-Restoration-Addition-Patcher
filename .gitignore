@@ -43,6 +43,12 @@ __pycache__/
 # beside the patcher, so tracking it dirties the tree on every GUI run
 # and publishes install paths on the first commit of that dirt.
 /work/patcher_local_settings.json
+# The Family Tree Maker's remembered look (vf2_tools_gui.save_tree_settings), written beside the GUI the same way.
+/work/family_tree_settings.json
+/src/family_tree_settings.json
+# The Family Tree Maker's backgrounds and logo stickers: the owner's pictures, shipped from work/ (GUI_TOOL_FILES).
+!/work/family_tree_backgrounds/
+!/work/family_tree_backgrounds/*.png
 !/work/*.csv
 !/work/*.txt
 !/work/*.md

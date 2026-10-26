@@ -33,7 +33,50 @@ GUI_TOOL_FILES = (
     "vf2_game_mechanics.py",
     "vf2_game_mechanics_window.py",
     "vf2_save_reader.py",
-)
+    # The Family Tree Maker (the Tools tab's link): the family, the log and tree file readers, the picture, the
+    # editor, and the owner's backgrounds and logos beside them (FAMILY_TREE_ASSETS).
+    "vf2_genealogy.py",
+    "vf2_family_history.py",
+    "vf2_tree_memory.py",
+    "vf2_family_tree.py",
+    "vf2_family_tree_window.py",
+    "vf2_member_info.py",
+    "vf2_line_colours.py",
+    "vf2_tree_editor_tools.py",
+    "vf2_gdiplus.py",
+) + tuple(f"family_tree_backgrounds/{name}" for name in (
+    "blue-board-on-wood.png",
+    "blue-island.png",
+    "canvas-in-wood-frame.png",
+    "city-in-the-mist.png",
+    "green-tree.png",
+    "island-in-the-sea.png",
+    "mausoleum.png",
+    "mountains-and-sea.png",
+    "palms-at-sunset.png",
+    "parchment-in-bamboo.png",
+    "sand-in-black-frame.png",
+    "starry-night.png",
+    "sunset-over-the-sea.png",
+    "tree-in-vines.png",
+    "tree-on-the-rocks.png",
+    "virtual-families-2-logo.png",
+    "virtual-families-logo.png",
+    "wood-and-magnifier.png",
+    "deck-and-hose.png",
+    "autumn-paving.png",
+    "grass-and-acorns.png",
+    "blue-rose.png",
+    "garden-gate.png",
+    "stone-patio.png",
+    "seeds-and-trowel.png",
+    "island-map.png",
+    "aquarium-rock-arch.png",
+    "aquarium-driftwood.png",
+    "aquarium-coral.png",
+    "fish-tycoon-logo.png",
+    "plant-tycoon-logo.png",
+))
 ROOT = SOURCE_DIR.parent
 DEFAULT_BASE_PAYLOAD = SOURCE_DIR / "vanilla_runtime_payload"
 OFFICIAL_PE_STRUCTURES_FILE = SOURCE_DIR / "official_vf2_pe_structures.json"
@@ -3908,6 +3951,7 @@ def write_bundle_runner_files(bundle_dir: Path, build_label: str) -> list[str]:
     shutil.copy2(SOURCE_DIR / "offline_vf2_patcher.py", bundle_dir / "offline_vf2_patcher.py")
     shutil.copy2(SOURCE_DIR / "offline_vf2_patcher_gui.py", bundle_dir / "offline_vf2_patcher_gui.py")
     for tool_name in GUI_TOOL_FILES:
+        (bundle_dir / tool_name).parent.mkdir(parents=True, exist_ok=True)   # family_tree_backgrounds/...
         shutil.copy2(SOURCE_DIR / tool_name, bundle_dir / tool_name)
     shutil.copy2(SOURCE_DIR / "vf2_crash_capture.py", bundle_dir / "vf2_crash_capture.py")
     (bundle_dir / "crash-capture-manifest.template.json").write_text(

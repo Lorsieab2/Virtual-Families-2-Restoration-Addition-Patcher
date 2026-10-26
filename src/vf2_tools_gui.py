@@ -1,4 +1,5 @@
-"""The Tools tab: Back Up Saves, Restore Saves, Rename Family, Game Speed, Game Mechanics and the guide.
+"""The Tools tab: Back Up Saves, Restore Saves, Rename Family, Game Speed, Game Mechanics, the Family Tree Maker
+(vf2_family_tree_window, its family read by vf2_genealogy) and the guide.
 
 A mixin for VF2PatcherGUI (offline_vf2_patcher_gui.py), kept in its own file so the window's patching code
 stays as it was.  It needs from the window: ``root``, ``status_var``, ``_run_with_wait`` and the
@@ -9,6 +10,7 @@ vf2_rename_family and vf2_game_speed (no Tk there); Game Mechanics is a read-onl
 from __future__ import annotations
 
 import contextlib
+import json
 import subprocess
 import tkinter as tk
 from pathlib import Path
@@ -22,6 +24,27 @@ import vf2_save_backup
 
 TOOLS_TITLE = "Virtual Families 2 Restoration/Addition Patcher"
 WRAP = 640
+# The Family Tree Maker's remembered look and window, beside the patcher (its own file: the window's
+# patcher_local_settings.json keeps only its folders and drops any other key when it saves them).
+TREE_SETTINGS_FILE = "family_tree_settings.json"
+
+
+def tree_settings_path() -> Path:
+    return Path(__file__).resolve().parent / TREE_SETTINGS_FILE
+
+
+def load_tree_settings(path: Path | None = None) -> dict:
+    """{"style": ..., "window": ...}, or {} when there is none or it does not read."""
+    try:
+        data = json.loads((path or tree_settings_path()).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def save_tree_settings(style: dict | None, window: dict | None, path: Path | None = None) -> None:
+    (path or tree_settings_path()).write_text(
+        json.dumps({"style": style or {}, "window": window or {}}, indent=2) + "\n", encoding="utf-8")
 
 
 class ToolsTabMixin:
@@ -126,8 +149,21 @@ class ToolsTabMixin:
             style="Muted.TLabel", wraplength=WRAP, justify="left",
         ).grid(row=1, column=0, sticky="w", pady=(6, 0))
 
+        tree = ttk.LabelFrame(tab, text="Family Tree Maker", style="Section.TLabelframe", padding=10)
+        tree.grid(row=2, column=0, sticky="ew", pady=(10, 0))
+        row = ttk.Frame(tree)
+        row.grid(row=0, column=0, sticky="w")
+        self._link(row, "Family Tree Maker...", self.open_family_tree).pack(side="left")
+        self._help_button(row, "family_tree").pack(side="left", padx=(3, 0))
+        ttk.Label(
+            tree,
+            text="Draws a family's tree from its save, with each family member's face from the game, and lets you "
+                 "mark, colour and arrange it and save it as a picture. Saves are only read.",
+            style="Muted.TLabel", wraplength=WRAP, justify="left",
+        ).grid(row=1, column=0, sticky="w", pady=(6, 0))
+
         guide = ttk.LabelFrame(tab, text="Help", style="Section.TLabelframe", padding=10)
-        guide.grid(row=2, column=0, sticky="ew", pady=(10, 0))
+        guide.grid(row=3, column=0, sticky="ew", pady=(10, 0))
         row = ttk.Frame(guide)
         row.grid(row=0, column=0, sticky="w")
         self._link(row, "How to Use...", self.show_how_to_use_guide).pack(side="left")
@@ -137,6 +173,24 @@ class ToolsTabMixin:
             text="Every button in the patcher, one short page each. The small ? buttons open the page for the control beside them.",
             style="Muted.TLabel", wraplength=WRAP, justify="left",
         ).grid(row=1, column=0, sticky="w", pady=(6, 0))
+
+    # -- Family Tree Maker ---------------------------------------------------
+
+    def open_family_tree(self) -> tk.Toplevel | None:
+        """The Family Tree Maker (vf2_family_tree_window): choose a save folder and a family, then the editor."""
+        import vf2_family_tree_window as tree_window
+        saved = load_tree_settings()
+        if not hasattr(self, "tree_style"):
+            self.tree_style = saved.get("style") or None
+        if not hasattr(self, "tree_window"):
+            self.tree_window = saved.get("window") or {}
+        folders = vf2_save_backup.find_save_folders(vf2_save_backup.documents_folder())
+        return tree_window.open_family_tree(self, folders=folders)
+
+    def _save_settings(self) -> None:
+        """The Family Tree Maker's look and window, remembered for the next tree (its own settings file)."""
+        with contextlib.suppress(OSError, TypeError, ValueError):
+            save_tree_settings(getattr(self, "tree_style", None), getattr(self, "tree_window", None))
 
     # -- Game Mechanics -----------------------------------------------------
 
