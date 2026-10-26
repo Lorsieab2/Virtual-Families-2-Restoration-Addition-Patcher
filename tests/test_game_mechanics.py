@@ -24,7 +24,7 @@ class PageTests(unittest.TestCase):
         self.assertEqual(gm.GROUPS, (
             "Time and ageing", "Needs and upkeep", "Health and sickness", "Old age", "Pregnancy and babies",
             "Careers", "Money and interest", "Leaving home", "Dating, marriage and the next generation",
-            "Island events", "Weather", "Messes and malfunctions", "Collectibles", "Flea Market and On Sale",
+            "Random Events", "Weather", "Messes and malfunctions", "Collectibles", "Flea Market and On Sale",
             "Chance and timer index"))
         seen = []
         for fact in self.facts:
