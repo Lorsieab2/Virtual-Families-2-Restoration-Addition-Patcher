@@ -58,5 +58,9 @@ married before ("married" lines), why someone left home (the college / Boarding 
 which event brought an adopted child (Event lines "Adoption Services" / "The Little Visitor"). A name the log gives
 that matches nobody, or more than one member, is left alone.
 
-The line formats read are the DLL's (the Virtual Families 1 Family Logs formats). The DLL writes no divorce
-line; the reader also accepts VF1's `Event <n>: Divorce Spouse: <name>` should one be added.
+The line formats read are the DLL's (`src/vf2_family_history.py` lists them). They differ from the Virtual
+Families 1 Family History log in four places: a Death line ends `; Family role: <role>, generation <g>[; <x> has
+no current spouse]`; a marriage may be `remarried:` with `; earlier spouse: <name>[ (died|divorced)]` and `; current
+spouse of <a>: <b>`; a divorce is its own line, `Divorce: <head> (<sex>) and <who> divorced, generation <g>`; and an
+adopted child's title is in brackets on the joined line, `adopted (<title>)`, while Event lines carry only the
+island event's title. The Virtual Families 1 forms are read too.

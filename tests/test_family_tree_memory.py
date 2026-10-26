@@ -173,28 +173,29 @@ def test_remembering_never_writes_the_save_and_keeps_the_edits(tmp_path):
 
 
 # ---------------------------------------------------------------- the Family History log
-# Lines as runtime/native/b200history writes them (OnBirths, OnDeath, OnMarriage, OnJoined, EventRecord,
-# OnLeftHome, OnGeneration, OnConception, Backfill).
+# Lines as runtime/native/b200history/b200history.cpp writes them (OnBirths, OnDeath, OnMarriage, OnDivorce,
+# OnJoined, OnIslandEvent, OnLeftHome, OnGeneration, OnConception, Backfill), and one Virtual Families 1 form.
 HISTORY = """Family: Testfamily (Save 1)
 [backfilled, no date] Generation 1: Ann (Female) and Bob (Male) were the parents
 [2026-10-20 10:00:00] Generation 1 began: Ann (Female, 20) was adopted and started the family
-[2026-10-20 10:05:00] Ann (Female, 21) married Bob (Male, 22), generation 1
+[2026-10-20 10:05:00] Ann (Female, 21) married Bob (Male, 22), generation 1; current spouse of Ann: Bob
 [2026-10-20 11:00:00] Conception 1: Ann and Bob (babies Nursing: 2)
 [2026-10-20 12:00:00] Birth 1: Cal (Male) was born to Ann and Bob (Twins)
 [2026-10-20 12:00:00] Birth 2: Cia (Female) was born to Ann and Bob (Twins)
 [2026-10-20 12:30:00] Birth 3: Moe (Male) was born to Ann and (unknown)
-[2026-10-20 13:00:00] Event 1: Divorce Spouse: Bob
-[2026-10-20 14:00:00] Ann (Female, 25) married Dan (Male, 30), generation 1
-[2026-10-20 15:00:00] Event 2: The Little Visitor: Kim
-[2026-10-20 15:00:00] Kim (Female, 3) joined the family as a child, adopted, generation 1
-[2026-10-20 15:01:00] Event 3: Adoption Services: Lou
-[2026-10-20 15:01:00] Lou (Male, 4) joined the family as a child, adopted, generation 1
-[2026-10-20 16:00:00] Death 1: Cia (Female, 2) died: Starvation
-[2026-10-20 17:00:00] Event 4: Boarding School: Lou
+[2026-10-20 13:00:00] Divorce: Ann (Female) and Bob (Male, 24) divorced, generation 1; Ann has no current spouse
+[2026-10-20 14:00:00] Ann (Female, 25) remarried: Dan (Male, 30), generation 1; earlier spouse: Bob (divorced); current spouse of Ann: Dan
+[2026-10-20 15:00:00] Kim (Female, 3) joined the family as a child, adopted (The Little Visitor), generation 1
+[2026-10-20 15:01:00] Lou (Male, 4) joined the family as a child, adopted (Adoption Services), generation 1
+[2026-10-20 16:00:00] Death 1: Cia (Female, 2) died: Starvation; Family role: Child, generation 1
+[2026-10-20 16:30:00] Event 1: The Talent Scout
 [2026-10-20 17:00:00] Lou has been sent away to school! (Male, 9, left home)
 [2026-10-20 18:00:00] Cal is going to college! (Male, 19, left home)
 [2026-10-20 18:30:00] Kim left home with The Talent Scout (Female, 15, left home)
+[2026-10-20 18:40:00] Death 2: Dan (Male, 50) died: Old age; Family role: Parent (married in), generation 1; Ann has no current spouse
+[2026-10-20 18:50:00] Ann (Female, 52) remarried: Gil (Male, 40), generation 1; earlier spouse: Dan (died); current spouse of Ann: Gil
 [2026-10-20 19:00:00] New Generation: generation 2 began: Cal (Male, 25) inherited the house
+[2026-10-20 19:10:00] Event 2: Divorce Spouse: Gil
 """
 
 
@@ -209,8 +210,7 @@ def test_the_family_history_fills_in_what_the_save_lost(tmp_path):
     history_folder(tmp_path)
     kids = [{**CAL, "slot": 2}, dict(name="Cia", sex=1, head=6, body=6, slot=-1),
             dict(name="Kim", sex=1, head=7, body=7, slot=5), dict(name="Lou", sex=0, head=8, body=8, slot=6)]
-    b = couple({**DAN, "slot": 3}, kids=kids)
-    villager(b, 3, **DAN)
+    b = couple(kids=kids)                               # Gil divorced: parent 2 zeroed
     villager(b, 2, **CAL, age=400, left=1)
     villager(b, 5, name="Kim", sex=1, head=7, body=7, age=300, left=1, father="", mother="")
     villager(b, 6, name="Lou", sex=0, head=8, body=8, age=180, left=1, father="", mother="")
@@ -226,7 +226,9 @@ def test_the_family_history_fills_in_what_the_save_lost(tmp_path):
     assert kim.event == "The Little Visitor" and lou.event == "Adoption Services"
     assert not any(u.startswith("Adopted:") for u in kim.unknowns + lou.unknowns)
     assert (cal.left_why, lou.left_why, kim.left_why) == ("College", "Boarding School", "The Talent Scout")
-    assert by_name(v, "Dan").event == "Married in"
+    dan, gil = by_name(v, "Dan"), by_name(v, "Gil")
+    assert dan.gone == "died" and dan.years == 50 and dan.cause == "Old age" and dan.how == "Married in"
+    assert gil.event == "Divorce Spouse" and dan.generation == gil.generation == bob.generation == 1
 
 
 def test_history_lines_parse_and_the_tree_works_without_them(tmp_path):
@@ -234,13 +236,19 @@ def test_history_lines_parse_and_the_tree_works_without_them(tmp_path):
     assert h.family == "Testfamily"
     assert [b[1] for b in h.births] == ["Cal", "Cia", "Moe"] and h.births[0][5] == "Twins"
     assert h.births[2][4] == fh.UNKNOWN_FATHER and h.births[2][5] == ""
-    assert h.deaths == [(1, "Cia", "Female", 2, "Starvation")]
-    assert [m[3] for m in h.marriages] == ["Bob", "Dan"]
-    assert [(e[1], e[2]) for e in h.events] == [("Divorce Spouse", "Bob"), ("The Little Visitor", "Kim"),
-                                                ("Adoption Services", "Lou"), ("Boarding School", "Lou")]
-    assert [(j[0], j[3]) for j in h.joined] == [("Kim", True), ("Lou", True)]
+    assert h.deaths == [(1, "Cia", "Female", 2, "Starvation"), (2, "Dan", "Male", 50, "Old age")]
+    assert [(m[0], m[3], m[7], m[8]) for m in h.marriages] == [("Ann", "Bob", "", ""), ("Ann", "Dan", "Bob", "divorced"),
+                                                              ("Ann", "Gil", "Dan", "died")]
+    assert h.divorces == [("Ann", "Bob", "Male", 24, 1)]
+    assert [(e[1], e[2]) for e in h.events] == [("The Talent Scout", ""), ("Divorce Spouse", "Gil")]
+    assert [(j[0], j[3], j[5]) for j in h.joined] == [("Kim", True, "The Little Visitor"), ("Lou", True,
+                                                                                          "Adoption Services")]
     assert h.left == [("Lou", "Male", 9, "Boarding School"), ("Cal", "Male", 19, "College"),
                       ("Kim", "Female", 15, "The Talent Scout")]
+    # The Virtual Families 1 forms are read too.
+    old = fh.parse("[x] Death 1: Al (Male, 3) died: Disease\n[x] Al (Male, 3) joined the family as a child, adopted, "
+                   "generation 1\n[x] Event 3: The Little Visitor: Al\n")
+    assert old.deaths == [(1, "Al", "Male", 3, "Disease")] and old.joined[0][3] and old.events[0][2] == "Al"
     assert fh.read(tmp_path, 1) is None
 
 
