@@ -20,8 +20,18 @@ were corrected in place):
   * A paused clock stops: SetSpeed(999) 0x468B80 stores speed 0; Seconds() 0x468B00 returns the banked value.
   * The owner's four questions: the fifth food-group slot (true, but it follows the Grains slot, not any group),
     interest pays at most 2 missed days and a second Brokerage purchase sets 1% (true), malfunctions roll while
-    paused (true), the Flea Market changes every 6 real hours (FALSE in B200: the patcher's expanded Flea Market
-    lists all 36 goods and the stock rotation is never reached; left out, and the window says it never changes).
+    paused (true), the Flea Market changes every 6 real hours (true only for the unpatched game: with the patcher
+    the expanded Flea Market lists all 36 goods and the stock rotation is never reached; both are shown).
+
+The unpatched game (2026-10-25): every routine the page rests on was diffed between the stock executable
+`Virtual Families 2.exe` (sha256 1582d9e8..., the patcher's vanilla payload) and the B200 core, and the patcher's
+always-on changes that touch them were listed.  Two differ, and each is shown both ways, a "With the patcher:"
+line and an "Unpatched game:" line, each with its own label and evidence (WITH_PATCHER / UNPATCHED below;
+docs/game-mechanics/spec.md section 22; tests/test_game_mechanics_stock_exe.py):
+  * the Flea Market: the stock rotation 0x4BA710 shows 5 of the 36 goods and re-picks them after 6 real hours;
+  * the Special Upgrades page: the stock list 0x556E3C has 6 items, without the Brokerage Account, Food Club,
+    Health Plan and Lucky Rock that the patcher's always-on Special Upgrades rows add.
+Everything else on the page is the same in the stock executable, and adds nothing.
 
 Wording: family members, never the code's own word for them.  A patcher option (0 in the core executable) is
 shown as an option, both ways where the spec gives both.  The window describes the game; it fixes nothing.
@@ -38,7 +48,11 @@ UNCONFIRMED = "UNCONFIRMED"
 LABELS = (VERIFIED_E, VERIFIED_C, UNCONFIRMED)
 
 INTRO = ("For the curious: Virtual Families 2's hidden rules, as the game's own code runs them. Every time is a "
-         "real time at the game's normal speed. It only reads: nothing is changed, so the game may be running.")
+         "real time at the game's normal speed. It only reads: nothing is changed, so the game may be running. "
+         "The page describes the game with the patcher applied, and gives the unpatched game's behaviour "
+         "wherever it differs.")
+WITH_PATCHER = "With the patcher: "
+UNPATCHED = "Unpatched game: "
 LABEL_NOTE = ("VERIFIED-E: the game's own code was run with the game's own inputs and every outcome counted. "
               "VERIFIED-C: read from the game's own code on a path the running game takes. "
               "UNCONFIRMED: not yet shown either way.")
@@ -421,8 +435,18 @@ def facts() -> list[Fact]:
            "UpdateInterest 0x481D80 run as linked: 1,000 at 0.10 gains 100 after 1 day and 200 after 2, 3 or 10"))
     add(_f(MONEY, "Interest is paid when it is next checked: every 30 real minutes, and when the bank or some "
                   "events look at the money.", C, "spec 8: callers of UpdateInterest"))
-    add(_f(MONEY, "Brokerage Account: buying it raises interest to 11% a day. Buying it again sets interest to 1%; "
-                  "each purchase after that adds 2 points (3%, 5%, 7%, 9%) until 11% again.", E,
+    add(_f(MONEY, WITH_PATCHER + "the store's Special Upgrades page also sells the Brokerage Account, the Food Club, "
+                  "the Health Plan and the Lucky Rock (10 items in all).", E,
+           "B200 core: GetCategoryItemCount 0x46B6D0 / GetCategoryItem 0x46B210, category 0x14, run as linked: 10 "
+           "items, gServicesList 0x56F100 = 0x111..0x116 then 0x117..0x11A (the patcher's always-on Special "
+           "Upgrades rows, patch_visible_special_upgrades)"))
+    add(_f(MONEY, UNPATCHED + "the Special Upgrades page has 6 items and sells none of the Brokerage Account, the "
+                  "Food Club, the Health Plan or the Lucky Rock.", E,
+           "stock exe sha256 1582d9e8: GetCategoryItemCount 0x4BB0A0 / GetCategoryItem 0x4BAA50, category 0x14 (the "
+           "store menu's Special Upgrades row, table 0x5346E0), run as linked: 6 items, list 0x556E3C = 0x111, "
+           "0x112, 0x113, 0x115, 0x116, 0x114"))
+    add(_f(MONEY, WITH_PATCHER + "Brokerage Account: buying it raises interest to 11% a day. Buying it again sets "
+                  "interest to 1%; each purchase after that adds 2 points (3%, 5%, 7%, 9%) until 11% again.", E,
            "HandlePurchaseItem 0x48C110 -> 0x4B8B50 run as linked from 0.10: 0.11, 0.01, 0.03, 0.05, 0.07, 0.09, "
            "0.11"))
     add(_f(MONEY, "Food Club: 500 food and all four food groups each game day, every missed day delivered; and 60 "
@@ -515,10 +539,18 @@ def facts() -> list[Fact]:
     add(_f(COLLECTIBLES, "Collectibles vanish again after a while, in real time.", C, "spec 15"))
 
     # ------------------------------------------------------------------ Flea Market and On Sale (spec 16)
-    add(_f(STORE, "The Flea Market shows all 36 of its goods at all times; it never changes (the game's tip still "
-                  "says three times a day).", E,
+    add(_f(STORE, WITH_PATCHER + "the Flea Market shows all 36 of its goods at all times; it never changes (the "
+                  "game's tip still says three times a day).", E,
            "GetCategoryItemCount 0x46B6D0 / GetCategoryItem 0x46B210 call VF2GetExpandedFleaMarketCount / Item "
            "0x4B9A90 / 0x4B9AB0 first (36 for category 15); the stock rotation 0x46BEB0 is never reached"))
+    add(_f(STORE, UNPATCHED + "the Flea Market shows 5 of its 36 goods, picked at random, and changes them every 6 "
+                  "real hours: the first time it is opened more than 6 real hours after the last change it picks 5 "
+                  "new ones (the time counts while paused and while the game is closed). The game's tip says three "
+                  "times a day.", E,
+           "stock exe sha256 1582d9e8: the store menu's Flea Market row (table 0x5346E0 row 1, category 15) -> "
+           "SetStoreCategory 0x432050(15) -> GetCategoryItemCount 0x4BB0A0 -> MaybeUpdateRotatingItems 0x4BA710, "
+           "run as linked after Reset 0x4BA8F0: 5 goods at real s T, the same 5 at T + 21,600, 5 new at "
+           "T + 21,601 and at T + 86,400; next change = real s + 21,600"))
     add(_f(STORE, "On Sale: 3 furniture items, changed every game day (24 real hours at normal speed; the clock "
                   "stops while paused).", C, "spec 16: MaybeUpdateSaleItems 0x46C000"))
     add(_f(STORE, "How much the On Sale price is reduced.", U, "spec 16: price path"))
@@ -559,7 +591,9 @@ def facts() -> list[Fact]:
             ("a collectible: about every 73 seconds (37 with the Lucky Rock);", C),
             ("a house malfunction: about every 27 minutes, also while paused;", E),
             ("a weather spell: normal 15 to 40 minutes, others 6 to 12 (game clock);", C),
-            ("On Sale: every 24 hours (game clock); the Flea Market never changes;", E),
+            ("On Sale: every 24 hours (game clock);", C),
+            ("the Flea Market, with the patcher: never changes;", E),
+            ("the Flea Market, unpatched game: every 6 hours (real time);", E),
             ("a body removed: 40 hours after death (real time);", C),
             ("the baby waiting time: 10 minutes to 4 hours 10 minutes (real time);", C),
             ("time away made up: at most 31,000 seconds, or 24 hours when more than 24 hours away.", E)):
