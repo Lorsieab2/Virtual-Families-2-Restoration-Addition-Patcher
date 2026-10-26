@@ -1,6 +1,6 @@
 # VF2 B203 release notes
 
-**The patcher bundle.** Built from `main` at `471f6f5` (PR #430, Game Mechanics), seeded from the B202 matrix.
+**The patcher bundle.** The executables are built from `main` at `471f6f5` (PR #430, Game Mechanics), seeded from the B202 matrix; the bundle was re-exported from `main` at `215e349` (PR #433), see "Updated in place" below.
 
 B203 changes no game code and no setting: the 38 settings of B202 are unchanged, and the 32 executable variants are the same feature combinations, rebuilt from this commit. What is new is the patcher's **Tools** tab.
 
@@ -29,7 +29,17 @@ B203 changes no game code and no setting: the 38 settings of B202 are unchanged,
 ## Checks
 
 - All 32 variants built from the commit above, 32 distinct executables; hashes in `docs/b203-matrix-manifest.md`, identities in `data/vf2/release-identities-B203.json`.
-- Full test suite with release-only tests, against this matrix: 2063 passed, 31 skipped, 0 failed.
+- Full test suite with release-only tests, against this matrix: 2071 passed, 31 skipped, 0 failed (on `215e349`).
 - The bundle reproduces the build on a clean install (8194 of 8194 files) and passed the release gate: **RELEASE GATE PASSED**, no features lost against 23 retained releases (B179 to B202). The two companion DLLs are the B202 files themselves (`runtime/` unchanged).
 - **No live test** of the new tools has been done.
-- Asset: `VF2-B203-Release.zip`, 146,881,689 bytes, SHA-256 `63ca18fc1cec76a7a7ed4bcf0b0035d0d6ca689199e656be661cb6407cbfb9b6`.
+- Asset: `VF2-B203-Release.zip`, 146,882,710 bytes, SHA-256 `c70371d6aea4ef59a58213b317f68850133532b229a0b7c6d9966c30b26f599b`.
+
+## Updated in place (2026-10-25)
+
+The bundle was re-exported from `main` at `215e349` on the same day, from the same 32 executables and the same two DLLs (identities unchanged), and passed the release gate again. Only the patcher's own files changed:
+
+- **Game Mechanics** now gives the unpatched game's behaviour wherever it differs from the game with the patcher. Only two facts do, each emulated in the stock exe:
+  - The Flea Market: unpatched, 5 of its 36 goods, re-picked after 6 real hours; with the patcher, all 36 always.
+  - The Special Upgrades page: 6 items unpatched, 10 with the patcher.
+- **Autosave:** the game saves by itself every 2 minutes (real time, also while paused) as well as when you quit. The Back Up, Restore, Rename Family and Game Speed texts used to say it saved only on quit; the Game Mechanics page now lists the autosave.
+- The first B203 zip (SHA-256 `63ca18fc...`) is replaced.
