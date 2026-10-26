@@ -652,7 +652,7 @@ class ToolsTabMixin:
             text=(
                 "Virtual Families 2 has no family surname: a family is shown under the player name typed when it was "
                 "started (on the main menu and in Change Player). This changes that name inside its save. The game "
-                "must be closed: it saves when you quit it, which would put the old name back. The save folder is "
+                "must be closed: it saves by itself every 2 minutes and when you quit it, which would put the old name back. The save folder is "
                 "backed up first, into <save folder>\\Backups\\Backup <date and time> (before rename), and the "
                 "family's Family History log gets one line noting the new name."
             ),
@@ -812,7 +812,7 @@ class ToolsTabMixin:
         ttk.Label(
             frame,
             text=(
-                "Sets a family's game speed inside its save. The game must be closed: it saves when you quit it, which "
+                "Sets a family's game speed inside its save. The game must be closed: it saves by itself every 2 minutes and when you quit it, which "
                 "would put the old speed back. The save folder is backed up first, into <save folder>\\Backups\\Backup "
                 "<date and time> (before speed change). Paused works as if you paused just before the game last saved; "
                 "Normal as if you unpaused it now, so the paused time is never aged in."
