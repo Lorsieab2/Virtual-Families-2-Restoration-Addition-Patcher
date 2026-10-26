@@ -13,7 +13,7 @@ from unittest import mock
 ELLIPSIS = chr(0x2026)
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(ROOT / "work"))
 import offline_vf2_patcher as patcher
 import offline_vf2_patcher_gui as gui
 
@@ -878,11 +878,15 @@ class PleaseWaitFeedbackTests(unittest.TestCase):
         # double-click on Apply could start two patch workers against the same
         # output folder. The window waits for visibility and then grabs for
         # real, so a failure here is an error rather than a silent no-op.
+        # Since the Virtual Villagers patcher's Windows-style hold replaced the Tk grab, the hold is what
+        # blocks a second Apply: every other patcher window is disabled while the wait window is up.
         wait = gui.WaitWindow(self.root, "Please wait", "Please wait" + ELLIPSIS)
         try:
-            self.assertEqual(str(wait.grab_current()), str(wait))
+            self.assertTrue(self.root.wm_attributes("-disabled"),
+                            "the main window stays usable while the work runs")
         finally:
             wait.close()
+        self.assertFalse(self.root.wm_attributes("-disabled"), "the main window stays disabled afterwards")
 
     def test_centering_keeps_negative_virtual_desktop_coordinates(self):
         # On a monitor left of or above the primary one the parent's root
@@ -1393,7 +1397,7 @@ class UpdatesLinkTests(unittest.TestCase):
 
     # The copy this suite exercises. tests/ runs against src/, work/ against
     # its own, which is the copy the exporter actually ships.
-    GUI = ROOT / "src" / "offline_vf2_patcher_gui.py"
+    GUI = ROOT / "work" / "offline_vf2_patcher_gui.py"
 
     def test_link_is_present_and_styled_as_a_link(self):
         source = self.GUI.read_text(encoding="utf-8")
@@ -1421,7 +1425,7 @@ class UpdatesLinkTests(unittest.TestCase):
         # The exporter ships work/; a fix applied only to src/ never reaches
         # anyone's download.
         # Built with joinpath rather than the / operator on a "work" literal:
-        # the sync rule that generates the tests/ copy rewrites ROOT / "src"
+        # the sync rule that generates the tests/ copy rewrites ROOT / "work"
         # to ROOT / "src", which would make this compare src against itself and
         # never detect the drift it exists to catch.
         shipped = ROOT.joinpath("work", "offline_vf2_patcher_gui.py")
