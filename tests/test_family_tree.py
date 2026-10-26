@@ -499,6 +499,7 @@ def test_tools_tab_has_the_family_tree_maker(tk_root, tmp_path, monkeypatch):
         def __init__(self, root):
             self.root = root
             self.status_var = tk.StringVar(master=root)
+            self.notebook = ttk.Notebook(root)      # the Tools tab refreshes its saves line on a tab change
             self._init_tools()
 
     top = tk.Toplevel(tk_root)
@@ -517,7 +518,7 @@ def test_tools_tab_has_the_family_tree_maker(tk_root, tmp_path, monkeypatch):
             for child in widget.winfo_children():
                 yield from walk(child)
         texts = [x.cget("text") for x in walk(tab) if x.winfo_class() in ("TLabel", "TLabelframe")]
-        assert "Family Tree Maker" in texts and "Family Tree Maker..." in texts and "family_tree" in app.help_keys
+        assert "Family Tree Maker..." in texts and "family_tree" in app.help_keys   # one game box, as in VV
         app.tree_style, app.tree_window = {"font": "Arial"}, {"zoom": 2}
         app._save_settings()
         assert tools.load_tree_settings() == {"style": {"font": "Arial"}, "window": {"zoom": 2}}
