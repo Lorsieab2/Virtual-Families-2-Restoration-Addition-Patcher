@@ -745,6 +745,28 @@ Up to 28 Children (companion DLL, after B201; not live tested)
 - Static evidence (capstone + pefile) and emulated evidence (the real DLL with
   the real game code under unicorn) only. No live test.
 
+Family History log (companion DLL, after B203; not live tested)
+--------------------------------------------------------------
+
+- Setting family_history, Experimental (off by default, never ticked by Enable
+  All): vf2history_b200.dll writes one Family History log per save slot,
+  "<save folder>\Virtual Families 2 Patcher\Save N\Logs\Family History\Family
+  History <k>.txt", in the Virtual Families 1 Family History format: each
+  record a heading "[YYYY-MM-DD HH:MM:SS] <Kind> <n>", then "  Label: value"
+  lines and a blank line, each person written as the Virtual Villagers patcher
+  writes a villager (name, age, sex, head, body); 2000 records per file; no
+  other file. Every record form and every hook: docs/FAMILY_HISTORY.md.
+- Hooks: 18 call retargets, one entry jmp (CVillager::Impregnate) and the Load
+  vtable slot, found by pins proved on all 128 B200-B203 matrix executables;
+  each reached from its live caller under emulation. Nothing Up to 28 Children
+  hooks is written.
+- Loader: a dormant .vf2hist byte in every executable and one line in the Time
+  Controls loader wrapper (after Time Controls and Up to 28 Children); it needs
+  a matrix rebuild. With the setting off the DLL is never loaded.
+- Rename Family (Tools tab) adds a "Family Renamed <n>" record (Old name, New
+  name) to a slot that already has a log; it never starts one.
+- Static and emulated evidence only. No live test.
+
 B153 default-off native debugger input milestone
 -------------------------------------------------
 

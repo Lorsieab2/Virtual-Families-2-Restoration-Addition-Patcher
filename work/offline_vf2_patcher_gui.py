@@ -842,6 +842,9 @@ class VF2PatcherGUI(ToolsTabMixin):
                     if setting.blocked or informational:
                         checkbutton.state(["disabled"])
                     checkbutton.grid(row=0, column=0, sticky="w")
+                    if setting.id in vf2_how_to_use.setting_keys():
+                        # A setting with its own guide gets its "?" on its row.
+                        self._help_button(item, setting.id).grid(row=0, column=1, sticky="e")
                     if setting.blocked:
                         details = f"{setting.id} - BLOCKED - {setting.readiness_reason}"
                     elif informational:

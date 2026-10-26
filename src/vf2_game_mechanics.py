@@ -66,7 +66,7 @@ CAREERS_GROUP = "Careers"
 MONEY = "Money and interest"
 LEAVING = "Leaving home"
 DATING = "Dating, marriage and the next generation"
-EVENTS = "Island events"
+EVENTS = "Random Events"
 WEATHER = "Weather"
 MESSES = "Messes and malfunctions"
 COLLECTIBLES = "Collectibles"
@@ -462,7 +462,7 @@ def facts() -> list[Fact]:
     add(_f(LEAVING, "College: a family member without a career leaves for college on turning 19. Children born in "
                     "the house have no career, so every child not chosen as the heir leaves at 19.", C,
            "spec 9: 0x4C4DF4"))
-    add(_f(LEAVING, "Talent Scout (an island event, a child at home): yes, the child leaves and the family gets "
+    add(_f(LEAVING, "The Talent Scout (a Popup Event, a child at home): yes, the child leaves and the family gets "
                     "$500; no, nothing happens.", E, "spec 9: event 83"))
     add(_f(LEAVING, "Boarding School (the store): the chosen child is sent away.", U, "spec 9: purchase path"))
     add(_f(LEAVING, "The college e-mails come from those who left; they count one year away for every 12,000 "
@@ -484,17 +484,17 @@ def facts() -> list[Fact]:
     add(_f(DATING, f"Patcher option \"{OPTION_PREGNANCIES}\", on: the next generation is also offered when the "
                    "oldest family member reaches 60 with a child alive. Off: only as above.", C,
            "spec 10: VF2CanStartNextGenerationAtOlderAge"))
-    add(_f(DATING, "Little Visitor (an island event, with room for a child): yes, a 3-year-old boy or girl joins "
+    add(_f(DATING, "The Little Visitor (a Popup Event, with room for a child): yes, a 3-year-old boy or girl joins "
                    "the family.", E, "spec 10: events 64 / 65"))
 
-    # ------------------------------------------------------------------ Island events (spec 11)
+    # ------------------------------------------------------------------ Random Events (spec 11)
     add(_f(EVENTS, "Every hour of game time (1 real hour at normal speed; the clock stops while paused), when "
                    "someone is at home: a 66% "
-                   "chance of an e-mail event, otherwise a pop-up event now. Opening the e-mail starts the hour "
+                   "chance of an Email Event, otherwise a Popup Event now. Opening the e-mail starts the hour "
                    "again.", C, "spec 11: UpdateScene 0x4A2E17"))
     add(_f(EVENTS, "The event is picked evenly among those that can happen at the time, so each one's chance is 1 "
                    "in the number that can.", C, "spec 11: CIslandEvents::FireEvent 0x46F330"))
-    add(_f(EVENTS, "The events of the game as shipped (the patcher's Island Events option changes them, not shown "
+    add(_f(EVENTS, "The events of the game as shipped (the patcher's \"Add mobile-exclusive Random Events\" option adds to them, not shown "
                    "here). Money: + gain, - cost; \"yes\" and \"no\" are the two answers:", E,
            "spec 11: CalcAward and ImpactGame run as linked (t_events)"))
     for text, label in _EVENT_LINES:
@@ -561,7 +561,7 @@ def facts() -> list[Fact]:
                   "\"30% (30.03%)\" means 9,840 of the game's 32,768 equally likely values.", C, "spec header"))
     add(_f(INDEX, "Chances, all shown above:", C, "spec 18"))
     for text in ("a malfunction 1 in 800 every 2 seconds, then 1 of 14;",
-                 "an island event's kind: e-mail 66%, pop-up 34%, then 1 among those that can happen;",
+                 "a Random Event's kind: Email Event 66%, Popup Event 34%, then 1 among those that can happen;",
                  "a missed meal 50% (50 food or less), starvation 30.03%, waste 76%, no food 76%;",
                  "illness per check 1.007% (2.518% with a catching housemate), losing health while sick 61%, "
                  "recovery 50% (10% from 55);",
@@ -584,7 +584,7 @@ def facts() -> list[Fact]:
             ("a symptom: 6 to 17 hours (real time);", C),
             ("a food group: 24 hours (real time);", C),
             ("interest and the Food Club: each game day (24 hours), interest at most 2 days at once;", E),
-            ("an island event: every hour (game clock);", C),
+            ("a Random Event: every hour (game clock);", C),
             ("the dating e-mail: 3 minutes, then 5 minutes per date plus 10 per year over 26 (game clock);", C),
             ("the Maid and the Gardener: every hour in the day by your PC's clock (game clock);", C),
             ("messes: every 5 hours, 2.5 with 4 or more in the family (game clock);", C),
@@ -603,76 +603,76 @@ def facts() -> list[Fact]:
     return out
 
 
-# Island events of the core build (spec 11 table), in family words.  Each line's label: VERIFIED-E (run as linked)
+# Random Events of the core build (spec 11 table), in family words.  Each line's label: VERIFIED-E (run as linked)
 # unless the spec marks part of it UNCONFIRMED or the event could not be shown to happen.
 _EVENT_LINES = (
-    ("A Secret Admirer (e-mail, someone living alone): nothing else happens.", E),
-    ("I Ate Soup, I am on a BOAT, So Many Babies, Status: Single, I Lost My Pants, Boring, Likes (e-mails, a teen or "
+    ("A Secret Admirer (Email Event, someone living alone): nothing else happens.", E),
+    ("I Ate Soup, I am on a BOAT, So Many Babies, Status: Single, I Lost My Pants, Boring, Likes (Email Events, a teen or "
      "adult at home): happiness only; I am on a BOAT and So Many Babies -10, Status: Single and I Lost My "
      "Pants +10, Boring -20 energy.", E),
-    ("Oh So Clever (e-mail): -10 happiness and a 15% chance of a stomach upset.", E),
-    ("Electric Bill Correction (e-mail): -$5 to -$24, or +$5 to +$24.", E),
+    ("Oh So Clever (Email Event): -10 happiness and a 15% chance of a stomach upset.", E),
+    ("Electric Bill Correction (Email Event): -$5 to -$24, or +$5 to +$24.", E),
     ("Spam e-mails (Funny, Bigger Brain, Nigerian Lottery, Car Insurance, What's What): only without the Anti-Spam "
      "Software; nothing happens.", E),
-    ("Professional Association Fee (e-mail): -$5, -$8 or -$11.", E),
-    ("Professional Association Rebate (e-mail, someone working): +$5 to +$32.", E),
-    ("Professional Network (e-mail, someone working): 20 pieces of unpaid career progress.", E),
-    ("Professional Association Award (e-mail): a promotion.", E),
-    ("Infringement Complaint (e-mail): nothing happens.", E),
-    ("Tax Audit (e-mails): a fee of -$40 to -$114, or a gift of +$500.", E),
-    ("Old Friend (e-mails, three kinds): nothing happens.", E),
-    ("Oh! A collectible! (e-mail): a collectible appears.", E),
-    ("My Weather Machine (e-mail, normal or sunny weather): rain, snow or fog, a third each.", E),
-    ("An extra hammock (e-mail): everyone runs to the yard.", U),
+    ("Professional Association Fee (Email Event): -$5, -$8 or -$11.", E),
+    ("Professional Association Rebate (Email Event, someone working): +$5 to +$32.", E),
+    ("Professional Network (Email Event, someone working): 20 pieces of unpaid career progress.", E),
+    ("Professional Association Award (Email Event): a promotion.", E),
+    ("Infringement Complaint (Email Event): nothing happens.", E),
+    ("Tax Audit (Email Events): a fee of -$40 to -$114, or a gift of +$500.", E),
+    ("Old Friend (Email Events, three kinds): nothing happens.", E),
+    ("Oh! A collectible! (Email Event): a collectible appears.", E),
+    ("My Weather Machine (Email Event, normal or sunny weather): rain, snow or fog, a third each.", E),
+    ("An extra hammock (Email Event): everyone runs to the yard.", U),
     ("Birthday present +$10 to +$50; Preferred Customer +$5 to +$79; Craft Fair +$35 to +$45; Rebate +$50; Helpful "
-     "Child +$5 to +$54; Bad Cookies -$5 to -$100 (e-mails).", E),
-    ("Office Collection -$4 to -$40 or -$5 to -$50; Overdue Book -$5 to -$50; Bake Sale -$6 to -$60 (e-mails).", E),
-    ("Best Landscape Award (e-mail, 5 weeds or fewer): +$10 for each weed fewer than 6.", E),
-    ("Kite Contest +$8 to +$80; Hot Dog Contest +$5 to +$50 (e-mails).", E),
-    ("Neighborhood Children's Association (pop-up, a child at home): -$10 per child.", E),
+     "Child +$5 to +$54; Bad Cookies -$5 to -$100 (Email Events).", E),
+    ("Office Collection -$4 to -$40 or -$5 to -$50; Overdue Book -$5 to -$50; Bake Sale -$6 to -$60 (Email Events).", E),
+    ("Best Landscape Award (Email Event, 5 weeds or fewer): +$10 for each weed fewer than 6.", E),
+    ("Kite Contest +$8 to +$80; Hot Dog Contest +$5 to +$50 (Email Events).", E),
+    ("Neighborhood Children's Association (Popup Event, a child at home): -$10 per child.", E),
     ("Angry Note, Sad Note, Room Specification, RSVP, Funeral Book, Adoption Response, The Deed, Earthquake "
-     "(pop-ups): nothing else happens.", E),
-    ("Aesthetic Society (pop-up, weeds in the yard): -$5 per weed.", E),
-    ("Birdwatcher Society (pop-up): +$25, +$50, +$75 or +$100.", E),
-    ("Allergy Season (pop-up): 3 random family members get a runny nose.", E),
-    ("Adoption Day (pop-up): everyone celebrates.", E),
-    ("TV Night, BBQ Party (pop-ups, with a TV or a grill): everyone joins in.", E),
-    ("The Broken Window (pop-up): +$1 to +$30.", E),
-    ("Photo Contest (pop-up, 2 or more people) +$25 to +$125; Community Association -$20 to -$100.", E),
-    ("Blowing Trash (pop-up): 5 to 12 pieces of trash in the house. Free Lawn Service: 5 to 12 weeds in the yard.",
+     "(Popup Events): nothing else happens.", E),
+    ("Aesthetic Society (Popup Event, weeds in the yard): -$5 per weed.", E),
+    ("Birdwatcher Society (Popup Event): +$25, +$50, +$75 or +$100.", E),
+    ("Allergy Season (Popup Event): 3 random family members get a runny nose.", E),
+    ("Adoption Day (Popup Event): everyone celebrates.", E),
+    ("TV Night, BBQ Party (Popup Events, with a TV or a grill): everyone joins in.", E),
+    ("The Broken Window (Popup Event): +$1 to +$30.", E),
+    ("Photo Contest (Popup Event, 2 or more people) +$25 to +$125; Community Association -$20 to -$100.", E),
+    ("Blowing Trash (Popup Event): 5 to 12 pieces of trash in the house. Free Lawn Service: 5 to 12 weeds in the yard.",
      E),
-    ("Little Visitor (pop-up, room for a child): yes, a 3-year-old boy or girl joins the family.", E),
-    ("EPA Visit (pop-up): yes, pay three quarters of an upgrade's price and get it built; no, a 75% chance of a skin "
+    ("Little Visitor (Popup Event, room for a child): yes, a 3-year-old boy or girl joins the family.", E),
+    ("EPA Visit (Popup Event): yes, pay three quarters of an upgrade's price and get it built; no, a 75% chance of a skin "
      "rash for everyone at home.", E),
-    ("Chemical Manifest (pop-up): yes, pay for and get an item, then the 75% skin-rash chance; no, the skin-rash "
+    ("Chemical Manifest (Popup Event): yes, pay for and get an item, then the 75% skin-rash chance; no, the skin-rash "
      "chance.", E),
-    ("Boy Selling Cupcakes (pop-up): yes, -$10 and a 50% chance of a stomach upset; no, -$45.", E),
-    ("Girl Selling Magazines (pop-up, room in the tray): yes, -$20 and one of three items.", E),
-    ("Ran Out Of Diapers (pop-up, a baby): yes, -$60. Diaper Rash: yes, pay for an item; no, everyone -10 energy. "
+    ("Boy Selling Cupcakes (Popup Event): yes, -$10 and a 50% chance of a stomach upset; no, -$45.", E),
+    ("Girl Selling Magazines (Popup Event, room in the tray): yes, -$20 and one of three items.", E),
+    ("Ran Out Of Diapers (Popup Event, a baby): yes, -$60. Diaper Rash: yes, pay for an item; no, everyone -10 energy. "
      "Lost Binky: yes, everyone +15 happiness.", E),
-    ("Bug Whisperer (pop-up): yes, -$75 and two random bug collectibles.", E),
-    ("Collecting Contest (pop-up): yes, +$10 with fewer than 10 collectibles, +$50 with 10 to 20, +$100 with 21 or "
+    ("Bug Whisperer (Popup Event): yes, -$75 and two random bug collectibles.", E),
+    ("Collecting Contest (Popup Event): yes, +$10 with fewer than 10 collectibles, +$50 with 10 to 20, +$100 with 21 or "
      "more.", E),
-    ("Adult-proof (pop-up, 2 or more children): yes, -$50.", E),
-    ("Small Package, Medium Brown Box, Sealed Green Bag (pop-ups, room in the tray): yes, a random item.", U),
-    ("A Tiny White Box (pop-up): yes, a third of the food is lost.", E),
-    ("Scratch-Off Lottery Ticket (pop-up): yes, -$20 and a 33% chance of winning $0 to $90 (in $10 steps).", E),
-    ("The Wrong Address (pop-up): yes, -$100 and one of two pieces of furniture.", U),
-    ("The Delivery Truck (pop-up): yes, a piece of furniture; no, an amount of $0 to $140 (in $20 steps).", U),
-    ("Talent Scout (pop-up, a child): yes, the child leaves home and the family gets $500.", E),
-    ("Beauty Contest (pop-up, a child): yes, -$10 and a 33% chance of winning $100.", E),
+    ("Adult-proof (Popup Event, 2 or more children): yes, -$50.", E),
+    ("Small Package, Medium Brown Box, Sealed Green Bag (Popup Events, room in the tray): yes, a random item.", U),
+    ("A Tiny White Box (Popup Event): yes, a third of the food is lost.", E),
+    ("Scratch-Off Lottery Ticket (Popup Event): yes, -$20 and a 33% chance of winning $0 to $90 (in $10 steps).", E),
+    ("The Wrong Address (Popup Event): yes, -$100 and one of two pieces of furniture.", U),
+    ("The Delivery Truck (Popup Event): yes, a piece of furniture; no, an amount of $0 to $140 (in $20 steps).", U),
+    ("Talent Scout (Popup Event, a child): yes, the child leaves home and the family gets $500.", E),
+    ("Beauty Contest (Popup Event, a child): yes, -$10 and a 33% chance of winning $100.", E),
     ("Landscaping -$20, the weeds gone; Housekeeping -$20, the socks, wrappers and smudges gone; Total House Care "
-     "-$50, all of them gone (pop-ups).", E),
-    ("The Mysterious Collector (pop-up): buys collectibles.", U),
-    ("Water Pressure Surge (pop-up): no brings five leaks.", E),
-    ("Professional Career Training (pop-up): yes, -$250 and a promotion.", E),
-    ("The Trainer (pop-up): yes, -$5 and all the food is lost.", E),
-    ("The Cooking Class (pop-up): yes, a cooking mess in the kitchen.", E),
-    ("The Power Failure (pop-up): the power goes out. Throw out the food: the food store is reset. Take a chance: no one ill "
+     "-$50, all of them gone (Popup Events).", E),
+    ("The Mysterious Collector (Popup Event): buys collectibles.", U),
+    ("Water Pressure Surge (Popup Event): no brings five leaks.", E),
+    ("Professional Career Training (Popup Event): yes, -$250 and a promotion.", E),
+    ("The Trainer (Popup Event): yes, -$5 and all the food is lost.", E),
+    ("The Cooking Class (Popup Event): yes, a cooking mess in the kitchen.", E),
+    ("The Power Failure (Popup Event): the power goes out. Throw out the food: the food store is reset. Take a chance: no one ill "
      "70.8%, one family member with a stomach upset 20.8%, two 8.3%.", E),
-    ("Career Change Counselor (pop-up): yes, a new random career at level 0.", E),
-    ("The Rare Bird (pop-up): everyone runs to the yard.", U),
-    ("School Fund-raiser (pop-up): yes, -$25 and +100 food.", E),
+    ("Career Change Counselor (Popup Event): yes, a new random career at level 0.", E),
+    ("The Rare Bird (Popup Event): everyone runs to the yard.", U),
+    ("School Fund-raiser (Popup Event): yes, -$25 and +100 food.", E),
 )
 
 

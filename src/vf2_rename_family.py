@@ -43,8 +43,11 @@ Safety
       "(before rename)".
     * Every file is written beside itself and swapped in with os.replace, then read back. Any failure puts every
       file already changed back exactly as it was.
-    * No log and no data file is written. The Up to 28 Children file beside a save is named after the save file,
-      not the name, so it is untouched.
+    * No data file is written. The Up to 28 Children file beside a save is named after the save file, not the
+      name, so it is untouched. When the Family History log patch has already made a log for the slot
+      (Virtual Families 2 Patcher\\Save N\\Logs\\Family History), one dated line is added to it, after the
+      rename succeeded: "Rename Family: the player name <old> is now <new>" (a new numbered file, opened with
+      the new name, when the newest already holds 2000 lines). No log is ever started here.
 
 Nothing here touches Tk; the GUI runs it on a worker thread, and the tests drive it against a temporary copy of a
 save folder with a fake process list.
@@ -52,6 +55,7 @@ save folder with a fake process list.
 from __future__ import annotations
 
 import os
+import re
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -301,6 +305,46 @@ def plan_changes(folder: Path, slot: int, new_name: str) -> tuple[bytes, list[Fi
     return old, changes
 
 
+
+
+def history_folder(folder: Path, slot: int) -> Path:
+    """Where the Family History log patch keeps a slot's log (vf2history_b200.dll)."""
+    return folder / "Virtual Families 2 Patcher" / f"Save {slot}" / "Logs" / "Family History"
+
+
+_RENAMED = re.compile(r"^\[[^\]]*\] Family Renamed (\d+)\r?$", re.MULTILINE)
+
+
+def history_record(old: str, new: str, when: datetime, number: int) -> str:
+    """The record the Family History log's own layout gives a rename (vf2history_b200.dll writes the others), as
+    Virtual Families 1's Rename Family writes it."""
+    return (f"[{when:%Y-%m-%d %H:%M:%S}] Family Renamed {number}\r\n"
+            f"  Old name: {old or '(no name)'}\r\n  New name: {new}\r\n\r\n")
+
+
+def log_rename(folder: Path, slot: int, old: str, new: str, when: datetime) -> Path | None:
+    """Add a "Family Renamed" record to the slot's newest Family History file, numbered after every earlier one
+    in all of its files, if the log exists; returns the file written. Old files keep their header."""
+    logs = history_folder(folder, slot)
+    files = []
+    k = 1
+    while (logs / f"Family History {k}.txt").is_file():
+        files.append(logs / f"Family History {k}.txt")
+        k += 1
+    if not files:
+        return None
+    number = 1
+    for path in files:
+        text = path.read_bytes().decode("cp1252", errors="replace")
+        number = max([number] + [int(n) + 1 for n in _RENAMED.findall(text)])
+    newest = files[-1]
+    data = newest.read_bytes()
+    prefix = b"" if not data or data.endswith(b"\n") else b"\r\n"
+    with open(newest, "ab") as out:
+        out.write(prefix + history_record(old, new, when, number).encode("latin-1"))
+    return newest
+
+
 def _restore(changes: list[FileChange]) -> list[str]:
     """Put every changed file back; the reasons any could not be."""
     problems: list[str] = []
@@ -364,4 +408,8 @@ def rename_family(
         raise RenameError(
             f"The rename failed ({exc}); every file was put back as it was. A backup is in {backup.backup_folder}."
         ) from exc
+    try:
+        log_rename(folder, slot, shown(old), new_name, when)
+    except OSError:
+        pass            # the rename itself is done; a log the patcher cannot write is left as it is
     return RenameResult(folder, slot, shown(old), new_name, backup, [change.path for change in changes])

@@ -62,6 +62,7 @@ WHOLE = (
     # and no other test reads runtime/build, so each file as a whole runs in the parallel pass.
     "tests/test_b200_time_controls.py",
     "tests/test_b200_up_to_28_children.py",
+    "tests/test_b200_family_history.py",
 )
 
 COUNT = re.compile(r"(\d+) (subtests )?(passed|failed|skipped|errors?|xfailed|xpassed|deselected)")

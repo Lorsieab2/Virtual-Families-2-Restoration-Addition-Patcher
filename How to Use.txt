@@ -62,7 +62,7 @@ as if you paused just before the game last saved; Normal as if you unpaused it
 right now, so the time it spent paused never counts. Your saves are backed up
 first as "Backup <date> (before speed change)".
 Game Mechanics shows how the game works underneath: ageing, needs, illness, old
-age, babies, careers, money, leaving home, dating, island events, weather,
+age, babies, careers, money, leaving home, dating, Random Events (Email and Popup Events), weather,
 messes, collectibles and the store, with every chance and timer in real time.
 Each line is marked VERIFIED-E (the game's own code was run and counted),
 VERIFIED-C (read from the game's own code) or UNCONFIRMED. It only shows text

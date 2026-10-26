@@ -41,6 +41,12 @@ def keys() -> list[str]:
     return list(_load()["controls"])
 
 
+def setting_keys() -> list[str]:
+    """The guides of patch settings (``"setting": true``): their "?" sits on the setting's row, so it is
+    there only while the loaded manifest offers that setting."""
+    return [key for key, entry in _load()["controls"].items() if entry.get("setting") is True]
+
+
 def control_title(key: str) -> str:
     return _load()["controls"][key]["title"]
 

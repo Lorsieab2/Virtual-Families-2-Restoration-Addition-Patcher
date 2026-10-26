@@ -135,7 +135,7 @@ actions, as before. **Tools** holds:
 - **Game Mechanics...** (the Game section) opens a read-only window of how Virtual Families 2 works underneath,
   laid out as the Virtual Villagers patcher's: a link to each group at the top (time and ageing, needs and upkeep,
   health and sickness, old age, pregnancy and babies, careers, money and interest, leaving home, dating, marriage
-  and the next generation, island events, weather, messes and malfunctions, collectibles, the Flea Market and On
+  and the next generation, Random Events (Email and Popup Events), weather, messes and malfunctions, collectibles, the Flea Market and On
   Sale, and a chance-and-timer index), every time a real time at normal speed and every chance the game's exact
   one. Each line shows its label: **VERIFIED-E** (the B200 core exe's own routine run as linked in unicorn and
   every outcome counted), **VERIFIED-C** (read from the exe's own code on a traced call path) or **UNCONFIRMED**.
@@ -285,7 +285,7 @@ rebuild the modded folder without it.
 - Playtest follow-up as of B183, kept for the record: the Exercise Bike and Home Gym venue handlers now apply their own labels even when the borrowed donor keeps its native label, while preserving the donor animation and duration. Spa receiving now uses the stock SleepNW/SleepNE strips after a short settle and walks to a small upward-adjusted target. The B183 generated executable was startup-smoke tested from its self-contained package for 15 seconds with zero new matching Windows Application Error/WER events. **All of it has since been confirmed in play.** The owner verified the Spa Lounger receiving pose against the furniture (the remaining spa defect closed in B191), and reports the Exercise Bike and Home Gym System working as described.
 - **Use mobile sound assets** (on) - stages the 67 hash-pinned mobile behavior sounds and repoints the four PC WAV routes that must load OGG.
 - **Add Holiday Ornaments collection** (on) - 12 yard collectibles, six Collections Chest pages, the Ornamentologist and six-family goals, Lucky Rock rarity odds, and The Collector offer/sell handling.
-- **Add mobile-exclusive Island Events** (on) - all 25 authenticated mobile-exclusive Island Event records with their text and choice/result dialogs. Also restores the PC game's unused Virtual Scouts event as a random event: "OK" makes everyone celebrate and gives each villager +5 happiness; "What rats?" costs 100 food. The Power Failure event's "Take a chance" now has a 1 in 4 chance that "The food was not ok.", giving each villager a 15% chance of an upset stomach.
+- **Add mobile-exclusive Random Events** (on) - all 25 authenticated mobile-exclusive Random Event records with their text and choice/result dialogs. Also restores the PC game's unused Virtual Scouts event as a random event: "OK" makes everyone celebrate and gives each villager +5 happiness; "What rats?" costs 100 food. The Power Failure event's "Take a chance" now has a 1 in 4 chance that "The food was not ok.", giving each villager a 15% chance of an upset stomach.
 - **Add mobile room renovations** (on) - 15 verified mobile renovation images (5 Bathroom 1, 3 kitchen, 5 office, 2 workshop) at their exact room-map positions, plus their store icons and the five shower-curtain variants. Bathroom 2's own art is not here: it is AI-generated and ships under **2nd Bathroom Mobile-Style Renovations** instead, so that a player who declines the AI art still gets every genuine mobile renovation.
 - **2nd Bathroom Mobile-Style Renovations (AI-Generated Art Warning)** (on) - AI-generated Bathroom 2 art, hand-edited, based on the Bathroom 1 mobile renovations. Labeled with an art warning in the GUI. **Requires Add mobile room renovations**: the Bathroom 2 renovations exist only in that executable, so the art is not installed while it is off.
 - **Cheat Upgrades** (on) - the cheat-only executable overlay, adding 43 Special Upgrade rows. See [Cheat Upgrades in detail](#cheat-upgrades-in-detail).
@@ -309,6 +309,33 @@ release bundle, like almost everything else)
   (`vf2kids_b200.dll`) in the Virtual Families 2 Patcher Files folder does the work; with the setting
   off it is not installed and the executable never loads it. **Not live tested yet** -- see
   `docs/b200-up-to-28-children.md` for the evidence and what is not covered.
+- **Family History log** (`.vf2hist`, in the **Experimental** section, off by default; Enable All and
+  `--enable-all` leave it off; added after B203, not yet in a release, and it needs executables built
+  with its loader, so it arrives with the next matrix build) - one Family History log per family, in the
+  format of the Virtual Families 1 patcher's Family History: one dated record per event, in
+  `Virtual Families 2 Patcher\Save N\Logs\Family History\Family History <k>.txt` in the save folder,
+  rolling to the next numbered file after 2000 records. Each record is the Virtual Villagers patcher's
+  layout: a heading `[YYYY-MM-DD HH:MM:SS] <Kind> <n>` (Conception, Birth, Death, Marriage, Divorce,
+  Arrived, Left Home, Generation, New Generation, Renamed, Random Event, Evict Family, Start Over, Family
+  Renamed, Family Tree), then `  Label: value` lines and a blank line; each family member is written as
+  that patcher writes a villager: the name, then the age, sex, head and body. It records
+  marriages and remarriages, same-sex ones included (naming the current spouse and the earlier one, and
+  whether that one died or was divorced), spouses lost to divorce (the patcher's Divorce Spouse) or death,
+  every conception and birth (twins and triplets marked, with both parents), every death with the game's own
+  cause and the person's age, children who join (Adoption Services, The Little Visitor) or leave home
+  (college, Boarding School, The Talent Scout), each new generation and its heir, a rename in the Details
+  box, a new family, Start Over and Evict Family, and every Random Event as `Email Event: <subject>` or
+  `Popup Event: <title>`, the text its dialog shows, with the choice made. Rename Family (Tools tab) adds a
+  `Family Renamed` record to a slot
+  that has a log. Virtual Families 2 has no family surname, so each file is headed with the player name the save holds. An
+  existing family's past is filled in once from its Family Tree, marked "backfilled, no date". No other
+  file is written: an earlier spouse and why they left (the game erases a childless spouse's Family Tree
+  record at death, and Divorce Spouse clears it) are read back from the log's own records. A new family or
+  Start Over in a save slot starts that slot's log again (a `Backups` folder in it is kept); Evict Family keeps it. The
+  save file is not changed. A companion DLL (`vf2history_b200.dll`) in the Virtual Families 2 Patcher Files
+  folder does the work; with the setting off it is not installed and the executable never loads it.
+  Experimental: not yet tested in a running game. Back up your saves before using it. **Not live tested
+  yet** -- see `docs/FAMILY_HISTORY.md` for every hook, its evidence and what is not covered.
 
 **Asset and UI mods**
 
