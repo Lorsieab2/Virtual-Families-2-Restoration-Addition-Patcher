@@ -53,15 +53,20 @@ remarriage, a divorced spouse and a founder who died childless stay on the tree 
 also knows which generation the save's oldest record is.
 
 With the log (`...\Save <N>\Logs\Family History\Family History <k>.txt`, written by `runtime/native/b200history`)
-the tree adds: twins and triplets (Birth lines' "(Twins)" / "(Triplets)"), the cause and age at death, spouses
-married before ("married" lines), why someone left home (the college / Boarding School / Talent Scout lines) and
-which event brought an adopted child (Event lines "Adoption Services" / "The Little Visitor"). A name the log gives
-that matches nobody, or more than one member, is left alone.
+the tree adds: twins and triplets (Birth records' "Born as"), the cause and age at death, every spouse and the
+order of a head's marriages (Marriage records, "Remarried", "Earlier spouse"), divorces, why someone left home
+(Left Home records) and the Random Event that brought a member in or took one away ("Adopted (Popup Event: The
+Little Visitor)", "Left home with The Talent Scout (Popup Event)"). A name the log gives that matches nobody, or
+more than one member, is left alone. Records before the last Evict Family belong to the earlier family.
 
-The line formats read are the DLL's (`src/vf2_family_history.py` lists them). They differ from the Virtual
-Families 1 Family History log in four places: a Death line ends `; Family role: <role>, generation <g>[; <x> has
-no current spouse]`; a marriage may be `remarried:` with `; earlier spouse: <name>[ (died|divorced)]` and `; current
-spouse of <a>: <b>`; a divorce is its own line, `Divorce: <head> (<sex>) and <who> divorced, generation <g>`; and an
-adopted child's title is in brackets on the joined line, `adopted (<title>)`, while Event lines carry only the
-Random Event's title; the new `Email Event: <title>` and `Popup Event: <title>` lines are read as well. The
-Virtual Families 1 forms are read too.
+The format is the Virtual Families 1 Family History log's, the Virtual Villagers record layout (VF1
+`origin/feat/family-history` a5f7ed9, `docs/FAMILY_HISTORY.md`): a `[YYYY-MM-DD HH:MM:SS] <Kind> <n>` heading,
+`  Label: value` lines with each family member's own lines (age, sex, head, body) one step in, then a blank line.
+Kinds: Conception, Birth, Death, Marriage, Divorce, Arrived, Left Home, Generation / New Generation, Random Event
+(`Email Event:` / `Popup Event:`), Roll the Dice, Evict Family, Start Over, Family Renamed, and the backfill's
+Family Tree. `src/vf2_family_history.py` is VF1's reader ported; the older one-line forms are not read (no
+Virtual Families 2 log ever wrote them).
+
+Labels from the log: Husband N / Wife N (each spouse's own sex) only when the log saw the head's first marriage
+itself, not a backfill; otherwise "Married in". Without the log only what the save and the tree file prove:
+Remarried when two or more spouses of one head were seen; never an order, never "Divorced".

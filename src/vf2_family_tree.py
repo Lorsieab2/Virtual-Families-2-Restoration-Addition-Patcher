@@ -5133,6 +5133,8 @@ def descriptors(lay: Layout, p: gen.Person) -> list[str]:
     out += ["Runner"] if lay.opt(p, "show_runner") and p.runner else []
     out += born_with(lay, p)
     arrived = arrival_words(v, p) if lay.opt(p, "show_arrived") else ""
+    if arrived == "Married in" and spouse_words(p) and lay.opt(p, "show_spouse_number"):
+        arrived = ""                            # "Husband 2" says it, in the order the log proves
     out += [arrived] if arrived else []
     out += ["Heir"] if lay.opt(p, "show_heir") and getattr(p, "heir", False) else []
 

@@ -85,6 +85,8 @@ class Person:
     event: str = ""                     # "Event names": what brought them in ("Married in", "The Little Visitor"...)
     left_home: bool = False             # alive and left home (the save's left-home flag, VERIFIED)
     left_why: str = ""                  # why they left home, when the Family History log says (the save does not)
+    left_how: str = ""                  # the log's own words for it ("Eve is going to college!")
+    partner: int | None = None          # the head of the family they married (the log)
     adopted: bool = False               # joined as an adopted child (no parents in their bio)
     heir: bool = False                  # inherited the house: parent 1 of a later generation
     cause: str = ""                     # the cause of death
@@ -141,6 +143,7 @@ class Village:
     identity_questions: list = field(default_factory=list)
     generations: int = 0                # the save's Family Tree records
     couples: dict = field(default_factory=dict)          # generation -> its parents' ids (as the save holds them)
+    history_events: list = field(default_factory=list)   # the log's Random Events ("<when>: Popup Event: <title>")
     sources: list[str] = field(default_factory=list)     # the files read
 
     def living(self) -> list[Person]:

@@ -173,97 +173,104 @@ def test_remembering_never_writes_the_save_and_keeps_the_edits(tmp_path):
 
 
 # ---------------------------------------------------------------- the Family History log
-# Lines as runtime/native/b200history/b200history.cpp writes them (OnBirths, OnDeath, OnMarriage, OnDivorce,
-# OnJoined, OnIslandEvent, OnLeftHome, OnGeneration, OnConception, Backfill), and one Virtual Families 1 form.
-HISTORY = """Family: Testfamily (Save 1)
-[backfilled, no date] Generation 1: Ann (Female) and Bob (Male) were the parents
-[2026-10-20 10:00:00] Generation 1 began: Ann (Female, 20) was adopted and started the family
-[2026-10-20 10:05:00] Ann (Female, 21) married Bob (Male, 22), generation 1; current spouse of Ann: Bob
-[2026-10-20 11:00:00] Conception 1: Ann and Bob (babies Nursing: 2)
-[2026-10-20 12:00:00] Birth 1: Cal (Male) was born to Ann and Bob (Twins)
-[2026-10-20 12:00:00] Birth 2: Cia (Female) was born to Ann and Bob (Twins)
-[2026-10-20 12:30:00] Birth 3: Moe (Male) was born to Ann and (unknown)
-[2026-10-20 13:00:00] Divorce: Ann (Female) and Bob (Male, 24) divorced, generation 1; Ann has no current spouse
-[2026-10-20 14:00:00] Ann (Female, 25) remarried: Dan (Male, 30), generation 1; earlier spouse: Bob (divorced); current spouse of Ann: Dan
-[2026-10-20 15:00:00] Kim (Female, 3) joined the family as a child, adopted (The Little Visitor), generation 1
-[2026-10-20 15:01:00] Lou (Male, 4) joined the family as a child, adopted (Adoption Services), generation 1
-[2026-10-20 16:00:00] Death 1: Cia (Female, 2) died: Starvation; Family role: Child, generation 1
-[2026-10-20 16:30:00] Event 1: The Talent Scout
-[2026-10-20 17:00:00] Lou has been sent away to school! (Male, 9, left home)
-[2026-10-20 18:00:00] Cal is going to college! (Male, 19, left home)
-[2026-10-20 18:30:00] Kim left home with The Talent Scout (Female, 15, left home)
-[2026-10-20 18:40:00] Death 2: Dan (Male, 50) died: Old age; Family role: Parent (married in), generation 1; Ann has no current spouse
-[2026-10-20 18:50:00] Ann (Female, 52) remarried: Gil (Male, 40), generation 1; earlier spouse: Dan (died); current spouse of Ann: Gil
-[2026-10-20 19:00:00] New Generation: generation 2 began: Cal (Male, 25) inherited the house
-[2026-10-20 19:10:00] Event 2: Divorce Spouse: Gil
-"""
+# Records in the final layout (VF1 docs/FAMILY_HISTORY.md at a5f7ed9; the Virtual Families 2 DLL writes the same).
+def person(label: str, name: str, sex: str, head: int, body: int, age: int | None = None, age_label: str = "Age",
+           indent: str = "  ") -> str:
+    out = f"{indent}{label}: {name}\n"
+    if age is not None:
+        out += f"{indent}  {age_label}: {age}\n"
+    return out + f"{indent}  Sex: {sex}\n{indent}  Head: {head}\n{indent}  Body: {body}\n"
 
 
-def history_folder(tmp_path):
+def record(when: str, kind: str, n: int, body: str) -> str:
+    return f"[{when}] {kind} {n}\n{body}\n"
+
+
+def marriage(n, head, hsex, spouse, ssex, g=1, earlier="", when="2026-10-20 10:05:00"):
+    body = person("Family member", head, hsex, 1, 1, 21) + person("Married", spouse, ssex, 2, 2, 22)
+    if earlier:
+        body += f"  Remarried: yes\n  Earlier spouse: {earlier}\n"
+    return record(when, "Marriage", n, body + f"  Current spouse of {head}: {spouse}\n  Generation: {g}\n")
+
+
+def death(n, name, sex, years, cause, role="Child", g=1):
+    return record("2026-10-20 16:00:00", "Death", n,
+                  f"  Name: {name}\n  Age at death: {years}\n  Sex: {sex}\n  Cause of death: {cause}\n  Head: 1\n"
+                  f"  Body: 1\n  Family role: {role}\n  Generation: {g}\n")
+
+
+def divorce(n, head, hsex, spouse, ssex, years):
+    return record("2026-10-20 13:00:00", "Divorce", n,
+                  person("Family member", head, hsex, 1, 1) + person("Divorced", spouse, ssex, 2, 2, years)
+                  + f"  How: Divorce Spouse\n  Current spouse of {head}: (none)\n  Generation: 1\n")
+
+
+def birth(n, child, sex, born_as="Single birth", father="Bob"):
+    return record("2026-10-20 12:00:00", "Birth", n,
+                  person("Child", child, sex, 4, 4) + "  Mother: Ann\n    Head: 1\n    Body: 1\n"
+                  + (f"  Father: {father}\n    Head: 2\n    Body: 2\n" if father else "  Father: (unknown)\n")
+                  + f"  Born as: {born_as}\n  Generation: 1\n")
+
+
+def arrived(n, name, sex, years, how):
+    return record("2026-10-20 15:00:00", "Arrived", n,
+                  f"  Name: {name}\n  Age at arrival: {years}\n  Sex: {sex}\n  Head: 7\n  Body: 7\n  How: {how}\n"
+                  "  Family role: Child\n  Generation: 1\n")
+
+
+def left_home(n, name, sex, years, what):
+    return record("2026-10-20 17:00:00", "Left Home", n,
+                  f"  Name: {name}\n  Age: {years}\n  Sex: {sex}\n  Head: 4\n  Body: 4\n  What happened: {what}\n"
+                  "  Generation: 1\n")
+
+
+GENERATION_1 = record("2026-10-20 10:00:00", "Generation", 1,
+                      "  Name: Ann\n  Age: 20\n  Sex: Female\n  Head: 1\n  Body: 1\n"
+                      "  How: Founder (adopted and started the family)\n  Generation: 1\n")
+HISTORY = ("Family: Testfamily (Save 1)\n" + GENERATION_1
+           + marriage(1, "Ann", "Female", "Bob", "Male")
+           + birth(1, "Cal", "Male", "Twin") + birth(2, "Cia", "Female", "Twin") + birth(3, "Moe", "Male", father="")
+           + divorce(1, "Ann", "Female", "Bob", "Male", 24)
+           + marriage(2, "Ann", "Female", "Dan", "Male", earlier="Bob (divorced)", when="2026-10-20 14:00:00")
+           + arrived(1, "Kim", "Female", 3, "Adopted (Popup Event: The Little Visitor)")
+           + arrived(2, "Lou", "Male", 4, "Adopted (Adoption Services)")
+           + death(1, "Cia", "Female", 2, "Starvation")
+           + record("2026-10-20 16:30:00", "Random Event", 1, "  Popup Event: The Talent Scout\n  Choice: A\n"
+                    "  Generation: 1\n")
+           + left_home(1, "Lou", "Male", 9, "Sent to Boarding School")
+           + left_home(2, "Cal", "Male", 19, "Cal is going to college!")
+           + left_home(3, "Kim", "Female", 15, "Left home with The Talent Scout (Popup Event)")
+           + death(2, "Dan", "Male", 50, "Old age", role="Parent (married in)")
+           + marriage(3, "Ann", "Female", "Gil", "Male", earlier="Dan (died)", when="2026-10-20 18:50:00")
+           + divorce(2, "Ann", "Female", "Gil", "Male", 41)
+           + record("2026-10-20 19:00:00", "Roll the Dice", 1, "  Cost: $500\n  Popup Event: Adoption Day\n"
+                    "  Generation: 1\n"))
+
+
+def history_folder(tmp_path, text: str = HISTORY):
     path = gen.slot_root(tmp_path, 1) / "Logs" / "Family History" / "Family History 1.txt"
-    path.parent.mkdir(parents=True)
-    path.write_text(HISTORY, encoding="cp1252")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="cp1252")
     return path
 
 
-def test_the_family_history_fills_in_what_the_save_lost(tmp_path):
-    history_folder(tmp_path)
+def logged_family(tmp_path, history: str = HISTORY, spouse=None):
+    history_folder(tmp_path, history)
     kids = [{**CAL, "slot": 2}, dict(name="Cia", sex=1, head=6, body=6, slot=-1),
             dict(name="Kim", sex=1, head=7, body=7, slot=5), dict(name="Lou", sex=0, head=8, body=8, slot=6)]
-    b = couple(kids=kids)                               # Gil divorced: parent 2 zeroed
+    b = couple(spouse, kids=kids)
+    if spouse:
+        villager(b, spouse["slot"], **{k: v for k, v in spouse.items() if k != "slot"})
     villager(b, 2, **CAL, age=400, left=1)
     villager(b, 5, name="Kim", sex=1, head=7, body=7, age=300, left=1, father="", mother="")
     villager(b, 6, name="Lou", sex=0, head=8, body=8, age=180, left=1, father="", mother="")
     write_save(tmp_path, bytes(b))
     before = snapshot(tmp_path)
     v = gen.load_village(tmp_path, gen.GAME, 1)
-    assert snapshot(tmp_path) == before
-    bob, cal, cia = by_name(v, "Bob"), by_name(v, "Cal"), by_name(v, "Cia")
-    assert bob.how == "Married in" and bob.event == "Divorce Spouse" and bob.generation == 1
-    assert cal.father == bob.id and cia.father == bob.id and cal.litter is not None and cal.litter == cia.litter
-    assert cia.cause == "Starvation" and cia.years == 2
-    kim, lou = by_name(v, "Kim"), by_name(v, "Lou")
-    assert kim.event == "The Little Visitor" and lou.event == "Adoption Services"
-    assert not any(u.startswith("Adopted:") for u in kim.unknowns + lou.unknowns)
-    assert (cal.left_why, lou.left_why, kim.left_why) == ("College", "Boarding School", "The Talent Scout")
-    dan, gil = by_name(v, "Dan"), by_name(v, "Gil")
-    assert dan.gone == "died" and dan.years == 50 and dan.cause == "Old age" and dan.how == "Married in"
-    assert gil.event == "Divorce Spouse" and dan.generation == gil.generation == bob.generation == 1
+    assert snapshot(tmp_path) == before                    # the log and the save are only read
+    return v
 
 
-def test_history_lines_parse_and_the_tree_works_without_them(tmp_path):
-    h = fh.parse(HISTORY)
-    assert h.family == "Testfamily"
-    assert [b[1] for b in h.births] == ["Cal", "Cia", "Moe"] and h.births[0][5] == "Twins"
-    assert h.births[2][4] == fh.UNKNOWN_FATHER and h.births[2][5] == ""
-    assert h.deaths == [(1, "Cia", "Female", 2, "Starvation"), (2, "Dan", "Male", 50, "Old age")]
-    assert [(m[0], m[3], m[7], m[8]) for m in h.marriages] == [("Ann", "Bob", "", ""), ("Ann", "Dan", "Bob", "divorced"),
-                                                              ("Ann", "Gil", "Dan", "died")]
-    assert h.divorces == [("Ann", "Bob", "Male", 24, 1)]
-    assert [(e[1], e[2]) for e in h.events] == [("The Talent Scout", ""), ("Divorce Spouse", "Gil")]
-    assert [(j[0], j[3], j[5]) for j in h.joined] == [("Kim", True, "The Little Visitor"), ("Lou", True,
-                                                                                          "Adoption Services")]
-    assert h.left == [("Lou", "Male", 9, "Boarding School"), ("Cal", "Male", 19, "College"),
-                      ("Kim", "Female", 15, "The Talent Scout")]
-    # The Virtual Families 1 forms are read too.
-    old = fh.parse("[x] Death 1: Al (Male, 3) died: Disease\n[x] Al (Male, 3) joined the family as a child, adopted, "
-                   "generation 1\n[x] Event 3: The Little Visitor: Al\n")
-    assert old.deaths == [(1, "Al", "Male", 3, "Disease")] and old.joined[0][3] and old.events[0][2] == "Al"
-    assert fh.read(tmp_path, 1) is None
-
-
-def test_the_log_folder_is_beside_the_save(tmp_path):
-    path = history_folder(tmp_path)
-    assert path == tmp_path / "Virtual Families 2 Patcher" / "Save 1" / "Logs" / "Family History" / \
-        "Family History 1.txt"
-    (path.parent / "Family History 2.txt").write_text("[2026-10-21 10:00:00] Death 2: Moe (Male, 1) died: Disease\n",
-                                                      encoding="cp1252")
-    h = fh.read(tmp_path, 1)
-    assert len(h.files) == 2 and h.deaths[-1][1] == "Moe"
-    assert struct.calcsize("<i") == 4                       # (the save reader's own sizes are its tests')
-
-
-# ---------------------------------------------------------------- spouses in order, Remarried, Divorced, events
 def text(v, name, **options):
     import vf2_family_tree as ft
     edits = ft.Edits(**options)
@@ -271,58 +278,68 @@ def text(v, name, **options):
     return ft.default_text(ft.layout(v, edits), by_name(v, name))
 
 
-def logged_family(tmp_path, history: str, spouse=None):
-    path = gen.slot_root(tmp_path, 1) / "Logs" / "Family History" / "Family History 1.txt"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(history, encoding="cp1252")
-    b = couple(spouse, kids=[{**CAL, "slot": 2}, dict(name="Kim", sex=1, head=7, body=7, slot=5),
-                             dict(name="Lou", sex=0, head=8, body=8, slot=6)])
-    if spouse:
-        villager(b, spouse["slot"], **{k: v for k, v in spouse.items() if k != "slot"})
-    villager(b, 2, **CAL, age=400, left=1)
-    villager(b, 5, name="Kim", sex=1, head=7, body=7, age=300, left=1, father="", mother="")
-    villager(b, 6, name="Lou", sex=0, head=8, body=8, age=180, left=1, father="", mother="")
-    write_save(tmp_path, bytes(b))
-    return gen.load_village(tmp_path, gen.GAME, 1)
+def test_the_records_parse(tmp_path):
+    h = fh.parse(HISTORY)
+    assert [(m.head, m.spouse, m.spouse_sex, m.again, m.earlier, m.earlier_how) for m in h.marriages] == [
+        ("Ann", "Bob", "Male", False, None, None), ("Ann", "Dan", "Male", True, "Bob", "divorced"),
+        ("Ann", "Gil", "Male", True, "Dan", "died")]
+    assert [(d[0], d[2], d[3]) for d in h.divorces] == [("Bob", 24, "Ann"), ("Gil", 41, "Ann")]
+    assert [(d[0], d[2], d[5]) for d in h.deaths] == [("Cia", 2, "Starvation"), ("Dan", 50, "Old age")]
+    assert [(b.babies, b.size, b.father) for b in h.births] == [([("Cal", "Male"), ("Cia", "Female")], 2, "Bob"),
+                                                                ([("Moe", "Male")], 1, None)]
+    assert [(j[0], j[3]) for j in h.joined] == [("Kim", "Adopted (Popup Event: The Little Visitor)"),
+                                                ("Lou", "Adopted (Adoption Services)")]
+    assert [(e.kind, e.title, e.choice) for e in h.events] == [("Popup Event", "The Talent Scout", "A")]
+    assert [x[3] for x in h.left] == ["Sent to Boarding School", "Cal is going to college!",
+                                      "Left home with The Talent Scout (Popup Event)"]
+    assert fh.read(tmp_path, 1) is None
 
 
-def test_the_log_numbers_each_spouse_and_names_the_events(tmp_path):
-    v = logged_family(tmp_path, HISTORY)
-    ann = by_name(v, "Ann")
-    assert ann.remarried and "Remarried" in text(v, "Ann")
+def test_the_family_history_fills_in_what_the_save_lost(tmp_path):
+    v = logged_family(tmp_path)
+    bob, cal, cia = by_name(v, "Bob"), by_name(v, "Cal"), by_name(v, "Cia")
+    assert bob.how == "Married in" and bob.divorced and bob.generation == 1
+    assert cal.father == bob.id and cia.father == bob.id and cal.litter is not None and cal.litter == cia.litter
+    assert cia.cause == "Starvation" and cia.years == 2
+    kim, lou = by_name(v, "Kim"), by_name(v, "Lou")
+    assert (kim.event_kind, kim.event_title) == ("Popup", "The Talent Scout")       # the last word: she left with it
+    assert lou.event == "Adoption Services" and (cal.left_why, lou.left_why) == ("College", "Boarding School")
+    assert any("Popup Event: The Talent Scout" in e for e in v.history_events)
+
+
+def test_the_labels_follow_the_log(tmp_path):
+    v = logged_family(tmp_path)
+    assert by_name(v, "Ann").remarried and "Remarried" in text(v, "Ann")
     assert [by_name(v, n).spouse_number for n in ("Bob", "Dan", "Gil")] == [1, 2, 3]
-    assert "Husband 1" in text(v, "Bob") and "Divorced" in text(v, "Bob")
+    bob = text(v, "Bob")
+    assert "Husband 1" in bob and "Divorced" in bob and "Married in" not in bob
     assert "Husband 2" in text(v, "Dan") and "Deceased: Old age" in text(v, "Dan")
     assert "Husband 3" in text(v, "Gil") and "Divorced" in text(v, "Gil")
-    assert "Adopted" in text(v, "Kim") and "Popup Event: The Little Visitor" in text(v, "Kim")
+    assert "Adopted" in text(v, "Kim") and "Popup Event: The Talent Scout" in text(v, "Kim")
     assert "Adopted (Adoption Services)" in text(v, "Lou") and "Left home (Boarding School)" in text(v, "Lou")
-    assert "Left home (The Talent Scout)" in text(v, "Kim")
-    assert "Popup Event: The Little Visitor" not in text(v, "Kim", show_event=False)
-    assert not any("sland" in line for name in ("Kim", "Lou", "Cal") for line in text(v, name))
-
-
-def test_email_and_popup_event_lines_name_the_kind(tmp_path):
-    h = fh.parse("[x] Popup Event 4: The Talent Scout: Cal\n[x] Email Event: Oh! A collectible!\n"
-                 "[x] Event 5: The Little Visitor\n")
-    assert [(e[1], e[2], e[3]) for e in h.events] == [("The Talent Scout", "Cal", "Popup"),
-                                                      ("Oh! A collectible!", "", "Email"),
-                                                      ("The Little Visitor", "", "")]
-    v = logged_family(tmp_path, HISTORY + "[2026-10-21 10:00:00] Popup Event 9: The Talent Scout: Cal\n")
-    cal = by_name(v, "Cal")
-    assert (cal.event_title, cal.event_kind) == ("The Talent Scout", "Popup")
-    assert "Popup Event: The Talent Scout" in text(v, "Cal")
-    assert gen.event_words(gen.Person(0, "X", 1, 1, event_title="A Show")) == "Random Event: A Show"
+    assert "Left home (College)" in text(v, "Cal")
     off = text(v, "Bob", show_spouse_number=False, show_divorced=False)
-    assert "Husband 1" not in off and "Divorced" not in off
+    assert "Husband 1" not in off and "Divorced" not in off and "Married in" in off
     assert "Remarried" not in text(v, "Ann", show_remarried=False)
+    assert "Popup Event: The Talent Scout" not in text(v, "Kim", show_event=False)
 
 
 def test_no_order_unless_the_log_saw_the_first_marriage(tmp_path):
-    late = "\n".join(line for line in HISTORY.splitlines() if "Generation 1 began" not in line) + "\n"
+    backfill = record("backfilled, no date", "Family Tree", 1,
+                      person("Parent", "Ann", "Female", 1, 1) + person("Parent (married in)", "Bob", "Male", 2, 2)
+                      + "  Generation: 1\n  Note: Recorded afterwards\n")
+    late = "Family: Testfamily (Save 1)\n" + backfill + marriage(2, "Ann", "Female", "Dan", "Male",
+                                                               earlier="Bob (died)")
     v = logged_family(tmp_path, late)
     assert by_name(v, "Ann").remarried
-    assert all(by_name(v, n).spouse_number is None for n in ("Bob", "Dan", "Gil"))
-    assert not any(line.startswith(("Husband", "Wife")) for line in text(v, "Dan"))
+    assert all(by_name(v, n).spouse_number is None for n in ("Bob", "Dan"))
+    assert "Married in" in text(v, "Dan") and not any(line.startswith(("Husband", "Wife")) for line in text(v, "Dan"))
+
+
+def test_an_eviction_starts_the_family_over_in_the_log(tmp_path):
+    h = fh.parse(HISTORY + record("2026-10-21 10:00:00", "Evict Family", 1, "  Family members: Ann\n  Generation: 1\n")
+                 + marriage(4, "Zoe", "Female", "Max", "Male"))
+    assert [m.spouse for m in h.marriages] == ["Max"] and h.evictions == 1 and not h.deaths
 
 
 def test_without_the_log_remarried_only_from_what_the_tree_saw(tmp_path):
@@ -336,22 +353,29 @@ def test_without_the_log_remarried_only_from_what_the_tree_saw(tmp_path):
     assert by_name(v, "Ann").remarried and "Remarried" in text(v, "Ann")
     assert by_name(v, "Bob").spouse_number is None and by_name(v, "Dan").spouse_number is None
     assert not by_name(v, "Bob").divorced                    # the save does not say why he went
+    assert "Married in" in text(v, "Bob")
 
 
 def test_a_same_sex_family_in_the_log_reads_and_labels_by_each_spouses_sex(tmp_path):
-    log = """Family: Testfamily (Save 1)
-[2026-10-20 10:00:00] Generation 1 began: Ann (Female, 20) was adopted and started the family
-[2026-10-20 10:05:00] Ann (Female, 21) married Zoe (Female, 22), generation 1; current spouse of Ann: Zoe
-[2026-10-20 11:00:00] Divorce: Ann (Female) and Zoe (Female, 25) divorced, generation 1; Ann has no current spouse
-[2026-10-20 12:00:00] Ann (Female, 26) remarried: Dan (Male, 30), generation 1; earlier spouse: Zoe (divorced); current spouse of Ann: Dan
-[2026-10-20 13:00:00] Death 1: Dan (Male, 40) died: Disease; Family role: Parent (married in), generation 1; Ann has no current spouse
-[2026-10-20 14:00:00] Ann (Female, 45) remarried: Mia (Female, 41), generation 1; earlier spouse: Dan (died); current spouse of Ann: Mia
-"""
+    log = ("Family: Testfamily (Save 1)\n" + GENERATION_1 + marriage(1, "Ann", "Female", "Zoe", "Female")
+           + divorce(1, "Ann", "Female", "Zoe", "Female", 25)
+           + marriage(2, "Ann", "Female", "Dan", "Male", earlier="Zoe (divorced)")
+           + death(1, "Dan", "Male", 40, "Disease", role="Parent (married in)")
+           + marriage(3, "Ann", "Female", "Mia", "Female", earlier="Dan (died)"))
     h = fh.parse(log)
-    assert [(m[0], m[3], m[4]) for m in h.marriages] == [("Ann", "Zoe", "Female"), ("Ann", "Dan", "Male"),
-                                                         ("Ann", "Mia", "Female")]
-    assert h.divorces == [("Ann", "Zoe", "Female", 25, 1)]
+    assert [(m.spouse, m.spouse_sex) for m in h.marriages] == [("Zoe", "Female"), ("Dan", "Male"), ("Mia", "Female")]
     v = logged_family(tmp_path, log, spouse={"name": "Mia", "sex": 1, "head": 9, "body": 9, "slot": 3})
     assert "Wife 1" in text(v, "Zoe") and "Divorced" in text(v, "Zoe")
     assert "Husband 2" in text(v, "Dan") and "Deceased: Disease" in text(v, "Dan")
     assert "Wife 3" in text(v, "Mia") and "Remarried" in text(v, "Ann")
+    assert by_name(v, "Mia").partner == by_name(v, "Ann").id
+
+
+def test_the_log_folder_is_beside_the_save(tmp_path):
+    path = history_folder(tmp_path)
+    assert path == tmp_path / "Virtual Families 2 Patcher" / "Save 1" / "Logs" / "Family History" / \
+        "Family History 1.txt"
+    (path.parent / "Family History 2.txt").write_text(death(3, "Moe", "Male", 1, "Disease"), encoding="cp1252")
+    h = fh.read(tmp_path, 1)
+    assert len(h.files) == 2 and h.deaths[-1][0] == "Moe"
+    assert struct.calcsize("<i") == 4                       # (the save reader's own sizes are its tests')
