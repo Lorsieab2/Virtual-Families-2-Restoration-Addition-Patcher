@@ -381,8 +381,10 @@ def facts() -> list[Fact]:
                    "6 to 17 real hours.", E, "spec 3: SetSymptom 0x4CBBA0"))
     add(_f(HEALTH, "A mild infection adds a symptom half the time when there is none and ends with a 3% chance per "
                    "check; a serious one adds symptoms (up to 2) and ends with a 1.2% chance per check.", E, "spec 3"))
-    add(_f(HEALTH, "Medicines and the Doctor Consultation (the stethoscope): each cures one illness; see Food and "
-                   "Medicine.", C, "HandleMouseDown 0x49EE90 cases 0x18..0x21"))
+    add(_f(HEALTH, "The medicines (see Food and Medicine): six each cure one symptom, Penicillin ends the mild "
+                   "infection and Vancomycin both; Baby Boost raises fertility and cures nothing; the Doctor "
+                   "Consultation (the stethoscope) only opens the Diagnosis window and cures nothing.", C,
+           "HandleMouseDown 0x49EE90 cases 0x18..0x21"))
     add(_f(HEALTH, "Deaths from illness (health reaching 0 while sick) and from starvation (health reaching 0 from "
                    "missed meals).", C, "spec 4"))
     add(_f(HEALTH, "Deaths by work accident or act of nature: the causes exist; what brings them is not traced.", U,

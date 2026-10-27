@@ -105,7 +105,7 @@ def test_the_lotto_odds_are_rand_mod_10000_counted():
 
 
 def test_the_formerly_unconfirmed_purchases_are_read_from_the_purchase_path():
-    for group, start in ((gm.TIME, "The store's Time Warp"), (gm.HEALTH, "Medicines and the Doctor Consultation"),
+    for group, start in ((gm.TIME, "The store's Time Warp"), (gm.HEALTH, "The medicines (see Food and Medicine)"),
                          (gm.LEAVING, "Boarding School (a Service, $1,500)"), (gm.UPGRADES, "Time Warp: $2,000"),
                          (gm.UPGRADES, "Health Plan: $10,000"), (gm.STORE, "On Sale: 3 furniture items")):
         assert _entry(group, start).label == gm.VERIFIED_C, start
@@ -145,7 +145,9 @@ def test_the_career_progress_formula():
 
 
 # ----------------------------------------------------------------------------------------- the B200 core executable
-import test_game_mechanics_b200_exe as b200  # noqa: E402
+# The executable tests' harnesses are imported inside their fixtures: importing them here would skip this whole
+# module (the page tests above too) wherever pefile or unicorn is not installed.
+b200 = None
 
 RESET, NUM_GENERATIONS, GET_PRICE, GET_LOCK = 0x46C130, 0x457A20, 0x46B9F0, 0x46B870
 DISPATCH, SET_CURRENT, HANDLE_UPGRADE = 0x49CB90, 0x4CCF20, 0x48C2E0
@@ -155,6 +157,8 @@ TABS = {"General Appliances": 0, "Living Room": 4, "Dining Room": 5, "Bedroom": 
 
 @pytest.fixture(scope="module")
 def core():
+    global b200
+    import test_game_mechanics_b200_exe as b200
     exe = b200.core_exe()
     e = b200.Emu(exe)
     e.stubs[NUM_GENERATIONS] = (lambda: 1, 0)
@@ -234,11 +238,13 @@ def test_the_lotto_thresholds(core):
 
 
 # ---------------------------------------------------------------------------------------------- the stock executable
-import test_game_mechanics_stock_exe as stock  # noqa: E402
+stock = None
 
 
 @pytest.fixture(scope="module")
 def stock_emu():
+    global stock
+    import test_game_mechanics_stock_exe as stock
     e = stock.Emu(stock.stock_exe())
     e.call(stock.RESET, (), ecx=stock.INVENTORY)
     return e
