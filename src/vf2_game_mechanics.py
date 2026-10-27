@@ -1665,6 +1665,56 @@ FURNITURE_HOTSPOTS = {
     0x331: (70,),
 }
 
+# The patcher's own drop routes (theMainScene::VF2HandleDropOnMobileFurniture, generator source), run before the
+# hot spots: item -> (when, what the route starts).
+PATCHER_DROP_ROUTES = {
+    0x220: ('with "Behavior Patches" on', 'Doing yoga'),
+    0x2aa: ('with "Add mobile furniture behaviors" on', 'Playing with holiday candles'),
+    0x2ad: ('with "Add mobile furniture behaviors" on', 'the Christmas tree for the family'),
+    0x2ae: ('with "Add mobile furniture behaviors" on', 'the Christmas tree for the family'),
+    0x2af: ('with "Add mobile furniture behaviors" on', 'the dreidel game for the family'),
+    0x2b0: ('with "Add mobile furniture behaviors" on', 'Stealing egg nog'),
+    0x2b1: ('with "Add mobile furniture behaviors" on', 'Enjoying the figurines'),
+    0x2b2: ('with "Add mobile furniture behaviors" on', 'Enjoying the figurines'),
+    0x2b3: ('with "Add mobile furniture behaviors" on', 'Enjoying the figurines'),
+    0x2b4: ('with "Add mobile furniture behaviors" on', 'Enjoying the figurines'),
+    0x2b5: ('with "Add mobile furniture behaviors" on', 'Enjoying the figurines'),
+    0x2b8: ('with "Add mobile furniture behaviors" on', 'the menorah for the family'),
+    0x2bd: ('with "Add mobile furniture behaviors" on', 'Enjoying the figurines'),
+    0x2be: ('with "Add mobile furniture behaviors" on', "the Santa's cookies route"),
+    0x2c0: ('with "Add mobile furniture behaviors" on', 'Enjoying the figurines'),
+    0x2c1: ('with "Add mobile furniture behaviors" on', 'Checking the decorations'),
+    0x2c2: ('with "Add mobile furniture behaviors" on', 'Enjoying the figurines'),
+    0x2c3: ('with "Add mobile furniture behaviors" on', 'Enjoying the figurines'),
+    0x2c4: ('with "Add mobile furniture behaviors" on', 'Checking the decorations'),
+    0x2c5: ('with "Add mobile furniture behaviors" on', 'Enjoying the figurines'),
+    0x2c6: ('with "Add mobile furniture behaviors" on', 'Checking for stocking stuffers'),
+    0x2c7: ('with "Add mobile furniture behaviors" on', 'Checking for stocking stuffers'),
+    0x2c8: ('with "Add mobile furniture behaviors" on', 'Checking the decorations'),
+    0x2c9: ('with "Add mobile furniture behaviors" on', 'Checking the decorations'),
+    0x2da: ('with "Add mobile furniture behaviors" on', 'the balloons'),
+    0x2db: ('with "Add mobile furniture behaviors" on', 'a birthday celebration for the family'),
+    0x2dc: ('with "Add mobile furniture behaviors" on', 'Poking cake'),
+    0x2dd: ('with "Add mobile furniture behaviors" on', 'Checking out the presents'),
+    0x2de: ('with "Add mobile furniture behaviors" on', 'the lounger route (relaxing, reading, studying, sitting, a nap or sleep; refused in bad weather)'),
+    0x2df: ('with "Add mobile furniture behaviors" on', 'the lounger route (relaxing, reading, studying, sitting, a nap or sleep; refused in bad weather)'),
+    0x2e0: ('with "Add mobile furniture behaviors" on', 'the lounger route (relaxing, reading, studying, sitting, a nap or sleep; refused in bad weather)'),
+    0x2e1: ('with "Add mobile furniture behaviors" on', 'the lounger route (relaxing, reading, studying, sitting, a nap or sleep; refused in bad weather)'),
+    0x2e6: ('with "Add mobile furniture behaviors" on', 'the patio table route (preparing drinks, or drinking them while ready; refused for a child or with little food)'),
+    0x2e7: ('with "Add mobile furniture behaviors" on', 'Adjusting umbrella'),
+    0x2e8: ('with "Add mobile furniture behaviors" on', 'the picnic table route (preparing a picnic, or eating it while ready; refused for a child or with little food)'),
+    0x328: ('with "Add mobile furniture behaviors" on', 'the picnic table route (preparing a picnic, or eating it while ready; refused for a child or with little food)'),
+    0x329: ('with "Add mobile furniture behaviors" on', 'the patio table route (preparing drinks, or drinking them while ready; refused for a child or with little food)'),
+    0x32a: ('with "Behavior Patches" on', 'Doing yoga'),
+    0x32b: ('with "Add mobile furniture behaviors" on', 'the lounger route (relaxing, reading, studying, sitting, a nap or sleep; refused in bad weather)'),
+    0x32c: ('with "Behavior Patches" on', 'the exercise bike (walking or running, 50% each)'),
+    0x32d: ('with "Behavior Patches" on', 'the home gym workout'),
+    0x32e: ('with "Behavior Patches" on', 'ping-pong'),
+    0x32f: ('with the patcher', 'the spa treatments (giving or receiving one)'),
+    0x330: ('with the patcher', 'the spa treatments (giving or receiving one)'),
+    0x331: ('with "Behavior Patches" on', 'ping-pong'),
+}
+
 
 def _action(bid: int) -> str:
     return ACTION_ITEMS[bid][0]
@@ -1903,11 +1953,16 @@ def _store_lines() -> list[Fact]:
            "Contains(0x19) check"))
     add(_f(FURNITURE, "Dropping a family member on a piece starts one of the actions of the hot spots on its placement "
                       "map; each entry below names them (the hot spot's code picks one by its own checks, which are "
-                      "not listed). What each action changes is in the Actions group. A piece without hot spots has "
-                      "no drop action. The patcher changes no stock piece's hot spots.", C,
+                      "not listed). What each action changes is in the Actions group. The patcher changes no stock piece's hot "
+                      "spots; it runs its own drop routes first for the pieces that say so, and a piece with neither "
+                      "has no drop action.", C,
            "theMainScene::HandleDropOnHotSpot -> CContentMap::GetHotSpot ((cell >> 18) & 0x7F) -> CHotSpot::Dispatch "
            "(handlers set in CHotSpot::CHotSpot) -> NewBehavior; the *.png.fmap of each piece (GetFmapName: ImageList "
            "0x579E48), stock and B204 maps compared"))
+    add(_f(FURNITURE, "The need changes of the patcher's own drop routes (the pieces that name one) are in its helper "
+                      "code, which this page has not decoded; the routes and when they run are read from it.", U,
+           "work/patch_mobile_furniture_pack.py: VF2HandleDropOnMobileFurniture and its VF2HandleMobile* / VF2Run* "
+           "helpers"))
     listed = set()
     for tab, _p, _s in tabs:
         add(_f(FURNITURE, f"{tab}:", E, cat, sub=False))
@@ -1927,7 +1982,12 @@ def _store_lines() -> list[Fact]:
                 for bid in HOTSPOT_ACTIONS[spot][1]:
                     if _action(bid) not in drops:
                         drops.append(_action(bid))
-            if drops:
+            if iid in PATCHER_DROP_ROUTES:
+                when, what = PATCHER_DROP_ROUTES[iid]
+                text += f" Dropped on, {when}: the patcher's own route, {what}"
+                text += ("; otherwise: " + ", ".join(drops) + "." if drops else ".")
+                label, evidence = C, cat + "; VF2HandleDropOnMobileFurniture"
+            elif drops:
                 text += " Dropped on: " + ", ".join(drops) + "."
                 label, evidence = C, cat + "; its map's hot spots"
             if iid == 0x202:

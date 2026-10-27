@@ -114,7 +114,7 @@ def test_the_formerly_unconfirmed_purchases_are_read_from_the_purchase_path():
 def test_every_unconfirmed_store_line_says_what_is_unknown():
     for fact in FACTS:
         if fact.group in gm.STORE_GROUPS and fact.label == gm.UNCONFIRMED:
-            assert re.search(r"not decoded|not traced|pass one more check", fact.text), fact.text
+            assert re.search(r"not decoded|not traced|has not decoded", fact.text), fact.text
 
 
 def test_like_bonuses_name_the_likes_the_game_shows():
@@ -280,4 +280,6 @@ def test_every_named_action_is_in_the_actions_group():
     assert actions["Doing Kung Fu"] == "Doing Kung Fu: no need changes."
     # the hammock's hot spot (5) starts Relaxing in the hammock (behaviour 0x24); the Hammock piece carries it
     assert gm.HOTSPOT_ACTIONS[5] == ("Hammock", (0x24,)) and 5 in gm.FURNITURE_HOTSPOTS[0x1E1]
-    assert not [f for f in FACTS if f.group in gm.STORE_GROUPS and f.label == gm.UNCONFIRMED]
+    left = [f.text for f in FACTS if f.group in gm.STORE_GROUPS and f.label == gm.UNCONFIRMED]
+    assert len(left) == 1 and "patcher's own drop routes" in left[0], left
+    assert "Dropped on, with the patcher: the patcher's own route, the spa treatments" in TEXT
