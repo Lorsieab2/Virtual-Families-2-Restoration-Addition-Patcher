@@ -161,7 +161,9 @@ class OfflineBundleZipVerifierTests(unittest.TestCase):
             self.skipTest("no release ZIP present in outputs/")
         with zipfile.ZipFile(archive) as zipped:
             root = zipped.namelist()[0].split("/", 1)[0]
-            manifest = json.loads(zipped.read(f"{root}/manifest.json"))
+            # In the patcher files folder from the B204 update on; at the top before it.
+            base, _ = verifier._bundle_layout(set(zipped.namelist()), root, False)
+            manifest = json.loads(zipped.read(f"{base}/manifest.json"))
         records = [
             record
             for record in manifest["asset_patches"]

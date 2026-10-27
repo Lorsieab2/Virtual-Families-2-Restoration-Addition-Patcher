@@ -433,6 +433,9 @@ def main() -> int:
             "--identities",
             str(identities),
             "--require-identities",
+            # A new release keeps only what the player opens or reads at the
+            # top; everything else is in "Virtual Families 2 Fun Patcher Files".
+            "--require-files-folder",
         ]
     )
     if verified.returncode != 0:

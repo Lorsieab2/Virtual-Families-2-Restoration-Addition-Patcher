@@ -1817,7 +1817,7 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
                 and row["requires"] == ["core_executable", "mobile_renovations"]
             )
             payload = out / overlay["source_path"]
-            self.assertEqual(payload.name, "Virtual Families 2 - Modded B157 - Mobile Room Renovations.exe")
+            self.assertEqual(payload.name, "Virtual Families 2 - Modded B157 - MR.exe")
             self.assertEqual(payload.read_bytes(), mobile_overlay.read_bytes())
             self.assertEqual(
                 manifest["source_build"]["mobile_renovations_exe"],
@@ -2398,7 +2398,9 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
                 "VF2 B103 Test Bundle",
             )
 
-            manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+            # --include-patcher-scripts: manifest.json and payload/ are in the patcher files folder.
+            files = out / exporter.PATCHER_FILES_FOLDER
+            manifest = json.loads((files / "manifest.json").read_text(encoding="utf-8"))
             assets_by_path = {}
             for row in manifest["asset_patches"]:
                 assets_by_path.setdefault(row["file_path"], []).append(row)
@@ -2409,7 +2411,7 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             self.assertIn("modded B103 executable", core_exe["note"])
             self.assertEqual(island_overlay["output_file_path"], "Virtual Families 2 - Modded B103.exe")
             self.assertIn("Island Events executable overlay", island_overlay["note"])
-            self.assertTrue((out / "payload" / "Virtual Families 2 - Modded B103 - Island Events.exe").is_file())
+            self.assertTrue((files / "payload" / "Virtual Families 2 - Modded B103 - IE.exe").is_file())
             self.assertEqual(core_exe["expected_target_sha256"], hashlib.sha256(vanilla.read_bytes()).hexdigest())
             self.assertEqual(island_overlay["expected_target_sha256"], core_exe["expected_target_sha256"])
             self.assertEqual(manifest["target_files"][0]["sha256"], core_exe["expected_target_sha256"])
@@ -2465,24 +2467,24 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
                 row for row in manifest["asset_patches"]
                 if row["file_path"] == "Virtual Families 2.exe"
             )
-            self.assertTrue((out / core_payload["source_path"]).is_file())
+            self.assertTrue((files / core_payload["source_path"]).is_file())
             self.assertEqual(
-                (out / core_payload["source_path"]).stat().st_size,
+                (files / core_payload["source_path"]).stat().st_size,
                 core_payload["source_size"],
             )
             self.assertTrue((out / "Apply_B103_Patcher.bat").is_file())
             self.assertTrue((out / "README-B103-PATCHER.txt").is_file())
             self.assertTrue((out / "Transparency Log.txt").is_file())
-            self.assertTrue((out / "offline_vf2_patcher.py").is_file())
-            self.assertTrue((out / "vf2_crash_capture.py").is_file())
+            self.assertTrue((files / "offline_vf2_patcher.py").is_file())
+            self.assertTrue((files / "vf2_crash_capture.py").is_file())
             crash_template = json.loads(
-                (out / "crash-capture-manifest.template.json").read_text(encoding="ascii")
+                (files / "crash-capture-manifest.template.json").read_text(encoding="ascii")
             )
             self.assertEqual(crash_template["schema"], "vf2-crash-capture/v1")
             self.assertEqual(crash_template["executable"]["path"], "")
             self.assertNotIn(str(tmp_path), json.dumps(crash_template))
-            self.assertTrue((out / "patcher_icon.png").is_file())
-            self.assertTrue((out / "patcher_icon.ico").is_file())
+            self.assertTrue((files / "patcher_icon.png").is_file())
+            self.assertTrue((files / "patcher_icon.ico").is_file())
             settings_by_id = {row["id"]: row for row in manifest["settings"]}
             self.assertEqual(settings_by_id["white_birds"]["category"], "optional")
             self.assertEqual(settings_by_id["optional_song_mods"]["category"], "optional")
@@ -2492,8 +2494,8 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             self.assertTrue((out / "Launch_GUI.bat").is_file())
             self.assertFalse((out / "Launch GUI.lnk").exists())
             self.assertFalse((out / "launch_gui_shortcut.json").exists())
-            self.assertFalse((out / "payload" / "SDL2.dll").exists())
-            self.assertFalse((out / "payload" / "Sounds" / "sound00.wav").exists())
+            self.assertFalse((files / "payload" / "SDL2.dll").exists())
+            self.assertFalse((files / "payload" / "Sounds" / "sound00.wav").exists())
             self.assertIn("Codex AI", (out / "README-B103-PATCHER.txt").read_text(encoding="ascii"))
             self.assertIn(creator_message, (out / "README-B103-PATCHER.txt").read_text(encoding="ascii"))
             self.assertIn(compatibility_note, (out / "README-B103-PATCHER.txt").read_text(encoding="ascii"))
@@ -2502,7 +2504,7 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             self.assertIn("Crash capture QA only", help_text)
             self.assertIn("never changes Windows Error Reporting", help_text)
             self.assertIn("Never substitute manifest.json", help_text)
-            gui_source = (out / "offline_vf2_patcher_gui.py").read_text(encoding="utf-8")
+            gui_source = (files / "offline_vf2_patcher_gui.py").read_text(encoding="utf-8")
             self.assertIn("PROJECT_CREATOR_MESSAGE", gui_source)
             self.assertIn("SAVE_COMPATIBILITY_NOTE", gui_source)
             self.assertIn("Official install validation", (out / "Transparency Log.txt").read_text(encoding="utf-8"))
@@ -2512,19 +2514,26 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             self.assertIn("Prebuilt Launch GUI.lnk is intentionally omitted", (out / "Transparency Log.txt").read_text(encoding="utf-8"))
             self.assertNotIn("Apply_B99_Patcher.bat", manifest["export_summary"]["runner_files"])
             self.assertIn("Launch_GUI.bat", manifest["export_summary"]["runner_files"])
-            self.assertIn("vf2_crash_capture.py", manifest["export_summary"]["runner_files"])
+            self.assertIn(f"{exporter.PATCHER_FILES_FOLDER}/vf2_crash_capture.py", manifest["export_summary"]["runner_files"])
             self.assertIn(
-                "crash-capture-manifest.template.json",
+                f"{exporter.PATCHER_FILES_FOLDER}/crash-capture-manifest.template.json",
                 manifest["export_summary"]["runner_files"],
             )
             self.assertNotIn("Launch GUI.lnk", manifest["export_summary"]["runner_files"])
             self.assertNotIn("launch_gui_shortcut.json", manifest["export_summary"]["runner_files"])
-            self.assertIn("patcher_icon.png", manifest["export_summary"]["runner_files"])
-            self.assertIn("patcher_icon.ico", manifest["export_summary"]["runner_files"])
+            self.assertIn(f"{exporter.PATCHER_FILES_FOLDER}/patcher_icon.png", manifest["export_summary"]["runner_files"])
+            self.assertIn(f"{exporter.PATCHER_FILES_FOLDER}/patcher_icon.ico", manifest["export_summary"]["runner_files"])
             self.assertIn("transparency_log", manifest["export_summary"])
             self.assertNotIn("launch_gui_shortcut", manifest["export_summary"])
             self.assertNotIn("launcher", manifest["export_summary"])
             self.assertTrue(manifest["export_summary"]["exe_replacement"])
+            self.assertEqual(manifest["export_summary"]["patcher_files_folder"], exporter.PATCHER_FILES_FOLDER)
+            # Only what the player opens or reads is left at the top.
+            self.assertEqual(
+                {p.name for p in out.iterdir()},
+                {"Apply_B103_Patcher.bat", "Launch_GUI.bat", "How to Use.txt", "README-B103-PATCHER.txt",
+                 "Transparency Log.txt", exporter.PATCHER_FILES_FOLDER},
+            )
 
     def test_exe_replacement_rejects_non_pe_and_non_x86_payloads(self):
         with tempfile.TemporaryDirectory() as tmp:

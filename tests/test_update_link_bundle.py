@@ -49,7 +49,7 @@ class UpdateLinkBundleTests(unittest.TestCase):
             how_to = (bundle_dir / "How to Use.txt").read_text(encoding="utf-8").replace("\r\n", "\n")
             self.assertIn("Check for updates:\n" + BASE + "\n", how_to)
             self.assertNotIn(BASE + "releases", how_to)
-            gui = (bundle_dir / "offline_vf2_patcher_gui.py").read_text(encoding="utf-8")
+            gui = (bundle_dir / self.bundle.PATCHER_FILES_FOLDER / "offline_vf2_patcher_gui.py").read_text(encoding="utf-8")
             self.assertIn(f'PATCHER_RELEASES_URL = "{BASE}"', gui)
 
     def test_the_shipped_how_to_use_and_the_gui_agree(self):

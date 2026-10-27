@@ -125,6 +125,55 @@ REQUIRED_RUNNERS = {
 # releases are real -- B155.5 shipped -- so "B\d+" alone would reject a
 # valid Apply_B174.5_Patcher.bat.
 APPLY_RUNNER_PATTERN = re.compile(r"^Apply_B\d+(?:\.\d+)?_Patcher\.bat$")
+# The one folder that holds everything the player does not open or read (scripts, manifest.json, payload/,
+# icons, pictures). work/export_offline_patch_bundle.py's PATCHER_FILES_FOLDER; the same name, spelled
+# out here so the verifier does not trust the exporter it checks.
+PATCHER_FILES_FOLDER = "Virtual Families 2 Fun Patcher Files"
+# What may sit loose at the top of an archive that has PATCHER_FILES_FOLDER: only what the player opens or
+# reads -- the .bat launchers, How to Use, the README and the Transparency Log.
+TOP_LEVEL_PLAYER_FILE = re.compile(
+    r"^(?:[^/]+\.bat|How to Use\.txt|README-B\d+(?:\.\d+)?-PATCHER\.txt|Transparency Log\.txt)$"
+)
+
+
+def _required_runners(files_prefix: str) -> set[str]:
+    """REQUIRED_RUNNERS as ZIP-root paths: the .bat files at the top, the rest under FILES_PREFIX."""
+    return {name if name.endswith(".bat") else files_prefix + name for name in REQUIRED_RUNNERS}
+
+
+def _bundle_layout(names: set[str], root: str, require_files_folder: bool) -> tuple[str, str]:
+    """Where the manifest-relative files are, and the player-facing top level is tidy.
+
+    Returns (base, files_prefix): base is the ZIP folder manifest.json and payload/ sit in, files_prefix
+    the same folder relative to the root ("" for the flat layout every release up to B204 first shipped
+    with, which a retained older archive still has). An archive with PATCHER_FILES_FOLDER may keep
+    nothing else loose at its top; REQUIRE_FILES_FOLDER (the release gate) refuses the flat layout.
+    """
+    folder = f"{root}/{PATCHER_FILES_FOLDER}"
+    if f"{folder}/manifest.json" in names:
+        loose = set()
+        for name in names:
+            rest = name[len(root) + 1:]
+            if not rest or rest == PATCHER_FILES_FOLDER + "/":
+                continue
+            first, _, below = rest.partition("/")
+            if below or rest.endswith("/"):
+                if first != PATCHER_FILES_FOLDER:
+                    loose.add(first + "/")
+            elif not TOP_LEVEL_PLAYER_FILE.match(first):
+                loose.add(first)
+        if loose:
+            _fail(
+                f"only the .bat launchers, How to Use, the README and the Transparency Log may sit at the "
+                f"top; move these into {PATCHER_FILES_FOLDER!r}: {sorted(loose)}"
+            )
+        return folder, PATCHER_FILES_FOLDER + "/"
+    if require_files_folder:
+        _fail(
+            f"the patcher's own files must be in {PATCHER_FILES_FOLDER!r} with manifest.json, "
+            "not loose at the top of the archive"
+        )
+    return root, ""
 
 
 def _load_variant_identities(path: Path) -> dict[frozenset[str], tuple[str, int]]:
@@ -560,19 +609,23 @@ def _verify_post_patch_targets(
         )
 
 
-def _verify_runner_members(names: set[str], root: str, export_summary: dict) -> set[str]:
+def _verify_runner_members(names: set[str], root: str, export_summary: dict, files_prefix: str = "") -> set[str]:
     """Every runner and the transparency log must actually be in the archive.
 
     runner_files is the exporter's own list; checking the list without the
     members let an archive missing offline_vf2_patcher_gui.py -- the file
-    Launch_GUI.bat runs -- pass the gate.
+    Launch_GUI.bat runs -- pass the gate. Its paths are relative to the ZIP
+    root, so with PATCHER_FILES_FOLDER the scripts are listed inside it.
     """
     runner_value = export_summary.get("runner_files")
     if not isinstance(runner_value, list) or any(not isinstance(item, str) for item in runner_value):
         _fail("manifest export_summary.runner_files must be a list of paths")
     runner_files = set(runner_value)
-    if not REQUIRED_RUNNERS <= runner_files:
-        _fail(f"required patcher/crash-capture runners are missing: {sorted(REQUIRED_RUNNERS - runner_files)}")
+    required = _required_runners(files_prefix)
+    if not required <= runner_files:
+        _fail(f"required patcher/crash-capture runners are missing: {sorted(required - runner_files)}")
+    if files_prefix and export_summary.get("patcher_files_folder") != files_prefix.rstrip("/"):
+        _fail(f"manifest export_summary.patcher_files_folder must name {files_prefix.rstrip('/')!r}")
     transparency = export_summary.get("transparency_log")
     if not isinstance(transparency, str) or not transparency:
         _fail("manifest export_summary.transparency_log must name the transparency log")
@@ -624,6 +677,7 @@ def verify_archive(
     zip_path: Path | str,
     identities_path: Path | str | None = None,
     require_complete: bool = False,
+    require_files_folder: bool = False,
 ) -> dict:
     """Verify one explicit archive and return a compact evidence summary.
 
@@ -669,7 +723,8 @@ def verify_archive(
                 "release does not cover every combination the matrix builds; "
                 f"missing={missing} unexpected={extra}"
             )
-        manifest_bytes = _read_member(zipped, names, root, "manifest.json", "manifest")
+        base, files_prefix = _bundle_layout(names, root, require_files_folder)
+        manifest_bytes = _read_member(zipped, names, base, "manifest.json", "manifest")
         try:
             manifest = json.loads(manifest_bytes)
         except json.JSONDecodeError as exc:
@@ -739,7 +794,7 @@ def verify_archive(
                 _fail(f"executable variant {sorted(requires)} has no source path")
             # Identity is checked against the bytes actually in the ZIP rather
             # than a hash frozen at some past release.
-            _verify_file_record(zipped, names, root, record, f"executable {source}")
+            _verify_file_record(zipped, names, base, record, f"executable {source}")
             if identities is not None:
                 expected_sha, expected_size = identities[requires]
                 if (
@@ -769,7 +824,7 @@ def verify_archive(
         for record in renovation_records:
             if not str(record.get("file_path", "")).startswith("Images/MobileRenovations/") or record.get("remove_when_disabled") is not True:
                 _fail("mobile renovation record has the wrong destination or removal policy")
-            _verify_file_record(zipped, names, root, record, "mobile renovation")
+            _verify_file_record(zipped, names, base, record, "mobile renovation")
 
         no_ai_records = [
             record
@@ -790,11 +845,11 @@ def verify_archive(
                     "core_executable", "cheat_upgrades"
                 ]:
                     _fail("No AI Icons record is missing its Cheat Upgrades restore gate")
-                _verify_file_record(zipped, names, root, record, "No AI Icons replacement")
+                _verify_file_record(zipped, names, base, record, "No AI Icons replacement")
                 _verify_file_record(
                     zipped,
                     names,
-                    root,
+                    base,
                     {
                         "source_path": record["restore_source_path"],
                         "source_sha256": record["restore_source_sha256"],
@@ -810,8 +865,8 @@ def verify_archive(
             _fail(f"expected 67 mobile sound records, found {len(sound_records)}")
         restore_count = remove_count = 0
         for record in sound_records:
-            _verify_file_record(zipped, names, root, record, "mobile sound")
-            data = _read_member(zipped, names, root, record["source_path"], "mobile sound source")
+            _verify_file_record(zipped, names, base, record, "mobile sound")
+            data = _read_member(zipped, names, base, record["source_path"], "mobile sound source")
             if not data.startswith(b"OggS"):
                 _fail(f"mobile sound payload is not an OGG file: {record['source_path']}")
             has_restore = bool(record.get("restore_source_path"))
@@ -820,7 +875,7 @@ def verify_archive(
                 _fail("each mobile sound record must be exactly restoreable or removable")
             if has_restore:
                 restore_count += 1
-                restore = _read_member(zipped, names, root, record["restore_source_path"], "mobile sound restore")
+                restore = _read_member(zipped, names, base, record["restore_source_path"], "mobile sound restore")
                 if len(restore) != record.get("restore_source_size") or _sha256(restore) != str(record.get("restore_source_sha256", "")).lower():
                     _fail("mobile sound restore identity does not match its manifest")
             else:
@@ -856,11 +911,11 @@ def verify_archive(
         if seen_routes != SOUND_ROUTE_NAMES:
             _fail("mobile sound post-route set is incomplete")
 
-        referenced = _verify_every_asset_source(zipped, names, root, assets)
-        _reject_unreferenced_payload(names, root, referenced)
+        referenced = _verify_every_asset_source(zipped, names, base, assets)
+        _reject_unreferenced_payload(names, base, referenced)
         exe_bytes = {
             str(record.get("source_sha256", "")).lower(): zipped.read(
-                _member_name(root, record["source_path"], "executable")
+                _member_name(base, record["source_path"], "executable")
             )
             for record in exe_records
         }
@@ -869,7 +924,7 @@ def verify_archive(
         export_summary = manifest.get("export_summary")
         if not isinstance(export_summary, dict):
             _fail("manifest export_summary must be an object")
-        runner_files = _verify_runner_members(names, root, export_summary)
+        runner_files = _verify_runner_members(names, root, export_summary, files_prefix)
         apply_runners = sorted(name for name in runner_files if APPLY_RUNNER_PATTERN.match(name))
         if len(apply_runners) != 1:
             _fail(
@@ -879,6 +934,7 @@ def verify_archive(
         return {
             "zip": str(archive_path),
             "root": root,
+            "patcher_files_folder": files_prefix.rstrip("/") or None,
             "members": len(names),
             "target_sha256": TARGET_SHA256,
             "executable_variants": len(requirements),
@@ -914,12 +970,24 @@ def main() -> int:
             "release"
         ),
     )
+    parser.add_argument(
+        "--require-files-folder",
+        action="store_true",
+        help=(
+            f"fail unless the patcher's own files are in {PATCHER_FILES_FOLDER!r} and only the .bat "
+            "launchers, How to Use, the README and the Transparency Log sit at the top; the release "
+            "gate passes this"
+        ),
+    )
     args = parser.parse_args()
     if args.require_identities and args.identities is None:
         parser.error("--require-identities was given without --identities")
     try:
         result = verify_archive(
-        args.zip_path, args.identities, require_complete=args.require_identities
+        args.zip_path,
+        args.identities,
+        require_complete=args.require_identities,
+        require_files_folder=args.require_files_folder,
     )
     except (OSError, ValueError, zipfile.BadZipFile) as exc:
         parser.error(str(exc))
