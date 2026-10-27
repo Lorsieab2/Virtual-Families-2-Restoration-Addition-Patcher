@@ -1137,7 +1137,8 @@ def run_loader(exe, dll, delta, bugs_flag, ini, others=0, dll_present=True):
     e = w.e
     _flag, _call, wrapper = T.loader_sites(exe)
     log = []
-    e.write(section_va(exe, b".vf2bugs") + delta, bytes([bugs_flag]))
+    if bugs_flag is not None:                            # None: the byte the executable file has
+        e.write(section_va(exe, b".vf2bugs") + delta, bytes([bugs_flag]))
     for name in (b".vf2time", b".vf2kids", b".vf2hist"):
         e.write(section_va(exe, name) + delta, bytes([others]))
     # theGame::Init's first call returns theGameState::Get(): the instance pointer the wrapper reads

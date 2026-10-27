@@ -188,9 +188,9 @@ def test_a_damaged_executable_is_refused(pin):
 
 def test_wrong_constants_are_refused(monkeypatch):
     exe = core_exe_bytes()
-    for name, value in (("TRAY_HELD", 0xA4), ("INV_MALE_PICTURE", 0x46C), ("INV_FEMALE_PICTURE", 0x470),
-                        ("TRAY_ITEM_LIMIT", 0xE0), ("TRAY_PLACES", 8), ("MALE_OUTFIT", 0x48),
-                        ("DRAW_CASE_MALE", 0x34), ("DRAW_CASE_FEMALE", 0x1D), ("INV_BIND_FIRST", 0x454),
+    for name, value in (("TRAY_HELD", 0xA4), ("INV_MALE_PICTURE", 0x500), ("INV_FEMALE_PICTURE", 0x470),
+                        ("TRAY_ITEM_LIMIT", 0xE0), ("TRAY_PLACES", 10), ("MALE_OUTFIT", 0x48),
+                        ("DRAW_CASE_MALE", 0x34), ("DRAW_CASE_FEMALE", 0x1D), ("INV_BIND_FIRST", 0x44C),
                         ("TRAY_FIRST_FREE", 1), ("VILLAGER_BODY", 0x6A80), ("GS_SAVE_VSLOT", 0x3C),
                         ("TRAY_TOP", 0x84), ("TRAY_DRAW_OFFSET", 7)):
         with monkeypatch.context() as mp:
@@ -441,7 +441,8 @@ MUTATIONS = [
     ("no version check", "    if (Get32(FileBuffer + 8) != OUTF_SIDECAR_VERSION || Get32(FileBuffer + 20) != kFileSize) return FILE_DAMAGED;",
      "    if (Get32(FileBuffer + 20) != kFileSize) return FILE_DAMAGED;", "scenario_a_wrong_version_or_picture_is_damaged"),
     ("a picture on a place that is no outfit", "        if (picture != -1 && (!IsOutfit(item) || !IsPicture(picture))) return FILE_DAMAGED;",
-     "        if (picture != -1 && !IsPicture(picture)) return FILE_DAMAGED;", "scenario_a_wrong_version_or_picture_is_damaged"),
+     "        if (picture != -1 && (item < -1000000 || !IsPicture(picture))) return FILE_DAMAGED;",
+     "scenario_a_wrong_version_or_picture_is_damaged"),
     ("a locked sidecar replaced", "    if (mine == FILE_SHUT || ShutSlot == slot) {", "    if (mine == FILE_SHUT && ShutSlot == slot && slot > 100) {",
      "scenario_a_locked_sidecar_is_never_replaced"),
     ("the backup's sidecar not rotated", "        if (clear) MoveFileExA(path, backup, 0);", "        (void)clear;",
