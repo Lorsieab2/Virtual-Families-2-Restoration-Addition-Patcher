@@ -63,3 +63,8 @@ Updated 27 October 2026: Cure no longer resets a family member's food groups (al
 - **Game Mechanics:** expanded. Every store item, upgrade and research has its own entry (#445, #446), and every line that was UNCONFIRMED is now settled, with the owner's weather names (#449). The Clear All Illnesses entry says what the cure clears and what it keeps. The Imported Candy entry says its cure skips a runny nose, which is how the stock game behaves.
 - **The bundle** is exported from the newest `main` (with #449). The Game Mechanics files go only into the bundle, never into an executable.
 - **Checks:** `tests/test_cure_keeps_food_groups_exe.py` runs the compiled cure and the game's own food-group count in every built executable. Only the illness fields change, and 4 food groups are still counted after the cure. The same test fails on the first B204 core, where 4 groups dropped to 0. No live test.
+- **Full suite** with release-only tests, against this matrix: 2368 passed, 36 skipped. Six files failed in the parallel pass:
+  - the Family Tree editor test passed when run alone;
+  - two bundle tests read the newest bundle in `outputs\`, which was B203 while the old B204 was moved aside. With the new bundle exported, they passed: 58 passed;
+  - two "generated files" tests are checkout-only. In a worktree that had just run the generator, they passed: 29 passed.
+- **The release gate** on the new zip: **RELEASE GATE PASSED**, no features lost against 24 retained releases (B179 to B203).
