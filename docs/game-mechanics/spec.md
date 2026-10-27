@@ -582,7 +582,8 @@ groups:
 
 ## 24. The formerly UNCONFIRMED lines (2026-10-27)
 
-Weather names follow the owner: Sunny = type 0 `eWeather_Sunny`, Normal = type 1 `eWeather_Cloudy`, Raining 2,
+Weather names follow the owner (decision 2026-10-27): Normal (the plain sky) = type 0 `eWeather_Sunny`, Sunny (the
+grey tint with sun beams) = type 1 `eWeather_Cloudy`, Raining 2,
 Stormy 3, Foggy 4, Snowing 5 (CodeView enum `EWeather`, Weather.obj).
 
 | What | Rule | Status |
@@ -602,7 +603,13 @@ Stormy 3, Foggy 4, Snowing 5 (CodeView enum `EWeather`, Weather.obj).
 | Rare Bird | yes: -(rand(8) x 10 + 15); everyone runs to x 174..240, y 269..309 and does 0x7D | VERIFIED-C |
 | Money checks | run as linked: Scratch-off > $21; EPA >= $1,312; Oh So Clever, Office Collection, Overdue Book, Professional Fee >= $750; Infringement and Tax Audit fee >= $750 and rand(100) >= 50; Tax Audit gift none. Read: Aesthetic Society, Children's Association, Community Association >= $750; Career Training > $255; Trainer > $5; Electric Bill none | VERIFIED-E / VERIFIED-C |
 | Starting weather | `CWeather::Reset` (only from `theGameState::Init`): type 0; rand(100) < 20 -> next = `Random(0)`, change after 30 game s; `Random(prev)` = PC minute mod 6, a 4 or 5 +1 mod 6 when rand(100) < 50, equal to prev +1 mod 6; weather not saved | VERIFIED-C |
-| Drawing | `CWeather::Draw`: type 0 nothing; type 1 grey tint 0.2 by day and `CSunBeam`; 2 rain; 3 rain and lightning; 4 fog; 5 snow; the tint by day only | VERIFIED-C |
+| Drawing | `CWeather::Draw`: type 0 (Normal) nothing; type 1 (Sunny) grey tint 0.2 by day and `CSunBeam`; 2 rain; 3 rain and lightning; 4 fog; 5 snow; the tint by day only | VERIFIED-C |
 | Breakdowns | picks 0 toilet, 1 / 2 bathroom sinks, 3 router, 4 kitchen sink, 5 stove, 6 shower, 7 dryer lint fire, 8..10 north bathroom (0x49 / 0x48 / 0x4A), 11..13 ants; with kitchen garbage gs+0x28 > 5 `GetRandom(17)`, 14..16 ants | VERIFIED-C |
 | Patcher drop routes | generator helpers: lounger roll 80 + nap (70 - energy) + sleep 3 x (45 - energy) weights, branch changes as on the page, refused for weather type >= 2; patio / picnic preparing -7 energy +7 dirt +5 trend +7 hunger, drinking -10 hunger, picnic -40 hunger, each +4 dirt +6 poo; bike = treadmill walk / run 50%; gym and yoga = WorkingOut (-4 energy, +5 dirt) / QuickWorkout (-7, +7, +5 trend) 50%; ping-pong = PlayingPooltable; spa receiving +2 dirt, +7..11 energy; umbrella, birthday and holiday helpers plan no need changes | VERIFIED-C |
 | Action branches | Reading: `LinkPeepToFurniture(0x5A)` fails -> head shake, trend -1, else +1; toilet: both occupants (gs+0x25C80 / +0x25CA8) taken -> the wait path skips the changes; BBQ: food <= 10 refusal; Needs to sit down: energy (state+0x34) > 35 -> +3, else +10 (the 45..52 is the lie-down length); Jumping on the bed: -2 energy three times, +3 trend, nothing without a bed | VERIFIED-C |
+
+Tropical Sunshine: the owner says it gives Sunny weather; the code (B200 0x49D890, push 0 before
+`PlanToChangeWeather`; the plan step calls `OverrideNight(180)` at 0x4CAFDC) sets type 0, the plain sky the owner calls Normal. A
+contradiction to live-check.
+
+Baby wait clock: every writer of gs+0x25AE0 and its one reader use `GetSecondsFromGameStart` 0x475830 (`_time64` minus the save's start time): real time, running while paused or closed, unaffected by the speed option; the Time Warp moves it on by moving the start time back. A drop with more than 3,600 s left sets now + 3,300 s (0x49E773..0x49E78E), so a player never waits more than 55 minutes after trying. VERIFIED-C.

@@ -49,7 +49,9 @@ def test_every_store_item_has_its_own_entry():
         assert len(hits) >= 1, name
         assert ("added by the patcher" in hits[0]) == added, name
     assert len([f for f in _lines(gm.PETS) if f.sub]) == len(gm.PET_ITEMS) == 14
-    assert len([f for f in _lines(gm.FLEA) if f.sub]) == len(gm.FLEA_ITEMS) == 36
+    # one entry per good, plus the code-reading sub-line under Bottled Tropical Sunshine
+    assert len([f for f in _lines(gm.FLEA) if f.sub and not f.text.startswith("The code reading")]) == len(
+        gm.FLEA_ITEMS) == 36
     assert len([f for f in _lines(gm.FOOD) if f.sub]) == len(gm.GROCERY_ITEMS) + len(gm.MEDICINE_ITEMS) == 18
     assert len([f for f in _lines(gm.CAREER_UPGRADES) if f.sub]) == len(gm.CAREER_UPGRADE_ITEMS) == 31
     assert len([f for f in _lines(gm.SERVICES) if f.sub]) == 6
@@ -63,18 +65,19 @@ def test_every_store_item_has_its_own_entry():
 def test_no_vague_words_and_no_cloudy():
     assert not re.search(r"\b(some|etc\.|a bit)\b", TEXT, re.I), re.search(r".{40}\b(some|etc\.|a bit)\b.{40}", TEXT,
                                                                              re.I)
-    # the code's enum name eWeather_Cloudy appears once, in the "Weather names" line; the page says Normal
+    # the code's enum name eWeather_Cloudy appears once, in the "Weather names" line; the page says Sunny
     assert TEXT.count("Cloudy") == 1 and "eWeather_Cloudy" in TEXT and "cloudy" not in TEXT
 
 
 def test_the_weather_bottles_use_the_owners_weather_names():
-    assert "Bottled Tropical Sunshine: $50: the weather becomes Sunny, and it is daytime for 3 minutes" in TEXT
+    assert "Bottled Tropical Sunshine: $50: gives Sunny weather (owner)." in TEXT
     assert "Bottled Tropical Rain: $50: the weather becomes Stormy, rain with lightning" in TEXT
     assert "Fog In a Bottle: $50: the weather becomes Foggy" in TEXT
     assert "Snow in a Bottle: $50: the weather becomes Snowing" in TEXT
-    assert "Bottled Tropical Sunshine sets Sunny (type 0)" in TEXT
-    assert "Sunny 0 eWeather_Sunny, Normal 1 eWeather_Cloudy, Raining 2" in TEXT
-    assert "returns to Sunny" in TEXT and "never Normal at night" in TEXT
+    assert "a contradiction to live-check: the bottle sets type 0, the plain sky the owner calls Normal" in TEXT
+    assert "Normal 0 eWeather_Sunny, Sunny 1 eWeather_Cloudy, Raining 2" in TEXT
+    assert "returns to Normal" in TEXT and "never Sunny at night" in TEXT
+    assert "Normal weather lasts 15 to 40 real minutes; any other kind, Sunny too, 6 to 12." in TEXT
 
 
 def test_health_plan_and_food_club_prices_are_the_price_codes_arithmetic():
@@ -219,7 +222,7 @@ def test_the_bottles_weather_types(core):
     # DispatchRotatingSundry pushes the EWeather for PlanToChangeWeather: Rain 3, Sunshine 0, Fog 4, Snow 5
     for offset, kind in ((0xC32, 3), (0xD00, 0), (0xEF2, 4), (0xFC0, 5)):
         assert _bytes(core, DISPATCH + offset, 2) == bytes([0x6A, kind]), hex(offset)
-    # CWeather::SetCurrent's switch: case 1 (Normal) is the sun beams' reset, case 0 the plain Sunny weather
+    # CWeather::SetCurrent's switch: case 1 (Sunny) is the sun beams' reset, case 0 the plain Normal sky
     table = struct.unpack("<I", _bytes(core, SET_CURRENT + 0x34, 4))[0]
     cases = [struct.unpack("<I", _bytes(core, table + 4 * k, 4))[0] - SET_CURRENT for k in range(6)]
     assert cases == [0x38, 0x41, 0x59, 0x4D, 0x78, 0x84]
