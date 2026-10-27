@@ -262,7 +262,7 @@ class LongPathTests(unittest.TestCase):
     @unittest.skipUnless(os.name == "nt", "Windows MAX_PATH behaviour")
     def test_deep_patcher_and_deep_output_folder_apply_and_back_up(self):
         with tempfile.TemporaryDirectory() as td:
-            tmp = Path(td)
+            tmp = Path(td).resolve()   # CI's TEMP is an 8.3 short name; the patcher resolves it
             # The manifest and payload sit past MAX_PATH (a deep OneDrive\Desktop-style unzip) ...
             bundle = self.deep(tmp / "OneDrive" / "Desktop", 245) / FOLDER
             self.assertGreater(len(str(bundle / "payload" / "mod.exe")), 260)
@@ -288,7 +288,7 @@ class LongPathTests(unittest.TestCase):
     @unittest.skipUnless(os.name == "nt", "Windows MAX_PATH behaviour")
     def test_too_deep_output_folder_is_refused_before_anything_is_written(self):
         with tempfile.TemporaryDirectory() as td:
-            tmp = Path(td)
+            tmp = Path(td).resolve()   # CI's TEMP is an 8.3 short name; the patcher resolves it
             bundle = tmp / "bundle" / FOLDER
             exe, manifest = self.make_install(tmp, bundle)
             output = self.deep(tmp / "Games", 259 - len(self.EXE_NAME))     # the EXE would be 260
