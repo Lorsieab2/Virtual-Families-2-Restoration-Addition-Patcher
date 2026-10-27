@@ -264,7 +264,7 @@ LEVELS = ("Beginner", "Novice", "Apprentice", "Licensed", "Practiced", "Accompli
 
 
 def _per_hour(salary: int) -> str:
-    """A career's pay per real hour: salary / 4 every 30 real minutes (spec section 2, 0x4C452E)."""
+    """A career's pay per hour of game time: salary / 4 every 3 age units (spec section 2, 0x4C452E)."""
     pay = salary / 2
     return f"${pay:g}"
 
@@ -277,7 +277,7 @@ def _career_lines() -> list[Fact]:
                         "careers.tsv; CVillagerSkills::Reset 0x4CB410", sub=True))
         for _cid, _wp, name, salaries in rows:
             lines.append(_f(CAREERS_GROUP, (
-                f"{name}: {_per_hour(salaries[0])} per real hour as a Beginner, "
+                f"{name}: {_per_hour(salaries[0])} per hour of game time as a Beginner, "
                 f"{_per_hour(salaries[7])} as a Master (levels: "
                 + ", ".join(_per_hour(s).lstrip("$") for s in salaries) + ")."), C,
                 "careers.tsv", sub=True))
@@ -290,28 +290,62 @@ def facts() -> list[Fact]:
     add = out.append
 
     # ------------------------------------------------------------------ Time and ageing (spec section 1, 5)
-    add(_f(TIME, "The game clock: at the game's normal speed one game second is one real second. The game itself "
-                 "only ever sets the normal speed or Pause.", C,
-           "spec 1: speed option gs+0x25B18, every writer listed"))
+    add(_f(TIME, "Clocks. Real time is your PC's clock: the game's speed does not change it, and it runs while the "
+                 "game is paused and while it is closed. Game time runs with the game's speed and stops while the "
+                 "game is paused: an hour of game time is 1 hour of real time at Normal speed, 2 hours at Slow, 30 "
+                 "minutes at Fast, 12 minutes at 5x and 6 minutes at 10x. The game itself only ever sets Normal or "
+                 "Pause; Slow, Fast, 5x and 10x come from the patcher's Time Controls.", C,
+           "CGameTime::Seconds 0x468B00 = banked + (GetSecondsFromGameStart - anchor) / (speed / 10), run as linked: "
+           "10,000 real s -> 10,000 game s at speed 10, 20,000 at 5, 5,000 at 20, 0 at 0; the age unit is "
+           "60 x speed real s (AllVillagersTimeflowUpkeep 0x4C4DE3); speed values Slow 20, Normal 10, Fast 5, 5x 2, "
+           "10x 1 (runtime/native/b200time/b200time_time.inc); GetSecondsFromGameStart 0x475830 = _time64 minus the "
+           "save's start time"))
+    add(_f(TIME, "Game time is kept by two clocks. The age clock counts age units, 10 minutes of game time each: "
+                 "ageing and every need, health, salary and pregnancy rule run on it, and for the time the game was "
+                 "closed it makes up only the capped catch-up (see time away). The game clock runs Random Events, "
+                 "messes, the weather, interest, the Food Club, On Sale, the Maid and the Gardener, the dating and "
+                 "college e-mails and the outfit restock; on loading it moves on by the whole time the game was "
+                 "closed, at the speed the family was saved at (not at all when it was saved paused).", C,
+           "CGameTime::SaveState 0x468AC0 / LoadState 0x468A20 keep the speed (+0x20), the anchor (+0x28) and the "
+           "banked seconds (+0x2C) and nothing re-anchors them at load, so Seconds() counts the time closed; the "
+           "age clock's catch-up caps at 0x4C4D29..0x4C4D8F"))
+    add(_f(TIME, "Real time while the game runs: the 2-second upkeep step (it also runs while paused; house "
+                 "malfunctions and the autosave ride on it) and the collectible rolls, 30 a second (not while "
+                 "paused). Neither runs while the game is closed.", C,
+           "theMainScene::UpdateScene 0x4A266E: ldwEventManager::GetSeconds 0x474600 + 2; CCollectableItem::Update "
+           "per frame"))
     add(_f(TIME, "Pause stops the game clock completely: the clock keeps the time it had when paused, however long "
                  "the pause lasts, and carries on from there when unpaused.", E,
            "SetSpeed(999) 0x468B80 stores speed 0 and banks Seconds(); Seconds() 0x468B00 returns the banked "
            "value at any later real time (tests/test_game_mechanics_b200_exe.py)"))
     add(_f(TIME, "While paused nobody ages and none of the family's upkeep (hunger, health, salary, birthdays) is "
-                 "processed, and the paused time is never made up later. Food groups, symptoms, the baby waiting "
-                 "time and collectibles keep counting down in real time while paused.", C,
+                 "processed, and the paused game time is never made up later. Food groups, symptoms, the baby "
+                 "waiting time and collectibles on the floor keep counting down in real time while paused.", C,
            "spec 1: option >= 999 zeroes the accumulator every step (0x4C4D99)"))
-    add(_f(TIME, "Ageing: a family member gains one age unit every 10 real minutes; 20 units make a year, so a "
-                 "year takes 3 hours 20 minutes of real time. Ageing counts real time, so it carries on while the "
-                 "game is closed (see time away).", C, "spec 1: AllVillagersTimeflowUpkeep 0x4C4C30"))
-    add(_f(TIME, "Time away (the game closed, not paused) is made up the next time the game runs:", E,
+    add(_f(TIME, "Ageing: a family member gains one age unit every 10 minutes of game time; 20 units make a year, "
+                 "so a year takes 3 hours 20 minutes of game time (3 hours 20 minutes of real time at Normal speed, "
+                 "20 minutes at 10x). It also carries on for the time the game is closed, up to the catch-up caps "
+                 "(see time away).", C,
+           "AllVillagersTimeflowUpkeep 0x4C4C30: units = real seconds / 60 / speed option (0x4C4DCF..0x4C4DE3)"))
+    add(_f(TIME, "Time away (the game closed, not paused) is made up the next time the game runs; at Normal speed, in "
+                 "real time away:", E,
            "AllVillagersTimeflowUpkeep 0x4C4D29..0x4C4D8F run as linked: 30,000 / 50,000 / 86,400 / 200,000 s "
            "away credit 30,000 / 31,000 / 31,000 / 86,400 s"))
-    add(_f(TIME, "up to 31,000 seconds (8 hours 36 minutes 40 seconds) away is made up in full;", E, sub=True))
-    add(_f(TIME, "from 31,000 seconds up to and including 24 hours away, 31,000 seconds are made up: 51 age units, "
-                 "about 2.55 years;", E, sub=True))
-    add(_f(TIME, "more than 24 hours away, exactly 24 hours are made up: 144 age units, 7.2 years. The rest of the "
-                 "time away is lost.", E, sub=True))
+    add(_f(TIME, "up to 31,000 seconds (8 hours 36 minutes 40 seconds) of real time away is made up in full;", E,
+           sub=True))
+    add(_f(TIME, "from 31,000 seconds up to and including 24 hours of real time away, 31,000 seconds are made up: 51 "
+                 "age units, about 2.55 years;", E, sub=True))
+    add(_f(TIME, "more than 24 hours of real time away, exactly 24 hours are made up: 144 age units, 7.2 years. The "
+                 "rest of the time away is lost.", E, sub=True))
+    add(_f(TIME, "At the other speeds (an age unit is 60 seconds of real time x the speed value): at Fast, up to "
+                 "38,200 seconds of real time away is made up in full (up to 127 age units) and more than that "
+                 "makes up 31,000 seconds (103 age units); at Slow, up to 23,800 seconds in full (19 age units) "
+                 "and more than that 31,000 seconds (25 age units); at 5x and 10x, up to 31,000 seconds in full "
+                 "(258 and 516 age units). At every speed more than 24 hours of real time away makes up 24 hours: "
+                 "288 age units at Fast, 72 at Slow, 720 at 5x and 1,440 at 10x.", E,
+           "0x4C4D58..0x4C4D8F run as linked at options 5, 20, 2, 1 (tests/test_game_mechanics_b200_exe.py): the "
+           "trigger is 38,200 (0x9538) / 23,800 (0x5CF8) / 31,000, the value set is always 31,000 (0x7918); over "
+           "86,400 -> 86,400; units = seconds / 60 / option", sub=True))
     add(_f(TIME, "A family saved paused makes up nothing.", E, "option 1009: accumulator 0 (emulated)", sub=True))
     add(_f(TIME, "Every age unit made up is then lived one by one, with its meals, health, salary and birthdays, as "
                  "if the game had been open.", E,
@@ -323,38 +357,41 @@ def facts() -> list[Fact]:
                  f"groups counted, unless the \"{OPTION_MORTALITY}\" option is on.", E, "spec 4, 5"))
     add(_f(TIME, "A new baby is created at 2 years of age (40 age units).", C,
            "Impregnate 0x4BB920 -> SpawnSpecificPeep, age argument 0x28 (40 units, 20 per year)"))
-    add(_f(TIME, "The store's Time Warp (Special Upgrades, $2,000) makes up 36,600 seconds (10 hours 10 minutes, "
-                 "61 age units) at once, all of it, and caps the money it brings at $750.", C,
+    add(_f(TIME, "The store's Time Warp (Special Upgrades, $2,000) makes up 61 age units (10 hours 10 minutes of game "
+                 "time) at once, all of it, at any speed, and caps the money it brings at $750. It moves every "
+                 "real-time count on by 3,660 seconds x the speed value: 10 hours 10 minutes of real time at "
+                 "Normal speed (the food groups, symptoms and the baby waiting time), 1 hour 1 minute at 10x.", C,
            "HandleUpgrade 0x48C2E0 case 0x112 on the purchase path HandleMouse -> HandlePurchaseItem: start time moved "
            "back 3,660 x option s, AllVillagersTimeflowUpkeep(true) (86,400 cap only), money capped at +750"))
 
     # ------------------------------------------------------------------ Needs and upkeep (spec 2, 14)
-    add(_f(NEEDS, "The family's needs are worked out once per age unit, every 10 real minutes, for everyone alive "
+    add(_f(NEEDS, "The family's needs are worked out once per age unit (every 10 minutes of game time) for everyone alive "
                   "and at home.", E, "spec 2"))
-    add(_f(NEEDS, "Hunger rises by 5 every 40 real minutes.", E, "spec 2: UpdateHungerState 0x4CC6A0"))
-    add(_f(NEEDS, "Eating: every 10 minutes, a hungry family member (hunger over 50) eats 3 food and loses 3 hunger "
+    add(_f(NEEDS, "Hunger rises by 5 every 4 age units (40 minutes of game time).", E, "spec 2: UpdateHungerState 0x4CC6A0"))
+    add(_f(NEEDS, "Eating: every age unit (10 minutes of game time), a hungry family member (hunger over 50) eats 3 food and loses 3 hunger "
                   "when the house has food; with 50 food or less in the house a meal is missed half the time.", E,
            "spec 2: 0x4C4575"))
     add(_f(NEEDS, "A missed meal or an empty house: a 30% chance (30.03%) of losing 1 health (starvation).", E,
            "spec 2"))
-    add(_f(NEEDS, "No food at all: 1 health lost (76% chance, sure every hour); at 20 health or less a 31% chance "
+    add(_f(NEEDS, "No food at all: 1 health lost each age unit (76% chance, sure every 6th unit, once an hour of game time); at 20 health or less a 31% chance "
                   "of 1 back every other unit.", E, "spec 2: 0x4C463C"))
     add(_f(NEEDS, "Waste: with 1,000 food or more, a hungry family member has a 76% chance of using 3 more food.",
            E, "spec 2: 0x4C460F"))
     add(_f(NEEDS, "The toilet: when the need reaches 90 it resets to 25-49.", E, "spec 2: 0x4C455A"))
-    add(_f(NEEDS, "Energy changes every 20 real minutes: -4 at night (8 PM to 5 AM by your PC's clock) with 10 or "
+    add(_f(NEEDS, "Energy changes every 2 age units (20 minutes of game time): -4 at night (8 PM to 5 AM by your PC's clock) with 10 or "
                   "more energy, +8 in the day (5:06 AM to 5 PM) with 70 or less; -1 each for happiness 10 or less, "
                   "health 25 or less, health 10 or less and hunger 90 or more; -3 when sick (at most -6 or +10).", C,
            "spec 2: UpdateEnergyState 0x4CBDC0"))
     add(_f(NEEDS, "Energy is only worked out for the last 12 units of a catch-up.", E, "spec 2: 0x4C450F"))
-    add(_f(NEEDS, "Happiness moves every 30 real minutes by up to 5 points, towards a mood made of: food groups, "
+    add(_f(NEEDS, "Happiness moves every 3 age units (30 minutes of game time) by up to 5 points, towards a mood made of: food groups, "
                   "money (worse below $1,000 and $100, better above $8,000, $50,000 and $100,000), food in the "
                   "house (worse at 250 and 50 or less), sickness, messes on the floor (better with none, worse at 10 "
                   "and 20), house renovations, placed furniture (up to 30), owned items the person likes, the "
                   "family's size, hunger 90 or more and health 10 or less.", C,
            "spec 2: UpdateHappinessState 0x4CBE90"))
     add(_f(NEEDS, "Food groups: Grains, Dairy, Meats and Fruits and Veggies. A grocery bag put in the kitchen, or a "
-                  "Food Club delivery, gives that group to everyone at home for 24 real hours.", C,
+                  "Food Club delivery, gives that group to everyone at home for 24 hours of real time (it runs out while "
+                  "paused and while the game is closed too).", C,
            "spec 2, 14: UpdateNutritionAllVillagers 0x4C74E0; groups by item: 0x49F998.."))
     add(_f(NEEDS, "Family members without a career (every child born in the house starts without one) count one "
                   "extra food group whenever they have had Grains, even after the Grains has run out: Grains and "
@@ -367,21 +404,22 @@ def facts() -> list[Fact]:
     add(_f(NEEDS, "The food store never goes below 0.", C, "spec 14"))
 
     # ------------------------------------------------------------------ Health and sickness (spec 2, 3, 4)
-    add(_f(HEALTH, "Recovery: every 10 minutes, a fed family member who is not sick has a 50% chance of 1 health "
+    add(_f(HEALTH, "Recovery: every age unit (10 minutes of game time), a fed family member who is not sick has a 50% chance of 1 health "
                    "back (10% from age 55), up to 100.", E, "spec 2: 0x4C470A"))
-    add(_f(HEALTH, "Every 30 minutes health also moves by up to 5: -1 for happiness 10 or less, -1 for hunger 90 or "
+    add(_f(HEALTH, "Every 3 age units (30 minutes of game time) health also moves by up to 5: -1 for happiness 10 or less, -1 for hunger 90 or "
                    "more and another at 100, -1 with exactly 1 food group, +1 with exactly 4, and when sick -1 with "
                    "a 15% chance (40% with an infection).", C, "spec 2: UpdateHealthState 0x4CC5F0"))
-    add(_f(HEALTH, "Being sick: every 10 minutes a 61% chance of losing 1 health; no recovery, less energy and "
+    add(_f(HEALTH, "Being sick: every age unit (10 minutes of game time) a 61% chance of losing 1 health; no recovery, less energy and "
                    "happiness, and less career progress.", E, "spec 2: 0x4C46D0; spec 3"))
-    add(_f(HEALTH, "Catching something: every 30 real minutes a healthy family member is checked:", E,
+    add(_f(HEALTH, "Catching something: every 3 age units (30 minutes of game time) a healthy family member is checked:", E,
            "spec 3: UpdateDisease 0x4CBBE0 (t_dis)"))
     add(_f(HEALTH, "1.007% in all (a symptom 0.906%, a mild infection 0.071%, a serious one 0.030%);", E, sub=True))
     add(_f(HEALTH, "2.518% when someone at home has a catching symptom;", E, sub=True))
     add(_f(HEALTH, "0.806% with exactly 3 food groups counted, and 0.503% with 5 (a family member without a career "
                    "who has all four).", E, "0x4CBD2E: base 10, -2 at 3 groups, -5 at 5", sub=True))
     add(_f(HEALTH, "Symptoms: hiccups, sore throat, stomach, headache, cough, skin rash and runny nose. Each lasts "
-                   "6 to 17 real hours.", E, "spec 3: SetSymptom 0x4CBBA0"))
+                   "6 to 17 hours of real time (it runs out while paused and while the game is closed too).", E,
+           "spec 3: SetSymptom 0x4CBBA0, expiry = GetSecondsFromGameStart + 6..17 h"))
     add(_f(HEALTH, "A mild infection adds a symptom half the time when there is none and ends with a 3% chance per "
                    "check; a serious one adds symptoms (up to 2) and ends with a 1.2% chance per check.", E, "spec 3"))
     add(_f(HEALTH, "The medicines (see Food and Medicine): six each cure one symptom, Penicillin ends the mild "
@@ -394,7 +432,9 @@ def facts() -> list[Fact]:
                    "but the only code that sets them is never called and is left out of the game, and every other "
                    "health change names cause 0, 1 or 2.", C,
            "cause enum 3 / 4; MakeRandomVillagersInjured / MakeRandomVillagersDead have no callers and are not linked into B200; all 20 AdjustHealth / SetHealth call sites pass cause -1, 0, 1 or 2"))
-    add(_f(HEALTH, "A family member who has died stays in the house for 40 real hours (240 age units), then is "
+    add(_f(HEALTH, "A family member who has died stays in the house for 240 age units after their last upkeep (40 hours "
+                   "of game time; this count is not capped, so the time the game is closed counts in full, at "
+                   "the speed the family was saved at), then is "
                    "taken from the family tree's slot.", C, "spec 4: 0x4C4C9D"))
 
     # ------------------------------------------------------------------ Old age (spec 4)
@@ -439,7 +479,8 @@ def facts() -> list[Fact]:
                       "adds its excess, in points, to both rolls. Twins need 2 free child places, triplets 3.", C,
            "spec 6: Impregnate 0x4BB920"))
     add(_f(PREGNANCY, "A family has room for 6 children per generation.", C, "spec 10: AddOffspring"))
-    add(_f(PREGNANCY, "A pregnancy lasts 21 age units: 3 hours 30 minutes of real time.", C, "spec 6: 0x4C47D8"))
+    add(_f(PREGNANCY, "A pregnancy lasts 21 age units: 3 hours 30 minutes of game time (3 hours 30 minutes of real time at "
+                      "Normal speed).", C, "spec 6: 0x4C47D8"))
     add(_f(PREGNANCY, "The baby waiting time, as you play it: however long it is, dropping one spouse on the other "
                       "while more than 1 hour of it is left cuts it to 55 minutes from that moment, so once you try "
                       "you never wait more than 55 minutes. It is real time on your PC's clock: it runs while the game "
@@ -468,8 +509,8 @@ def facts() -> list[Fact]:
     add(_f(CAREERS_GROUP, "A career is picked at random from 132 (38 in the kitchen, 57 in the office, 37 in the "
                           "workshop) and starts at level 0.", C, "spec 7: CVillagerSkills::Reset 0x4CB410"))
     add(_f(CAREERS_GROUP, "Levels: " + ", ".join(LEVELS) + ".", C, "spec 7"))
-    add(_f(CAREERS_GROUP, "Salary: paid every 30 real minutes, a quarter of the career's salary each time (half the "
-                          "salary per real hour), whether or not the person is at work.", E, "spec 2, 7: 0x4C452E"))
+    add(_f(CAREERS_GROUP, "Salary: paid every 3 age units (30 minutes of game time), a quarter of the career's salary each "
+                          "time (half the salary per hour of game time), whether or not the person is at work.", E, "spec 2, 7: 0x4C452E"))
     add(_f(CAREERS_GROUP, "Each piece of work succeeds with a chance of 56.25% for a Beginner rising to 100% for a "
                           "Master; a success pays 6% of the salary and adds progress (more in better-equipped rooms, "
                           "less at higher levels). 3,000 progress is a promotion: a new salary and a celebration.", C,
@@ -482,23 +523,24 @@ def facts() -> list[Fact]:
                           "\"carbs\", \"cooking\" and \"computers\") and a quarter when that like is a "
                           "dislike.", C,
            "CVillagerAI::DecideWhatToDo (GetRandom(total weight)); InitAI run as linked: behaviours 0x2C / 0x47 / 0x4B weights 469 / 553 / 478, min 50, max 45,000, likes 82 / 39 / 81"))
-    add(_f(CAREERS_GROUP, "During a catch-up, for each 10 minutes made up while a family member is more than 20 "
-                          "minutes behind, a family member with a career who is not sick and not pregnant gets one "
+    add(_f(CAREERS_GROUP, "During a catch-up, for each age unit made up (10 minutes of game time) while a family member is "
+                          "more than 2 age units behind, a family member with a career who is not sick and not pregnant gets one "
                           "try for every 400 of their work weight (1 at the starting weights, 112 at 45,000), each "
                           "a 1 in 6 chance (16.67%) of a piece of work: its progress and its pay, as above, with no "
                           "success roll.", C,
            "AllVillagersRealtimePhysiologyAndProductivityUpkeep 0x4C4A8F..0x4C4AD6 -> RealtimeWorkDone 0x4C3DB0: weight / 400, GetRandom(6) == 0 -> AdvanceCareer(villager, pay true, promote false)"))
-    add(_f(CAREERS_GROUP, "Every career's pay, per real hour, at each level from Beginner to Master:", C,
+    add(_f(CAREERS_GROUP, "Every career's pay, per hour of game time (per real hour at Normal speed), at each level from "
+                          "Beginner to Master:", C,
            "careers.tsv"))
     out.extend(_career_lines())
 
     # ------------------------------------------------------------------ Money and interest (spec 8)
     add(_f(MONEY, "A new family starts with $50 to $189.", C, "spec 10: theGameState init rand(140)"))
     add(_f(MONEY, "Money never goes below $0 or above $4,000,000,000.", C, "spec 8: CMoney::Adjust 0x4818B0"))
-    add(_f(MONEY, "Interest: 10% of the money (the starting rate) each game day (24 real hours at normal speed). After a gap only 2 "
+    add(_f(MONEY, "Interest: 10% of the money (the starting rate) each game day (24 hours of game time on the game clock). After a gap only 2 "
                   "days are paid, however many have passed; the rest are skipped.", E,
            "UpdateInterest 0x481D80 run as linked: 1,000 at 0.10 gains 100 after 1 day and 200 after 2, 3 or 10"))
-    add(_f(MONEY, "Interest is paid when it is next checked: every 30 real minutes (the happiness check), when the "
+    add(_f(MONEY, "Interest is paid when it is next checked: every 3 age units (30 minutes of game time, the happiness check), when the "
                   "bank window opens, when the store is clicked, at the Time Warp, at the daily e-mail, when a new "
                   "family's first adult is made, and when 15 of the Random Events look at the money.", C,
            "callers of UpdateInterest 0x481D80: UpdateHappinessState, CBankingDlg, CScrollingStoreScene::HandleMouse, "
@@ -513,7 +555,7 @@ def facts() -> list[Fact]:
            "stock exe sha256 1582d9e8: GetCategoryItemCount 0x4BB0A0 / GetCategoryItem 0x4BAA50, category 0x14 (the "
            "store menu's Special Upgrades row, table 0x5346E0), run as linked: 6 items, list 0x556E3C = 0x111, "
            "0x112, 0x113, 0x115, 0x116, 0x114"))
-    add(_f(MONEY, WITH_PATCHER + "Brokerage Account: buying it raises interest to 11% a day. Buying it again sets "
+    add(_f(MONEY, WITH_PATCHER + "Brokerage Account: buying it raises interest to 11% a game day (24 hours of game time). Buying it again sets "
                   "interest to 1%; each purchase after that adds 2 points (3%, 5%, 7%, 9%) until 11% again.", E,
            "HandlePurchaseItem 0x48C110 -> 0x4B8B50 run as linked from 0.10: 0.11, 0.01, 0.03, 0.05, 0.07, 0.09, "
            "0.11"))
@@ -530,10 +572,10 @@ def facts() -> list[Fact]:
                     "\"... has been sent away to school!\".", C,
            "HandleUpgrade 0x48C2E0 case 0x10B: SetLeftHome on gs+0x25CC4, message 0x4C8"))
     add(_f(LEAVING, "The college e-mails come from those who left; they count one year away for every 12,000 "
-                    "game seconds (3 hours 20 minutes).", C, "spec 9: YearsAwayFromHome"))
+                    "game seconds (3 hours 20 minutes of game time on the game clock).", C, "spec 9: YearsAwayFromHome"))
 
     # ------------------------------------------------------------------ Dating, marriage, next generation (spec 10)
-    add(_f(DATING, "The dating e-mail first comes 3 minutes into a new game or a new generation. After a date "
+    add(_f(DATING, "The dating e-mail first comes 3 minutes of game time into a new game or a new generation. After a date "
                    "without a match it comes 5 minutes x the dates so far later, plus 10 minutes for each year the "
                    "single head of the family is over 26.", C, "spec 10: gs+0x25AE4 writers"))
     add(_f(DATING, "Each date is of the other sex and 3 years younger to 2 years older (equally likely).", C,
@@ -555,7 +597,7 @@ def facts() -> list[Fact]:
                    "the family.", E, "spec 10: events 64 / 65"))
 
     # ------------------------------------------------------------------ Random Events (spec 11)
-    add(_f(EVENTS, "Every hour of game time (1 real hour at normal speed; the clock stops while paused), when "
+    add(_f(EVENTS, "Every hour of game time (1 hour of real time at Normal speed; the game clock stops while paused), when "
                    "someone is at home: a 66% "
                    "chance of an Email Event, otherwise a Popup Event now. Opening the e-mail starts the hour "
                    "again.", C, "spec 11: UpdateScene 0x4A2E17"))
@@ -590,7 +632,7 @@ def facts() -> list[Fact]:
     add(_f(WEATHER, "After a spell the weather always returns to Normal; after Normal the next kind is picked "
                     "evenly from the other five (never Sunny at night). The weather stands still while paused.", C,
            "spec 12: CWeather::Update 0x4CD110"))
-    add(_f(WEATHER, "Normal weather lasts 15 to 40 real minutes; any other kind, Sunny too, 6 to 12.", C,
+    add(_f(WEATHER, "Normal weather lasts 15 to 40 minutes of game time; any other kind, Sunny too, 6 to 12.", C,
            "spec 12: SetCurrent 0x4CCF20"))
     add(_f(WEATHER, "Heavy rain or a storm sends everyone outside to take cover.", C, "spec 12"))
     add(_f(WEATHER, "The collectibles of the rain-only spawn areas appear only in Raining or Stormy weather.", C,
@@ -603,14 +645,14 @@ def facts() -> list[Fact]:
            "CWeather::Reset, called only by theGameState::Init; CWeather::Random(previous)"))
 
     # ------------------------------------------------------------------ Messes and malfunctions (spec 13)
-    add(_f(MESSES, "Messes appear every 5 real hours of game time (2.5 hours with 4 or more in the family), not "
+    add(_f(MESSES, "Messes appear every 5 hours of game time (2.5 hours with 4 or more in the family), not "
                    "while paused, one roll each: under 30 a weed, under 55 a sock, under 80 a candy wrapper, "
                    "else a dirt smudge; with no cobwebs about, a roll under 20 makes nothing. A Gardener stops the "
                    "weeds and a Maid the rest; with both, no messes.", C,
            "spec 13: CCollectableItem::Update 0x44DE90"))
     add(_f(MESSES, "Messes on the floor change the family's happiness (see Needs and upkeep).", C, "spec 13"))
-    add(_f(MESSES, "House malfunctions: every 2 seconds a 1 in 800 chance (about every 27 real minutes), from 6 "
-                   "minutes after the family was started and only while no other malfunction is out. They roll "
+    add(_f(MESSES, "House malfunctions: every 2 seconds of real time a 1 in 800 chance (about every 27 minutes of real "
+                   "time, at any speed), from 6 minutes of real time after the family was started and only while no other malfunction is out. They roll "
                    "while the game is paused too.", E,
            "UpdateScene 2-second step 0x4A266E..0x4A28F9 run as linked at speed option 10 and 1009: both reach "
            "GetRandom(800) and the pick GetRandom(14); the step's clock is the wall clock (0x474600)"))
@@ -624,8 +666,8 @@ def facts() -> list[Fact]:
            "spec 13: picks 0 toilet, 1 / 2 bathroom sinks, 3 router, 4 kitchen sink, 5 stove, 6 shower, 7 dryer lint fire, 8..10 north bathroom 0x49 / 0x48 / 0x4A, 11..13 ants; GetRandom(17) with gs+0x28 > 5, 14..16 ants"))
 
     # ------------------------------------------------------------------ Collectibles (spec 15)
-    add(_f(COLLECTIBLES, "The game rolls for a collectible 30 times a second while it runs (not paused): about one "
-                         "every 73 real seconds, every 37 with the Lucky Rock.", C,
+    add(_f(COLLECTIBLES, "The game rolls for a collectible 30 times a second of real time while it runs (not paused, and at "
+                         "any speed): about one every 73 seconds of real time, every 37 with the Lucky Rock.", C,
            "spec 15: CCollectableItem::Update, 3 in 6,600 (3 in 3,300)"))
     add(_f(COLLECTIBLES, "Rarity: rare 4%, uncommon 13%, common 83%; with the Lucky Rock 8%, 26% and 66%. The same "
                          "item never appears twice at once.", C, "spec 15: CCollectableItem::Add 0x44CA10"))
@@ -638,15 +680,15 @@ def facts() -> list[Fact]:
     add(_f(INDEX, "Every chance on this page is exact: the game rolls rand(N) and every value is counted, so "
                   "\"30% (30.03%)\" means 9,840 of the game's 32,768 equally likely values.", C, "spec header"))
     add(_f(INDEX, "Chances, all shown above:", C, "spec 18"))
-    for text in ("a malfunction 1 in 800 every 2 seconds, then 1 of 14;",
+    for text in ("a malfunction 1 in 800 every 2 seconds of real time, then 1 of 14;",
                  "a Random Event's kind: Email Event 66%, Popup Event 34%, then 1 among those that can happen;",
                  "a missed meal 50% (50 food or less), starvation 30.03%, waste 76%, no food 76%;",
                  "illness per check 1.007% (2.518% with a catching housemate), losing health while sick 61%, "
                  "recovery 50% (10% from 55);",
-                 "an infection ending 3% (mild) or 1.2% (serious) per check, a symptom lasting 6 to 17 hours;",
+                 "an infection ending 3% (mild) or 1.2% (serious) per check, a symptom lasting 6 to 17 hours of real time;",
                  "old age 10% per year over, pregnancy by the table, twins 5.25%, triplets 1.75%;",
                  "work success 56.25% to 100%, a career from 132;",
-                 "weather: the next kind 1 in 5, Normal 15 to 40 minutes, Sunny and the others 6 to 12;",
+                 "weather: the next kind 1 in 5, Normal 15 to 40 minutes of game time, Sunny and the others 6 to 12;",
                  "a collectible 3 in 6,600 per frame (3 in 3,300 with the Lucky Rock), rare 4%, uncommon 13%;",
                  "a mess: under 30 of 100 a weed, under 55 a sock, under 80 a wrapper, else a smudge;",
                  "the Lotto Ticket: $50,000 4 in 32,768, $25,000 8, $5,000 80, $1,000 800, $750 2,000, a grocery bag "
@@ -658,30 +700,33 @@ def facts() -> list[Fact]:
                   "it faces, its animation, pose and sound, e-mail wording, names and looks. What each action "
                   "gives is in the Actions group.", C,
            "spec 18: 4,431 behaviour sites; every conditional branch of the 63 listed actions read"))
-    add(_f(INDEX, "Timers, in real time at normal speed (game-clock timers stop while paused; real-time ones run "
-                  "while paused and while the game is closed):", C, "spec 17"))
+    add(_f(INDEX, "Timers, each with its clock (game time stops while paused and is real time at Normal speed; "
+                  "real time runs while paused and while the game is closed; the game clock also moves on by the "
+                  "time the game was closed, the age clock only by the capped catch-up):", C,
+           "spec 17, 25"))
     for text, label in (
-            ("upkeep: every 2 seconds, also while paused;", C),
-            ("one age unit: 10 minutes (real time; paused time is discarded);", C),
-            ("a pregnancy: 3 hours 30 minutes;", C),
-            ("a symptom: 6 to 17 hours (real time);", C),
-            ("a food group: 24 hours (real time);", C),
-            ("interest and the Food Club: each game day (24 hours), interest at most 2 days at once;", E),
-            ("a Random Event: every hour (game clock);", C),
-            ("the dating e-mail: 3 minutes, then 5 minutes per date plus 10 per year over 26 (game clock);", C),
-            ("the Maid and the Gardener: every hour in the day by your PC's clock (game clock);", C),
-            ("messes: every 5 hours, 2.5 with 4 or more in the family (game clock);", C),
-            ("a collectible: about every 73 seconds (37 with the Lucky Rock);", C),
-            ("a house malfunction: about every 27 minutes, also while paused;", E),
+            ("upkeep: every 2 seconds of real time, also while paused;", C),
+            ("one age unit: 10 minutes of game time (the age clock; paused time is discarded);", C),
+            ("a pregnancy: 3 hours 30 minutes of game time (21 age units);", C),
+            ("a symptom: 6 to 17 hours of real time;", C),
+            ("a food group: 24 hours of real time;", C),
+            ("interest and the Food Club: each game day (24 hours of game time), interest at most 2 days at once;", E),
+            ("a Random Event: every hour of game time;", C),
+            ("the dating e-mail: 3 minutes of game time, then 5 minutes per date plus 10 per year over 26;", C),
+            ("the Maid and the Gardener: every hour of game time, in the day by your PC's clock;", C),
+            ("messes: every 5 hours of game time, 2.5 with 4 or more in the family;", C),
+            ("a collectible: about every 73 seconds of real time (37 with the Lucky Rock), not while paused;", C),
+            ("a house malfunction: about every 27 minutes of real time, also while paused;", E),
             ("the autosave: every 2 minutes (real time), also while paused, to the same save file a quit "
              "writes; the same in the unpatched game;", E),
-            ("a weather spell: Normal 15 to 40 minutes before the next spell, Sunny and the others 6 to 12 (game clock);", C),
-            ("On Sale: every 24 hours (game clock);", C),
+            ("a weather spell: Normal 15 to 40 minutes of game time before the next spell, Sunny and the others 6 to 12;", C),
+            ("On Sale: every 24 hours of game time;", C),
             ("the Flea Market, with the patcher: never changes;", E),
-            ("the Flea Market, unpatched game: every 6 hours (real time);", E),
-            ("a body removed: 40 hours after death (real time);", C),
-            ("the baby waiting time: 10 minutes to 12 hours 30 minutes (real time), cut to 55 minutes by a drop;", C),
-            ("time away made up: at most 31,000 seconds, or 24 hours when more than 24 hours away.", E)):
+            ("the Flea Market, unpatched game: every 6 hours of real time;", E),
+            ("a body removed: 240 age units after death (40 hours of game time), the time closed counted in full;", C),
+            ("the baby waiting time: 10 minutes to 12 hours 30 minutes of real time, cut to 55 minutes by a drop;", C),
+            ("time away made up: at most 31,000 seconds of real time at Normal speed, or 24 hours when more than 24 "
+             "hours away.", E)):
         add(_f(INDEX, text, label, "spec 17", sub=True))
     return out
 
@@ -1302,15 +1347,16 @@ FLEA_ITEMS = (
 # Special Upgrades (category 0x14), stock rows: (name, price, effect, label)
 SPECIAL_ITEMS = (
     ("Roll the Dice (Random Event)", 2000, "a Random Event at once, picked evenly among those that can happen", C),
-    ("Time Warp", 2000, "the family lives 10 hours 10 minutes of real time at once (36,600 seconds, 61 age units, "
+    ("Time Warp", 2000, "the family lives 61 age units at once (10 hours 10 minutes of game time; 36,600 seconds of "
+                        "real time at Normal speed), "
                         "with their meals, health, salary and birthdays); the money it brings is capped at $750; a "
                         "paused game stays paused", C),
     ("Adoption Services", 4000, "a 3-year-old (60 age units) of either sex, equally likely, joins the house and is "
                                 "added to the family tree as a child", C),
-    ("On Call Maid Service", 1000, "kept for good: the Maid comes every hour in the day by your PC's clock (the first "
+    ("On Call Maid Service", 1000, "kept for good: the Maid comes every hour of game time in the day by your PC's clock (the first "
                                    "visit 1 hour of game time after buying) and no socks, candy wrappers or dirt "
                                    "smudges appear (see Messes and malfunctions)", C),
-    ("On Call Gardening Service", 1000, "kept for good: the Gardener comes every hour in the day by your PC's clock "
+    ("On Call Gardening Service", 1000, "kept for good: the Gardener comes every hour of game time in the day by your PC's clock "
                                         "(the first visit 1 hour of game time after buying) and no weeds appear", C),
 )
 
@@ -1337,7 +1383,7 @@ RENOVATION_ITEMS = (
     (0xE2, "West Auxiliary Room", 6000, 3, ""), (0xE8, "Large Central Room", 9500, 3, ""),
     (0xE5, "Bedroom 2", 9500, 4, ""),
     (0xE6, "2nd Bathroom", 15000, 4, " It also makes the north bathroom's shower, toilet and sink leaks possible (3 of "
-                                     "the 14 malfunction picks), and gives 10 mood points every 30 real minutes to each "
+                                     "the 14 malfunction picks), and gives 10 mood points every 30 minutes of game time to each "
                                      "family member whose Likes show \"shaving\"."),
     (0xE7, "Small Central Room", 35000, 5, ""), (0xE9, "Large North Room", 45000, 5, ""),
 )
@@ -1854,7 +1900,7 @@ def _store_lines() -> list[Fact]:
     add(_f(STORE, "\"From generation N\": the store keeps the item locked until the family tree counts N generations. "
                   "Lock 0 is from the start.", C, "CInventoryManager::IsLocked / CFurnitureManager::IsLocked: lock > "
                                                   "CFamilyTree::NumGenerations"))
-    add(_f(STORE, "Mood points: every 30 real minutes the game adds up each family member's mood points (the list in "
+    add(_f(STORE, "Mood points: every 3 age units (30 minutes of game time) the game adds up each family member's mood points (the list in "
                   "Needs and upkeep, and the items below), moves happiness by a hundredth of the total, at most 5 "
                   "points, then halves the total.", C, "UpdateHappinessState 0x4CBE90: trend / 100 clamped to -5..5, "
                                                        "then trend / 2"))
@@ -1870,18 +1916,18 @@ def _store_lines() -> list[Fact]:
                   "action: each applies once, when its step plays.", C,
            "CVillagerPlans::ProcessCurrentPlan: each planned change calls the matching Adjust once and marks the step done"))
     add(_f(STORE, WITH_PATCHER + "the Flea Market shows all 36 of its goods at all times; it never changes (the "
-                  "game's tip still says three times a day).", E,
+                  "game's tip still says three times a day; there is no Flea Market clock in real time or game time).", E,
            "GetCategoryItemCount 0x46B6D0 / GetCategoryItem 0x46B210 call VF2GetExpandedFleaMarketCount / Item "
            "0x4B9A90 / 0x4B9AB0 first (36 for category 15); the stock rotation 0x46BEB0 is never reached"))
     add(_f(STORE, UNPATCHED + "the Flea Market shows 5 of its 36 goods, picked at random, and changes them every 6 "
-                  "real hours: the first time it is opened more than 6 real hours after the last change it picks 5 "
+                  "hours of real time: the first time it is opened more than 6 real hours after the last change it picks 5 "
                   "new ones (the time counts while paused and while the game is closed). The game's tip says three "
                   "times a day.", E,
            "stock exe sha256 1582d9e8: the store menu's Flea Market row (table 0x5346E0 row 1, category 15) -> "
            "SetStoreCategory 0x432050(15) -> GetCategoryItemCount 0x4BB0A0 -> MaybeUpdateRotatingItems 0x4BA710, "
            "run as linked after Reset 0x4BA8F0: 5 goods at real s T, the same 5 at T + 21,600, 5 new at "
            "T + 21,601 and at T + 86,400; next change = real s + 21,600"))
-    add(_f(STORE, "On Sale: 3 furniture items, changed every game day (24 real hours at normal speed; the clock "
+    add(_f(STORE, "On Sale: 3 furniture items, changed every game day (24 hours of game time, 24 real hours at Normal speed; the clock "
                   "stops while paused), at half price. Buying one takes it off the list.", C,
            "spec 16: MaybeUpdateSaleItems 0x46C000; CalcPrice category 3; HandlePurchaseItem TakeOne"))
 
@@ -1890,7 +1936,7 @@ def _store_lines() -> list[Fact]:
            cat + "; stock 0x4BB0A0 category 0xE: the same 18"))
     add(_f(FOOD, "Groceries are placed on the kitchen table (anywhere else: \"Groceries must be placed in the "
                  "kitchen.\" and the bag stays in the tray). Each bag gives its food group to everyone at home for "
-                 "24 real hours (see Needs and upkeep) and everyone at home starts Putting away "
+                 "24 hours of real time (see Needs and upkeep) and everyone at home starts Putting away "
                  "groceries. With the Food Club each costs half.", C, "HandleMouseDown 0x49EE90: kitchenTableRect1, UpdateNutritionAllVillagers "
                                         "0x4C74E0 (expiry real s + 86,400), MakeAllVillagersDoIt"))
     for _iid, name, price, group, organic in GROCERY_ITEMS:
@@ -1905,7 +1951,7 @@ def _store_lines() -> list[Fact]:
                      f"{group} food group.{extra}", C,
                "HandleMouseDown grocery cases (case table 0x4A003E), FoodStore Adjust 150 / 250", sub=True))
     add(_f(FOOD, "Medicines are given to the family member they are dropped on, and each is used up when given. "
-                 "Hiccups have no medicine; they wear off (6 to 17 real hours). With the Health Plan each costs a "
+                 "Hiccups have no medicine; they wear off (6 to 17 hours of real time). With the Health Plan each costs a "
                  "quarter.", C, "HandleMouseDown 0x49EE90 cases 0x18..0x21; symptoms state+0x5C..0x62"))
     for name, price, effect in MEDICINE_ITEMS:
         add(_f(FOOD, f"{name}: {_money(price)} ({_money(price * 25 // 100)} with the Health Plan): {effect}.", C,
@@ -1946,18 +1992,18 @@ def _store_lines() -> list[Fact]:
                      "its price while the family does not have it; while it does, its price is $0 and buying it "
                      "removes it.", C,
            "VF2GetVisibleSpecialUpgradePrice 0x4B9F60 returns 0 while owned; 0x4B8B50 toggles cases 0x117..0x11A"))
-    add(_f(UPGRADES, "Brokerage Account: $10,000 (with the patcher): interest 11% a game day instead of 10%; bought "
+    add(_f(UPGRADES, "Brokerage Account: $10,000 (with the patcher): interest 11% a game day (24 hours of game time) instead of 10%; bought "
                      "again ($0) it sets interest to 1%; each later purchase ($10,000) adds 2 points, 3%, 5%, 7%, 9% "
                      "and back to 11% (see Money and interest).", E,
            "0x4B8B50 case 0x117 run as linked from 0.10: 0.11, 0.01, 0.03, 0.05, 0.07, 0.09, 0.11", sub=True))
-    add(_f(UPGRADES, "Food Club: $10,000 (with the patcher): 500 food and all four food groups each game day, every "
+    add(_f(UPGRADES, "Food Club: $10,000 (with the patcher): 500 food and all four food groups each game day (24 hours of game time), every "
                      "missed day delivered; 60 food whenever a family member finds less than 60; groceries at half "
                      "price. Bought again ($0) the deliveries stop.", C,
            "JoinFoodClub; CFoodStore::Update 0x464F70; CalcPrice; 0x4B8B50 case 0x118 clears the flag", sub=True))
     add(_f(UPGRADES, "Health Plan: $10,000 (with the patcher): the quarter prices above, kept in the save. Bought again "
                      "($0) prices are back to full.", C, "0x4B8B50 case 0x119: gs+0x25B1D and record 0xA8 bit 0",
            sub=True))
-    add(_f(UPGRADES, "Lucky Rock: $77,777 (with the patcher): a collectible about every 37 real seconds instead of 73, "
+    add(_f(UPGRADES, "Lucky Rock: $77,777 (with the patcher): a collectible about every 37 seconds of real time instead of 73, "
                      "rare 8% and uncommon 26% instead of 4% and 13% (see Collectibles). Bought again ($0) it is "
                      "gone.", C, "0x4B8B50 case 0x11A: CCollectableItem+0x8A8", sub=True))
     add(_f(UPGRADES, f"Patcher option \"{OPTION_CHEATS}\", on: 45 more rows, every one $0 (43 on this page, 2 offered "
@@ -1980,8 +2026,8 @@ def _store_lines() -> list[Fact]:
     # ------------------------------------------------------------------ Home Renovation
     add(_f(RENOVATION, "The Home Renovation tab: 10 renovations, the same prices with and without the patcher. "
                        "Buying one: everyone at home starts the same action, workers come and build it, and the "
-                       "room opens for good. Each one owned gives every family member 5 mood points every 30 real "
-                       "minutes.", C,
+                       "room opens for good. Each one owned gives every family member 5 mood points every 30 "
+                       "minutes of game time.", C,
            cat + "; HandleUpgrade cases 0xE1..0xEA (ActivateCondemnedArea, SetProp); UpdateHappinessState +5 per "
                  "renovation 0xE1..0xEA"))
     for _iid, name, price, lock, extra in RENOVATION_ITEMS:
@@ -2014,7 +2060,7 @@ def _store_lines() -> list[Fact]:
                             "career counts equipment level 1.", C,
            "CVillagerSkills::AdvanceCareer: (4 x Tech + 20) / (level + 1), x7 / x3 / x2 at levels 0 / 1 / 2, none from 7"))
     add(_f(CAREER_UPGRADES, "Equipment and likes: a family member whose Likes show \"cooking\" gets 500 x (the kitchen's "
-                            "level - 1) mood points every 30 real minutes, so -500 with no kitchen upgrade and 0 with "
+                            "level - 1) mood points every 30 minutes of game time, so -500 with no kitchen upgrade and 0 with "
                             "1; \"carbs\" the same with the office's level, and \"computers\" with the workshop's.", C,
            "UpdateHappinessState: likes 0x27 / 0x52 / 0x51 with CTech::Level 0 / 1 / 2: (25 x level - 25) x 20"))
     for workplace in (2, 1, 3):
@@ -2023,7 +2069,7 @@ def _store_lines() -> list[Fact]:
                 continue
             extra = ""
             if _iid == 0x108:
-                extra = (" It also gives 10 mood points every 30 real minutes to each family member whose Likes show "
+                extra = (" It also gives 10 mood points every 30 minutes of game time to each family member whose Likes show "
                          "\"computers\".")
             add(_f(CAREER_UPGRADES, f"{name} ({WORKPLACES[wp]}): {_money(price)}, {_generation(lock)}.{extra}",
                    C if extra else E, cat + ("; UpdateHappinessState like 0x51 with 0x108" if extra else ""),
@@ -2040,9 +2086,9 @@ def _store_lines() -> list[Fact]:
            "stock exe sha256 1582d9e8: GetCategoryItemCount 0x4BB0A0 / GetCategoryItem 0x4BAA50 run as linked; "
            "furniture table 0x54C87C = B200 0x564F48 for 0x1AD..0x2A8 (price, lock, name)"))
     add(_f(FURNITURE, "Every piece placed in the house, of any kind, gives every family member 1 mood point every 30 "
-                      "real minutes, up to 30 pieces. Pieces in storage count for nothing.", C,
+                      "minutes of game time, up to 30 pieces. Pieces in storage count for nothing.", C,
            "UpdateHappinessState: min(CFurnitureManager::NumberOfItemsPlaced, 30)"))
-    add(_f(FURNITURE, "The pieces below that name a like also give mood points every 30 real minutes, while placed, "
+    add(_f(FURNITURE, "The pieces below that name a like also give mood points every 30 minutes of game time, while placed, "
                       "to each family member whose Likes show it. The Fish Bowl gives its 15 to everyone, like or not "
                       "(the code skips the like check for it).", C,
            "UpdateHappinessState 0x2ED..0x55F: HaveUpgrade -> CFurnitureManager::IsInWorld; 0x202 jumps past the "
@@ -2120,7 +2166,7 @@ def _store_lines() -> list[Fact]:
     add(_f(PETS, UNPATCHED + "the Pets tab lists 12 pets and the bowls, without the Turtle and the Hamster.", E,
            "stock exe sha256 1582d9e8: category 0x15 run as linked, 13 items"))
     add(_f(PETS, "A pet goes to storage when bought and is placed like furniture: placed, it counts as one placed "
-                 "piece (1 mood point for everyone every 30 real minutes, within the 30-piece limit) and walks about, "
+                 "piece (1 mood point for everyone every 30 minutes of game time, within the 30-piece limit) and walks about, "
                  "following family members. No pet code changes any need. Dropping a family member on a pet starts "
                  "Petting the pet (no need changes), and the pet walks to the family member and waits.", C,
            "CFurnitureManager::DropFurniture -> CPetManager::SpawnPet, placed flag counted by NumberOfItemsPlaced; "

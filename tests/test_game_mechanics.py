@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """Game Mechanics (src/vf2_game_mechanics.py and its window): the page's groups, labels, words and settled rules.
 
 The rules themselves are pinned against the B200 core executable in tests/test_game_mechanics_b200_exe.py; here
@@ -55,9 +55,9 @@ class PageTests(unittest.TestCase):
         self.assertNotRegex(gm.INTRO + gm.LABEL_NOTE, r"(?i)villag")
 
     def test_time_away_is_the_emulated_cap(self):
-        self.assertIn("up to 31,000 seconds (8 hours 36 minutes 40 seconds) away is made up in full", self.text)
-        self.assertIn("from 31,000 seconds up to and including 24 hours away, 31,000 seconds are made up", self.text)
-        self.assertIn("more than 24 hours away, exactly 24 hours are made up: 144 age units, 7.2 years", self.text)
+        self.assertIn("up to 31,000 seconds (8 hours 36 minutes 40 seconds) of real time away is made up in full", self.text)
+        self.assertIn("from 31,000 seconds up to and including 24 hours of real time away, 31,000 seconds are made up", self.text)
+        self.assertIn("more than 24 hours of real time away, exactly 24 hours are made up: 144 age units, 7.2 years", self.text)
         self.assertNotIn("2.58", self.text)
         for fact in self.facts:
             if "made up" in fact.text and fact.group == gm.TIME and "31,000" in fact.text:
@@ -102,8 +102,8 @@ class PageTests(unittest.TestCase):
         self.assertIn("shows all 36 of its goods at all times; it never changes", patched.text)
         self.assertEqual(patched.label, gm.VERIFIED_E)
         self.assertIn("0x4B9A90", patched.evidence)
-        self.assertIn("the Flea Market shows 5 of its 36 goods, picked at random, and changes them every 6 real "
-                      "hours", unpatched.text)
+        self.assertIn("the Flea Market shows 5 of its 36 goods, picked at random, and changes them every 6 hours "
+                      "of real time", unpatched.text)
         self.assertIn("more than 6 real hours after the last change", unpatched.text)
         self.assertIn("while the game is closed", unpatched.text)
         self.assertEqual(unpatched.label, gm.VERIFIED_E)
@@ -115,7 +115,7 @@ class PageTests(unittest.TestCase):
                 self.assertRegex(fact.text, r"(?i)unpatched", fact.text)
         index = [(f.text, f.label) for f in self.facts if f.group == gm.INDEX and "Flea Market" in f.text]
         self.assertEqual(index, [("the Flea Market, with the patcher: never changes;", gm.VERIFIED_E),
-                                 ("the Flea Market, unpatched game: every 6 hours (real time);", gm.VERIFIED_E)])
+                                 ("the Flea Market, unpatched game: every 6 hours of real time;", gm.VERIFIED_E)])
 
     def test_the_special_upgrades_page_both_ways(self):
         patched, unpatched = self._pair("the store's Special Upgrades page")
@@ -166,8 +166,26 @@ class PageTests(unittest.TestCase):
         for _cid, _w, name, salaries in gm.CAREERS:
             self.assertEqual(len(salaries), 8)
             self.assertEqual(sum(1 for f in self.facts if f.text.startswith(name + ":")), 1, name)
-        # pay per real hour is half the salary: Pastry Designer 30 -> $15
-        self.assertIn("Pastry Designer: $15 per real hour as a Beginner, $50 as a Master", self.text)
+        # pay per hour of game time is half the salary: Pastry Designer 30 -> $15
+        self.assertIn("Pastry Designer: $15 per hour of game time as a Beginner, $50 as a Master", self.text)
+
+    def test_every_duration_names_its_clock(self):
+        # The owner (2026-10-27): every duration, rate, timer and countdown says "real time" or "game time".
+        # Ages counted only in age units or years need neither.
+        duration = re.compile(r"\b(\d[\d,.]*|an?|one|every|each|per|half an?)\s+(?:(?:real|game|more|extra)\s+)?"
+                              r"(seconds?|minutes?|hours?|days?)\b|\bgame days?\b|\bdaily\b", re.I)
+        missing = [f.text for f in self.facts if duration.search(f.text)
+                   and not re.search(r"real time|game time", f.text, re.I)]
+        self.assertEqual(missing, [])
+        # the two clocks are explained at the top, with every speed's conversion
+        clocks = self.facts[0]
+        self.assertTrue(clocks.text.startswith("Clocks. Real time is your PC's clock"), clocks.text)
+        for needle in ("1 hour of real time at Normal speed", "2 hours at Slow", "30 minutes at Fast",
+                       "12 minutes at 5x", "6 minutes at 10x", "Time Controls"):
+            self.assertIn(needle, clocks.text)
+        # the age clock is game time, not real time
+        self.assertIn("one age unit every 10 minutes of game time", self.text)
+        self.assertNotRegex(self.text, r"\d+ real (minutes|hours|seconds)\b(?! after the last change| at Normal speed)")
 
     def test_no_line_is_left_unconfirmed(self):
         # Every former UNCONFIRMED line is now read from the code (VERIFIED-C) or run as linked (VERIFIED-E).

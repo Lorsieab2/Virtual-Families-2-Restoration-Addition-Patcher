@@ -206,7 +206,7 @@ def test_the_unpatched_flea_market_shows_five_and_changes_after_six_real_hours(e
     patched = next(f for f in gm.facts() if f.text.startswith(gm.WITH_PATCHER + "the Flea Market"))
     unpatched = next(f for f in gm.facts() if f.text.startswith(gm.UNPATCHED + "the Flea Market"))
     assert "never changes" in patched.text
-    assert "5 of its 36 goods, picked at random, and changes them every 6 real hours" in unpatched.text
+    assert "5 of its 36 goods, picked at random, and changes them every 6 hours of real time" in unpatched.text
     assert unpatched.label == gm.VERIFIED_E
 
 
