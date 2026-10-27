@@ -283,3 +283,11 @@ def test_every_named_action_is_in_the_actions_group():
     left = [f.text for f in FACTS if f.group in gm.STORE_GROUPS and f.label == gm.UNCONFIRMED]
     assert len(left) == 1 and "patcher's own drop routes" in left[0], left
     assert "Dropped on, with the patcher: the patcher's own route, the spa treatments" in TEXT
+
+
+def test_the_cure_row_says_what_its_code_clears():
+    # VF2ClearIllnesses (work/patch_mobile_furniture_pack.py): symptoms state+0x5C..0x62 and their expiries, both
+    # infections (+0x80 word) and +0x84..+0x97, the four food-group flags and expiries (UpdateNutritionAllVillagers)
+    line = _entry(gm.UPGRADES, "Clear All Illnesses: ")
+    assert "every symptom and both infections are cured" in line.text
+    assert "clears all four food groups" in line.text

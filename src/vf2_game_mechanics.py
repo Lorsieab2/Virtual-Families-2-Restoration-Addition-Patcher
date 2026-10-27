@@ -1354,8 +1354,10 @@ CHEAT_ITEMS = (
                              "two"),
     ("Next Pregnancy Triplets", "a one-shot: the next birth is triplets when 3 child places are free; it replaces the "
                                 "other two"),
-    ("Clear All Illnesses", 'its description: "Cures every symptom and every infection for everyone currently in the '
-                            'house."'),
+    ("Clear All Illnesses", "for everyone alive at home: every symptom and both infections are cured, and the same "
+                            "code also clears all four food groups (their flags and 24-hour timers), so nobody has a "
+                            "food group until the next grocery bag or Food Club delivery. The unpatched game has no "
+                            "such row"),
     ("Max out Happiness Bar", 'its description: "Fills the Happiness bar for everyone currently in the house."'),
     ("Max out Energy Bar", 'its description: "Fills the Energy bar for everyone currently in the house."'),
     ("Max out Fed Bar", 'its description: "Fills the Fed bar for everyone currently in the house, so nobody is '
