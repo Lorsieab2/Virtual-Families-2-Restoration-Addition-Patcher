@@ -242,8 +242,8 @@ Changelog
   Installs vf2kids_b200.dll in the Virtual Families 2 Patcher Files folder
   only while the setting is on.
 
-- Family History log (after B203; Experimental section, off by default, never
-  ticked by Enable All): one dated Family History log per family, in the save
+- Family History log (after B203; an Optional patch, on by default, ticked by
+  Enable All; Experimental and off until the 26 October 2026 update of B204): one dated Family History log per family, in the save
   folder under Virtual Families 2 Patcher\Save N\Logs\Family History, one
   record per event (no other file). Marriages and
   remarriages, divorce, conceptions, births (twins and triplets), deaths with
@@ -251,7 +251,6 @@ Changelog
   a new family, Start Over, Evict Family and every Random Event (Email Event or
   Popup Event). The save file itself is not changed. Rename Family adds a
   Family Renamed record to a slot that already has a log.
-  Experimental: not yet tested in a running game. Back up your saves before using it.
   Installs vf2history_b200.dll in the Virtual Families 2 Patcher Files folder
   only while the setting is on; it needs executables built with its loader.
 

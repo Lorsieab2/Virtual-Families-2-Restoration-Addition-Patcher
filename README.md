@@ -200,7 +200,8 @@ play reports; superseded claims are marked rather than deleted.*
 The GUI reads its checkboxes from the shipped manifest, so the exact list follows
 the release you downloaded. The B204 bundle offers 39 settings, grouped the way
 the GUI groups them: the 38 of B203 (B202 added **Up to 28 Children** to the 37 of B201)
-plus the **Family History log**, new in B204; both are in the Experimental section.
+plus the **Family History log**, new in B204. Up to 28 Children is in the Experimental section; the
+Family History log is a normal Optional row, on by default (since the 26 October 2026 update of B204).
 
 That number is not simply the count of settings the patcher defines, which is
 40. The settings list drops any optional setting that has no packaged source
@@ -273,9 +274,9 @@ verified against the shipped `manifest.json`.
 
 Release bundles are exported with the all-enabled release profile, so **nearly
 all of these arrive on** when you pick **Defaults** in the GUI — including
-**Cheat Upgrades**. Of B204's 39 settings, 36 arrive enabled and three arrive
+**Cheat Upgrades**. Of B204's 39 settings, 37 arrive enabled and two arrive
 off (**Swap Invisible Furniture Graphics with Transparent Graphics**, and the
-Experimental **Up to 28 Children** and **Family History log**). (B202 and B203: 38 settings, 36 on.) (B198 through B200: 36 settings, 35 on;
+Experimental **Up to 28 Children**). (B204 as first published: 36 on, with the Family History log off.) (B202 and B203: 38 settings, 36 on.) (B198 through B200: 36 settings, 35 on;
 B201: 37 settings, 36 on; superseded.) The
 `(on)` marks below are a reading aid on entries whose default has surprised
 people, **not** an exhaustive index -- an unmarked entry is not thereby off.
@@ -313,8 +314,9 @@ release bundle, like almost everything else)
   (`vf2kids_b200.dll`) in the Virtual Families 2 Patcher Files folder does the work; with the setting
   off it is not installed and the executable never loads it. **Not live tested yet** -- see
   `docs/b200-up-to-28-children.md` for the evidence and what is not covered.
-- **Family History log** (`.vf2hist`, in the **Experimental** section, off by default; Enable All and
-  `--enable-all` leave it off; new in B204, whose executables carry its loader) - one Family History log per family, in the
+- **Family History log** (`.vf2hist`, an Optional patch, **on by default**, and Enable All and
+  `--enable-all` tick it; it was Experimental and off until the 26 October 2026 update of B204;
+  new in B204, whose executables carry its loader) - one Family History log per family, in the
   format of the Virtual Families 1 patcher's Family History: one dated record per event, in
   `Virtual Families 2 Patcher\Save N\Logs\Family History\Family History <k>.txt` in the save folder,
   rolling to the next numbered file after 2000 records. Each record is the Virtual Villagers patcher's
@@ -337,7 +339,7 @@ release bundle, like almost everything else)
   Start Over in a save slot starts that slot's log again (a `Backups` folder in it is kept); Evict Family keeps it. The
   save file is not changed. A companion DLL (`vf2history_b200.dll`) in the Virtual Families 2 Patcher Files
   folder does the work; with the setting off it is not installed and the executable never loads it.
-  Experimental: not yet tested in a running game. Back up your saves before using it. **Not live tested
+  **Not live tested
   yet** -- see `docs/FAMILY_HISTORY.md` for every hook, its evidence and what is not covered.
 
 **Asset and UI mods**
@@ -364,9 +366,9 @@ release bundle, like almost everything else)
 - **No AI Icons** - requires Cheat Upgrades; swaps the late Special Upgrade icons for non-AI artwork.
 
 **Almost everything in the release bundle is on by default.** Of B204's 39
-settings, **36 arrive enabled** when you pick **Defaults** in the GUI, and
-exactly three arrive off: **Swap Invisible Furniture Graphics with Transparent
-Graphics**, and **Up to 28 Children** and the **Family History log**, which are Experimental and which
+settings, **37 arrive enabled** when you pick **Defaults** in the GUI, and
+exactly two arrive off: **Swap Invisible Furniture Graphics with Transparent
+Graphics**, and **Up to 28 Children**, which is Experimental and which
 **Enable All** leaves off too. The `(on)` marks below are therefore not an exhaustive index --
 they were added to entries where the default has surprised people, and an
 entry without one is not thereby off. The shipped `manifest.json` is the

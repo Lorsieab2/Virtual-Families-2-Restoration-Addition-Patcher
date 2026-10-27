@@ -97,9 +97,9 @@ FINAL_PLAYTEST_DEFAULT_ON_SETTINGS = frozenset({
     "cheat_upgrades",
     "ai_generated_bathroom2_renovations",
     "time_controls",
+    "family_history",
 })
-# up_to_28_children and family_history are Experimental: the final playtest profile leaves them off too,
-# like Enable All.
+# up_to_28_children is Experimental: the final playtest profile leaves it off too, like Enable All.
 # Empty by design. The owner's standing instruction is that a playtest ships
 # with every patch on -- "make sure your playtests ship and compile with every
 # single patch on. you have wasted too much of my life giving me playtests that
@@ -531,9 +531,11 @@ SETTINGS = [
     {
         "id": "family_history",
         "label": "Family History log",
-        "description": "Keeps a Family History log for each family, one dated record per event, in the same format as the Virtual Families 1 patcher's Family History, with each family member written as the Virtual Villagers patcher writes a villager (name, age, sex, head and body): marriages and remarriages (same-sex ones too) with the current spouse, spouses lost to divorce or death, every conception and birth (twins and triplets marked), every death with its cause, children who join or leave home, each new generation and its heir, renames, a new family, Start Over and Evict Family, and every Random Event as an Email Event or a Popup Event with the title the player sees and the choice made. An existing family's past is filled in once from its Family Tree, marked \"backfilled, no date\". The log is a text file in the save folder, under Virtual Families 2 Patcher\\Save N\\Logs\\Family History; no other file is written. Starting a new family or Start Over in that save slot starts its log again. The save file itself is not changed. Experimental: not yet tested in a running game. Back up your saves before using it. Installs a small companion DLL in the Virtual Families 2 Patcher Files folder next to the game; unticking the setting removes it and the game is unmodified again.",
-        "default": False,   # Experimental: default off, never ticked by Enable All
-        "category": "experimental",
+        "description": "Keeps a Family History log for each family, one dated record per event, in the same format as the Virtual Families 1 patcher's Family History, with each family member written as the Virtual Villagers patcher writes a villager (name, age, sex, head and body): marriages and remarriages (same-sex ones too) with the current spouse, spouses lost to divorce or death, every conception and birth (twins and triplets marked), every death with its cause, children who join or leave home, each new generation and its heir, renames, a new family, Start Over and Evict Family, and every Random Event as an Email Event or a Popup Event with the title the player sees and the choice made. An existing family's past is filled in once from its Family Tree, marked \"backfilled, no date\". The log is a text file in the save folder, under Virtual Families 2 Patcher\\Save N\\Logs\\Family History; no other file is written. Starting a new family or Start Over in that save slot starts its log again. The save file itself is not changed. Installs a small companion DLL in the Virtual Families 2 Patcher Files folder next to the game; unticking the setting removes it and the game is unmodified again.",
+        # On by default and a normal Optional row (owner, 2026-10-26: "enable family logs by default",
+        # "don't put it under experimental"); Enable All ticks it like any other.
+        "default": True,
+        "category": "optional",
     },
     {
         "id": "mobile_sound_assets",
