@@ -10,6 +10,19 @@ include a prebuilt `Launch GUI.lnk` shortcut because Windows shortcut targets
 are path-specific and can break after ZIP extraction. The patcher was created
 with Codex AI in collaboration with Lorsieab2.
 
+Release layout (from the 26 October 2026 update of B204): the unzipped folder's
+top level holds only what the player opens or reads -- `Apply_B<release>_Patcher.bat`,
+`Launch_GUI.bat`, `How to Use.txt`, `README-B<release>-PATCHER.txt` and
+`Transparency Log.txt`. Everything else (the scripts, `manifest.json`, `payload/`,
+the icons and `family_tree_backgrounds/`) is in `Virtual Families 2 Fun Patcher Files/`,
+and the .bat files run it by a path relative to their own folder (`%~dp0`).
+`manifest.json` paths stay relative to the manifest; `export_summary.runner_files`
+is relative to the ZIP root. `work/gate_release_zip.py` passes
+`--require-files-folder` to the verifier, which refuses anything else loose at the
+top. The patcher refuses, before writing anything, an output folder where a game
+file's path would pass 259 characters, and switches its own file I/O to `\\?\`
+paths from 200 characters on.
+
 The first implementation is `work/offline_vf2_patcher.py`. It applies byte
 patches and file/asset patch records from JSON manifests, then can restore
 files from its own backups.

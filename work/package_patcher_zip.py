@@ -16,8 +16,19 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest().upper()
 
 
+# The folder beside the .bat launchers that holds manifest.json, payload/ and the scripts
+# (export_offline_patch_bundle.PATCHER_FILES_FOLDER). A bundle without it has the old flat layout.
+PATCHER_FILES_FOLDER = "Virtual Families 2 Fun Patcher Files"
+
+
+def manifest_dir(source_dir: Path) -> Path:
+    """The folder manifest.json (and so every manifest-relative path) is in."""
+    folder = source_dir / PATCHER_FILES_FOLDER
+    return folder if (folder / "manifest.json").is_file() else source_dir
+
+
 def load_manifest(source_dir: Path) -> dict:
-    manifest_path = source_dir / "manifest.json"
+    manifest_path = manifest_dir(source_dir) / "manifest.json"
     if not manifest_path.is_file():
         raise ValueError(f"Patcher bundle manifest is missing: {manifest_path}")
     data = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -65,11 +76,17 @@ def require_pe32_x86(path: Path) -> None:
 
 def validate_executable_inventory(source_dir: Path, files: list[Path]) -> None:
     manifest = load_manifest(source_dir)
+    base = manifest_dir(source_dir)
     exe_paths: dict[str, tuple[str, Path]] = {}
     for path in files:
         if path.suffix.lower() != ".exe":
             continue
-        relative = path.relative_to(source_dir).as_posix()
+        # Manifest-relative, as the payload records name them; a root-level
+        # launcher (outside the files folder) stays relative to the root.
+        try:
+            relative = path.relative_to(base).as_posix()
+        except ValueError:
+            relative = path.relative_to(source_dir).as_posix()
         key = relative.casefold()
         if key in exe_paths:
             raise ValueError(

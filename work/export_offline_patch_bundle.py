@@ -728,6 +728,10 @@ STALE_PATCHER_LAUNCHER_NAME = "Virtual Families 2 Restoration-Addition Patcher.e
 STALE_PATCHER_SHORTCUT_NAME = "Launch GUI.lnk"
 STALE_PATCHER_SHORTCUT_STATUS_NAME = "launch_gui_shortcut.json"
 TRANSPARENCY_LOG_NAME = "Transparency Log.txt"
+# The one folder, beside the .bat launchers at the unzipped folder's top, that holds everything the player
+# does not open or read: the scripts, manifest.json, payload/, icons and pictures. Named as the Virtual
+# Villagers patcher names its "Virtual Villagers Fun Patcher Files".
+PATCHER_FILES_FOLDER = "Virtual Families 2 Fun Patcher Files"
 PATCHER_ICON_PNG = "patcher_icon.png"
 PATCHER_ICON_ICO = "patcher_icon.ico"
 CREATOR_DISCLOSURE = "This offline patcher was created with Codex AI in collaboration with Lorsieab2."
@@ -3553,6 +3557,27 @@ def export_exe_replacement_payload(
     return record
 
 
+# Short names for the executable overlays' payload files. Spelled out ("... - Island Events + Cheat
+# Upgrades + Holiday Ornaments + Mobile Room Renovations.exe") the longest was 104 characters, and inside
+# the PATCHER_FILES_FOLDER that put the zip's longest entry at 179 characters: Windows' own Extract All
+# (which adds the zip's name as one more folder) then fails past MAX_PATH in a folder as ordinary as
+# OneDrive\Desktop\<a games folder>. The full feature list stays in each record's note and requires.
+OVERLAY_PAYLOAD_ABBREVIATIONS = {
+    "Island Events": "IE",
+    "Cheat Upgrades": "CU",
+    "Holiday Ornaments": "HO",
+    "Behavior Patches": "BP",
+    "Mobile Room Renovations": "MR",
+    "Final All-Enabled Native": "All Enabled",
+}
+
+
+def overlay_payload_name(output_exe_name: str, label: str) -> str:
+    """payload/ file name of the overlay LABEL: "<modded exe stem> - IE+CU+HO.exe"."""
+    short = "+".join(OVERLAY_PAYLOAD_ABBREVIATIONS.get(part, part) for part in label.split(" + "))
+    return f"{Path(output_exe_name).stem} - {short}.exe"
+
+
 def export_optional_exe_overlay_payload(
     *,
     bundle_dir: Path,
@@ -3947,14 +3972,24 @@ def copy_patcher_icon_assets(bundle_dir: Path) -> list[str]:
 
 
 def write_bundle_runner_files(bundle_dir: Path, build_label: str) -> list[str]:
-    icon_files = copy_patcher_icon_assets(bundle_dir)
-    shutil.copy2(SOURCE_DIR / "offline_vf2_patcher.py", bundle_dir / "offline_vf2_patcher.py")
-    shutil.copy2(SOURCE_DIR / "offline_vf2_patcher_gui.py", bundle_dir / "offline_vf2_patcher_gui.py")
+    """Write the runners into BUNDLE_DIR, the unzipped folder's top level.
+
+    Only what the player opens or reads sits at the top (the .bat launchers, the README and How to Use; the
+    Transparency Log is written beside them by write_transparency_log). Everything else -- the scripts,
+    manifest.json, payload/, the icons, the Family Tree backgrounds -- lives in PATCHER_FILES_FOLDER, and
+    the .bat files run it from there by a path relative to their own folder (%~dp0). Returns the written
+    paths relative to BUNDLE_DIR.
+    """
+    files_dir = bundle_dir / PATCHER_FILES_FOLDER
+    files_dir.mkdir(parents=True, exist_ok=True)
+    icon_files = copy_patcher_icon_assets(files_dir)
+    shutil.copy2(SOURCE_DIR / "offline_vf2_patcher.py", files_dir / "offline_vf2_patcher.py")
+    shutil.copy2(SOURCE_DIR / "offline_vf2_patcher_gui.py", files_dir / "offline_vf2_patcher_gui.py")
     for tool_name in GUI_TOOL_FILES:
-        (bundle_dir / tool_name).parent.mkdir(parents=True, exist_ok=True)   # family_tree_backgrounds/...
-        shutil.copy2(SOURCE_DIR / tool_name, bundle_dir / tool_name)
-    shutil.copy2(SOURCE_DIR / "vf2_crash_capture.py", bundle_dir / "vf2_crash_capture.py")
-    (bundle_dir / "crash-capture-manifest.template.json").write_text(
+        (files_dir / tool_name).parent.mkdir(parents=True, exist_ok=True)   # family_tree_backgrounds/...
+        shutil.copy2(SOURCE_DIR / tool_name, files_dir / tool_name)
+    shutil.copy2(SOURCE_DIR / "vf2_crash_capture.py", files_dir / "vf2_crash_capture.py")
+    (files_dir / "crash-capture-manifest.template.json").write_text(
         json.dumps(
             {
                 "schema": "vf2-crash-capture/v1",
@@ -3975,6 +4010,13 @@ def write_bundle_runner_files(bundle_dir: Path, build_label: str) -> list[str]:
         f'''@echo off
 setlocal
 set "SCRIPT_DIR=%~dp0"
+set "FILES_DIR=%~dp0{PATCHER_FILES_FOLDER}\\"
+if not exist "%FILES_DIR%manifest.json" (
+  echo The "{PATCHER_FILES_FOLDER}" folder is missing from beside this file.
+  echo Unzip the whole download again and keep that folder next to {apply_name}.
+  pause
+  exit /b 1
+)
 echo.
 echo {PATCHER_DISPLAY_NAME} - {build_label}
 echo This creates a separate modded game folder next to the vanilla folder.
@@ -4011,7 +4053,7 @@ if not defined VF2_PY (
   pause
   exit /b 1
 )
-%VF2_PY% "%SCRIPT_DIR%offline_vf2_patcher.py" apply --exe "%VF2_EXE%" --manifest "%SCRIPT_DIR%manifest.json"
+%VF2_PY% "%FILES_DIR%offline_vf2_patcher.py" apply --exe "%VF2_EXE%" --manifest "%FILES_DIR%manifest.json"
 echo.
 pause
 ''',
@@ -4022,6 +4064,13 @@ pause
         r'''@echo off
 setlocal
 set "SCRIPT_DIR=%~dp0"
+set "FILES_DIR=%~dp0''' + PATCHER_FILES_FOLDER + r'''\"
+if not exist "%FILES_DIR%manifest.json" (
+  echo The "''' + PATCHER_FILES_FOLDER + r'''" folder is missing from beside this file.
+  echo Unzip the whole download again and keep that folder next to Launch_GUI.bat.
+  pause
+  exit /b 1
+)
 rem py.exe existing does not mean it has a Python 3 registered, so try it and
 rem fall back on failure rather than committing to a branch up front.
 set "VF2_PY="
@@ -4047,7 +4096,7 @@ if not defined VF2_PY (
   pause
   exit /b 1
 )
-%VF2_PY% "%SCRIPT_DIR%offline_vf2_patcher_gui.py" "%SCRIPT_DIR%manifest.json"
+%VF2_PY% "%FILES_DIR%offline_vf2_patcher_gui.py" "%FILES_DIR%manifest.json"
 ''',
         encoding="ascii",
         newline="\r\n",
@@ -4065,6 +4114,16 @@ Use {apply_name} and enter or drag the original Virtual Families 2.exe, or run
 Launch_GUI.bat for the GUI. This package does not ship a prebuilt Windows
 shortcut because .lnk targets are path-specific and can break after ZIP
 extraction.
+
+The patcher's own files (its scripts, manifest.json, the payload/ folder,
+icons and Family Tree pictures) are in the "{PATCHER_FILES_FOLDER}"
+folder beside this README. Keep that folder next to the .bat files; you never
+need to open it.
+
+Keep the unzipped folder fairly near the top of a drive (for example
+C:\\Games or your Downloads folder): Windows cannot open files whose full path
+is longer than 260 characters. The patcher refuses up front, with a message,
+to make a modded game folder the game could not read.
 
 The patcher validates that the selected folder is an official Virtual Families
 2 install before it creates backups or writes any modded output. It then
@@ -4090,7 +4149,8 @@ the selected VF2 folder looks right, whether the EXE is the expected official
 one, whether all patch data matches, and whether the needed payload files are
 intact. It does not actually change or write files. If you do not choose a
 custom log path, dry-run and pre-write failure logs are written next to
-manifest.json so the vanilla game folder stays untouched.
+manifest.json, in the "{PATCHER_FILES_FOLDER}" folder, so the vanilla
+game folder stays untouched.
 
 B151 changelog
 --------------
@@ -4121,15 +4181,19 @@ Check for updates:
 
 1. Download and install the official Virtual Families 2 PC version.
 
-2. Unzip this patcher package anywhere you like.
+2. Unzip this patcher package. Somewhere near the top of a drive is best (for
+   example C:\\Games or your Downloads folder): Windows cannot open files whose
+   full path is longer than 260 characters.
 
 3. Run:
    Launch_GUI.bat
 
    The BAT file is the supported launcher. It resolves files relative to the
-   folder where you extracted this ZIP.
+   folder where you extracted this ZIP. The patcher's own files are in the
+   "{PATCHER_FILES_FOLDER}" folder beside it; keep that folder
+   next to the BAT files. You never need to open it.
 
-4. The patcher should auto-load manifest.json.
+4. The patcher should auto-load manifest.json (from that folder).
 
 5. Select your vanilla Virtual Families 2 install folder. It should be the
    folder that contains Virtual Families 2.exe, Images, Sounds, Assets, and the
@@ -4166,8 +4230,8 @@ it restores anything.
 
 Crash capture QA only (optional):
 The patcher never changes Windows Error Reporting settings or launches the
-game. If a test build crashes, copy crash-capture-manifest.template.json to a
-new file and fill in the absolute path, byte size, and SHA-256 of the exact
+game. If a test build crashes, copy crash-capture-manifest.template.json (in
+the "{PATCHER_FILES_FOLDER}" folder) to a new file and fill in the absolute path, byte size, and SHA-256 of the exact
 modded EXE. Run vf2_crash_capture.py verify-exe first, then use its
 emit-wer-plan command to generate separate reviewable setup and restore scripts.
 They are inert until you choose to run them manually: run setup, reproduce and
@@ -4193,12 +4257,17 @@ Have fun! -Lorsieab2 :)
         newline="\r\n",
     )
     files = [
-        "offline_vf2_patcher.py",
-        "offline_vf2_patcher_gui.py",
-        *GUI_TOOL_FILES,
-        "vf2_crash_capture.py",
-        "crash-capture-manifest.template.json",
-        *icon_files,
+        *(
+            f"{PATCHER_FILES_FOLDER}/{name}"
+            for name in (
+                "offline_vf2_patcher.py",
+                "offline_vf2_patcher_gui.py",
+                *GUI_TOOL_FILES,
+                "vf2_crash_capture.py",
+                "crash-capture-manifest.template.json",
+                *icon_files,
+            )
+        ),
         apply_name,
         "Launch_GUI.bat",
         readme_name,
@@ -4208,6 +4277,19 @@ Have fun! -Lorsieab2 :)
 
 
 def clear_generated_runner_files(bundle_dir: Path) -> None:
+    """Remove every generated runner from BUNDLE_DIR's top level and its PATCHER_FILES_FOLDER.
+
+    The top level is cleared of the scripts too, so re-exporting over a bundle made with the old flat
+    layout (B204 and earlier) leaves no stray copy beside the .bat files.
+    """
+    for directory in (bundle_dir, bundle_dir / PATCHER_FILES_FOLDER):
+        _clear_generated_runner_files_in(directory)
+        backgrounds = directory / "family_tree_backgrounds"
+        if backgrounds.is_dir() and not any(backgrounds.iterdir()):
+            backgrounds.rmdir()
+
+
+def _clear_generated_runner_files_in(bundle_dir: Path) -> None:
     for pattern in (
         "Apply_*_Patcher.bat",
         "README-*-PATCHER.txt",
@@ -4234,11 +4316,12 @@ def clear_generated_runner_files(bundle_dir: Path) -> None:
                 path.unlink()
 
 
-def write_transparency_log(bundle_dir: Path, manifest: dict[str, Any]) -> str:
+def write_transparency_log(bundle_dir: Path, manifest: dict[str, Any], files_dir: Path | None = None) -> str:
+    """Write the Transparency Log at BUNDLE_DIR's top; FILES_DIR is where manifest.json and payload/ are."""
     summary = manifest.get("export_summary", {})
     source_build = manifest.get("source_build", {})
     settings = manifest.get("settings", [])
-    payload_root = bundle_dir / "payload"
+    payload_root = (files_dir or bundle_dir) / "payload"
     payload_files = sorted(path for path in payload_root.rglob("*") if path.is_file()) if payload_root.is_dir() else []
     payload_top_counts: dict[str, int] = {}
     for path in payload_files:
@@ -4272,7 +4355,9 @@ def write_transparency_log(bundle_dir: Path, manifest: dict[str, Any]) -> str:
         "- Creates backups before writing changed files in the modded output folder.",
         "- Writes machine-readable success/failure logs.",
         "- Dry Run / Validate Only validates that the patcher's working: it checks the install, EXE, patch records, and payload hashes, then stops before creating backups, creating the modded output folder, or changing/writing files. Default dry-run and pre-write failure logs are written next to manifest.json, not into the vanilla game folder.",
-        "- Launch_GUI.bat starts the GUI with adjacent manifest.json. Prebuilt .lnk shortcuts are not shipped because they are path-specific and can break after ZIP extraction.",
+        f"- Launch_GUI.bat starts the GUI with the manifest.json in the \"{PATCHER_FILES_FOLDER}\" folder beside it, found relative to the .bat file's own folder. Prebuilt .lnk shortcuts are not shipped because they are path-specific and can break after ZIP extraction.",
+        f"- The unzipped folder's top level holds only what the player opens or reads: the .bat launchers, the README, How to Use and this Transparency Log. The patcher's scripts, manifest.json, payload/, icons and pictures are in \"{PATCHER_FILES_FOLDER}\".",
+        "- The patcher refuses, before writing anything, a modded output folder in which any game file's full path would exceed 259 characters, because the game cannot open such a file; its own reads and writes use Windows extended-length paths when a path is long.",
         "- Payload files are read-only/copy-only during apply. The patcher reads payload sources and copies selected files into the separate modded output folder; it never writes back into payload/ during patching.",
         "- Provides a restore command for backups created by this patcher.",
         "",
@@ -4285,7 +4370,7 @@ def write_transparency_log(bundle_dir: Path, manifest: dict[str, Any]) -> str:
         "",
         "Payload folder",
         "--------------",
-        "- payload/ is the patch bundle's local stash of files that may be copied into the separate modded output folder.",
+        f"- payload/ (inside \"{PATCHER_FILES_FOLDER}\") is the patch bundle's local stash of files that may be copied into the separate modded output folder.",
         "- The patcher does not apply payload/ blindly. Each copied file must be referenced by an active asset_patches record in manifest.json.",
         "- Before copying a payload file, the patcher verifies the file against that record's source_sha256 and source_size metadata.",
         "- This bundle keeps payload lean: changed Images files, .fmap files, OptionalVisualMods/, Original Virtual Families 2 Assets/, and OptionalSongMods/.",
@@ -4400,6 +4485,7 @@ def write_transparency_log(bundle_dir: Path, manifest: dict[str, Any]) -> str:
             "- offline_vf2_patcher_gui.py: Tkinter GUI wrapper that renders manifest settings, streams patch progress, and shows a completion popup.",
             "- export_offline_patch_bundle.py: source-side exporter that builds manifest.json, payload/, runner scripts, and this transparency log.",
             "- Launch_GUI.bat: readable batch launcher for the GUI. No compiled patcher launcher EXE is shipped in this bundle.",
+            f"- {PATCHER_FILES_FOLDER}/: the patcher's scripts, manifest.json, payload/, icons and Family Tree pictures; the .bat files run them from here.",
             "",
             "GUI launcher",
             "------------",
@@ -4504,9 +4590,12 @@ def write_transparency_log(bundle_dir: Path, manifest: dict[str, Any]) -> str:
 
 def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
     build_dir = Path(args.build_dir).resolve()
-    bundle_dir = Path(args.out_dir).resolve()
+    # out_dir is the unzipped folder's top level; bundle_dir is where manifest.json and payload/ go, which
+    # with the runner scripts is the PATCHER_FILES_FOLDER inside it (see manifest_dir_for).
+    out_dir = Path(args.out_dir).resolve()
+    bundle_dir = manifest_dir_for(args)
     base_payload = Path(args.base_payload).resolve()
-    build_label = infer_build_label(bundle_dir, args.name)
+    build_label = infer_build_label(out_dir, args.name)
     manifest_in = Path(args.build_manifest).resolve() if args.build_manifest else build_dir / "patch-manifest.json"
     build_manifest_data = load_json(manifest_in) if manifest_in.is_file() else {}
     patched_exe = find_patched_exe(build_dir, args.patched_exe)
@@ -4692,17 +4781,19 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
     if args.include_exe_replacement and vanilla_exe is None and target_identity_record is None:
         raise ValueError("--include-exe-replacement requires --vanilla-exe or --target-identity-manifest.")
 
-    if bundle_dir.exists() and any(bundle_dir.iterdir()) and not args.force:
-        raise FileExistsError(f"Output bundle directory is not empty: {bundle_dir}")
+    if out_dir.exists() and any(out_dir.iterdir()) and not args.force:
+        raise FileExistsError(f"Output bundle directory is not empty: {out_dir}")
     bundle_dir.mkdir(parents=True, exist_ok=True)
     if args.force:
-        payload_dir = bundle_dir / "payload"
-        if payload_dir.exists():
-            shutil.rmtree(payload_dir)
-        manifest_path = bundle_dir / "manifest.json"
-        if manifest_path.exists():
-            manifest_path.unlink()
-        clear_generated_runner_files(bundle_dir)
+        # Both places: a bundle made with the old flat layout has payload/ and manifest.json at the top.
+        for directory in {out_dir, bundle_dir}:
+            payload_dir = directory / "payload"
+            if payload_dir.exists():
+                shutil.rmtree(payload_dir)
+            manifest_path = directory / "manifest.json"
+            if manifest_path.exists():
+                manifest_path.unlink()
+        clear_generated_runner_files(out_dir)
 
     byte_patches: list[dict[str, Any]] = []
     native_status: dict[str, Any]
@@ -5127,7 +5218,7 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
                 target_exe_name=target_exe_name,
                 output_exe_name=output_exe_name,
                 requires=requires,
-                payload_name=f"{Path(output_exe_name).stem} - {label}.exe",
+                payload_name=overlay_payload_name(output_exe_name, label),
                 note=note,
                 target_identity_fields=overlay_target_identity,
             ))
@@ -5317,9 +5408,18 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
     if final_profile is not None:
         manifest["final_playtest_profile"] = final_profile
     if args.include_patcher_scripts:
-        manifest["export_summary"]["runner_files"] = write_bundle_runner_files(bundle_dir, build_label)
-    manifest["export_summary"]["transparency_log"] = write_transparency_log(bundle_dir, manifest)
+        manifest["export_summary"]["patcher_files_folder"] = PATCHER_FILES_FOLDER
+        manifest["export_summary"]["runner_files"] = write_bundle_runner_files(out_dir, build_label)
+    manifest["export_summary"]["transparency_log"] = write_transparency_log(out_dir, manifest, bundle_dir)
     return manifest
+
+
+def manifest_dir_for(args: argparse.Namespace) -> Path:
+    """Where manifest.json and payload/ are written: inside PATCHER_FILES_FOLDER when the bundle carries
+    the patcher scripts (a release), so the unzipped top level keeps only what the player opens or reads;
+    the out dir itself for a bare manifest-and-payload export."""
+    out_dir = Path(args.out_dir).resolve()
+    return out_dir / PATCHER_FILES_FOLDER if args.include_patcher_scripts else out_dir
 
 
 def parse_args() -> argparse.Namespace:
@@ -5426,8 +5526,7 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     manifest = build_manifest(args)
-    out_dir = Path(args.out_dir).resolve()
-    manifest_path = out_dir / "manifest.json"
+    manifest_path = manifest_dir_for(args) / "manifest.json"
     write_json(manifest_path, manifest)
     print(
         json.dumps(

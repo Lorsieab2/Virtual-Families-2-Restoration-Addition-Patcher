@@ -215,7 +215,10 @@ def verify(out_dir: Path, build_dir: Path, matrix_prefix: str, release: str) -> 
     Assets file the build produced. Anything the build has and the install
     would not is listed by name.
     """
-    manifest = json.loads((out_dir / "manifest.json").read_text(encoding="utf-8-sig"))
+    # A release keeps manifest.json in the patcher files folder, not at the top.
+    manifest = json.loads(
+        (out_dir / exporter.PATCHER_FILES_FOLDER / "manifest.json").read_text(encoding="utf-8-sig")
+    )
     summary = manifest["export_summary"]
 
     clean_index = json.loads(

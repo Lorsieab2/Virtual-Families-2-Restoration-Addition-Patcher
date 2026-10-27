@@ -149,6 +149,79 @@ class IconResource:
 ProgressCallback = Callable[[str], None]
 
 
+# The longest path, in characters, the game can open: Windows' MAX_PATH is 260 including the closing NUL,
+# and Virtual Families 2 is not long-path aware, so a game file past this is a file the game cannot load.
+GAME_MAX_PATH_CHARS = 259
+# The patcher's own reads and writes switch to the extended-length (\\?\) form from this length on, well
+# below MAX_PATH, so the names it derives from a path (".vf2patch.tmp" beside a target, a backup's
+# "files\..." copy, a parent folder for mkdir, whose own limit is 248) never reach the limit either.
+LONG_PATH_THRESHOLD = 200
+_EXTENDED_PREFIX = "\\\\?\\"
+
+
+def long_path(path: Path | str, *, force: bool = False) -> Path:
+    """PATH in Windows' extended-length form when it is long enough to need it (or always, with FORCE).
+
+    The unzipped patcher can sit deep (OneDrive, Desktop, long folder names, then the Virtual Families 2 Fun
+    Patcher Files folder), and Windows refuses an ordinary path past 260 characters unless long paths are
+    switched on for the whole machine. The extended-length form has no such limit. Short paths come back unchanged, so a
+    normal install behaves exactly as before; FORCE is for the root of a tree walk or delete, whose
+    descendants can be long even when the root is not. Off Windows the path is returned as it is.
+    """
+    if os.name != "nt":
+        return Path(path)
+    text = os.fspath(path)
+    if text.startswith(_EXTENDED_PREFIX):
+        return Path(text)
+    absolute = os.path.abspath(text)
+    if not force and len(absolute) < LONG_PATH_THRESHOLD:
+        return Path(path)
+    if absolute.startswith("\\\\"):
+        return Path(_EXTENDED_PREFIX + "UNC\\" + absolute[2:])
+    return Path(_EXTENDED_PREFIX + absolute)
+
+
+def plain_path(path: Path | str) -> Path:
+    """PATH without the extended-length prefix long_path() adds, for messages and comparisons."""
+    text = os.fspath(path)
+    if text.startswith(_EXTENDED_PREFIX + "UNC\\"):
+        return Path("\\\\" + text[len(_EXTENDED_PREFIX) + 4:])
+    if text.startswith(_EXTENDED_PREFIX):
+        return Path(text[len(_EXTENDED_PREFIX):])
+    return Path(text)
+
+
+def resolve_path(path: Path | str) -> Path:
+    """Path(PATH).resolve() that also works past MAX_PATH, returned in the ordinary form."""
+    return plain_path(long_path(Path(path)).resolve())
+
+
+def check_game_path_lengths(output_dir: Path, rel_paths: list[str] | set[str]) -> None:
+    """Refuse, before anything is written, a modded game folder the game could not read every file from.
+
+    The game opens its files by full path and is not long-path aware, so a file the patcher writes past
+    GAME_MAX_PATH_CHARS would be one the game cannot open. Checking up front means a too-deep output
+    folder is refused with a clear message, never discovered part-way through an apply.
+    """
+    root = plain_path(output_dir)
+    too_long = sorted(
+        ((len(str(root / rel)), rel) for rel in rel_paths if len(str(root / rel)) > GAME_MAX_PATH_CHARS),
+        reverse=True,
+    )
+    if not too_long:
+        return
+    length, rel = too_long[0]
+    longest_rel = max(len(str(Path(rel))) for rel in rel_paths)
+    allowed = GAME_MAX_PATH_CHARS - longest_rel - 1
+    raise PatchError(
+        f"The modded game folder is too deep for Windows: {len(too_long)} game file(s) would have a path "
+        f"longer than {GAME_MAX_PATH_CHARS} characters, which Virtual Families 2 cannot open. The longest "
+        f"would be {length} characters: {root / rel}\n\n"
+        f"Choose a modded output folder whose own path is at most {allowed} characters long "
+        f"(this one is {len(str(root))}), for example one directly under C:\\Games. Nothing was changed."
+    )
+
+
 def utc_now() -> str:
     # datetime.UTC is a 3.11 alias for datetime.timezone.utc. Using the alias
     # made a normal validate/apply run raise AttributeError on 3.9 and 3.10,
@@ -158,7 +231,7 @@ def utc_now() -> str:
 
 
 def read_json(path: Path) -> dict[str, Any]:
-    with path.open("r", encoding="utf-8") as handle:
+    with long_path(path).open("r", encoding="utf-8") as handle:
         data = json.load(handle)
     if not isinstance(data, dict):
         raise PatchError("Manifest root must be a JSON object.")
@@ -182,6 +255,7 @@ def install_validation_error(manifest: dict[str, Any], detail: str) -> PatchErro
 
 
 def write_json(path: Path, data: dict[str, Any]) -> None:
+    path = long_path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8", newline="\n") as handle:
         json.dump(data, handle, indent=2, sort_keys=True)
@@ -248,7 +322,7 @@ def log_process_event(
 
 def sha256_file(path: Path) -> str:
     h = hashlib.sha256()
-    with path.open("rb") as handle:
+    with long_path(path).open("rb") as handle:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             h.update(chunk)
     return h.hexdigest()
@@ -342,42 +416,37 @@ def canonical_rel_path_key(rel_path: str) -> str:
     return str(Path(rel_path)).replace("\\", "/").casefold()
 
 
-def resolve_under_game_dir(game_dir: Path, rel_path: str) -> Path:
-    root = game_dir.resolve()
+def _resolve_under(base: Path, rel_path: str, what: str) -> Path:
+    # Checked in the ordinary form (plain_path), returned in the form the file I/O needs (long_path): a
+    # resolved path past LONG_PATH_THRESHOLD comes back extended-length, so every read, write, temp file
+    # and parent mkdir derived from it works however deep the folder sits.
+    root = plain_path(long_path(base).resolve())
     candidate = root / rel_path
     reject_symlink_components(candidate, root, rel_path)
-    resolved = candidate.resolve()
+    resolved = plain_path(long_path(candidate).resolve())
     if resolved != root and root not in resolved.parents:
-        raise PatchError(f"Path escapes game directory: {rel_path}")
-    return resolved
+        raise PatchError(f"{what}: {rel_path}")
+    return long_path(resolved)
+
+
+def resolve_under_game_dir(game_dir: Path, rel_path: str) -> Path:
+    return _resolve_under(game_dir, rel_path, "Path escapes game directory")
 
 
 def resolve_under_manifest_dir(manifest_dir: Path, rel_path: str) -> Path:
-    root = manifest_dir.resolve()
-    candidate = root / rel_path
-    reject_symlink_components(candidate, root, rel_path)
-    resolved = candidate.resolve()
-    if resolved != root and root not in resolved.parents:
-        raise PatchError(f"Path escapes manifest directory: {rel_path}")
-    return resolved
+    return _resolve_under(manifest_dir, rel_path, "Path escapes manifest directory")
 
 
 def reject_symlink_components(candidate: Path, root: Path, rel_path: str) -> None:
     current = root
     for part in Path(rel_path).parts:
         current = current / part
-        if current.is_symlink():
+        if long_path(current).is_symlink():
             raise PatchError(f"Symlink path components are not allowed: {rel_path}")
 
 
 def resolve_under_backup_dir(backup_dir: Path, rel_path: str) -> Path:
-    root = backup_dir.resolve()
-    candidate = root / rel_path
-    reject_symlink_components(candidate, root, rel_path)
-    resolved = candidate.resolve()
-    if resolved != root and root not in resolved.parents:
-        raise PatchError(f"Backup path escapes backup directory: {rel_path}")
-    return resolved
+    return _resolve_under(backup_dir, rel_path, "Backup path escapes backup directory")
 
 
 def pe_timestamp(path: Path) -> int | None:
@@ -581,7 +650,7 @@ def pe_structure_matches_any(path: Path, expected_rows: tuple[dict[str, Any], ..
 
 def relative_to_game_dir(game_dir: Path, path: Path) -> str:
     try:
-        return str(path.resolve().relative_to(game_dir.resolve()))
+        return str(plain_path(long_path(path).resolve()).relative_to(plain_path(long_path(game_dir).resolve())))
     except ValueError:
         return str(path)
 
@@ -1537,13 +1606,13 @@ def resolve_apply_output_dir(
 ) -> Path:
     explicit = getattr(args, "output_dir", None)
     if explicit:
-        return Path(explicit).resolve()
+        return resolve_path(explicit)
     folder_name = manifest_output_folder_name(manifest)
     if folder_name:
         parent = getattr(args, "output_parent_dir", None)
         if parent:
-            return (Path(parent).resolve() / folder_name).resolve()
-        return (game_dir.parent / folder_name).resolve()
+            return resolve_path(resolve_path(parent) / folder_name)
+        return resolve_path(game_dir.parent / folder_name)
     return game_dir
 
 
@@ -1574,6 +1643,7 @@ def _retry_after_clearing_read_only(func: Callable[..., Any], path: str, exc: An
 
 def remove_output_entry(path: Path) -> None:
     """Delete one top-level entry of a modded output folder, including read-only files."""
+    path = long_path(path, force=True)
     if path.is_dir():
         if sys.version_info >= (3, 12):
             shutil.rmtree(path, onexc=_retry_after_clearing_read_only)
@@ -1634,15 +1704,16 @@ def prepare_output_dir(
 
     output_root.mkdir(parents=True, exist_ok=True)
     normalized_skips = {str(Path(path)) for path in skip_rel_paths}
-    for source in source_root.rglob("*"):
-        rel = source.relative_to(source_root)
+    walk_root = long_path(source_root, force=True)
+    for source in walk_root.rglob("*"):
+        rel = source.relative_to(walk_root)
         if rel.parts and rel.parts[0] == DEFAULT_BACKUP_ROOT:
             continue
         if any(DESKTOP_RUNTIME_SOURCE_FILENAME_RE.search(part) for part in rel.parts):
             continue
         if str(rel) in normalized_skips:
             continue
-        target = output_root / rel
+        target = long_path(output_root / rel)
         if source.is_dir():
             target.mkdir(parents=True, exist_ok=True)
         elif source.is_file():
@@ -1651,6 +1722,32 @@ def prepare_output_dir(
             # copy2 carries a read-only attribute over from the vanilla file,
             # and the next refresh or reconfigure could then not replace it.
             make_writable(target)
+
+
+def planned_output_game_files(
+    game_dir: Path,
+    output_dir: Path,
+    grouped: dict[str, list[BytePatch]],
+    asset_checks: list[dict[str, Any]],
+    post_asset_checks: list[dict[str, Any]],
+    reconfigure_output: bool,
+) -> set[str]:
+    """Every game file (relative to the output folder) an apply will leave there: the vanilla files a
+    separate output folder is refreshed from, plus every byte-patched, asset and post-asset target."""
+    planned = {str(Path(rel)) for rel in grouped}
+    planned.update(str(Path(str(check.get("output_file_path") or check["file_path"]))) for check in asset_checks)
+    planned.update(str(Path(str(check["file_path"]))) for check in post_asset_checks)
+    if not reconfigure_output and plain_path(long_path(output_dir).resolve()) != plain_path(long_path(game_dir).resolve()):
+        walk_root = long_path(game_dir, force=True)
+        for source in walk_root.rglob("*"):
+            rel = source.relative_to(walk_root)
+            if rel.parts and rel.parts[0] == DEFAULT_BACKUP_ROOT:
+                continue
+            if any(DESKTOP_RUNTIME_SOURCE_FILENAME_RE.search(part) for part in rel.parts):
+                continue
+            if source.is_file():
+                planned.add(str(rel))
+    return planned
 
 
 def is_recognized_modded_output_dir(path: Path) -> bool:
@@ -1727,6 +1824,7 @@ def enforce_modded_exe_name(
 
 
 def count_files(root: Path) -> int:
+    root = long_path(root, force=True)
     if not root.is_dir():
         return 0
     return sum(1 for path in root.rglob("*") if path.is_file())
@@ -3644,14 +3742,15 @@ def create_backup(
     post_asset_checks: list[dict[str, Any]],
     manifest_path: Path,
 ) -> dict[str, Any]:
-    backup_dir.mkdir(parents=True, exist_ok=False)
+    long_path(backup_dir).mkdir(parents=True, exist_ok=False)
     backup_targets: dict[str, bool] = {rel_path: True for rel_path in grouped}
     output_backup_paths: set[str] = set()
     if output_dir.resolve() != game_dir.resolve() and output_dir.is_dir():
-        for existing in output_dir.rglob("*"):
+        walk_root = long_path(output_dir, force=True)
+        for existing in walk_root.rglob("*"):
             if not existing.is_file():
                 continue
-            rel_path = str(existing.relative_to(output_dir)).replace("\\", "/")
+            rel_path = str(existing.relative_to(walk_root)).replace("\\", "/")
             if rel_path == DEFAULT_BACKUP_ROOT or rel_path.startswith(DEFAULT_BACKUP_ROOT + "/"):
                 continue
             backup_targets[rel_path] = True
@@ -3799,25 +3898,25 @@ def post_asset_patch_summary(post_asset_checks: list[dict[str, Any]]) -> list[di
 
 
 def apply_manifest(args: argparse.Namespace) -> int:
-    exe_path = Path(args.exe).resolve() if getattr(args, "exe", None) else None
-    requested_game_dir = Path(args.game_dir).resolve() if args.game_dir else None
-    requested_output_dir = Path(args.output_dir).resolve() if getattr(args, "output_dir", None) else None
+    exe_path = resolve_path(args.exe) if getattr(args, "exe", None) else None
+    requested_game_dir = resolve_path(args.game_dir) if args.game_dir else None
+    requested_output_dir = resolve_path(args.output_dir) if getattr(args, "output_dir", None) else None
     game_dir = requested_game_dir
     reconfigure_output = False
     if exe_path is not None:
         if exe_path.suffix.lower() != ".exe":
             raise PatchError(f"--exe must point to a Virtual Families 2 executable, got {exe_path.name!r}.")
-        if game_dir is not None and game_dir != exe_path.parent.resolve():
+        if game_dir is not None and game_dir != resolve_path(exe_path.parent):
             raise PatchError("--game-dir and --exe disagree; use the EXE's parent folder or omit --game-dir.")
         if (
             game_dir is None
             and exe_path.name.lower() != DEFAULT_EXE_NAME.lower()
-            and is_recognized_modded_output_dir(exe_path.parent.resolve())
+            and is_recognized_modded_output_dir(resolve_path(exe_path.parent))
         ):
-            game_dir = exe_path.parent.resolve()
+            game_dir = resolve_path(exe_path.parent)
             reconfigure_output = True
         else:
-            game_dir = exe_path.parent.resolve()
+            game_dir = resolve_path(exe_path.parent)
     if game_dir is None and requested_output_dir is not None:
         game_dir = requested_output_dir
         reconfigure_output = True
@@ -3826,7 +3925,7 @@ def apply_manifest(args: argparse.Namespace) -> int:
     if reconfigure_output and requested_game_dir is not None:
         reconfigure_output = False
     setattr(args, "reconfigure_output", reconfigure_output)
-    manifest_path = Path(args.manifest).resolve()
+    manifest_path = resolve_path(args.manifest)
     if not game_dir.is_dir():
         raise PatchError(f"Game directory does not exist: {game_dir}")
     process_log: list[dict[str, Any]] = []
@@ -3963,6 +4062,12 @@ def apply_manifest(args: argparse.Namespace) -> int:
             # Before create_backup: with the default backup location the backup
             # itself would make an unrelated folder pass this check.
             check_output_dir_refresh_allowed(game_dir, output_dir)
+        # Before any backup or write, and in a dry run too: every game file this run puts in the output
+        # folder must stay short enough for the game to open.
+        check_game_path_lengths(
+            output_dir,
+            planned_output_game_files(game_dir, output_dir, grouped, asset_checks, post_asset_checks, reconfigure_output),
+        )
         if not args.dry_run:
             skip_copy_paths = {
                 str(check.get("target_file_path") or check["file_path"])
@@ -3990,7 +4095,7 @@ def apply_manifest(args: argparse.Namespace) -> int:
                 # an earlier backup -- so a browsed Backup folder used to fail
                 # every time, and a second run into the same new folder failed
                 # too. A path that does not exist yet is still used as given.
-                chosen_backup = Path(args.backup_dir).resolve()
+                chosen_backup = resolve_path(args.backup_dir)
                 backup_dir = (
                     chosen_backup / backup_slug(manifest_path)
                     if chosen_backup.is_dir()
@@ -4165,7 +4270,7 @@ def apply_manifest(args: argparse.Namespace) -> int:
             "process_log": process_log,
         }
         if args.log:
-            log_path = Path(args.log).resolve()
+            log_path = resolve_path(args.log)
         elif backup_dir:
             log_path = backup_dir / "patch_log.json"
         else:
@@ -4228,7 +4333,7 @@ def apply_manifest(args: argparse.Namespace) -> int:
         # is as much a failed apply as a PatchError: it must leave a failure
         # log and reach the CLI and GUI as a clean error, not a traceback.
         if args.log:
-            failure_log_path = Path(args.log).resolve()
+            failure_log_path = resolve_path(args.log)
         elif backup_dir:
             failure_log_path = backup_dir / "patch_error_log.json"
         else:
@@ -4261,7 +4366,7 @@ def apply_manifest(args: argparse.Namespace) -> int:
 
 
 def list_manifest_settings(args: argparse.Namespace) -> int:
-    manifest_path = Path(args.manifest).resolve()
+    manifest_path = resolve_path(args.manifest)
     manifest = read_json(manifest_path)
     settings = manifest_settings(manifest)
     if args.json:
@@ -4275,7 +4380,7 @@ def list_manifest_settings(args: argparse.Namespace) -> int:
                 ),
             },
         )
-        print(f"Settings JSON written: {Path(args.json).resolve()}")
+        print(f"Settings JSON written: {resolve_path(args.json)}")
         return 0
     if not settings:
         print("This manifest does not declare toggleable settings.")
@@ -4293,7 +4398,7 @@ def list_manifest_settings(args: argparse.Namespace) -> int:
 
 
 def restore_backup(args: argparse.Namespace) -> int:
-    backup_dir = Path(args.backup_dir).resolve()
+    backup_dir = resolve_path(args.backup_dir)
     backup_manifest_path = backup_dir / BACKUP_MANIFEST
     if not backup_manifest_path.is_file():
         raise PatchError(f"Backup manifest not found: {backup_manifest_path}")
@@ -4301,7 +4406,7 @@ def restore_backup(args: argparse.Namespace) -> int:
     recorded = backup_manifest.get("game_dir")
     recorded_dir = Path(str(recorded)).resolve() if recorded else None
     if args.game_dir:
-        game_dir = Path(args.game_dir).resolve()
+        game_dir = resolve_path(args.game_dir)
         # A backup holds the files of the folder it was taken from, and its
         # "existed": false rows mean "delete this path". Restoring it anywhere
         # else writes that folder's files over the destination and deletes
@@ -4384,7 +4489,7 @@ def restore_backup(args: argparse.Namespace) -> int:
         "backup_dir": str(backup_dir),
         "restored_files": restored,
     }
-    log_path = Path(args.log).resolve() if args.log else backup_dir / "restore_log.json"
+    log_path = resolve_path(args.log) if args.log else backup_dir / "restore_log.json"
     write_json(log_path, log)
     print(f"Restored {len(restored)} file(s).")
     print(f"Restore log: {log_path}")
