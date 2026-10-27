@@ -26,7 +26,7 @@ class PageTests(unittest.TestCase):
             "Careers", "Money and interest", "Leaving home", "Dating, marriage and the next generation",
             "Random Events", "Weather", "Messes and malfunctions", "Collectibles", "The store: prices and buying",
             "Food and Medicine", "Flea Market", "Special Upgrades", "Services", "Home Renovation", "Career upgrades",
-            "Furniture and Accessories", "Pets", "Clothing and Hairstyles", "Chance and timer index"))
+            "Furniture and Accessories", "Pets", "Clothing and Hairstyles", "Actions", "Chance and timer index"))
         seen = []
         for fact in self.facts:
             if not seen or seen[-1] != fact.group:
