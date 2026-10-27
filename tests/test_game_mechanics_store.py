@@ -70,11 +70,15 @@ def test_no_vague_words_and_no_cloudy():
 
 
 def test_the_weather_bottles_use_the_owners_weather_names():
-    assert "Bottled Tropical Sunshine: $50: gives Sunny weather (owner)." in TEXT
+    # the owner's rule (2026-10-27): a live report the code contradicts is written both ways, each labelled
+    live = _entry(gm.FLEA, "Bottled Tropical Sunshine: $50: seen live, the owner's report in play: gives Sunny weather")
+    assert live.label == gm.UNCONFIRMED and "not re-tested against the code reading below" in live.text
+    code = _entry(gm.FLEA, "The code reading, which contradicts the live report above, so both are given")
+    assert code.label == gm.VERIFIED_C and "0x49D890" in code.text
     assert "Bottled Tropical Rain: $50: the weather becomes Stormy, rain with lightning" in TEXT
     assert "Fog In a Bottle: $50: the weather becomes Foggy" in TEXT
     assert "Snow in a Bottle: $50: the weather becomes Snowing" in TEXT
-    assert "a contradiction to live-check: the bottle sets type 0, the plain sky the owner calls Normal" in TEXT
+    assert "so both are given: the bottle sets type 0, the plain sky the owner calls Normal" in TEXT
     assert "Normal 0 eWeather_Sunny, Sunny 1 eWeather_Cloudy, Raining 2" in TEXT
     assert "returns to Normal" in TEXT and "never Sunny at night" in TEXT
     assert "Normal weather lasts 15 to 40 minutes of game time; any other kind, Sunny too, 6 to 12." in TEXT
@@ -120,7 +124,7 @@ def test_the_formerly_unconfirmed_purchases_are_read_from_the_purchase_path():
 def test_every_unconfirmed_store_line_says_what_is_unknown():
     for fact in FACTS:
         if fact.group in gm.STORE_GROUPS and fact.label == gm.UNCONFIRMED:
-            assert re.search(r"not decoded|not traced|has not decoded", fact.text), fact.text
+            assert re.search(r"not decoded|not traced|has not decoded|not re-tested", fact.text), fact.text
 
 
 def test_like_bonuses_name_the_likes_the_game_shows():
@@ -289,7 +293,8 @@ def test_every_named_action_is_in_the_actions_group():
     assert actions["Doing Kung Fu"] == "Doing Kung Fu: no need changes."
     # the hammock's hot spot (5) starts Relaxing in the hammock (behaviour 0x24); the Hammock piece carries it
     assert gm.HOTSPOT_ACTIONS[5] == ("Hammock", (0x24,)) and 5 in gm.FURNITURE_HOTSPOTS[0x1E1]
-    assert not [f.text for f in FACTS if f.group in gm.STORE_GROUPS and f.label == gm.UNCONFIRMED]
+    assert not [f.text for f in FACTS if f.group in gm.STORE_GROUPS and f.label == gm.UNCONFIRMED
+                and " seen live, " not in f.text]   # a live report the code contradicts is written both ways
     assert "the exercise bike: walking as Walking on the treadmill (dirtiness +8, mood points +4)" in TEXT
     assert "Dropped on, with the patcher: the patcher's own route, the spa treatments" in TEXT
 
