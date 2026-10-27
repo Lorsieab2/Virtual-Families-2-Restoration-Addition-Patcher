@@ -400,8 +400,8 @@ and while paused), **G** = game seconds (`CGameTime::Seconds`, frozen while paus
 | Timer | Field | Clock | Period / length | Real time on speed 10 | Status |
 |---|---|---|---|---|---|
 | Upkeep step | theMainScene+0x30 | S | 2 s | 2 s | VERIFIED-C |
-| Age unit | state+0x00/+0x04 | R | 600 s | 10 min (paused time discarded) | VERIFIED-C |
-| Dead body removal | state+0x04 | R | 240 units | 40 h | VERIFIED-C |
+| Age unit | state+0x00/+0x04 | R / speed | 60 x speed option real s (600 at Normal; units = seconds / 60 / gs+0x25B18, 0x4C4DCF..0x4C4DE3): game time, section 25 | 10 min (paused time discarded) | VERIFIED-C |
+| Dead body removal | state+0x04 | R / speed | 240 units: (now - stamp) / 60 / option >= 240 (0x4C4C80..0x4C4C9D), not capped, so the time closed counts in full | 40 h | VERIFIED-C |
 | Pregnancy | state+0x24 | units | 21 units | 3 h 30 min | VERIFIED-C |
 | Baby cooldown | gs+0x25AE0 | R | birth: 600 x (5-d1/20)(5-d2/20) s; failed try: 1,200 s; drop refusal: 3,300 s; another path 1,800 x (same product) s | 10 min .. 12 h 30 min | VERIFIED-C (writers and the one reader, HandleDropOnVillager) |
 | Symptom | state+0x64.. | R | 6..17 h | 6..17 h | VERIFIED-C |
@@ -613,3 +613,17 @@ Tropical Sunshine: the owner says it gives Sunny weather; the code (B200 0x49D89
 contradiction to live-check.
 
 Baby wait clock: every writer of gs+0x25AE0 and its one reader use `GetSecondsFromGameStart` 0x475830 (`_time64` minus the save's start time): real time, running while paused or closed, unaffected by the speed option; the Time Warp moves it on by moving the start time back. A drop with more than 3,600 s left sets now + 3,300 s (0x49E773..0x49E78E), so a player never waits more than 55 minutes after trying. VERIFIED-C.
+
+## 25. Clocks (2026-10-27)
+
+| Clock | Source | Speed | Paused | Closed | Used by | Status |
+|---|---|---|---|---|---|---|
+| Real time | `GetSecondsFromGameStart` 0x475830 = `_time64` - the save's start time | no effect | runs | runs | food groups, symptoms, the baby wait, collectibles on the floor, the unpatched Flea Market, the malfunction start (> 360 s, 0x4A28C0) | VERIFIED-C |
+| Real time while running | `ldwEventManager::GetSeconds` 0x474600 (the 2-second step, 0x4A266E); frames | no effect | step runs, frames' collectible rolls stop | stops | upkeep step, malfunctions, autosave; collectible rolls | VERIFIED-C |
+| Game time, age clock | real seconds since the stamp / 60 / speed option | scales | discarded (accumulator 0 at option >= 999, 0x4C4D99) | capped catch-up: options 10, 2, 1: in full to 31,000 s; 5: in full to 38,200 s, then 31,000; 20: in full to 23,800 s, then 31,000; over 86,400 s: 86,400 (emulated at 10, 5, 20, 2, 1) | ageing, needs, health, salary, pregnancy, body removal (uncapped) | VERIFIED-E |
+| Game time, game clock | `CGameTime::Seconds` 0x468B00 = banked + (real - anchor) x 10 / speed (emulated: 10,000 real s -> 10,000 at 10, 20,000 at 5, 5,000 at 20, 0 at 0) | scales | stopped (`SetSpeed(999)` stores 0) | Save/LoadState keep speed, anchor and banked seconds, so the whole time closed counts at the saved speed (none if saved paused) | Random Events, messes, weather, interest, Food Club, On Sale, Maid / Gardener, dating and college e-mails, outfit restock, OverrideNight | VERIFIED-E (Seconds), VERIFIED-C (load) |
+
+Speeds: gs+0x25B18 / `CGameTime`+0x20: Normal 10 (the stock game's only speed besides Pause); the patcher's Time
+Controls (runtime/native/b200time/b200time_time.inc): Slow 20, Fast 5, 5x 2, 10x 1. One hour of game time = speed / 10
+real hours. The Time Warp moves the start time back 3,660 x option s: 61 age units at any speed, every real-time count
++3,660 x option s.

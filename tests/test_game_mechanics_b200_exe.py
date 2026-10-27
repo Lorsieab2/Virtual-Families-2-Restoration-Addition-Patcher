@@ -220,8 +220,17 @@ def test_time_away_is_capped_as_the_window_says(emu):
     assert _credited(emu, 200_000) == (86_400, 144)
     assert _credited(emu, 50_000, option=1009)[1] == 0     # saved paused: nothing made up
     assert _credited(emu, 50_000, catch_up=1) == (50_000, 83)
+    # the other speeds: the caps are real seconds, the age unit is 60 x the speed value
+    # Fast (5): in full up to 38,200 s, then 31,000 s; Slow (20): in full up to 23,800 s, then 31,000 s
+    assert _credited(emu, 35_000, option=5)[1] == 116 and _credited(emu, 50_000, option=5)[1] == 103
+    assert _credited(emu, 20_000, option=20)[1] == 16 and _credited(emu, 24_000, option=20)[1] == 25
+    for option, capped, day in ((5, 103, 288), (20, 25, 72), (2, 258, 720), (1, 516, 1440)):
+        assert _credited(emu, 50_000, option=option)[1] == capped, option
+        assert _credited(emu, 200_000, option=option)[1] == day, option
     text = gm.render()
-    assert "up to 31,000 seconds (8 hours 36 minutes 40 seconds) away is made up in full" in text
+    assert "up to 31,000 seconds (8 hours 36 minutes 40 seconds) of real time away is made up in full" in text
+    assert "more than that makes up 31,000 seconds (103 age units)" in text
+    assert "more than that 31,000 seconds (25 age units)" in text
     assert "51 age units, about 2.55 years" in text and "144 age units, 7.2 years" in text
 
 

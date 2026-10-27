@@ -77,7 +77,7 @@ def test_the_weather_bottles_use_the_owners_weather_names():
     assert "a contradiction to live-check: the bottle sets type 0, the plain sky the owner calls Normal" in TEXT
     assert "Normal 0 eWeather_Sunny, Sunny 1 eWeather_Cloudy, Raining 2" in TEXT
     assert "returns to Normal" in TEXT and "never Sunny at night" in TEXT
-    assert "Normal weather lasts 15 to 40 real minutes; any other kind, Sunny too, 6 to 12." in TEXT
+    assert "Normal weather lasts 15 to 40 minutes of game time; any other kind, Sunny too, 6 to 12." in TEXT
 
 
 def test_health_plan_and_food_club_prices_are_the_price_codes_arithmetic():
