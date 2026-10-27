@@ -14,10 +14,11 @@
 #               and manifests, so folders arriving during the early run would be read half-copied), and
 #             the release test run, --release, with VF2_KIDS_EXE and VF2_B200_MATRIX_GLOB pointing at the new
 #               matrix, so the tests that need it run. This is the run the release gate reads.
-#   last:     the two companion DLLs (runtime\native\build_b200time.bat, build_b200kids.bat). Last, because
-#               tests\test_b200_time_controls.py and tests\test_b200_up_to_28_children.py rebuild the same
-#               runtime\build files; building the release DLLs after them means runtime\build holds the build
-#               this script made on purpose.
+#   last:     the companion DLLs (runtime\native\build_b200time.bat, build_b200kids.bat, build_b200history.bat,
+#               build_b200outfits.bat). Last, because tests\test_b200_time_controls.py,
+#               test_b200_up_to_28_children.py, test_b200_family_history.py and test_b200_outfit_pictures.py
+#               rebuild the same runtime\build files; building the release DLLs after them means runtime\build
+#               holds the build this script made on purpose.
 #
 # Exporting the bundle and the release gate stay manual steps after this script. It changes nothing about what
 # is built: the matrix is work\build_matrix.ps1 with the same toggles, and the DLLs are the same batch files.
@@ -87,7 +88,7 @@ if ($null -ne $saved.kids) { $env:VF2_KIDS_EXE = $saved.kids }
 if ($null -ne $saved.glob) { $env:VF2_B200_MATRIX_GLOB = $saved.glob }
 if ($gate -ne 0) { throw "The release test run still fails alone; see $runDir\tests-release\summary.txt. DLLs not built." }
 
-foreach ($bat in @("build_b200time.bat", "build_b200kids.bat")) {
+foreach ($bat in @("build_b200time.bat", "build_b200kids.bat", "build_b200history.bat", "build_b200outfits.bat")) {
     & cmd.exe /d /c "`"$(Join-Path $root "runtime\native\$bat")`"" > (Join-Path $runDir "$bat.log") 2>&1
     if ($LASTEXITCODE -ne 0) { throw "$bat failed; see $runDir\$bat.log" }
 }

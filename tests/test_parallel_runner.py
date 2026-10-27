@@ -54,7 +54,8 @@ def test_a_file_that_rebuilds_a_companion_dll_is_never_split():
     # runs the build batch file would build the same DLL at the same moment.
     builders = [runner.rel(p) for p in runner.suite_files("all")
                 if p.resolve() != Path(__file__).resolve() and any(bat in p.read_text(encoding="utf-8", errors="replace")
-                       for bat in ("build_b200time.bat", "build_b200kids.bat", "build_b200history.bat"))]
+                       for bat in ("build_b200time.bat", "build_b200kids.bat", "build_b200history.bat",
+                                   "build_b200outfits.bat"))]
     assert builders, "no test runs the companion DLL builds any more; review WHOLE"
     for name in builders:
         assert name in runner.WHOLE or name in runner.SERIAL, f"{name} rebuilds runtime/build; add it to WHOLE"

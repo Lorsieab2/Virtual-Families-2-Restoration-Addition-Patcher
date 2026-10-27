@@ -372,3 +372,22 @@ B96 now also redirects the body draw relocation at
 `CVillagerManager::DrawVillager + 0x454` to
 `_VF2DrawSceneVillagerBodyFrame`, which uses the same folder-backed Holiday
 frame table and clamps fallback stock draws to row `49`.
+
+## Tray outfit pictures (stock bug, fixed 2026-10-27)
+
+The stock tray cannot hold two stock outfits of one sex with different
+pictures. `TakeOne` copies the bought row's body (`+0x408 + item * 4`) into one
+field per sex (`+0x468` male, `+0x46C` female), the tray place keeps only
+`(item, uses)`, and both the tray draws and the apply's `GetOutfit` read that
+one field for `0x49` / `0x4A`. So every stock outfit of a sex shows, and puts
+on, the last one bought. The patcher's expansion rows are other tray items and
+were never affected, but holding one writes its body into the same field
+(`VF2SetStockOutfitBodyForSyntheticItem`), so stock tray outfits also showed the
+expansion body afterwards.
+
+Fix Vanilla Game Bugs now loads `vf2outfits_b200.dll`
+(`runtime/native/b200outfits`, sites proved in `runtime/b200_outfits_sites.py`),
+which keeps each tray place's own picture and lends it to the field only for the
+one draw, and gives it at the apply. Per save it keeps them in
+`Virtual Families 2 Patcher Data\Outfits\<save file>.dat`. The save format is
+unchanged. Emulated in `tests/test_b200_outfit_pictures.py`; not live tested.

@@ -79,6 +79,19 @@
         "Starting a new family or Start Over in a save slot starts that slot's log again. It is not yet tested in a running game, so back up your saves first."
       ]
     },
+    "fix_vanilla_game_bugs": {
+      "section": "Patching",
+      "title": "Fix Vanilla Game Bugs",
+      "setting": true,
+      "guide": [
+        "Fixes bugs that are in the original game. It is on by default.",
+        "Menus: Start Over asks first, Pause Game: Yes works while paused, and the title screen shows the right name and buttons.",
+        "Outfits: each Male Outfit and Female Outfit in the tray keeps the outfit it was bought with. In the original game every outfit of a family member's sex showed, and gave, the last one bought.",
+        "Your outfits are remembered in a small file beside each save, in Virtual Families 2 Patcher Data\\Outfits. The save itself is not changed.",
+        "Outfits bought before this fix look and work as they did before. The outfit fix is not yet tested in a running game.",
+        "Unticking it and clicking Enable/Disable Patches gives you the original game's behaviour back."
+      ]
+    },
     "dry_run": {
       "section": "Patching",
       "title": "Dry Run (Validate Only)",

@@ -90,6 +90,11 @@ def main() -> int:
     parser.add_argument("--family-history-dll",
                         default=str(ROOT / "runtime" / "build" / "vf2history_b200.dll"),
                         help="Built vf2history_b200.dll shipped behind the family_history setting")
+    # Outfit Pictures has no byte of its own: its loader rides Fix Vanilla Game Bugs' .vf2bugs byte, and the
+    # exporter ships the DLL behind that setting (build_b200outfits.bat).
+    parser.add_argument("--outfit-pictures-dll",
+                        default=str(ROOT / "runtime" / "build" / "vf2outfits_b200.dll"),
+                        help="Built vf2outfits_b200.dll shipped behind the fix_vanilla_game_bugs setting")
     args = parser.parse_args()
 
     outputs = ROOT / "outputs"
@@ -161,7 +166,8 @@ def main() -> int:
     # nothing.
     for flag, value in (("--time-controls-dll", args.time_controls_dll),
                         ("--up-to-28-children-dll", args.up_to_28_children_dll),
-                        ("--family-history-dll", args.family_history_dll)):
+                        ("--family-history-dll", args.family_history_dll),
+                        ("--outfit-pictures-dll", args.outfit_pictures_dll)):
         if flag not in flags:
             print(f"exporter has no {flag}; the companion DLL would be absent", file=sys.stderr)
             return 1
