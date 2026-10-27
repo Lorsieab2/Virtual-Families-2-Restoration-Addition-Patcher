@@ -9464,19 +9464,20 @@ class OutfitStoreMappingTests(unittest.TestCase):
         # Hunger counts hunger, not fullness: a full Fed bar is the minimum.
         self.assertIn("static const int kVF2VillagerFedMaximum = 1;", source)
 
-        # The cure reproduces exactly the two loops CVillagerState::Reset runs
-        # -- 7 symptom flags at +0x5C with dword expiries at +0x64, and 4
-        # infection flags at +0x84 with dword expiries at +0x88 -- and must not
-        # touch the health/age fields Reset goes on to overwrite.
+        # The cure writes what the game's own cures write: the 7 symptom flags
+        # at +0x5C with their dword expiries at +0x64 (ClearSymptom's pair) and
+        # the 16-bit infection field at +0x80 (Vancomycin, Imported Candy).
+        # +0x84..+0x97 are the food groups' flags and expiries
+        # (UpdateNutritionAllVillagers, FoodGroupsActive): a cure must not
+        # touch them, nor the health/age fields.
         end = chr(10) + "}" + chr(10)
         cure = source.split("static void VF2ClearIllnesses(", 1)[1].split(end, 1)[0]
         self.assertIn("for (int symptom = 0; symptom < 7; ++symptom)", cure)
         self.assertIn("fields[0x5C + symptom] = 0;", cure)
         self.assertIn("fields + 0x64 + symptom * 4", cure)
-        self.assertIn("for (int infection = 0; infection < 4; ++infection)", cure)
-        self.assertIn("fields[0x84 + infection] = 0;", cure)
-        self.assertIn("fields + 0x88 + infection * 4", cure)
-        for forbidden in ("0x0C", "SetHealth", "SetHappiness", "0x54", "0x58"):
+        self.assertIn("*reinterpret_cast<unsigned short *>(fields + 0x80) = 0;", cure)
+        for forbidden in ("0x84", "0x88", "infection < 4", "0x0C", "SetHealth",
+                          "SetHappiness", "0x54", "0x58"):
             self.assertNotIn(forbidden, cure)
 
         # The wellbeing strings must not collide with any other block. The
