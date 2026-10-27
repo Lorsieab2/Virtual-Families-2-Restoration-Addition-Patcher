@@ -495,7 +495,7 @@ The Dryer lint fire remains a legitimate native random malfunction and requires 
 
 | Row | Effect |
 | --- | --- |
-| Clear All Illnesses | Cures every symptom and infection, clearing the same illness fields the game clears itself. Changes no other part of a villager. |
+| Clear All Illnesses | Cures every symptom and infection, clearing the same illness fields the game clears itself. Changes no other part of a villager: food groups are kept (before the 27 October 2026 B204 update it also cleared them). |
 | Max out Happiness Bar | Fills the Happiness bar. |
 | Max out Energy Bar | Fills the Energy bar. |
 | Max out Fed Bar | Fills the Fed bar, so nobody is hungry. |
