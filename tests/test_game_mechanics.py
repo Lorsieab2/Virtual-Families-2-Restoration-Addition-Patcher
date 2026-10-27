@@ -24,8 +24,9 @@ class PageTests(unittest.TestCase):
         self.assertEqual(gm.GROUPS, (
             "Time and ageing", "Needs and upkeep", "Health and sickness", "Old age", "Pregnancy and babies",
             "Careers", "Money and interest", "Leaving home", "Dating, marriage and the next generation",
-            "Random Events", "Weather", "Messes and malfunctions", "Collectibles", "Flea Market and On Sale",
-            "Chance and timer index"))
+            "Random Events", "Weather", "Messes and malfunctions", "Collectibles", "The store: prices and buying",
+            "Food and Medicine", "Flea Market", "Special Upgrades", "Services", "Home Renovation", "Career upgrades",
+            "Furniture and Accessories", "Pets", "Clothing and Hairstyles", "Chance and timer index"))
         seen = []
         for fact in self.facts:
             if not seen or seen[-1] != fact.group:
@@ -45,8 +46,9 @@ class PageTests(unittest.TestCase):
 
     def test_family_wording(self):
         text = self.text
-        for name in gm.OPTION_NAMES:          # the patcher options' own names, as the Patches tab shows them
+        for name in gm.OPTION_NAMES + gm.STORE_OPTION_NAMES:   # the patcher options' own names (Patches tab)
             text = text.replace(name, "")
+        text = text.replace("Virtual Villagers Painting", "")       # a furniture item's own name
         self.assertNotRegex(text, r"(?i)villag|tribe|peep")
         self.assertIn("family member", self.text)
         self.assertNotRegex(gm.INTRO + gm.LABEL_NOTE, r"(?i)villag")
@@ -167,9 +169,9 @@ class PageTests(unittest.TestCase):
         self.assertIn("Pastry Designer: $15 per real hour as a Beginner, $50 as a Master", self.text)
 
     def test_unconfirmed_lines_stay_unconfirmed(self):
-        for start in ("Medicines and the stethoscope", "The store's time-skip item", "Lotto Ticket",
-                      "Health Plan", "Boarding School", "What that waiting time holds back",
-                      "The Mysterious Collector", "The Wrong Address"):
+        # The time-skip item, the medicines, the Lotto Ticket, the Health Plan and Boarding School are now read from
+        # the purchase path (tests/test_game_mechanics_store.py).
+        for start in ("What that waiting time holds back", "The Mysterious Collector", "The Wrong Address"):
             fact = next(f for f in self.facts if f.text.startswith(start))
             self.assertEqual(fact.label, gm.UNCONFIRMED, start)
 

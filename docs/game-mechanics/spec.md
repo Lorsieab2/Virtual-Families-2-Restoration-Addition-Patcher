@@ -546,3 +546,27 @@ without the patcher, so the window adds nothing for it.
 Scripts (outside the repo, scratchpad `gm2`): `fp.py` / `sweep.py` (routine matching), `consts.py`, `evmap2.py`
 (events by title key), `stock_flea.py`, `special_upgrades.py`; the repo test is
 `tests/test_game_mechanics_stock_exe.py` (skipped without the stock exe).
+
+## 23. Every store item (2026-10-27)
+
+The owner's rule: every store item, upgrade and service gets its own entry. All in the B200 core exe (sha256
+5cad4050) unless marked; the stock exe is sha256 1582d9e8. The page's data and lines are `src/vf2_game_mechanics.py`
+(`_store_lines`); `tests/test_game_mechanics_store.py` pins them to both executables.
+
+| What | Rule | Status |
+|---|---|---|
+| Store tabs | store menu table 0x574744 (16-byte rows: string, 0, category, icon). `GetCategoryItemCount` 0x46B6D0 / `GetCategoryItem` 0x46B210 run as linked after `CInventoryManager::Reset` 0x46C130 for every category; stock 0x4BB0A0 / 0x4BAA50 after 0x4BA8F0. Patched / stock counts: General Appliances 18 / 15, Living Room 108 / 88, Dining Room 27 / 26, Bedroom 84 / 74, Outdoors 38 / 12, Accessories 109 / 47, Toys 21 / 21, Pets 15 / 13, Clothing 214 / 6, Food and Medicine 18 / 18, Career 31 / 31, Home Renovation 10 / 10, Special Upgrades 10 / 6, Flea Market 36 / 5 of 36 | VERIFIED-E |
+| Prices, locks | `GetPrice` 0x46B9F0 and `GetLockGenerationLevel` 0x46B870 run as linked for every item; inventory table 0x56FE70 (0x24-byte rows: id, owned-upgrade flag, uses, price, lock, short and long description, food flag, drop-target flag) and furniture table 0x564F48 (0x6C-byte rows: id, image, price, lock, ...) equal the stock tables 0x553278 / 0x54C87C for every stock item. Locked while lock > `CFamilyTree::NumGenerations` | VERIFIED-E |
+| Discounts | `CalcPrice` 0x48ACB0: On Sale (category 3) half; items 4..0xB half with the Food Club; 0x10F x (level + 1). Health Plan (gs+0x25B1D) x 25 / 100 for items 0x18..0x36 in B200 (0x46BA3B), 0x18..0x21 in the stock exe (0x4B9DE0) | VERIFIED-C |
+| Buying | `HandleMouse` -> `HandlePurchaseItem` 0x48BF20: items below 0xE1 to the tray (`AddItem`), 0xE1..0x1AC `TakeOne` + `HandleUpgrade` 0x48C2E0, 0x1AD..0x331 to storage; the game saves after every purchase | VERIFIED-C |
+| Groceries, medicine, outfits | `theMainScene::HandleMouseDown` 0x49EE90: groceries on `kitchenTableRect1`, +150 food (organics +250), `UpdateNutritionAllVillagers(group, organic)` (Organics: Grains passes organic = false); medicines cure symptom 1..6 / infections, Baby Boost fertility += (102 - F) / 4, Doctor Consultation opens the diagnosis dialog; stock outfits 0x49 / 0x4A by gender | VERIFIED-C |
+| Flea Market goods | `DispatchRotatingSundry` 0x49CB90, case table 0x49DD64 / 0x49DCF4 (index = item - 12), byte for byte the desktop object. Weather: Tropical Rain pushes 3 (Stormy), Tropical Sunshine 0 (Normal), Fog 4, Snow 5 (`CWeather::SetCurrent` 0x4CCF20: 0 Normal, 1 Sunny = `CSunBeam::Reset`, 2 Raining, 3 Stormy, 4 Foggy, 5 Snowing). Rewards / scolding: `InvokeReward` / `InvokeScolding` | VERIFIED-C |
+| Upgrades, services, renovations | `HandleUpgrade` 0x48C2E0 (cases from its table 0x48CBC0 / 0x48CB70); Lotto `GetRandom(10000)` thresholds 1 / 3 / 23 / 223 / 723 / 4056; Time Warp 3,660 x option s, money capped +750; services act on gs+0x25CC4 | VERIFIED-C |
+| Career equipment | `CTech::Level` = owned upgrades of the workplace (at most 12); `AdvanceCareer`: (4 x level + 20) / (career level + 1), x7 / x3 / x2 at levels 0 / 1 / 2 | VERIFIED-C |
+| Mood points from items | `UpdateHappinessState` 0x4CBE90: +5 per renovation 0xE1..0xEA, min(placed furniture, 30), the item-and-like table (desktop 0x2ED..0x55F; the Fish Bowl 0x202 skips its like check), 500 x (equipment - 1) for likes 39 / 82 / 81. Like names: string 0x7AF split on commas (120 names; the game has 121 likes, `CLikeList::Add` rand(121)) | VERIFIED-C |
+| Patcher rows | `VF2GetVisibleSpecialUpgradePrice` 0x4B9F60, 0x4B8B50; outfit store `VF2GetOutfitStorePrice` 0x4B9E80 ($75; bodies 50..53 $500), names 0xBED + 2 x (54 x sex + body) / 0xF2B + 2 x (50 x sex + style); Cheat Upgrades and the remodels from the generator source (`VF2ApplyVisibleSpecialUpgrade`, `CHEAT_UPGRADE_ITEMS`, `MOBILE_RENOVATION_STYLE_CATALOG`, `AI_BATHROOM2_STYLE_CATALOG`) | VERIFIED-C |
+
+UNCONFIRMED on the page, each saying why: the behaviour table's actions (what an action itself changes); what a pet
+does; how the store picks a stock outfit row's body; the patcher's Outfit-store tray conversion
+(`VF2NormalizeOutfitToolInHand` 0x4BA000); the children's book reader check (`GetRandomVillager` selector 6, one
+record field not identified).
