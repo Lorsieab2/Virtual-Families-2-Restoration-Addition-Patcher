@@ -1485,7 +1485,7 @@ class ExperimentalSectionAndPageHeightTests(unittest.TestCase):
 
     def test_the_experimental_section_has_its_heading_and_warning(self):
         experimental = [row["id"] for row in self.rows if row["category"] == "experimental"]
-        self.assertEqual(experimental, ["up_to_28_children", "family_history"])
+        self.assertEqual(experimental, ["up_to_28_children"])
         labels = [w.cget("text") for w in self.app.settings_inner.winfo_children() if w.winfo_class() == "Label"]
         self.assertEqual(labels, ["Main Patches", "Optional Patches", "Experimental"])
         texts = [getattr(w, "_vf2_description_text", "") for w in self.app.description_widgets]
@@ -1499,17 +1499,18 @@ class ExperimentalSectionAndPageHeightTests(unittest.TestCase):
 
     def test_enable_all_and_defaults_leave_experimental_off(self):
         self.assertFalse(self.app.setting_vars["up_to_28_children"].get())
-        self.assertFalse(self.app.setting_vars["family_history"].get())
+        # The Family History log is a normal row, on by default (owner, 2026-10-26).
+        self.assertTrue(self.app.setting_vars["family_history"].get())
         self.app.select_all_settings()
         self.root.update()
         ticked = {k for k, v in self.app.setting_vars.items() if v.get()}
         self.assertNotIn("up_to_28_children", ticked)
-        self.assertNotIn("family_history", ticked)
+        self.assertIn("family_history", ticked)
         everything_else = {row["id"] for row in self.rows if row["category"] != "experimental"}
         self.assertEqual(ticked, everything_else)
         self.app.select_default_settings()
         self.assertFalse(self.app.setting_vars["up_to_28_children"].get())
-        self.assertFalse(self.app.setting_vars["family_history"].get())
+        self.assertTrue(self.app.setting_vars["family_history"].get())
         self.app.setting_vars["up_to_28_children"].set(True)      # ticked deliberately
         self.root.update()
         self.assertTrue(self.app.setting_vars["up_to_28_children"].get())

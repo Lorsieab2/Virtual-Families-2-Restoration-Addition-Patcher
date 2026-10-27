@@ -2,8 +2,8 @@
 
 One log, the **Family History**, of every family event Virtual Families 2 has, for the Family Tree Maker (the save
 forgets a spouse who leaves or dies before any child, every earlier spouse, twins and triplets, causes of death and
-how anyone joined or left). The patch **Family History log** (setting `family_history`, Experimental, off by
-default, never ticked by Enable All) installs its own companion DLL, `vf2history_b200.dll`, in `Virtual Families 2
+how anyone joined or left). The patch **Family History log** (setting `family_history`, an Optional patch, on by
+default and ticked by Enable All; Experimental and off until the 26 October 2026 update of B204) installs its own companion DLL, `vf2history_b200.dll`, in `Virtual Families 2
 Patcher Files`, which writes each event as it happens, from the game's own memory and with the game's own words
 (theStringManager at run time: "Male", "Female", "Nursing", the causes of death, "New Generation", "{name} is going
 to college!", "The Talent Scout", "The Little Visitor", "Adoption Services", and each Random Event's own title). The

@@ -55,7 +55,8 @@ class GuideContentTests(unittest.TestCase):
         self.assertIn("family_history", guides.keys())
         self.assertEqual(guides.setting_keys(), ["family_history"])
         text = guides.guide("family_history").text
-        for needle in ("Experimental", "Family History", "remarriage", "divorce", "Twins and triplets",
+        self.assertNotIn("Experimental", text)        # a normal row, on by default (owner, 2026-10-26)
+        for needle in ("on by default", "Family History", "remarriage", "divorce", "Twins and triplets",
                        "Email Event", "Popup Event", "current spouse", "backfilled, no date", "head and body",
                        "Virtual Families 2 Patcher\\Save N\\Logs\\Family History", "back up your saves"):
             self.assertIn(needle, text)

@@ -123,9 +123,9 @@ def test_exporter_setting():
     rows = [s for s in X.SETTINGS if s["id"] == "family_history"]
     assert len(rows) == 1
     s = rows[0]
-    # Experimental: off by default, and Enable All (and the final playtest profile) leave it off
-    assert s["default"] is False and s["category"] == "experimental" and s["label"] == "Family History log"
-    assert "Experimental: not yet tested in a running game. Back up your saves before using it." in s["description"]
+    # On by default and a normal Optional row (owner, 2026-10-26); Enable All and the final playtest profile tick it
+    assert s["default"] is True and s["category"] == "optional" and s["label"] == "Family History log"
+    assert "experimental" not in s["description"].lower()
     for needle in ("Virtual Families 1", "Virtual Villagers", "name, age, sex, head and body", "remarriage",
                    "same-sex", "divorce", "twins and triplets", "cause", "Random Event", "Email Event",
                    "Popup Event", "renames", "Start Over", "Evict Family",
@@ -134,7 +134,7 @@ def test_exporter_setting():
         assert needle.lower() in s["description"].lower(), needle
     assert X.RUNTIME_FLAG_SECTION_BY_SETTING["family_history"] == ".vf2hist"
     assert "family_history" in X.SOURCE_BACKED_OPTIONAL_SETTINGS
-    assert "family_history" not in X.FINAL_PLAYTEST_DEFAULT_ON_SETTINGS
+    assert "family_history" in X.FINAL_PLAYTEST_DEFAULT_ON_SETTINGS
     assert X.FAMILY_HISTORY_INI_TEXT == "[Patches]\r\nFamilyHistory=1\r\n"
     assert X.FAMILY_HISTORY_DLL_NAME == S.DLL_NAME and X.FAMILY_HISTORY_INI_NAME == S.INI_NAME
 
