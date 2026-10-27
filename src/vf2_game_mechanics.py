@@ -33,6 +33,16 @@ docs/game-mechanics/spec.md section 22; tests/test_game_mechanics_stock_exe.py):
     Health Plan and Lucky Rock that the patcher's always-on Special Upgrades rows add.
 Everything else on the page is the same in the stock executable, and adds nothing.
 
+Every store item (2026-10-27, the owner's rule "Elaborate on what every store item and upgrade and research and
+everything does"): the groups from "The store: prices and buying" to "Clothing and Hairstyles" give each item the
+store sells its own entry: price (stock first, then the patcher's where it differs), uses, the exact effect with its
+numbers and odds, who it acts on, how long it lasts and what unlocks it.  The store tabs, prices and locks were run as
+linked in both executables; the effects were read from the purchase and use code (docs/game-mechanics/spec.md
+section 23; tests/test_game_mechanics_store.py).  Corrections made on the way: the Time Warp, the Lotto Ticket, the
+Health Plan, the Food Club's prices, the On Sale price, Boarding School and the medicines were UNCONFIRMED and are now
+read from the purchase path (HandleMouse -> HandlePurchaseItem -> HandleUpgrade); Bottled Tropical Sunshine sets the
+weather to Normal (type 0) and Bottled Tropical Rain to Stormy (type 3).
+
 Wording: family members, never the code's own word for them.  A patcher option (0 in the core executable) is
 shown as an option, both ways where the spec gives both.  The window describes the game; it fixes nothing.
 """
@@ -70,10 +80,20 @@ EVENTS = "Random Events"
 WEATHER = "Weather"
 MESSES = "Messes and malfunctions"
 COLLECTIBLES = "Collectibles"
-STORE = "Flea Market and On Sale"
+STORE = "The store: prices and buying"
+FOOD = "Food and Medicine"
+FLEA = "Flea Market"
+UPGRADES = "Special Upgrades"
+SERVICES = "Services"
+RENOVATION = "Home Renovation"
+CAREER_UPGRADES = "Career upgrades"
+FURNITURE = "Furniture and Accessories"
+PETS = "Pets"
+CLOTHING = "Clothing and Hairstyles"
 INDEX = "Chance and timer index"
+STORE_GROUPS = (STORE, FOOD, FLEA, UPGRADES, SERVICES, RENOVATION, CAREER_UPGRADES, FURNITURE, PETS, CLOTHING)
 GROUPS = (TIME, NEEDS, HEALTH, OLD_AGE, PREGNANCY, CAREERS_GROUP, MONEY, LEAVING, DATING, EVENTS, WEATHER, MESSES,
-          COLLECTIBLES, STORE, INDEX)
+          COLLECTIBLES) + STORE_GROUPS + (INDEX,)
 
 BULLET, SUB_BULLET = "• ", "    – "
 
@@ -300,8 +320,10 @@ def facts() -> list[Fact]:
                  f"groups counted, unless the \"{OPTION_MORTALITY}\" option is on.", E, "spec 4, 5"))
     add(_f(TIME, "A new baby is created at 2 years of age (40 age units).", U,
            "spec 5 text: Impregnate passes 0x28; not labelled there"))
-    add(_f(TIME, "The store's time-skip item ages the family by up to 61 age units (10 hours 10 minutes) at once "
-                 "and caps the money it brings at $750.", U, "spec 1: purchase path not traced"))
+    add(_f(TIME, "The store's Time Warp (Special Upgrades, $2,000) makes up 36,600 seconds (10 hours 10 minutes, "
+                 "61 age units) at once, all of it, and caps the money it brings at $750.", C,
+           "HandleUpgrade 0x48C2E0 case 0x112 on the purchase path HandleMouse -> HandlePurchaseItem: start time moved "
+           "back 3,660 x option s, AllVillagersTimeflowUpkeep(true) (86,400 cap only), money capped at +750"))
 
     # ------------------------------------------------------------------ Needs and upkeep (spec 2, 14)
     add(_f(NEEDS, "The family's needs are worked out once per age unit, every 10 real minutes, for everyone alive "
@@ -359,7 +381,10 @@ def facts() -> list[Fact]:
                    "6 to 17 real hours.", E, "spec 3: SetSymptom 0x4CBBA0"))
     add(_f(HEALTH, "A mild infection adds a symptom half the time when there is none and ends with a 3% chance per "
                    "check; a serious one adds symptoms (up to 2) and ends with a 1.2% chance per check.", E, "spec 3"))
-    add(_f(HEALTH, "Medicines and the stethoscope.", U, "spec 3: player actions"))
+    add(_f(HEALTH, "The medicines (see Food and Medicine): six each cure one symptom, Penicillin ends the mild "
+                   "infection and Vancomycin both; Baby Boost raises fertility and cures nothing; the Doctor "
+                   "Consultation (the stethoscope) only opens the Diagnosis window and cures nothing.", C,
+           "HandleMouseDown 0x49EE90 cases 0x18..0x21"))
     add(_f(HEALTH, "Deaths from illness (health reaching 0 while sick) and from starvation (health reaching 0 from "
                    "missed meals).", C, "spec 4"))
     add(_f(HEALTH, "Deaths by work accident or act of nature: the causes exist; what brings them is not traced.", U,
@@ -433,8 +458,11 @@ def facts() -> list[Fact]:
     add(_f(MONEY, "Interest: 10% of the money (the starting rate) each game day (24 real hours at normal speed). After a gap only 2 "
                   "days are paid, however many have passed; the rest are skipped.", E,
            "UpdateInterest 0x481D80 run as linked: 1,000 at 0.10 gains 100 after 1 day and 200 after 2, 3 or 10"))
-    add(_f(MONEY, "Interest is paid when it is next checked: every 30 real minutes, and when the bank or some "
-                  "events look at the money.", C, "spec 8: callers of UpdateInterest"))
+    add(_f(MONEY, "Interest is paid when it is next checked: every 30 real minutes (the happiness check), when the "
+                  "bank window opens, when the store is clicked, at the Time Warp, at the daily e-mail, when a new "
+                  "family's first adult is made, and when 15 of the Random Events look at the money.", C,
+           "callers of UpdateInterest 0x481D80: UpdateHappinessState, CBankingDlg, CScrollingStoreScene::HandleMouse, "
+           "HandleUpgrade, CDailyEmail::Show, CAdoptionScene::GeneratePeepCandidate and 15 event CanFire / CalcAward"))
     add(_f(MONEY, WITH_PATCHER + "the store's Special Upgrades page also sells the Brokerage Account, the Food Club, "
                   "the Health Plan and the Lucky Rock (10 items in all).", E,
            "B200 core: GetCategoryItemCount 0x46B6D0 / GetCategoryItem 0x46B210, category 0x14, run as linked: 10 "
@@ -449,14 +477,8 @@ def facts() -> list[Fact]:
                   "interest to 1%; each purchase after that adds 2 points (3%, 5%, 7%, 9%) until 11% again.", E,
            "HandlePurchaseItem 0x48C110 -> 0x4B8B50 run as linked from 0.10: 0.11, 0.01, 0.03, 0.05, 0.07, 0.09, "
            "0.11"))
-    add(_f(MONEY, "Food Club: 500 food and all four food groups each game day, every missed day delivered; and 60 "
-                  "food whenever the food runs below 60. Removing it stops the deliveries.", C,
-           "spec 8: JoinFoodClub, CFoodStore::Update 0x464F70"))
-    add(_f(MONEY, "Food Club prices (its description promises 50% off food).", U, "spec 14: price path"))
-    add(_f(MONEY, "Health Plan: medicine at a quarter of the price.", U, "spec 8: price path is player input"))
-    add(_f(MONEY, "Lotto Ticket: 1 in 10,000 for $50,000; 2 in 10,000 for $25,000; 20 for $5,000; 200 for "
-                  "$1,000; 500 for $750; otherwise a 50% chance of a grocery bag (when there is room in the "
-                  "tray) or nothing.", U, "spec 8: purchase path"))
+    add(_f(MONEY, "Food Club, Health Plan, Lucky Rock and Lotto Ticket: see Special Upgrades.", C,
+           "HandleUpgrade / 0x4B8B50"))
 
     # ------------------------------------------------------------------ Leaving home (spec 9)
     add(_f(LEAVING, "College: a family member without a career leaves for college on turning 19. Children born in "
@@ -464,7 +486,9 @@ def facts() -> list[Fact]:
            "spec 9: 0x4C4DF4"))
     add(_f(LEAVING, "The Talent Scout (a Popup Event, a child at home): yes, the child leaves and the family gets "
                     "$500; no, nothing happens.", E, "spec 9: event 83"))
-    add(_f(LEAVING, "Boarding School (the store): the chosen child is sent away.", U, "spec 9: purchase path"))
+    add(_f(LEAVING, "Boarding School (a Service, $1,500): the chosen child leaves home at once, with the message "
+                    "\"... has been sent away to school!\".", C,
+           "HandleUpgrade 0x48C2E0 case 0x10B: SetLeftHome on gs+0x25CC4, message 0x4C8"))
     add(_f(LEAVING, "The college e-mails come from those who left; they count one year away for every 12,000 "
                     "game seconds (3 hours 20 minutes).", C, "spec 9: YearsAwayFromHome"))
 
@@ -509,7 +533,8 @@ def facts() -> list[Fact]:
     add(_f(WEATHER, "Normal weather lasts 15 to 40 real minutes; any other kind 6 to 12.", C,
            "spec 12: SetCurrent 0x4CCF20"))
     add(_f(WEATHER, "Heavy rain or a storm sends everyone outside to take cover.", C, "spec 12"))
-    add(_f(WEATHER, "Some collectibles only appear in rain or storms.", C, "spec 12, 15"))
+    add(_f(WEATHER, "The collectibles of the rain-only spawn areas appear only in Raining or Stormy weather.", C,
+           "spec 12, 15"))
     add(_f(WEATHER, "The weather when the game starts.", U, "spec 12: when CWeather::Reset runs"))
 
     # ------------------------------------------------------------------ Messes and malfunctions (spec 13)
@@ -538,23 +563,8 @@ def facts() -> list[Fact]:
                          "item never appears twice at once.", C, "spec 15: CCollectableItem::Add 0x44CA10"))
     add(_f(COLLECTIBLES, "Collectibles vanish again after a while, in real time.", C, "spec 15"))
 
-    # ------------------------------------------------------------------ Flea Market and On Sale (spec 16)
-    add(_f(STORE, WITH_PATCHER + "the Flea Market shows all 36 of its goods at all times; it never changes (the "
-                  "game's tip still says three times a day).", E,
-           "GetCategoryItemCount 0x46B6D0 / GetCategoryItem 0x46B210 call VF2GetExpandedFleaMarketCount / Item "
-           "0x4B9A90 / 0x4B9AB0 first (36 for category 15); the stock rotation 0x46BEB0 is never reached"))
-    add(_f(STORE, UNPATCHED + "the Flea Market shows 5 of its 36 goods, picked at random, and changes them every 6 "
-                  "real hours: the first time it is opened more than 6 real hours after the last change it picks 5 "
-                  "new ones (the time counts while paused and while the game is closed). The game's tip says three "
-                  "times a day.", E,
-           "stock exe sha256 1582d9e8: the store menu's Flea Market row (table 0x5346E0 row 1, category 15) -> "
-           "SetStoreCategory 0x432050(15) -> GetCategoryItemCount 0x4BB0A0 -> MaybeUpdateRotatingItems 0x4BA710, "
-           "run as linked after Reset 0x4BA8F0: 5 goods at real s T, the same 5 at T + 21,600, 5 new at "
-           "T + 21,601 and at T + 86,400; next change = real s + 21,600"))
-    add(_f(STORE, "On Sale: 3 furniture items, changed every game day (24 real hours at normal speed; the clock "
-                  "stops while paused).", C, "spec 16: MaybeUpdateSaleItems 0x46C000"))
-    add(_f(STORE, "How much the On Sale price is reduced.", U, "spec 16: price path"))
-    add(_f(STORE, "Each of the 10 house renovations adds to the family's happiness every 30 minutes.", C, "spec 16"))
+    # ------------------------------------------------------------------ The store (spec 16, 23)
+    out.extend(_store_lines())
 
     # ------------------------------------------------------------------ Chance and timer index (spec 17, 18)
     add(_f(INDEX, "Every chance on this page is exact: the game rolls rand(N) and every value is counted, so "
@@ -570,7 +580,11 @@ def facts() -> list[Fact]:
                  "work success 56.25% to 100%, a career from 132;",
                  "weather: the next kind 1 in 5, normal 15 to 40 minutes, others 6 to 12;",
                  "a collectible 3 in 6,600 per frame (3 in 3,300 with the Lucky Rock), rare 4%, uncommon 13%;",
-                 "a mess: under 30 of 100 a weed, under 55 a sock, under 80 a wrapper, else a smudge."):
+                 "a mess: under 30 of 100 a weed, under 55 a sock, under 80 a wrapper, else a smudge;",
+                 "the Lotto Ticket: $50,000 4 in 32,768, $25,000 8, $5,000 80, $1,000 800, $750 2,000, a grocery bag "
+                 "18.40% (with a free tray place);",
+                 "the Imported Candy 1 of 5 and the Dirty Candy 1 of 4, evenly; the Energy Drink, Chamomile Drink and "
+                 "Sleeping Pills 15% / 85%, the Mega Chamomile Extract 75% / 25%."):
         add(_f(INDEX, text, C, sub=True))
     add(_f(INDEX, "The other rolls the game makes: how long actions last and which way they are done, animations, "
                   "e-mail wording, names and looks. What actions give the family is not decoded yet.", U,
@@ -674,6 +688,990 @@ _EVENT_LINES = (
     ("The Rare Bird (Popup Event): everyone runs to the yard.", U),
     ("School Fund-raiser (Popup Event): yes, -$25 and +100 food.", E),
 )
+
+
+# Every furniture item of the store's furniture tabs, B200 core (catalog run as linked: GetCategoryItemCount 0x46B6D0 /
+# GetCategoryItem 0x46B210, GetPrice 0x46B9F0, GetLockGenerationLevel; names from the item's short description).
+# (id, name, price, generation lock, store tabs, added by the patcher).  An item on several tabs is listed once, under
+# its first tab in the store menu's order; "added" = not on any furniture tab of the stock exe (sha256 1582d9e8).
+FURNITURE_ITEMS = (
+    (0x1f2, 'Classic TV', 150, 0, ('General Appliances', 'Living Room'), False),
+    (0x1ae, 'Basic Charcoal Grill', 175, 0, ('General Appliances', 'Outdoors'), False),
+    (0x1ea, 'Bathroom Scale', 130, 0, ('General Appliances', 'Accessories'), False),
+    (0x1cf, 'Drying rack', 80, 0, ('General Appliances', 'Accessories'), False),
+    (0x200, 'Desk Lamp', 150, 0, ('General Appliances', 'Accessories'), False),
+    (0x1ad, 'Outdoor Grill', 650, 2, ('General Appliances', 'Outdoors'), False),
+    (0x1f4, 'Antique Radio', 850, 2, ('General Appliances', 'Accessories'), False),
+    (0x203, 'Floor Lamp', 450, 2, ('General Appliances', 'Accessories'), False),
+    (0x207, 'MP3 Player and Speakers', 350, 2, ('General Appliances', 'Accessories'), False),
+    (0x1df, 'Automatic Clothes Washer', 950, 3, ('General Appliances', 'Accessories'), False),
+    (0x1cb, 'Laundry Dryer', 650, 3, ('General Appliances', 'Accessories'), False),
+    (0x1f3, 'Flat Screen TV', 5000, 3, ('General Appliances', 'Living Room'), False),
+    (0x1b0, 'Basic Gas Grill', 750, 3, ('General Appliances', 'Outdoors'), False),
+    (0x1cd, 'Ironing Set', 250, 3, ('General Appliances', 'Accessories'), False),
+    (0x1af, 'Deluxe Gas Grill', 4500, 5, ('General Appliances', 'Outdoors'), False),
+    (0x324, 'Large Flat Screen TV', 6500, 12, ('General Appliances',), True),
+    (0x325, 'Small Flat Screen TV', 4250, 12, ('General Appliances',), True),
+    (0x326, "Father's Favorite TV", 5250, 12, ('General Appliances',), True),
+    (0x1c3, 'Used Couch', 45, 0, ('Living Room',), False),
+    (0x1c4, 'Used Couch', 75, 0, ('Living Room',), False),
+    (0x1c5, 'Used Couch', 55, 0, ('Living Room',), False),
+    (0x1c2, 'Usable Couch', 45, 0, ('Living Room',), False),
+    (0x1d6, 'Second Hand Loveseat', 99, 0, ('Living Room',), False),
+    (0x30d, 'Invisible 3-Seater Couch', 45, 0, ('Living Room',), True),
+    (0x30e, 'Invisible 2-Seater Loveseat', 99, 0, ('Living Room',), True),
+    (0x30f, 'Invisible Single Couch', 1415, 0, ('Living Room',), True),
+    (0x310, 'Invisible Beanbag Chair', 250, 0, ('Living Room',), True),
+    (0x311, 'Invisible Large Bookshelf', 2450, 0, ('Living Room',), True),
+    (0x312, 'Invisible Thin Bookshelf', 450, 0, ('Living Room',), True),
+    (0x313, 'Invisible Small Square Bookshelf', 1250, 0, ('Living Room',), True),
+    (0x1fa, 'Blue Beanbag Chair', 250, 2, ('Living Room',), False),
+    (0x1fb, 'Brown Beanbag Chair', 250, 2, ('Living Room',), False),
+    (0x1fc, 'Green Beanbag Chair', 250, 2, ('Living Room',), False),
+    (0x1fd, 'Orange Beanbag Chair', 350, 2, ('Living Room',), False),
+    (0x1fe, 'Red Beanbag Chair', 300, 2, ('Living Room',), False),
+    (0x1f7, 'Small Birch Book Case', 450, 2, ('Living Room',), False),
+    (0x226, 'House Plant', 165, 2, ('Living Room', 'Accessories'), False),
+    (0x22c, 'House Plant', 90, 2, ('Living Room', 'Accessories'), False),
+    (0x233, 'House Plant', 280, 2, ('Living Room', 'Accessories'), False),
+    (0x237, 'House Plant', 75, 2, ('Living Room', 'Accessories'), False),
+    (0x238, 'House Plant', 180, 2, ('Living Room', 'Accessories'), False),
+    (0x270, 'Orange Couch', 1525, 3, ('Living Room',), False),
+    (0x275, 'Orange Sofa', 980, 3, ('Living Room',), False),
+    (0x27a, 'Orange Bookshelf', 1095, 3, ('Living Room', 'Dining Room', 'Bedroom'), False),
+    (0x27f, 'Orange Coffee Table', 450, 3, ('Living Room',), False),
+    (0x28d, 'Orange Credenza', 2115, 3, ('Living Room', 'Dining Room'), False),
+    (0x29c, 'Modern Orange Rug', 895, 3, ('Living Room', 'Dining Room', 'Bedroom'), False),
+    (0x1bd, 'Large Quality Couch', 750, 3, ('Living Room',), False),
+    (0x1be, 'Large Quality Couch', 700, 3, ('Living Room',), False),
+    (0x1bf, 'Large Quality Couch', 1800, 3, ('Living Room',), False),
+    (0x1c0, 'Large Sturdy Couch', 850, 3, ('Living Room',), False),
+    (0x1c1, 'Large Quality Couch', 225, 3, ('Living Room',), False),
+    (0x1d4, 'Tan Loveseat', 750, 3, ('Living Room',), False),
+    (0x1d3, 'White Loveseat', 1150, 3, ('Living Room',), False),
+    (0x1d5, 'Brown Loveseat', 750, 3, ('Living Room',), False),
+    (0x1d2, "Kids' Sofa", 2150, 3, ('Living Room',), False),
+    (0x1c7, 'Wide Cabinet', 450, 3, ('Living Room', 'Dining Room', 'Bedroom'), False),
+    (0x1e6, 'Small Sepia Oval Rug', 1550, 3, ('Living Room',), False),
+    (0x1e7, 'Small Lapis Oval Rug', 750, 3, ('Living Room',), False),
+    (0x1e8, 'Small Brown Oval Rug', 850, 3, ('Living Room',), False),
+    (0x1e9, 'Small Green Oval Rug', 750, 3, ('Living Room',), False),
+    (0x271, 'Pink Couch', 1780, 4, ('Living Room',), False),
+    (0x276, 'Pink Sofa', 1150, 4, ('Living Room',), False),
+    (0x27b, 'Pink Bookshelf', 1295, 4, ('Living Room', 'Dining Room', 'Bedroom'), False),
+    (0x280, 'Pink Coffee Table', 525, 4, ('Living Room',), False),
+    (0x28e, 'Pink Credenza', 2550, 4, ('Living Room', 'Dining Room'), False),
+    (0x29d, 'Modern Pink Rug', 1050, 4, ('Living Room', 'Dining Room', 'Bedroom'), False),
+    (0x1f8, 'Large Birch Book Case', 2450, 4, ('Living Room',), False),
+    (0x253, 'Square Birch Bookshelf', 1250, 4, ('Living Room',), False),
+    (0x219, 'Wall Painting', 450, 4, ('Living Room',), False),
+    (0x21a, 'Wall Painting', 350, 4, ('Living Room',), False),
+    (0x21b, 'Wall Painting', 4150, 4, ('Living Room',), False),
+    (0x21c, 'Wall Painting', 13150, 4, ('Living Room',), False),
+    (0x26f, 'Green Couch', 1950, 5, ('Living Room',), False),
+    (0x274, 'Green Sofa', 1250, 5, ('Living Room',), False),
+    (0x279, 'Green Bookshelf', 1425, 5, ('Living Room', 'Dining Room', 'Bedroom'), False),
+    (0x27e, 'Green Coffee Table', 580, 5, ('Living Room',), False),
+    (0x28c, 'Green Credenza', 2795, 5, ('Living Room', 'Dining Room'), False),
+    (0x29b, 'Modern Green Rug', 1175, 5, ('Living Room', 'Dining Room', 'Bedroom'), False),
+    (0x211, 'Antique Oriental Rug', 14500, 5, ('Living Room',), False),
+    (0x212, 'Quality Oriental Rug', 8800, 5, ('Living Room',), False),
+    (0x213, 'Intricate Oriental Rug', 7600, 5, ('Living Room',), False),
+    (0x214, 'Modern Oriental Rug', 4500, 5, ('Living Room',), False),
+    (0x26e, 'Blue Couch', 2210, 7, ('Living Room',), False),
+    (0x273, 'Blue Sofa', 1415, 7, ('Living Room',), False),
+    (0x278, 'Blue Bookshelf', 1595, 7, ('Living Room', 'Dining Room', 'Bedroom'), False),
+    (0x27d, 'Blue Coffee Table', 650, 7, ('Living Room',), False),
+    (0x28b, 'Blue Credenza', 3145, 7, ('Living Room', 'Dining Room'), False),
+    (0x29a, 'Modern Blue Rug', 1315, 7, ('Living Room', 'Dining Room', 'Bedroom'), False),
+    (0x261, 'Elegant Flowery Sofa', 1825, 7, ('Living Room',), False),
+    (0x262, 'Elegant Striped Sofa', 1745, 7, ('Living Room',), False),
+    (0x263, 'A Modern White Couch', 2695, 7, ('Living Room',), False),
+    (0x260, 'Dramatic Gothic Couch', 3395, 7, ('Living Room',), False),
+    (0x25d, 'Modern White Coffee Table', 795, 7, ('Living Room',), False),
+    (0x24b, 'Gothic Coffee Table', 2150, 7, ('Living Room',), False),
+    (0x25c, 'Modern White Bookshelf', 1950, 7, ('Living Room',), False),
+    (0x24a, 'Black Bookshelf', 3125, 7, ('Living Room',), False),
+    (0x258, 'Animal Rug', 1250, 7, ('Living Room',), False),
+    (0x259, 'Modern White Rug', 2750, 7, ('Living Room',), False),
+    (0x25a, 'Modern Dark Rug', 3125, 7, ('Living Room',), False),
+    (0x25b, 'Modern Red Rug', 1610, 7, ('Living Room',), False),
+    (0x22d, 'Large Modern Painting', 3875, 7, ('Living Room',), False),
+    (0x22e, 'Large Modern Painting', 2450, 7, ('Living Room',), False),
+    (0x22f, 'Large Modern Painting', 2975, 7, ('Living Room',), False),
+    (0x230, 'Large Modern Painting', 2795, 7, ('Living Room',), False),
+    (0x231, 'Huge Landscape Painting', 12995, 7, ('Living Room',), False),
+    (0x272, 'Red Couch', 2450, 9, ('Living Room',), False),
+    (0x277, 'Red Sofa', 1575, 9, ('Living Room',), False),
+    (0x27c, 'Red Bookshelf', 1775, 9, ('Living Room', 'Dining Room', 'Bedroom'), False),
+    (0x281, 'Red Coffee Table', 725, 9, ('Living Room',), False),
+    (0x28f, 'Red Credenza', 3495, 9, ('Living Room', 'Dining Room'), False),
+    (0x2f6, 'Plaid Loveseat', 725, 12, ('Living Room',), True),
+    (0x2f7, 'Plaid Couch', 950, 13, ('Living Room',), True),
+    (0x2fa, 'Striped Loveseat', 725, 13, ('Living Room',), True),
+    (0x2f8, 'Flowered Couch', 1250, 14, ('Living Room',), True),
+    (0x2f9, 'Striped Couch', 1050, 14, ('Living Room',), True),
+    (0x2fb, 'Flowered Loveseat', 825, 14, ('Living Room',), True),
+    (0x2f0, 'Vibrant Brown Couch', 700, 17, ('Living Room',), True),
+    (0x2f1, 'Vibrant Gold Couch', 1800, 17, ('Living Room',), True),
+    (0x2f4, 'Vibrant Violet Couch', 900, 17, ('Living Room',), True),
+    (0x2f5, 'Vibrant Lime Couch', 750, 17, ('Living Room',), True),
+    (0x2ef, 'Vibrant Purple Couch', 750, 19, ('Living Room',), True),
+    (0x2f2, 'Vibrant Aqua Couch', 750, 19, ('Living Room',), True),
+    (0x2f3, 'Vibrant Pink Couch', 750, 19, ('Living Room',), True),
+    (0x321, 'Invisible Kids Table with Chairs', 950, 0, ('Dining Room',), True),
+    (0x1d9, 'Second Hand Round Table', 150, 3, ('Dining Room',), False),
+    (0x1dc, 'Second Hand Round Table', 275, 3, ('Dining Room',), False),
+    (0x1d7, 'White Rectangular Table', 550, 3, ('Dining Room',), False),
+    (0x1d8, 'White Circular Table', 625, 3, ('Dining Room',), False),
+    (0x1ce, "Children's Chairs", 950, 3, ('Dining Room',), False),
+    (0x1da, 'White Rectangular Table', 975, 4, ('Dining Room',), False),
+    (0x1db, 'White Circular Table', 1050, 4, ('Dining Room',), False),
+    (0x1c6, 'Large Credenza', 2200, 4, ('Dining Room',), False),
+    (0x1ff, 'Cocktail Credenza', 4290, 5, ('Dining Room',), False),
+    (0x25e, 'Modern White Credenza', 3850, 7, ('Dining Room',), False),
+    (0x24d, 'Gothic Credenza', 5195, 7, ('Dining Room',), False),
+    (0x1b1, 'Standard Adult Bed', 850, 0, ('Bedroom',), False),
+    (0x1b6, 'Standard Adult Bed', 850, 0, ('Bedroom',), False),
+    (0x1b7, 'Standard Adult Bed', 850, 0, ('Bedroom',), False),
+    (0x1b8, 'Standard Adult Bed', 850, 0, ('Bedroom',), False),
+    (0x1b9, 'Standard Adult Bed', 850, 0, ('Bedroom',), False),
+    (0x1ba, 'Standard Adult Bed', 850, 0, ('Bedroom',), False),
+    (0x1bb, 'Standard Adult Bed', 1350, 0, ('Bedroom',), False),
+    (0x1b4, "Pink Children's Bed", 550, 0, ('Bedroom',), False),
+    (0x1b5, "Blue Children's Bed", 550, 0, ('Bedroom',), False),
+    (0x1ca, 'Standard Dresser', 250, 0, ('Bedroom',), False),
+    (0x20d, 'Landscape Poster', 35, 0, ('Bedroom',), False),
+    (0x20e, 'Farm Poster', 35, 0, ('Bedroom',), False),
+    (0x20f, 'Rose Poster', 55, 0, ('Bedroom',), False),
+    (0x210, 'Art Poster', 75, 0, ('Bedroom',), False),
+    (0x314, 'Invisible Adult Double Bed', 850, 0, ('Bedroom',), True),
+    (0x327, 'Invisible Heart-Shaped Bed', 2750, 0, ('Bedroom',), True),
+    (0x315, 'Invisible Child Single Bed', 550, 0, ('Bedroom',), True),
+    (0x316, 'Invisible Double Bed', 3875, 0, ('Bedroom',), True),
+    (0x317, 'Invisible Single Bed', 2195, 0, ('Bedroom',), True),
+    (0x320, 'Invisible Dresser', 250, 0, ('Bedroom',), True),
+    (0x225, 'Hearts Poster', 55, 2, ('Bedroom',), False),
+    (0x252, 'Heart Shaped Bed', 2750, 3, ('Bedroom',), False),
+    (0x292, 'Orange Double Bed', 1695, 3, ('Bedroom',), False),
+    (0x297, 'Orange Dresser', 995, 3, ('Bedroom',), False),
+    (0x283, 'Small Orange Bookshelf', 425, 3, ('Bedroom',), False),
+    (0x286, 'Narrow Orange Dresser', 675, 3, ('Bedroom',), False),
+    (0x289, 'Orange Nightstand', 520, 3, ('Bedroom',), False),
+    (0x2a1, 'Large Orange Nightstand', 375, 3, ('Bedroom',), False),
+    (0x2a6, 'Orange Single Bed', 955, 3, ('Bedroom',), False),
+    (0x1b2, 'Boat Shaped Bed', 750, 4, ('Bedroom',), False),
+    (0x1b3, 'Car Shaped Bed', 950, 4, ('Bedroom',), False),
+    (0x293, 'Pink Double Bed', 1995, 4, ('Bedroom',), False),
+    (0x298, 'Pink Dresser', 1175, 4, ('Bedroom',), False),
+    (0x284, 'Small Pink Bookshelf', 495, 4, ('Bedroom',), False),
+    (0x287, 'Narrow Pink Dresser', 795, 4, ('Bedroom',), False),
+    (0x28a, 'Pink Nightstand', 600, 4, ('Bedroom',), False),
+    (0x2a2, 'Large Pink Nightstand', 445, 4, ('Bedroom',), False),
+    (0x2a7, 'Pink Single Bed', 1125, 4, ('Bedroom',), False),
+    (0x291, 'Green Double Bed', 2175, 5, ('Bedroom',), False),
+    (0x296, 'Green Dresser', 1295, 5, ('Bedroom',), False),
+    (0x2a0, 'Large Green Nightstand', 485, 5, ('Bedroom',), False),
+    (0x2a5, 'Green Single Bed', 1225, 5, ('Bedroom',), False),
+    (0x254, 'Modern Double Bed in Blue', 2650, 7, ('Bedroom',), False),
+    (0x255, 'Modern Double Bed in Red', 2650, 7, ('Bedroom',), False),
+    (0x267, 'Modern Double Bed in Blue', 2995, 7, ('Bedroom',), False),
+    (0x268, 'Modern Double Bed in Red', 2995, 7, ('Bedroom',), False),
+    (0x26b, 'Fancy Single Bed, Airplanes', 1695, 7, ('Bedroom',), False),
+    (0x26c, 'Fancy Single Bed, Princess', 1695, 7, ('Bedroom',), False),
+    (0x24e, 'Gothic Double Bed in Blue', 3850, 7, ('Bedroom',), False),
+    (0x24f, 'Gothic Double Bed in Red', 3850, 7, ('Bedroom',), False),
+    (0x264, 'Gothic Double Bed in Blue', 3875, 7, ('Bedroom',), False),
+    (0x265, 'Gothic Double Bed in Green', 3875, 7, ('Bedroom',), False),
+    (0x266, 'Gothic Double Bed in Red', 3875, 7, ('Bedroom',), False),
+    (0x250, 'Gothic Single Bed in Blue', 2195, 7, ('Bedroom',), False),
+    (0x251, 'Gothic Single Bed in Red', 2195, 7, ('Bedroom',), False),
+    (0x269, 'Gothic Single Bed in Blue', 2150, 7, ('Bedroom',), False),
+    (0x26a, 'Gothic Single Bed in Red', 2150, 7, ('Bedroom',), False),
+    (0x25f, 'Modern White Nightstand', 495, 7, ('Bedroom',), False),
+    (0x24c, 'Gothic Nightstand', 995, 7, ('Bedroom',), False),
+    (0x290, 'Blue Double Bed', 2450, 7, ('Bedroom',), False),
+    (0x295, 'Blue Dresser', 1465, 7, ('Bedroom',), False),
+    (0x282, 'Small Blue Bookshelf', 615, 7, ('Bedroom',), False),
+    (0x285, 'Narrow Blue Dresser', 980, 7, ('Bedroom',), False),
+    (0x288, 'Blue Nightstand', 750, 7, ('Bedroom',), False),
+    (0x29f, 'Large Blue Nightstand', 550, 7, ('Bedroom',), False),
+    (0x2a4, 'Blue Single Bed', 1395, 7, ('Bedroom',), False),
+    (0x294, 'Red Double Bed', 2725, 9, ('Bedroom',), False),
+    (0x299, 'Red Dresser', 1625, 9, ('Bedroom',), False),
+    (0x2a3, 'Large Red Nightstand', 595, 9, ('Bedroom',), False),
+    (0x2a8, 'Single Red Bed', 1545, 9, ('Bedroom',), False),
+    (0x2eb, 'Last Day of Work Poster', 35, 25, ('Bedroom',), True),
+    (0x2ec, 'Casino Game Posters and Wall Calendar', 35, 25, ('Bedroom',), True),
+    (0x2ed, 'Virtual Families and Tycoon Games Posters', 55, 25, ('Bedroom',), True),
+    (0x2ee, 'Virtual Town and Cook Off Posters', 75, 25, ('Bedroom',), True),
+    (0x30a, 'Invisible Kiddie Pool', 250, 0, ('Outdoors',), True),
+    (0x30b, 'Invisible Full-Size Pool', 14150, 0, ('Outdoors',), True),
+    (0x328, 'Invisible Picnic Table', 450, 0, ('Outdoors',), True),
+    (0x329, 'Invisible Patio Table', 850, 0, ('Outdoors',), True),
+    (0x32a, 'Invisible Yoga Equipment', 150, 0, ('Outdoors',), True),
+    (0x32b, 'Invisible Lounger', 250, 0, ('Outdoors',), True),
+    (0x32f, 'Invisible Spa Lounger', 250, 0, ('Outdoors',), True),
+    (0x331, 'Invisible Ping-Pong Table', 12000, 0, ('Outdoors',), True),
+    (0x30c, 'Invisible Hammock', 450, 0, ('Outdoors',), True),
+    (0x31a, 'Invisible Sandbox', 695, 0, ('Outdoors',), True),
+    (0x31b, 'Invisible Playhouse', 18000, 0, ('Outdoors',), True),
+    (0x31c, 'Invisible Train Table', 950, 0, ('Outdoors',), True),
+    (0x323, 'Invisible Trampoline', 2695, 0, ('Outdoors',), True),
+    (0x1e0, 'Bubble Maker', 75, 2, ('Outdoors', 'Toys'), False),
+    (0x1e2, 'Toy Pirate Ship', 150, 2, ('Outdoors', 'Toys'), False),
+    (0x1e1, 'Hammock', 450, 3, ('Outdoors',), False),
+    (0x2e2, 'Black Floor Lamp', 175, 3, ('Outdoors',), True),
+    (0x2e3, 'Chrome Floor Lamp', 175, 3, ('Outdoors',), True),
+    (0x235, 'Sandbox', 695, 4, ('Outdoors',), False),
+    (0x1e4, 'Kiddie Pool', 250, 4, ('Outdoors', 'Toys'), False),
+    (0x1e5, 'Full Size Pool', 14150, 4, ('Outdoors',), False),
+    (0x2de, 'Blue Lounge Chair', 250, 4, ('Outdoors',), True),
+    (0x2df, 'Brown Lounge Chair', 250, 4, ('Outdoors',), True),
+    (0x2e0, 'Green Lounge Chair', 250, 4, ('Outdoors',), True),
+    (0x2e1, 'Red Lounge Chair', 250, 4, ('Outdoors',), True),
+    (0x2e4, 'Brick Patio', 4500, 4, ('Outdoors',), True),
+    (0x2e5, 'Cobblestone Patio', 5500, 4, ('Outdoors',), True),
+    (0x2e6, 'Patio Table', 850, 4, ('Outdoors',), True),
+    (0x2e7, 'Patio Umbrella', 125, 4, ('Outdoors',), True),
+    (0x2e8, 'Picnic Table', 450, 4, ('Outdoors',), True),
+    (0x32e, 'Ping-Pong Table', 12000, 4, ('Outdoors',), True),
+    (0x1e3, 'Play Structure', 18000, 5, ('Outdoors', 'Toys'), False),
+    (0x23a, 'Trampoline', 1695, 6, ('Outdoors',), False),
+    (0x330, 'Spa Lounger', 250, 12, ('Outdoors',), True),
+    (0x1d0, "Children's Night Light", 20, 0, ('Accessories',), False),
+    (0x1eb, 'Blue Designer Soap', 45, 0, ('Accessories',), False),
+    (0x1ee, 'Dental Care Set', 10, 0, ('Accessories',), False),
+    (0x1f0, 'Blue Towel Set', 150, 0, ('Accessories',), False),
+    (0x202, 'Fish Bowl', 150, 0, ('Accessories',), False),
+    (0x206, 'Acoustic Guitar', 1700, 0, ('Accessories',), False),
+    (0x21d, 'Door Mat', 150, 0, ('Accessories',), False),
+    (0x21e, 'Welcome Mat', 250, 0, ('Accessories',), False),
+    (0x26d, 'Food and Water Bowls', 35, 0, ('Accessories',), False),
+    (0x318, 'Invisible Mantle Fireplace', 9150, 0, ('Accessories',), True),
+    (0x319, 'Invisible MP3 Player', 350, 0, ('Accessories',), True),
+    (0x31d, 'Invisible Bathroom Scale', 130, 0, ('Accessories',), True),
+    (0x31e, 'Invisible Drying Rack', 80, 0, ('Accessories',), True),
+    (0x31f, 'Invisible Grandfather Clock', 8500, 0, ('Accessories',), True),
+    (0x322, 'Invisible Ironing Board', 250, 0, ('Accessories',), True),
+    (0x1bc, 'Cleaning Supplies', 75, 2, ('Accessories',), False),
+    (0x1ec, 'Brown Designer Soap', 45, 2, ('Accessories',), False),
+    (0x1ed, 'Pink Designer Soap', 55, 2, ('Accessories',), False),
+    (0x1ef, 'Black Towel Set', 250, 2, ('Accessories',), False),
+    (0x1f1, 'Green Towel Set', 150, 2, ('Accessories',), False),
+    (0x1f5, 'Fish Aquarium', 850, 2, ('Accessories',), False),
+    (0x204, 'Foosball Table', 1250, 2, ('Accessories',), False),
+    (0x218, 'Wall Clock', 250, 2, ('Accessories',), False),
+    (0x220, 'Yoga Equipment', 150, 2, ('Accessories',), False),
+    (0x2ae, 'Lighted Christmas Tree', 350, 2, ('Accessories',), True),
+    (0x2bb, 'Gold Ornament', 6, 2, ('Accessories',), True),
+    (0x2bc, 'Elegant Ornament', 6, 2, ('Accessories',), True),
+    (0x2bd, 'Penguin Decoration', 50, 2, ('Accessories',), True),
+    (0x2c0, 'Polar Bear Decoration', 75, 2, ('Accessories',), True),
+    (0x2c2, 'Reindeer Decoration', 75, 2, ('Accessories',), True),
+    (0x2c3, 'Santa Decoration', 75, 2, ('Accessories',), True),
+    (0x2c5, 'Snowman', 75, 2, ('Accessories',), True),
+    (0x2c8, 'Holiday Garland', 50, 2, ('Accessories',), True),
+    (0x2c9, 'Lighted Garland', 50, 2, ('Accessories',), True),
+    (0x2d3, 'Holiday Welcome Mat', 150, 2, ('Accessories',), True),
+    (0x2d4, 'Lighted Wreath', 125, 2, ('Accessories',), True),
+    (0x2d5, 'Holiday Wreath', 100, 2, ('Accessories',), True),
+    (0x1d1, 'Sewing Kit', 30, 3, ('Accessories',), False),
+    (0x208, 'Pachinko Machine', 2200, 3, ('Accessories',), False),
+    (0x20a, 'Upright Piano', 11100, 3, ('Accessories',), False),
+    (0x215, 'Slot Machine', 2250, 3, ('Accessories',), False),
+    (0x216, 'Telescope', 950, 3, ('Accessories',), False),
+    (0x20b, 'Pinball Machine', 3550, 4, ('Accessories',), False),
+    (0x217, 'Treadmill', 3150, 4, ('Accessories',), False),
+    (0x32c, 'Exercise Bike', 3150, 4, ('Accessories',), True),
+    (0x32d, 'Home Gym System', 3150, 4, ('Accessories',), True),
+    (0x201, 'Hearth', 9150, 5, ('Accessories',), False),
+    (0x205, 'Grandfather Clock', 8500, 5, ('Accessories',), False),
+    (0x209, 'Grand Piano', 19590, 5, ('Accessories',), False),
+    (0x20c, 'Pool Table', 12000, 5, ('Accessories',), False),
+    (0x21f, 'Wood Pile', 175, 5, ('Accessories',), False),
+    (0x1f9, 'Carousel', 450, 5, ('Accessories', 'Toys'), False),
+    (0x256, 'Black Framed Modern Mirror', 425, 7, ('Accessories',), False),
+    (0x257, 'Silver Framed Modern Mirror', 425, 7, ('Accessories',), False),
+    (0x2b3, 'Lumwinkle', 50, 10, ('Accessories',), True),
+    (0x2cd, 'Green Beans', 5, 10, ('Accessories',), True),
+    (0x2d8, 'Brown Towel Set', 150, 10, ('Accessories',), True),
+    (0x2aa, 'Holiday Candles', 30, 12, ('Accessories',), True),
+    (0x2af, 'Dreidel', 15, 12, ('Accessories',), True),
+    (0x2cc, 'Gravy', 5, 12, ('Accessories',), True),
+    (0x2ca, 'Cranberry Sauce', 5, 13, ('Accessories',), True),
+    (0x2ce, 'Holiday Ham', 35, 13, ('Accessories',), True),
+    (0x2cf, 'Mashed Potatoes', 5, 13, ('Accessories',), True),
+    (0x2ad, 'Christmas Tree', 250, 15, ('Accessories',), True),
+    (0x2b8, 'Menorah', 25, 15, ('Accessories',), True),
+    (0x2cb, 'Dressing', 5, 15, ('Accessories',), True),
+    (0x2ac, 'Christmas Cookie', 5, 17, ('Accessories',), True),
+    (0x2b2, 'Pilwinkle', 50, 17, ('Accessories',), True),
+    (0x2db, 'Birthday Banner', 15, 17, ('Accessories',), True),
+    (0x2b4, 'Bimpni', 50, 18, ('Accessories',), True),
+    (0x2ba, 'Striped Ornament', 5, 18, ('Accessories',), True),
+    (0x2d1, 'Holiday Souffle', 10, 18, ('Accessories',), True),
+    (0x2b1, 'Nacklebell', 50, 20, ('Accessories',), True),
+    (0x2c4, 'Santa Wall Decoration', 35, 20, ('Accessories',), True),
+    (0x2d9, 'Pink Towel Set', 150, 20, ('Accessories',), True),
+    (0x2b9, 'Red Ornament', 5, 22, ('Accessories',), True),
+    (0x2bf, 'Poinsettia', 20, 22, ('Accessories',), True),
+    (0x2c1, 'Red Bow', 10, 22, ('Accessories',), True),
+    (0x2be, 'A Plate of Cookies', 10, 23, ('Accessories',), True),
+    (0x2d7, 'Green Designer Soap', 45, 23, ('Accessories',), True),
+    (0x2dc, 'Birthday Cake', 25, 23, ('Accessories',), True),
+    (0x2b6, 'Large Angel', 25, 25, ('Accessories',), True),
+    (0x2c7, 'Small Stocking', 10, 25, ('Accessories',), True),
+    (0x2dd, 'Birthday Presents', 50, 25, ('Accessories',), True),
+    (0x2d0, 'Pumpkin Pie', 10, 27, ('Accessories',), True),
+    (0x2d2, 'Holiday Turkey', 25, 27, ('Accessories',), True),
+    (0x2da, 'Birthday Balloons!', 10, 27, ('Accessories',), True),
+    (0x2ab, 'Candy Canes', 5, 28, ('Accessories',), True),
+    (0x2b0, 'Glass of Eggnog', 5, 28, ('Accessories',), True),
+    (0x2b7, 'Large Star', 15, 28, ('Accessories',), True),
+    (0x2b5, 'Minnimalkin', 50, 30, ('Accessories',), True),
+    (0x2c6, 'Large Stocking', 15, 30, ('Accessories',), True),
+    (0x2d6, 'Black Designer Soap', 45, 30, ('Accessories',), True),
+    (0x2e9, 'Virtual Villagers Painting', 2795, 30, ('Accessories',), True),
+    (0x2ea, 'Painting of Isola', 12995, 30, ('Accessories',), True),
+    (0x1c8, 'Hippo Doll', 25, 0, ('Toys',), False),
+    (0x1c9, 'Pink Doll', 30, 0, ('Toys',), False),
+    (0x1dd, 'Teddy Bear', 65, 0, ('Toys',), False),
+    (0x249, 'Plush Elephant', 55, 0, ('Toys',), False),
+    (0x1f6, 'Balloons!', 150, 0, ('Toys',), False),
+    (0x228, 'Plush Giraffe', 55, 2, ('Toys',), False),
+    (0x229, 'Plush Horse', 55, 2, ('Toys',), False),
+    (0x232, 'Plush Monkey', 55, 2, ('Toys',), False),
+    (0x234, 'Plush Pig', 55, 2, ('Toys',), False),
+    (0x1cc, "Artist's Easel", 75, 2, ('Toys',), False),
+    (0x227, 'Toy Drum', 35, 2, ('Toys',), False),
+    (0x1de, 'Toy Assortment', 220, 3, ('Toys',), False),
+    (0x22a, 'Giant Plush Bear', 450, 4, ('Toys',), False),
+    (0x22b, 'Play Car', 475, 5, ('Toys',), False),
+    (0x236, 'Play Kitchen', 750, 5, ('Toys',), False),
+    (0x239, 'Toy Train Table', 950, 7, ('Toys',), False),
+)
+# The Pets tab (category 0x15): (id, name, price, generation lock, added by the patcher).  The Food and Water Bowls
+# (0x26D) are on this tab too and are listed with the Accessories.
+PET_ITEMS = (
+    (0x23b, 'Kitten', 350, 0, False),
+    (0x243, 'Longhair Puppy', 375, 0, False),
+    (0x247, 'Hamster', 150, 0, True),
+    (0x23d, 'Tabby', 550, 2, False),
+    (0x241, 'Yellow Lab', 750, 2, False),
+    (0x242, 'Black Lab', 750, 2, False),
+    (0x23c, 'Snow White', 850, 3, False),
+    (0x240, 'Beagle', 800, 3, False),
+    (0x23f, 'Fluffy Grey Cat', 3500, 4, False),
+    (0x245, 'Turtle', 900, 4, True),
+    (0x23e, 'Hairless Cat', 11000, 5, False),
+    (0x244, 'A Chihuahua', 3250, 5, False),
+    (0x246, 'Lizard', 4650, 6, False),
+    (0x248, 'Tarantula', 15000, 7, False),
+)
+
+# ---------------------------------------------------------------------------------------------------------------------
+# Everything the store sells (2026-10-27, the owner's rule: every store item, upgrade and service gets its own entry).
+# Sources, all in the B200 core exe (sha256 5cad4050) unless the line says otherwise, the stock exe (sha256 1582d9e8) for
+# every "Unpatched game:" line:
+#   * the store tabs, prices and generation locks: CInventoryManager::GetCategoryItemCount 0x46B6D0 / GetCategoryItem
+#     0x46B210 / GetPrice 0x46B9F0 / GetLockGenerationLevel run as linked for every category of the store menu (table
+#     0x574744: Food and Medicine 0xE, Flea Market 0xF, Career 0x1, Home Renovation 0x11, Clothing and Hairstyles 0xD,
+#     Special Upgrades 0x14, Pets 0x15, On Sale 0x3, Living Room 0x4, Dining Room 0x5, Bedroom 0x6, General Appliances
+#     0x0, Outdoors 0x7, Accessories 0xA, Toys 0x8), and the same in the stock exe (0x4BB0A0 / 0x4BAA50 after Reset
+#     0x4BA8F0).  Every stock item has the same price and lock in both exes (inventory table 0x56FE70 / stock 0x553278,
+#     furniture table 0x564F48 / stock 0x54C87C, compared row by row);
+#   * buying: CScrollingStoreScene::HandleMouse -> HandlePurchaseItem 0x48BF20 -> CalcPrice 0x48ACB0, then the tray
+#     (items below 0xE1), HandleUpgrade 0x48C2E0 (0xE1..0x1AC) or the furniture storage (0x1AD..0x331);
+#   * using a tray item: theMainScene::HandleMouseDown 0x49EE90 (groceries, medicine, outfits) and
+#     theMainScene::DispatchRotatingSundry 0x49CB90 (the Flea Market goods; its case table 0x49DD64 / 0x49DCF4), whose
+#     code is the desktop object's byte for byte (coffmap placement);
+#   * the patcher's rows: its helper code in the exe (VF2GetVisibleSpecialUpgradePrice 0x4B9F60, 0x4B8B50,
+#     VF2GetOutfitStorePrice 0x4B9E80) and, for the Cheat Upgrades and room-renovation executables, the generator
+#     source that builds them (work/patch_mobile_furniture_pack.py: VF2ApplyVisibleSpecialUpgrade, CHEAT_UPGRADE_ITEMS,
+#     MOBILE_RENOVATION_STYLE_CATALOG, AI_BATHROOM2_STYLE_CATALOG).
+# ---------------------------------------------------------------------------------------------------------------------
+OPTION_CHEATS = "Cheat Upgrades"
+HEALTH_PLAN_FLEA = frozenset(("Sweet Mango", "Perfect Bananas", "Virtuoso Fragrance for Men", "Virtuosa Perfume for Women",
+                              "Multivitamins", "Antibacterial hand gel", "Sunscreen", "Towelette", "Natural Fruit Candy",
+                              "Licorice Candy", "Mint Candy", "Cinnamon Candy", "Anti-spam Software",
+                              "Kitchen Profession Magazine", "Office Profession Magazine",
+                              "Workshop Profession Magazine"))
+OPTION_RENOVATIONS = "Add mobile room renovations"
+OPTION_BATHROOM2 = "2nd Bathroom Mobile-Style Renovations (AI-Generated Art Warning)"
+STORE_OPTION_NAMES = (OPTION_CHEATS, OPTION_RENOVATIONS, OPTION_BATHROOM2)
+
+# The game's Likes text (string 0x7AF), comma-separated, the n-th name for like n (CLikeList::GetListAsString).
+LIKE_NAMES = {2: "resting", 25: "fish", 28: "swimming", 39: "cooking", 45: "quiet", 57: "strolling", 65: "shaving",
+              75: "Internet", 81: "computers", 82: "carbs", 87: "burgers", 88: "pizza", 100: "trains", 108: "music",
+              109: "art", 110: "gophers"}
+
+
+def _likes(*ids: int) -> str:
+    names = [f'"{LIKE_NAMES[i]}"' for i in ids]
+    return names[0] if len(names) == 1 else ", ".join(names[:-1]) + " or " + names[-1]
+
+
+# Owned or placed items that add mood points for a family member with a matching like (UpdateHappinessState
+# 0x4CBE90, desktop offsets 0x2ED..0x55F): item -> (mood points, the likes, the condition).
+FURNITURE_BONUS_GROUPS = {0x1AD: "4 grills", 0x1B0: "4 grills", 0x1AE: "4 grills", 0x1AF: "4 grills",
+                          0x1E4: "2 pools", 0x1E5: "2 pools"}
+FURNITURE_LIKE_BONUS = {
+    0x1F3: (15, (75,)), 0x219: (3, (110,)), 0x1F5: (15, (25,)), 0x217: (15, (57,)), 0x207: (15, (109,)),
+    0x20B: (45, (108,)), 0x208: (15, (108,)), 0x1E4: (35, (28,)), 0x1E5: (35, (28,)), 0x1E1: (15, (100, 45, 2)),
+    0x1AD: (25, (87, 88)), 0x1B0: (25, (87, 88)), 0x1AE: (25, (87, 88)), 0x1AF: (25, (87, 88)),
+}
+
+# Food and Medicine (category 0xE): id -> (name, price, effect).  Prices from GetPrice run as linked.
+GROCERY_ITEMS = (
+    (0x04, "Groceries: Grains", 20, "Grains", False), (0x05, "Groceries: Dairy", 30, "Dairy", False),
+    (0x06, "Groceries: Meats", 70, "Meats", False), (0x07, "Groceries: Fruits and Veggies", 40, "Fruits and Veggies", False),
+    (0x08, "Organics: Grains", 40, "Grains", True), (0x09, "Organics: Dairy", 70, "Dairy", True),
+    (0x0A, "Organics: Meats", 150, "Meats", True), (0x0B, "Organics: Fruits and Veggies", 90, "Fruits and Veggies", True),
+)
+MEDICINE_ITEMS = (
+    ("Throat Lozenges", 25, "a sore throat: cured, with 3 hunger off and 10 mood points as part of the cure; without a "
+                            "sore throat nothing is cured and the dose is used up"),
+    ("Peptic Syrup", 35, "a stomach upset: cured, with 25 on the toilet need and 10 hunger off as part of the cure; "
+                         "without one, 70 on the toilet need and 10 energy off at once, and the dose is used up"),
+    ("Analgesic/Anti-inflammatory", 25, "a headache: cured; without one nothing is cured and the dose is used up"),
+    ("Antitussive Syrup", 65, "a cough: cured, with 15 energy off as part of the cure; without one, 20 energy off at "
+                              "once and the dose is used up"),
+    ("Cortisone Cream", 40, "a skin rash: cured; without one nothing is cured and the dose is used up"),
+    ("Antihistamine", 50, "a runny nose: cured, with 5 energy as part of the cure; without one nothing is cured "
+                          "(the planned 5 energy is dropped) and the dose is used up"),
+    ("Penicillin", 145, "the mild infection ends (whether or not there was one); energy is set to 15, the toilet need "
+                        "rises by 30 and, with more than 10 health, 3 health is lost"),
+    ("Vancomycin", 275, "both infections end; energy is set to 5, the toilet need is set to 80 and, with more than 12 "
+                        "health, 10 health is lost"),
+    ("Baby Boost", 2500, "only for a family member with a career (anyone else: nothing, and it stays in the tray): "
+                         "fertility rises by a quarter of what it lacks of 102 (rounded towards zero), every time it is "
+                         "used"),
+    ("Doctor Consultation", 495, "opens the Diagnosis window for that family member, and is used up"),
+)
+
+# The Flea Market's 36 goods (gGoodiesList 0x56F5BC, in the store's order): (name, price, effect, label).
+FLEA_ITEMS = (
+    ("Multivitamins", 15, "health +3 to +7 and 35 mood points as part of the action, happiness +1 to +3 at once", C),
+    ("Chamomile Drink", 10, "energy -10 to -29 at once, then one of two actions (15% / 85%)", C),
+    ("Energy Drink", 25, "hunger -4 and energy +40 to +89 at once, 5 jumps, then one of two actions (15% / 85%)", C),
+    ("Mega Chamomile Extract", 10, "hunger -7 at once and energy -30 to -59 as part of the action, then one of two "
+                                   "actions (75% / 25%)", C),
+    ("Delicious Candy", 7, "hunger -2 and happiness +2 to +3 at once, then 3 rewards for what the family member was "
+                           "doing (see Rewards and scolding)", C),
+    ("Salty Candy", 10, "3 scoldings for what the family member was doing (see Rewards and scolding); no need changes", C),
+    ("Blood Orange", 10, "hunger -3, health +2 to +6, happiness +2 to +4 and energy +2 to +6 at once, then 3 rewards", C),
+    ("Sweet Mango", 10, "health +2 to +6, happiness +2 to +6, energy +2 to +6 and hunger -3 at once, then 3 rewards", C),
+    ("Perfect Bananas", 10, "health +2 to +6, hunger -3, happiness +2 to +6 and energy +2 to +6 at once, then 3 "
+                            "rewards", C),
+    ("Natural Fruit Candy", 10, "hunger -2 and happiness +2 to +4 at once, then 3 rewards", C),
+    ("Licorice Candy", 10, "hunger -2 and happiness +2 to +4 at once, then 3 rewards", C),
+    ("Mint Candy", 10, "hunger -2 and happiness +2 to +4 at once, then 3 rewards", C),
+    ("Cinnamon Candy", 10, "hunger -2 and happiness +2 to +4 at once, then 3 rewards", C),
+    ("Imported Candy", 25, "one of five, 20% each: happiness +5 to +12; happiness -5 with the toilet need set to 90; "
+                           "happiness -5 and the family member runs away (the \"Running away\" action); a skin rash; "
+                           "or health +20 with every symptom and both infections cured", C),
+    ("Virtuoso Fragrance for Men", 25, "on a family member without a career (every child born in the house): the "
+                                       "\"Running away\" action and nothing else. On anyone else, whichever sex: that "
+                                       "family member and the head of the family of the other sex (the matriarch for "
+                                       "a man, the patriarch for a woman) both start the same action, and the wearer "
+                                       "gets 35 mood points and happiness +1 to +3", C),
+    ("Virtuosa Perfume for Women", 25, "the same code as the Virtuoso Fragrance for Men, with no check of the wearer's "
+                                       "sex", C),
+    ("Antibacterial hand gel", 12, "health +10 and 35 mood points as part of the action, happiness +1 to +3 at once", C),
+    ("Sunscreen", 12, "25 mood points as part of the action, happiness +1 to +3 at once, then an action", C),
+    ("Towelette", 10, "dirtiness -15 as part of the action, happiness +1 to +3 at once, then dancing and 3 jumps", C),
+    ("Kitchen Profession Magazine", 300, "for a family member who works in the kitchen: 10 rounds of career progress "
+                                         "(each one piece of successful work, unpaid; see Career upgrades), so it can "
+                                         "bring a promotion, and happiness +8 to +15. Anyone else: the \"Confused\" "
+                                         "action, and the magazine is used up", C),
+    ("Office Profession Magazine", 300, "the same, for a family member who works in the office", C),
+    ("Workshop Profession Magazine", 300, "the same, for a family member who works in the workshop", C),
+    ("Fog In a Bottle", 50, "the weather becomes Foggy (see Bottled weather)", C),
+    ("Snow in a Bottle", 50, "the weather becomes Snowing (see Bottled weather)", C),
+    ("Sleeping Pills", 10, "the same code as the Chamomile Drink: energy -10 to -29 at once, then one of two actions "
+                           "(15% / 85%)", C),
+    ("Dirty Candy", 25, "one of four, 25% each: energy +2 to +6 with 2 jumps and a wave; energy -30 to -59 as part of "
+                        "the action; the family member's career progress is multiplied by 4 (nothing without a "
+                        "career; 3,000 progress is a promotion at the next piece of work); or a stomach upset", C),
+    ("Weed Bomb", 75, "dropped outdoors, on the ground the code checks for: every weed in the yard is removed. Anywhere else: \"You can't use this "
+                      "here!\" and it stays in the tray", C),
+    ("Turtle Adventures", 20, "a movie: everyone at home starts the same action; with a TV next to the family member it "
+                              "is dropped on it is used up, otherwise it goes back to the tray", C),
+    ("Little Man Under the Sea", 20, "a movie, the same as Turtle Adventures", C),
+    ("Pluto, the Loneliest Planet", 20, "a movie, the same as Turtle Adventures", C),
+    ("Anti-spam Software", 125, "dropped on the computer: installed for good, so the 5 spam e-mails (see Random Events) "
+                                "never come again, and everyone at home starts the same action. Anywhere else: "
+                                "\"You can't use this here!\" and it stays in the tray", C),
+    ("Bottled Tropical Rain", 50, "the weather becomes Stormy, rain with lightning (see Bottled weather)", C),
+    ("Bottled Tropical Sunshine", 50, "the weather becomes Normal, type 0 (see Bottled weather)", C),
+    ("Encyclopedia", 75, "happiness +1 to +3; one like, picked from the first 100 of the 121, is added if it is not "
+                         "already a like and one of the 3 like places is free, and that like is taken off the "
+                         "dislikes either way", C),
+    ("Magic Barker and the Loose Screw", 15, "a children's book. Dropped on a family member 14 or older, that member "
+                                             "reads it; dropped on a child (under 14), the game picks the reader at "
+                                             "random among those 55 or older and those 14 or older with a career who "
+                                             "pass one more check of their record (and nobody reads if none "
+                                             "qualifies). The reader gets happiness +4 to +5; every child at home "
+                                             "gets happiness +5 and starts the same action", U),
+    ("Rockhound Certificate", 1500, "kept for good once bought: the collectible spawn areas that need it become "
+                                    "active (its description: the fossils)", C),
+)
+
+# Special Upgrades (category 0x14), stock rows: (name, price, effect, label)
+SPECIAL_ITEMS = (
+    ("Roll the Dice (Random Event)", 2000, "a Random Event at once, picked evenly among those that can happen", C),
+    ("Time Warp", 2000, "the family lives 10 hours 10 minutes of real time at once (36,600 seconds, 61 age units, "
+                        "with their meals, health, salary and birthdays); the money it brings is capped at $750; a "
+                        "paused game stays paused", C),
+    ("Adoption Services", 4000, "a 3-year-old (60 age units) of either sex, equally likely, joins the house and is "
+                                "added to the family tree as a child", C),
+    ("On Call Maid Service", 1000, "kept for good: the Maid comes every hour in the day by your PC's clock (the first "
+                                   "visit 1 hour of game time after buying) and no socks, candy wrappers or dirt "
+                                   "smudges appear (see Messes and malfunctions)", C),
+    ("On Call Gardening Service", 1000, "kept for good: the Gardener comes every hour in the day by your PC's clock "
+                                        "(the first visit 1 hour of game time after buying) and no weeds appear", C),
+)
+
+# Services (the family member selected when the store opened, gs+0x25CC4): (name, price, effect, ages)
+SERVICE_ITEMS = (
+    ("Boarding School", 1500, "the family member leaves home, as a child going to college does (see Leaving home), "
+                              "with the message \"... has been sent away to school!\"", "children"),
+    ("Systematic Desensitization", 2500, "every dislike is removed", "children and adults"),
+    ("Psychotherapy", 1750, "happiness below 25 becomes 30 to 49; from 25 to 49 it becomes 55 to 74; from 50 it rises "
+                            "by 5 to 24 (at most 100)", "children and adults"),
+    ("Higher Learning Classes", 1000, "one new like, picked at random from the 121 likes not already liked, if one of "
+                                      "the 3 like places is free; that like is taken off the dislikes",
+     "children and adults"),
+    ("Advanced Career Training", 1100, "a promotion to the next career level, with its new salary (nothing at Master). "
+                                       "The price is $1,100 times (the career level + 1): $1,100 for a Beginner up to "
+                                       "$8,800 for a Master", "adults"),
+    ("Career Change", 1200, "a new career picked at random from the 132, at level 0 (Beginner)", "adults"),
+)
+
+# Home Renovation (category 0x11), in the store's order: (id, name, price, lock, extra)
+RENOVATION_ITEMS = (
+    (0xE3, "West Room Renovation", 650, 0, ""), (0xE4, "Bedroom 1", 1750, 0, ""),
+    (0xE1, "Deck Expansion", 1500, 2, ""), (0xEA, "Rear Deck Expansion", 475, 2, ""),
+    (0xE2, "West Auxiliary Room", 6000, 3, ""), (0xE8, "Large Central Room", 9500, 3, ""),
+    (0xE5, "Bedroom 2", 9500, 4, ""),
+    (0xE6, "2nd Bathroom", 15000, 4, " It also makes the north bathroom's shower, toilet and sink leaks possible (3 of "
+                                     "the 14 malfunction picks), and gives 10 mood points every 30 real minutes to each "
+                                     "family member whose Likes show \"shaving\"."),
+    (0xE7, "Small Central Room", 35000, 5, ""), (0xE9, "Large North Room", 45000, 5, ""),
+)
+
+# Career upgrades (category 0x1): (id, name, price, lock, workplace)
+CAREER_UPGRADE_ITEMS = (
+    (0xF0, "Designer Waste Basket", 150, 0, 2), (0xF2, "Paper Shredder", 350, 0, 2), (0xED, "Air Purifier", 950, 2, 2),
+    (0xF3, "Surround Sound System", 1450, 2, 2), (0xEF, "Phone System and Fax Machine", 3800, 3, 2),
+    (0xF1, "Printer Upgrade", 3920, 3, 2), (0xEE, "High Capacity Battery Backup", 4500, 4, 2),
+    (0xF5, "Digitizing White Board", 4800, 4, 2), (0xEB, "Pro Computer (left)", 8000, 5, 2),
+    (0xEC, "Pro Computer (right)", 8000, 5, 2), (0xF4, "Business Broadband", 8500, 5, 2),
+    (0xFC, "Spice Rack with Imported Spices", 150, 0, 1), (0xF7, "Professional Coffee Maker", 400, 0, 1),
+    (0xFD, "Fresh Herb and Spice Grinders", 825, 2, 1), (0xFE, "Waffle Iron and Panini Press", 1675, 2, 1),
+    (0xFA, "Pro Blender and Electric Mixer", 3939, 3, 1), (0xF6, "Commercial Microwave Oven", 4400, 3, 1),
+    (0xFB, "Professional Cutlery", 4800, 4, 1), (0xF8, "Espresso Machine", 6700, 4, 1),
+    (0xF9, "Pro Food Processor and Slicers", 8895, 5, 1), (0xFF, "Super Fridge", 13000, 5, 1),
+    (0x109, "Starter Tool Box", 175, 0, 3), (0x106, "Big Red Tool Box", 475, 0, 3),
+    (0x107, "Industrial Shop Vacuum", 895, 2, 3), (0x105, "Parts Box and Assorted Hardware", 1250, 2, 3),
+    (0x101, "Workshop Ventilation System", 2200, 3, 3), (0x102, "Furnace", 5200, 3, 3),
+    (0x103, "Power Tool Set", 5750, 4, 3), (0x108, "Tool Wall", 6980, 4, 3),
+    (0x100, "Industrial Drill and Drill Press", 10500, 5, 3), (0x104, "Lathe", 12500, 5, 3),
+)
+
+# The patcher's room remodels ("Add mobile room renovations"): MOBILE_RENOVATION_STYLE_CATALOG, (name, price, lock)
+MOBILE_RENOVATION_ITEMS = (
+    ("Bathroom 1 Remodel in Black", 2200, 4), ("Bathroom 1 Remodel in Blue", 1000, 0),
+    ("Bathroom 1 Remodel in Beige", 2200, 4), ("Bathroom 1 Remodel in Green", 2200, 4),
+    ("Bathroom 1 Remodel in Pink", 2200, 4), ("Kitchen Remodel in Beige", 2200, 4),
+    ("Wood Paneled Workshop Remodel", 2100, 3), ("Office Remodel in Red", 2750, 3),
+    ("Kitchen Remodel in Yellow", 3500, 3), ("Country Kitchen Remodel", 1850, 3), ("Dark Office Remodel", 2100, 3),
+    ("Office Remodel in Green", 2800, 3), ("Modern Office Remodel", 2100, 3), ("Office Remodel in Blue", 2450, 3),
+    ("Checkered Workshop Remodel", 1900, 3),
+)
+BATHROOM2_REMODEL_ITEMS = (("Bathroom 2 Remodel in Black", 2200), ("Bathroom 2 Remodel in Blue", 1000),
+                           ("Bathroom 2 Remodel in Beige", 2200), ("Bathroom 2 Remodel in Green", 2200),
+                           ("Bathroom 2 Remodel in Pink", 2200))
+
+# The Cheat Upgrades rows (CHEAT_UPGRADE_ITEMS, every one $0), each with what VF2ApplyVisibleSpecialUpgrade's case does.
+CHEAT_ITEMS = (
+    ("No Money", "money is set to $0"),
+    ("Add 100 coins", "+$100"),
+    ("Add 10 thousand coins", "+$10,000"),
+    ("Add max amount of coins", "money is set to $4,000,000,000, the most the game holds"),
+    ("No Food", "the house's food is set to 0"),
+    ("Add 100 food", "+100 food"),
+    ("Add 10 thousand food", "+10,000 food"),
+    ("Add max amount of food", "food is set to 2,147,483,647"),
+    ("Unlock everything in the store", "every generation lock in the store is lifted, saved with the game; bought "
+                                       "again ($0) the locks are back"),
+    ("Reset Achievements", "every goal and its progress is reset; kept: the lifetime generation count, the armed "
+                           "pregnancy rows below, the Health Plan and the remodels"),
+    ("Complete all Achievements", 'its description: "Completes every currently enabled achievement and awards its '
+                                  'normal coin reward."'),
+    ("Reset Ants", 'its description: "Resets the ants puzzle so it can be completed again."'),
+    ("Reset all collections", 'its description: "Removes every collected item and resets collection progress."'),
+    ("Complete all collections", 'its description: "Completes every collection and its related achievements."'),
+    ("2x Prices", "every store price is doubled after the store's own discounts; the three multiplier rows exclude "
+                  "one another, and buying the active one again ($0) switches it off"),
+    ("5x Prices", "every store price is multiplied by 5, as above"),
+    ("100x Prices", "every store price is multiplied by 100, as above"),
+    ("Reset Price Multiplier", "the multiplier in force is switched off"),
+    ("Trigger all house malfunctions", "the router goes offline and the 6 other breakdowns of the malfunction pick "
+                                       "happen at once; the dryer lint fire too when a dryer is placed, and "
+                                       "the north bathroom's 3 leaks when the 2nd Bathroom is owned; the ants are not "
+                                       "touched"),
+    ("Fix all house malfunctions", "those 11 malfunctions are all cleared, so the router is back online; the ants "
+                                   "are not touched"),
+    ("Fill available house slots with trash", 'its description: "Spawns 15: 5 dirt smudges, 5 socks, 5 wrappers. Will '
+                                              'not work if Maid is active."'),
+    ("Clean House", 'its description: "Removes the same four indoor mess categories as the stock Housekeeping '
+                    'Services event. Yard weeds and the laundry-room sock pile are preserved."'),
+    ("Fill available yard slots with weeds", 'its description: "Spawns 15 weeds, all 4 types (4/4/4/3, rotates). Will '
+                                             'not work if Gardener is active."'),
+    ("Clean Garden", "every weed in the yard is removed, as the Weed Bomb does"),
+    ("Max out sock pile", 'its description: "Sets only the laundry-room sock pile to 1,000,000 socks."'),
+    ("No sock pile", 'its description: "Clears the laundry-room sock pile without awarding sock-laundering '
+                     'progress."'),
+    ("Force Marriage Email", "the dating e-mail is sent now, with the game's own rules for the date (nothing while it "
+                             "cannot be sent)"),
+    ("Enable Same-Sex Marriage", "a switch, saved with the game: dates of the same sex become possible; bought again it "
+                                 "is off"),
+    ("Divorce Spouse", 'its description: "WARNING: Permanently removes spouse from the Family Tree and House!"'),
+    ("Allow Reroll of Marriage Candidates", "a switch, saved with the game: No on a date brings a new date, until "
+                                            "Yes; bought again it is off"),
+    ("Force Successful Pregnancy", "a one-shot, saved with the game: the next try for a baby succeeds; it stays armed "
+                                   "until a birth; bought again it is disarmed"),
+    ("Next Babies Male", "a one-shot: every baby of the next birth is a boy; it replaces Next Babies Female and is "
+                         "cleared by the birth"),
+    ("Next Babies Female", "a one-shot: every baby of the next birth is a girl; it replaces Next Babies Male"),
+    ("Next Pregnancy Singleton", "a one-shot: the next birth is one baby; it replaces the twins and triplets rows"),
+    ("Next Pregnancy Twins", "a one-shot: the next birth is twins when 2 child places are free; it replaces the other "
+                             "two"),
+    ("Next Pregnancy Triplets", "a one-shot: the next birth is triplets when 3 child places are free; it replaces the "
+                                "other two"),
+    ("Clear All Illnesses", 'its description: "Cures every symptom and every infection for everyone currently in the '
+                            'house."'),
+    ("Max out Happiness Bar", 'its description: "Fills the Happiness bar for everyone currently in the house."'),
+    ("Max out Energy Bar", 'its description: "Fills the Energy bar for everyone currently in the house."'),
+    ("Max out Fed Bar", 'its description: "Fills the Fed bar for everyone currently in the house, so nobody is '
+                        'hungry."'),
+    ("Max out Health Bar", 'its description: "Fills the Health bar for everyone currently in the house. Does not '
+                           'revive anyone who has already died."'),
+    ("Anti-Spam Software Ownership", "a switch: the Anti-spam Software is installed without a computer, or "
+                                     "uninstalled"),
+    ("Rockhound Certificate Ownership", "a switch: the Rockhound Certificate is given, or taken away"),
+    ("Set Age to 18", "the family member whose details are open becomes exactly 18 years old (360 age units); offered "
+                      "from that member's details only"),
+    ("Add Running Like", "the family member whose details are open gets like 29, which the Likes text names "
+                         "\"running\", if a like place is free; offered from that member's details only"),
+)
+
+
+def _money(value: int) -> str:
+    return f"${value:,}"
+
+
+def _generation(lock: int) -> str:
+    return "from the start" if lock <= 0 else f"from generation {lock}"
+
+
+def _store_lines() -> list[Fact]:
+    """Every store row, in the store's groups (spec section 23)."""
+    out: list[Fact] = []
+    add = out.append
+    cat = ("GetCategoryItemCount 0x46B6D0 / GetCategoryItem 0x46B210 / GetPrice 0x46B9F0 / GetLockGenerationLevel run "
+           "as linked")
+
+    # ------------------------------------------------------------------ The store: prices and buying
+    add(_f(STORE, "Prices are in coins ($). The store's own discounts, from the price code: On Sale furniture costs "
+                  "half (rounded down); groceries and organics cost half with the Food Club; Advanced Career Training "
+                  "costs its price times (the selected family member's career level + 1).", C,
+           "CalcPrice 0x48ACB0: category 3 halves; items 4..0xB halve with HaveFoodClub; item 0x10F x (level + 1)"))
+    add(_f(STORE, WITH_PATCHER + "with the Health Plan, items 0x18 to 0x36 cost a quarter (price x 25 / 100, rounded "
+                  "down): the 10 medicines and 17 of the Flea Market's goods, the Sweet Mango, Perfect Bananas, both "
+                  "perfumes, Multivitamins, hand gel, Sunscreen, Towelette, the 4 fruit, licorice, mint and cinnamon "
+                  "candies, the Anti-spam Software and the 3 Profession Magazines.", C,
+           "B200 GetPrice 0x46BA3B: lea eax,[ecx-0x18]; cmp eax,0x1E; gs+0x25B1D; imul 0x19, / 100"))
+    add(_f(STORE, UNPATCHED + "the Health Plan's quarter price covers only the 10 medicines (items 0x18 to 0x21), and "
+                  "the Special Upgrades page does not sell the Health Plan.", C,
+           "stock exe sha256 1582d9e8: GetPrice 0x4B9DE0 lea edx,[eax-0x18]; cmp edx,9"))
+    add(_f(STORE, f"Patcher option \"{OPTION_CHEATS}\", on: the 2x, 5x and 100x Prices rows multiply every price after "
+                  "those discounts. Off (and in the unpatched game): no multiplier.", C,
+           "VF2ApplyPriceMultiplier on the CalcPrice return (discoveries.md B150; generator source)"))
+    add(_f(STORE, "Buying: food, medicine, Flea Market goods and outfits go to the tray, one use each; furniture and "
+                  "pets go to storage and the house opens in decorate mode; upgrades, renovations and services act at "
+                  "once. Upgrades, renovations and the Rockhound Certificate are kept for good. The game saves after "
+                  "every purchase.", C, "HandlePurchaseItem 0x48BF20: AddItem 0x4AB330 / HandleUpgrade 0x48C2E0 / "
+                                        "AddToStorageAndAward 0x4B6A30; TakeOne owned flag for rows whose field +4 is 1; "
+                                        "SaveCurrentGame"))
+    add(_f(STORE, "\"From generation N\": the store keeps the item locked until the family tree counts N generations. "
+                  "Lock 0 is from the start.", C, "CInventoryManager::IsLocked / CFurnitureManager::IsLocked: lock > "
+                                                  "CFamilyTree::NumGenerations"))
+    add(_f(STORE, "Mood points: every 30 real minutes the game adds up each family member's mood points (the list in "
+                  "Needs and upkeep, and the items below), moves happiness by a hundredth of the total, at most 5 "
+                  "points, then halves the total.", C, "UpdateHappinessState 0x4CBE90: trend / 100 clamped to -5..5, "
+                                                       "then trend / 2"))
+    add(_f(STORE, "Needs change in steps, each capped from 1 to 100: an energy loss when energy is below 10, or a gain "
+                  "above 80, is halved; the same for hunger; a health loss below 15, or a gain above 90, is halved.", C,
+           "CVillagerState::AdjustEnergy / AdjustHunger / AdjustHealth / AdjustHappiness"))
+    add(_f(STORE, "Rewards and scolding: a reward raises the likelihood of what the family member is doing by a "
+                  "twentieth of the way to its highest (at least 1 step); a scolding lowers it by a fifteenth of the "
+                  "way to its lowest (at least 1). The candies use these.", C,
+           "theMainScene::InvokeReward / InvokeScolding: weight +max(1,(max-w)/20) / -max(1,(w-min)/15)"))
+    add(_f(STORE, "\"An action\": what an item makes a family member do (an animation and what that action itself "
+                  "changes) comes from the behaviour table, which is not decoded; each entry gives only the changes "
+                  "the item's own code makes. \"As part of the action\" changes happen while it plays.", U,
+           "spec 18: behaviour-table rewards not decoded"))
+    add(_f(STORE, WITH_PATCHER + "the Flea Market shows all 36 of its goods at all times; it never changes (the "
+                  "game's tip still says three times a day).", E,
+           "GetCategoryItemCount 0x46B6D0 / GetCategoryItem 0x46B210 call VF2GetExpandedFleaMarketCount / Item "
+           "0x4B9A90 / 0x4B9AB0 first (36 for category 15); the stock rotation 0x46BEB0 is never reached"))
+    add(_f(STORE, UNPATCHED + "the Flea Market shows 5 of its 36 goods, picked at random, and changes them every 6 "
+                  "real hours: the first time it is opened more than 6 real hours after the last change it picks 5 "
+                  "new ones (the time counts while paused and while the game is closed). The game's tip says three "
+                  "times a day.", E,
+           "stock exe sha256 1582d9e8: the store menu's Flea Market row (table 0x5346E0 row 1, category 15) -> "
+           "SetStoreCategory 0x432050(15) -> GetCategoryItemCount 0x4BB0A0 -> MaybeUpdateRotatingItems 0x4BA710, "
+           "run as linked after Reset 0x4BA8F0: 5 goods at real s T, the same 5 at T + 21,600, 5 new at "
+           "T + 21,601 and at T + 86,400; next change = real s + 21,600"))
+    add(_f(STORE, "On Sale: 3 furniture items, changed every game day (24 real hours at normal speed; the clock "
+                  "stops while paused), at half price. Buying one takes it off the list.", C,
+           "spec 16: MaybeUpdateSaleItems 0x46C000; CalcPrice category 3; HandlePurchaseItem TakeOne"))
+
+    # ------------------------------------------------------------------ Food and Medicine
+    add(_f(FOOD, "The Food and Medicine tab: 18 items, the same with and without the patcher.", E,
+           cat + "; stock 0x4BB0A0 category 0xE: the same 18"))
+    add(_f(FOOD, "Groceries are placed on the kitchen table (anywhere else: \"Groceries must be placed in the "
+                 "kitchen.\" and the bag stays in the tray). Each bag gives its food group to everyone at home for "
+                 "24 real hours (see Needs and upkeep) and everyone at home starts the same action. With the Food Club "
+                 "each costs half.", C, "HandleMouseDown 0x49EE90: kitchenTableRect1, UpdateNutritionAllVillagers "
+                                        "0x4C74E0 (expiry real s + 86,400), MakeAllVillagersDoIt"))
+    for _iid, name, price, group, organic in GROCERY_ITEMS:
+        food = 250 if organic else 150
+        extra = ""
+        if organic and group != "Grains":
+            extra = (" Each family member at home also gets 5 to 14 mood points and happiness +0 to +2.")
+        elif organic:
+            extra = (" Unlike the other organics it gives no mood points or happiness: the code passes the organic "
+                     "flag only for Dairy, Meats and Fruits and Veggies.")
+        add(_f(FOOD, f"{name}: {_money(price)} ({_money(price // 2)} with the Food Club): +{food} food and the "
+                     f"{group} food group.{extra}", C,
+               "HandleMouseDown grocery cases (case table 0x4A003E), FoodStore Adjust 150 / 250", sub=True))
+    add(_f(FOOD, "Medicines are given to the family member they are dropped on, and each is used up when given. "
+                 "Hiccups have no medicine; they wear off (6 to 17 real hours). With the Health Plan each costs a "
+                 "quarter.", C, "HandleMouseDown 0x49EE90 cases 0x18..0x21; symptoms state+0x5C..0x62"))
+    for name, price, effect in MEDICINE_ITEMS:
+        add(_f(FOOD, f"{name}: {_money(price)} ({_money(price * 25 // 100)} with the Health Plan): {effect}.", C,
+               "HandleMouseDown cases 0x18..0x21", sub=True))
+
+    # ------------------------------------------------------------------ Flea Market
+    add(_f(FLEA, "The Flea Market's goods are given to the family member they are dropped on (the Weed Bomb, the "
+                 "Anti-spam Software and the movies say where they go) and are used up when given.", C,
+           "DispatchRotatingSundry 0x49CB90 -> UseTool"))
+    add(_f(FLEA, "Bottled weather: the family member \"Deploying Bottled Weather\" gets happiness +1 to +3, walks to "
+                 "one fixed spot of the house map (x 1,539, y 208), bends, waits, and then the weather changes. Stormy, Foggy and Snowing last "
+                 "6 to 12 minutes of game time; Normal 15 to 40; then the weather carries on as in Weather.", C,
+           "DispatchRotatingSundry cases 0x3B / 0x3C / 0x41 / 0x42: PlanToChangeWeather(3 / 0 / 4 / 5) -> "
+           "CWeather::SetCurrent 0x4CCF20 (0 Normal, 1 Sunny, 2 Raining, 3 Stormy, 4 Foggy, 5 Snowing)"))
+    add(_f(FLEA, "Sunny (type 1, the grey tint with sun beams) is never set by a bottle: Bottled Tropical Sunshine "
+                 "sets type 0, Normal. Sunny comes only from the weather's own change (see Weather).", C,
+           "B200 0x49CB90+0xD00: push 0 before PlanToChangeWeather; SetCurrent case 1 = CSunBeam::Reset"))
+    for name, price, effect, label in FLEA_ITEMS:
+        hp = f" ({_money(price * 25 // 100)} with the Health Plan)" if name in HEALTH_PLAN_FLEA else ""
+        add(_f(FLEA, f"{name}: {_money(price)}{hp}: {effect}.", label,
+               "DispatchRotatingSundry 0x49CB90 (case table 0x49DD64 / 0x49DCF4)", sub=True))
+
+    # ------------------------------------------------------------------ Special Upgrades
+    add(_f(UPGRADES, "The Special Upgrades act on the whole family at once.", C, "HandleUpgrade 0x48C2E0 cases "
+                                                                                    "0x111..0x116"))
+    for name, price, effect, label in SPECIAL_ITEMS:
+        add(_f(UPGRADES, f"{name}: {_money(price)}: {effect}.", label, "HandleUpgrade 0x48C2E0", sub=True))
+    add(_f(UPGRADES, "Lotto Ticket: $100. The game rolls 1 of 10,000 as rand() mod 10,000 (each of 0 to 2,767 comes "
+                     "4 times in the 32,768 values, each other value 3 times): $50,000 at 4 in 32,768 (0.012%); $25,000 at 8 (0.024%); $5,000 at 80 "
+                     "(0.244%); $1,000 at 800 (2.441%); $750 at 2,000 (6.104%); a free grocery bag (Grains, Dairy, "
+                     "Meats or Fruits and Veggies, a quarter each) at 12,044 in 32,768 times 50.05% (18.40% in all) when "
+                     "a tray place is free; otherwise nothing.", C,
+           "HandleUpgrade 0x48C2E0 case 0x114 (desktop $LN50): GetRandom(10000) < 1 / 3 / 23 / 223 / 723, else < 4056 "
+           "with rand(100) < 50 and IsSlotAvailable -> AddItem(4 + rand(4))", sub=True))
+    add(_f(UPGRADES, "The four rows the patcher adds (not in the unpatched game; see Money and interest): each costs "
+                     "its price while the family does not have it; while it does, its price is $0 and buying it "
+                     "removes it.", C,
+           "VF2GetVisibleSpecialUpgradePrice 0x4B9F60 returns 0 while owned; 0x4B8B50 toggles cases 0x117..0x11A"))
+    add(_f(UPGRADES, "Brokerage Account: $10,000 (with the patcher): interest 11% a game day instead of 10%; bought "
+                     "again ($0) it sets interest to 1%; each later purchase ($10,000) adds 2 points, 3%, 5%, 7%, 9% "
+                     "and back to 11% (see Money and interest).", E,
+           "0x4B8B50 case 0x117 run as linked from 0.10: 0.11, 0.01, 0.03, 0.05, 0.07, 0.09, 0.11", sub=True))
+    add(_f(UPGRADES, "Food Club: $10,000 (with the patcher): 500 food and all four food groups each game day, every "
+                     "missed day delivered; 60 food whenever a family member finds less than 60; groceries at half "
+                     "price. Bought again ($0) the deliveries stop.", C,
+           "JoinFoodClub; CFoodStore::Update 0x464F70; CalcPrice; 0x4B8B50 case 0x118 clears the flag", sub=True))
+    add(_f(UPGRADES, "Health Plan: $10,000 (with the patcher): the quarter prices above, kept in the save. Bought again "
+                     "($0) prices are back to full.", C, "0x4B8B50 case 0x119: gs+0x25B1D and record 0xA8 bit 0",
+           sub=True))
+    add(_f(UPGRADES, "Lucky Rock: $77,777 (with the patcher): a collectible about every 37 real seconds instead of 73, "
+                     "rare 8% and uncommon 26% instead of 4% and 13% (see Collectibles). Bought again ($0) it is "
+                     "gone.", C, "0x4B8B50 case 0x11A: CCollectableItem+0x8A8", sub=True))
+    add(_f(UPGRADES, f"Patcher option \"{OPTION_CHEATS}\", on: 45 more rows, every one $0 (43 on this page, 2 offered "
+                     "from a family member's details). Off, and in the unpatched game: none of them.", C,
+           "work/patch_mobile_furniture_pack.py CHEAT_UPGRADE_ITEMS (45 rows, 2 details_only); "
+           "VF2ApplyVisibleSpecialUpgrade cases 0x11B..0x15B"))
+    for name, effect in CHEAT_ITEMS:
+        end = "" if effect.endswith('"') else "."
+        add(_f(UPGRADES, f"{name}: {effect}{end}", C, "VF2ApplyVisibleSpecialUpgrade (generator source)", sub=True))
+
+    # ------------------------------------------------------------------ Services
+    add(_f(SERVICES, "Services act on the family member selected when the store was opened. The children's list has "
+                     "Boarding School, Systematic Desensitization, Psychotherapy and Higher Learning Classes; the "
+                     "adults' list has the last three and Advanced Career Training and Career Change. The same in the "
+                     "unpatched game.", E, cat + ": categories 0x13 (4) and 0x12 (5); stock the same"))
+    for name, price, effect, ages in SERVICE_ITEMS:
+        add(_f(SERVICES, f"{name}: {_money(price)} ({ages}): {effect}.", C,
+               "HandleUpgrade 0x48C2E0, selected member gs+0x25CC4 (desktop $LN10..$LN18)", sub=True))
+
+    # ------------------------------------------------------------------ Home Renovation
+    add(_f(RENOVATION, "The Home Renovation tab: 10 renovations, the same prices with and without the patcher. "
+                       "Buying one: everyone at home starts the same action, workers come and build it, and the "
+                       "room opens for good. Each one owned gives every family member 5 mood points every 30 real "
+                       "minutes.", C,
+           cat + "; HandleUpgrade cases 0xE1..0xEA (ActivateCondemnedArea, SetProp); UpdateHappinessState +5 per "
+                 "renovation 0xE1..0xEA"))
+    for _iid, name, price, lock, extra in RENOVATION_ITEMS:
+        add(_f(RENOVATION, f"{name}: {_money(price)}, {_generation(lock)}.{extra}", E if not extra else C,
+               cat + "; UpdateHappinessState like 65 (0x41) with item 0xE6" if extra else cat, sub=True))
+    add(_f(RENOVATION, f"Patcher option \"{OPTION_RENOVATIONS}\", on: 15 room remodels are added to this tab; each "
+                       "redraws its room with the remodel's picture, and none is among the 10 renovations that give "
+                       "mood points. Off, and in the unpatched game: "
+                       "none of them.", C,
+           "MOBILE_RENOVATION_STYLE_CATALOG (generator source); UpdateHappinessState counts only 0xE1..0xEA"))
+    for name, price, lock in MOBILE_RENOVATION_ITEMS:
+        add(_f(RENOVATION, f"{name}: {_money(price)}, {_generation(lock)}.", C,
+               "MOBILE_RENOVATION_STYLE_CATALOG", sub=True))
+    add(_f(RENOVATION, f"Patcher option \"{OPTION_BATHROOM2}\", on: 5 remodels of the 2nd Bathroom, only after the 2nd "
+                       "Bathroom renovation (before it the price is refunded with \"Bathroom 2 must be renovated "
+                       "first before this can be bought.\"). One is shown at a time: buying one replaces the one "
+                       "shown, and buying the shown one again ($0) removes it. Off, and in the unpatched game: none.", C,
+           "AI_BATHROOM2_STYLE_CATALOG; VF2ApplyAIBathroom2Style / VF2GetAIBathroom2Price (generator source)"))
+    for name, price in BATHROOM2_REMODEL_ITEMS:
+        add(_f(RENOVATION, f"{name}: {_money(price)}.", C, "AI_BATHROOM2_STYLE_CATALOG", sub=True))
+
+    # ------------------------------------------------------------------ Career upgrades
+    add(_f(CAREER_UPGRADES, "The store's Career tab: 31 upgrades for the three workplaces, the same with and without "
+                            "the patcher. Each one owned adds 1 to its workplace's equipment level (the office has 11, "
+                            "the kitchen 10, the workshop 10). Buying one: everyone at home starts the same action.", C,
+           cat + "; CTech::Level counts the owned upgrades (at most 12); HandleUpgrade cases 0xEB..0x109"))
+    add(_f(CAREER_UPGRADES, "Each piece of successful work adds (20 + 4 x the workplace's equipment level) / (career "
+                            "level + 1) progress, rounded down, then times 7 for a Beginner, 3 for a Novice, 2 for an "
+                            "Apprentice; a Master adds none. 3,000 progress is a promotion. A family member without a "
+                            "career counts equipment level 1.", C,
+           "CVillagerSkills::AdvanceCareer: (4 x Tech + 20) / (level + 1), x7 / x3 / x2 at levels 0 / 1 / 2, none from 7"))
+    add(_f(CAREER_UPGRADES, "Equipment and likes: a family member whose Likes show \"cooking\" gets 500 x (the kitchen's "
+                            "level - 1) mood points every 30 real minutes, so -500 with no kitchen upgrade and 0 with "
+                            "1; \"carbs\" the same with the office's level, and \"computers\" with the workshop's.", C,
+           "UpdateHappinessState: likes 0x27 / 0x52 / 0x51 with CTech::Level 0 / 1 / 2: (25 x level - 25) x 20"))
+    for workplace in (2, 1, 3):
+        for _iid, name, price, lock, wp in CAREER_UPGRADE_ITEMS:
+            if wp != workplace:
+                continue
+            extra = ""
+            if _iid == 0x108:
+                extra = (" It also gives 10 mood points every 30 real minutes to each family member whose Likes show "
+                         "\"computers\".")
+            add(_f(CAREER_UPGRADES, f"{name} ({WORKPLACES[wp]}): {_money(price)}, {_generation(lock)}.{extra}",
+                   C if extra else E, cat + ("; UpdateHappinessState like 0x51 with 0x108" if extra else ""),
+                   sub=True))
+
+    # ------------------------------------------------------------------ Furniture and Accessories
+    tabs = (("General Appliances", 18, 15), ("Living Room", 108, 88), ("Dining Room", 27, 26), ("Bedroom", 84, 74),
+            ("Outdoors", 38, 12), ("Accessories", 109, 47), ("Toys", 21, 21))
+    add(_f(FURNITURE, WITH_PATCHER + "the furniture tabs list " + ", ".join(f"{t} {p}" for t, p, _s in tabs)
+           + " items, with the patcher's furniture (marked \"added by the patcher\" below).", E,
+           cat + ": categories 0, 4, 5, 6, 7, 0xA, 8"))
+    add(_f(FURNITURE, UNPATCHED + "the same tabs list " + ", ".join(f"{t} {s}" for t, _p, s in tabs)
+           + " items; every one of them has the same price and generation as with the patcher.", E,
+           "stock exe sha256 1582d9e8: GetCategoryItemCount 0x4BB0A0 / GetCategoryItem 0x4BAA50 run as linked; "
+           "furniture table 0x54C87C = B200 0x564F48 for 0x1AD..0x2A8 (price, lock, name)"))
+    add(_f(FURNITURE, "Every piece placed in the house, of any kind, gives every family member 1 mood point every 30 "
+                      "real minutes, up to 30 pieces. Pieces in storage count for nothing.", C,
+           "UpdateHappinessState: min(CFurnitureManager::NumberOfItemsPlaced, 30)"))
+    add(_f(FURNITURE, "The pieces below that name a like also give mood points every 30 real minutes, while placed, "
+                      "to each family member whose Likes show it. The Fish Bowl gives its 15 to everyone, like or not "
+                      "(the code skips the like check for it).", C,
+           "UpdateHappinessState 0x2ED..0x55F: HaveUpgrade -> CFurnitureManager::IsInWorld; 0x202 jumps past the "
+           "Contains(0x19) check"))
+    add(_f(FURNITURE, "What each piece lets the family do, and what that restores, comes from the behaviour table, "
+                      "which is not decoded (see the store's \"An action\").", U, "spec 18"))
+    listed = set()
+    for tab, _p, _s in tabs:
+        add(_f(FURNITURE, f"{tab}:", E, cat, sub=False))
+        for iid, name, price, lock, item_tabs, added in FURNITURE_ITEMS:
+            if item_tabs[0] != tab or iid in listed:
+                continue
+            listed.add(iid)
+            parts = [f"{name}: {_money(price)}, {_generation(lock)}"]
+            if len(item_tabs) > 1:
+                parts.append("also on the " + " and ".join(t for t in item_tabs[1:]) + " tab")
+            if added:
+                parts.append("added by the patcher")
+            text = "; ".join(parts) + "."
+            label, evidence = E, cat
+            if iid == 0x202:
+                text += " 15 mood points to everyone, while placed."
+                label, evidence = C, cat + "; UpdateHappinessState 0x202"
+            elif iid in FURNITURE_LIKE_BONUS:
+                points, likes = FURNITURE_LIKE_BONUS[iid]
+                text += f" {points} mood points for a liking of {_likes(*likes)}, while placed"
+                group = FURNITURE_BONUS_GROUPS.get(iid)
+                text += f" (once, however many of the {group} are placed)." if group else "."
+                label, evidence = C, cat + "; UpdateHappinessState like bonus"
+            add(_f(FURNITURE, text, label, evidence, sub=True))
+
+    # ------------------------------------------------------------------ Pets
+    add(_f(PETS, WITH_PATCHER + "the Pets tab lists 14 pets and the Food and Water Bowls (listed with the "
+                 "Accessories); the Turtle and the Hamster are the patcher's (\"Add unused pets\").", E,
+           cat + ": category 0x15, 15 items"))
+    add(_f(PETS, UNPATCHED + "the Pets tab lists 12 pets and the bowls, without the Turtle and the Hamster.", E,
+           "stock exe sha256 1582d9e8: category 0x15 run as linked, 13 items"))
+    add(_f(PETS, "A pet goes to storage when bought and is placed like furniture. What a pet does and gives the family "
+                 "is the pet code's, which is not decoded.", U, "HandlePurchaseItem AddToStorageAndAward"))
+    for _iid, name, price, lock, added in PET_ITEMS:
+        tail = "; added by the patcher" if added else ""
+        add(_f(PETS, f"{name}: {_money(price)}, {_generation(lock)}{tail}.", E, cat, sub=True))
+
+    # ------------------------------------------------------------------ Clothing and Hairstyles
+    add(_f(CLOTHING, WITH_PATCHER + "the tab lists 214 items: the 6 outfits below and the patcher's Outfit store, 54 "
+                     "outfit bodies and 50 hairstyles for each sex.", E, cat + ": category 0xD"))
+    add(_f(CLOTHING, UNPATCHED + "the tab lists the 6 outfits only.", E,
+           "stock exe sha256 1582d9e8: category 0xD run as linked, 6 items"))
+    add(_f(CLOTHING, "An outfit goes to the tray and is dropped on a family member of its sex: it changes that "
+                     "member's outfit. On the other sex: \"This outfit is for a male!\" (or female) and it stays in "
+                     "the tray.", C, "HandleMouseDown 0x49EE90 cases 0x49 / 0x4A: gender +0x6A58, outfit +0x6A84"))
+    add(_f(CLOTHING, "Which outfit a stock row gives: the store holds one per row and hands it over when bought; how "
+                     "the store picks it is not traced.", U, "CInventoryManager::TakeOne copies +0x408 + id x 4"))
+    for name, price, lock in (("Discount Store Male Outfit", 75, 0), ("Discount Store Female Outfit", 75, 0),
+                              ("Department Store Male Outfit", 200, 2), ("Department Store Female Outfit", 200, 2),
+                              ("Designer Male Outfit", 1500, 4), ("Designer Female Outfit", 1500, 4)):
+        add(_f(CLOTHING, f"{name}: {_money(price)}, {_generation(lock)}.", E, cat, sub=True))
+    add(_f(CLOTHING, "The patcher's Outfit store: no generation lock; outfit bodies 0 to 49 cost $75 and the Holiday "
+                     "bodies 50 to 53 cost $500; every hairstyle costs $75. Each goes to the tray when bought.", E,
+           cat + "; VF2GetOutfitStorePrice 0x4B9E80; VF2GetOutfitStoreLockGeneration 0x4B9D40 (0); "
+                 "VF2PurchaseOutfitStoreItem 0x4BA100 -> AddItem"))
+    add(_f(CLOTHING, "Dropped on a family member of its sex, an Outfit-store row gives that member its outfit body or "
+                     "hairstyle; the patcher's code that turns the tray item into the outfit or "
+                     "hairstyle is not decoded.", U, "0x4BA000"))
+    for sex, base in (("Female", 0), ("Male", 1)):
+        for body in range(54):
+            holiday = " Holiday" if body >= 50 else ""
+            price = 500 if body >= 50 else 75
+            add(_f(CLOTHING, f"{sex}{holiday} Outfit Body {body:02d}: {_money(price)}; outfit body {body}.", E,
+                   f"item {0x400 + 0x40 * base + body:#x}; name string {0xBED + 2 * (54 * base + body):#x}", sub=True))
+    for sex, base in (("Female", 0), ("Male", 1)):
+        for style in range(50):
+            add(_f(CLOTHING, f"{sex} Hairstyle {style:02d}: $75; hairstyle {style}.", E,
+                   f"item {0x480 + 0x40 * base + style:#x}; name string {0xF2B + 2 * (50 * base + style):#x}",
+                   sub=True))
+    return out
 
 
 def render_lines(items: list[Fact] | None = None) -> list[tuple[str, str | None, str]]:

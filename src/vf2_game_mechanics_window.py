@@ -21,7 +21,7 @@ from vf2_tree_editor_tools import TOOL_HEADING_SPACING, tool_fonts, tool_text
 TITLE = gm.TITLE
 WIDTH, HEIGHT = 900, 720
 MIN_WIDTH, MIN_HEIGHT = 600, 600
-# 3, not 4: in 4 columns the 15 group links need 690 pixels, more than the window has at its smallest (600 less the
+# 3, not 4: in 4 columns the group links (15 before the store groups, 25 now) need 690 pixels or more, more than the window has at its smallest (600 less the
 # 12-pixel padding each side); in 3 they need 511 (tests/test_game_mechanics.py).
 LINKS_PER_ROW = 3
 PADDING = 12

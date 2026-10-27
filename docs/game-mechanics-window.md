@@ -18,7 +18,11 @@ executable (every patcher option byte 0). It is modelled on the Virtual Villager
 - Groups, in order: Time and ageing; Needs and upkeep; Health and sickness; Old age; Pregnancy and babies;
   Careers (with every career's pay per real hour at each level); Money and interest; Leaving home; Dating, marriage
   and the next generation; Island events (every event of the shipped game); Weather; Messes and malfunctions;
-  Collectibles; Flea Market and On Sale; Chance and timer index.
+  Collectibles; then the store, in the store menu's order: The store: prices and buying; Food and Medicine; Flea
+  Market; Special Upgrades; Services; Home Renovation; Career upgrades; Furniture and Accessories; Pets; Clothing
+  and Hairstyles (every item the store sells has its own entry: price, the Health Plan or Food Club price, uses,
+  the exact effect with its numbers and odds, who it acts on, how long it lasts and its generation lock; the
+  patcher's added rows say so); and Chance and timer index.
 - Times are real times at the game's normal speed. Game-clock timers stop while paused; real-time ones do not.
 - Patcher options (Older Villager Mortality Curve, Allow Older Pregnancies) are shown as options, both ways.
 - The page describes the game with the patcher applied (the intro says so). Where the unpatched game differs, a
