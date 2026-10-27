@@ -41,7 +41,8 @@ class PageTests(unittest.TestCase):
         for line in lines:
             body = line[len(gm.SUB_BULLET):] if line.startswith(gm.SUB_BULLET) else line[len(gm.BULLET):]
             self.assertRegex(body, r"^(VERIFIED-E|VERIFIED-C|UNCONFIRMED)  \S")
-        for label in gm.LABELS:
+        # every label the page uses is shown; no line is left UNCONFIRMED any more
+        for label in {fact.label for fact in self.facts}:
             self.assertIn(label, self.text)
 
     def test_family_wording(self):
@@ -150,7 +151,7 @@ class PageTests(unittest.TestCase):
             self.assertTrue(any(", off" in t for t in states), name)
             self.assertTrue(any(", on" in t for t in states), name)
         older = next(f for f in self.facts if f'"{gm.OPTION_PREGNANCIES}", on: with a parent 50' in f.text)
-        self.assertEqual(older.label, gm.UNCONFIRMED)
+        self.assertEqual(older.label, gm.VERIFIED_C)
 
     def test_old_age_matches_the_formula(self):
         line = next(f for f in self.facts if f.text.startswith("With no food groups"))
@@ -168,12 +169,12 @@ class PageTests(unittest.TestCase):
         # pay per real hour is half the salary: Pastry Designer 30 -> $15
         self.assertIn("Pastry Designer: $15 per real hour as a Beginner, $50 as a Master", self.text)
 
-    def test_unconfirmed_lines_stay_unconfirmed(self):
-        # The time-skip item, the medicines, the Lotto Ticket, the Health Plan and Boarding School are now read from
-        # the purchase path (tests/test_game_mechanics_store.py).
+    def test_no_line_is_left_unconfirmed(self):
+        # Every former UNCONFIRMED line is now read from the code (VERIFIED-C) or run as linked (VERIFIED-E).
+        self.assertEqual([f.text for f in self.facts if f.label == gm.UNCONFIRMED], [])
         for start in ("What that waiting time holds back", "The Mysterious Collector", "The Wrong Address"):
             fact = next(f for f in self.facts if f.text.startswith(start))
-            self.assertEqual(fact.label, gm.UNCONFIRMED, start)
+            self.assertEqual(fact.label, gm.VERIFIED_C, start)
 
     def test_every_fact_keeps_its_evidence_for_the_export(self):
         for fact in self.facts:
@@ -234,7 +235,7 @@ class WindowTests(unittest.TestCase):
             links = [child.cget("text") for child in window.mechanics_links.winfo_children()]
             self.assertEqual(links, list(gm.GROUPS))
             # every label is drawn in its own colour
-            for label in gm.LABELS:
+            for label in {fact.label for fact in gm.facts()}:
                 self.assertTrue(page.tag_ranges(label), label)
                 self.assertEqual(page.tag_cget(label, "foreground"), self.gmw.LABEL_COLOURS[label])
             window.mechanics_jump(gm.STORE)

@@ -390,7 +390,7 @@ class ToolsTabTests(unittest.TestCase):
         try:
             self.assertEqual(window.title(), "Game Mechanics")
             self.assertIs(self.app.game_mechanics(), window)        # a second click brings the same window
-            self.assertIn("UNCONFIRMED", window.mechanics_page.get("1.0", "end"))
+            self.assertIn("VERIFIED-C", window.mechanics_page.get("1.0", "end"))
         finally:
             window.destroy()
         self.assertEqual(self._snapshot(), before)                   # the saves are untouched

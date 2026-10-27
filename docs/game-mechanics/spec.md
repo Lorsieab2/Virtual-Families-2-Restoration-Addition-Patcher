@@ -156,11 +156,11 @@ Two infections: mild (state+0x80, "penicillin") and serious (state+0x81, "vancom
 | Old age (Older Villager Mortality option, `.vf2mort` = 1) | Same birthday check, `VF2RollOlderVillagerMortality` 0x4BA410: effective age = years - N (N clamped 0..4); death if GetRandom(1,000,000) < table[effective age]. Emulated per-birthday odds (N=0): 55: 0%, 60: 1.81%, 65: 3.59%, 70: 5.33%, 75: 7.04%, 80: 8.72%, 90: 11.99%, 100: 15.15%, 110: 18.19%, 115: 40.49%, 120: 56.71%, 125: 68.51%, 150: 93.59%, 200: 99.73%. No age cap. | VERIFIED-E |
 | Disease | Health reaches 0 through the sickness loss (cause 0) | VERIFIED-C |
 | Starvation | Health reaches 0 through the eating / no-food losses (cause 1) | VERIFIED-C |
-| Work accident, Act of Nature | Cause ids exist (strings 0x87F, 0x880); their sources are island events / behaviours, not traced here | UNCONFIRMED |
+| Work accident, Act of Nature | Cause ids exist (strings 0x87F, 0x880); their sources are island events / behaviours, not traced here | settled in section 24 |
 | Removal | A dead villager stays active until **240 units (40 real hours)** after its last upkeep stamp, then `ReportDeath` removes it from the tree slot (`AllVillagersTimeflowUpkeep` 0x4C4C9D) | VERIFIED-C |
 
 Cause names (string 0x87B + id): -1 Unknown, 0 Disease, 1 Starvation, 2 Old age, 3 Work accident, 4 Act of Nature;
-ids 0-2 match the call sites above, 3-4 UNCONFIRMED. Save: record +0x0B4 health, +0x0B8 cause.
+ids 0-2 match the call sites above, 3-4 settled in section 24. Save: record +0x0B4 health, +0x0B8 cause.
 
 ## 5. Aging and life stages
 
@@ -198,7 +198,7 @@ GameStats+0x20 (file 0x163E8) is updated in years. Real time per year: 3 h 20 mi
   Formula: 105 - (100 - motherFert)/3 - (100 - fatherFert)/3; fathers 41+ lose (years-40)/5; mothers 31-50 lose
   2 x (years-20); mothers over 50 get 0. **The very first try while tip 0x868 has not been shown always succeeds
   (mother under 50).** Allow Older Pregnancies (`.vf2preg` = 1, a parent 50+) replaces this with
-  `VF2RollOlderPregnancy` (patcher table, 10.0% at 50 down to 0.1% from 69; per discoveries.md, UNCONFIRMED here).
+  `VF2RollOlderPregnancy` (patcher table, 10.0% at 50 down to 0.1% from 69; per discoveries.md, settled in section 24 here).
 - **Twins / triplets** (`Impregnate` 0x4BB920, VERIFIED-C): bonus = (motherFert - 85 if > 85) + (fatherFert - 85
   if > 85). Twins if rand(100) < 7 + bonus and at least 2 free child slots; then triplets if rand(100) < 25 + bonus
   and 3 free slots. Base: single 93%, twins 5.25%, triplets 1.75%. Needs at least 1 free child slot (6 per
@@ -207,7 +207,9 @@ GameStats+0x20 (file 0x163E8) is updated in years. Real time per year: 3 h 20 mi
   (upkeep 0x4C47D8). Babies are spawned inactive at conception (gs+0x25AB0/4/8) and activated at birth.
 - **Next try cooldown**: at a birth processed live (not catch-up), gs+0x25AE0 = real time + 600 x (5 - motherDesire/20)
   x (5 - fatherDesire/20) s (desire = state+0x50, 1..99): 4 h 10 min at desire 0, 10 min at desire 80+.
-  Where gs+0x25AE0 is read: UNCONFIRMED.
+  Where gs+0x25AE0 is read: only `theMainScene::HandleDropOnVillager` (0x49E726 / 0x49E778): a spouse dropped on a
+  spouse while it runs shakes their head ("It is too soon to try to make a baby again."), and a wait of more than
+  1 hour is cut to now + 3,300 s (0x49E78E). VERIFIED-C.
 - Save: record +0x0CC pregnant stamp, +0x0D0 babies expected; GameStats+0x08 babies born.
 
 ## 7. Careers and salary
@@ -220,7 +222,7 @@ GameStats+0x20 (file 0x163E8) is updated in years. Real time per year: 3 h 20 mi
   (56.25% at Beginner ... 100% at Master); always success before tip 0x858 is shown.
   Success -> `AdvanceCareer(pay)`: money + salary x 0.06, progress + (4 x roomTech + 20) / (level+1) times 7 / 3 /
   2 / 1 for levels 0 / 1 / 2 / 3-6 (none at 7). Progress 3,000 = promotion: level + 1, new salary, progress 0,
-  life event 3, everyone celebrates. VERIFIED-C (behaviour entry from the AI: UNCONFIRMED frequency).
+  life event 3, everyone celebrates. VERIFIED-C (behaviour entry from the AI: settled in section 24 frequency).
 - **Unwatched work** `RealtimeWorkDone` 0x4C3DB0 (catch-up units only): count = AI value 71 / 44 / 75 (by career
   type) / 400 (0 if pregnant, / 8 if sick); each count has a 1-in-6 chance of an unpaid `AdvanceCareer`.
 - **Salary** paid every 3 units: salary / 4 (section 2) = **salary / 2 per real hour** on speed 10, whether or not
@@ -320,12 +322,12 @@ exactly; where an event rolls again per villager, that second roll is marked. Mo
 | 76-78 | Small Package / Medium Brown Box / Sealed Green Bag | pop-up | a free tray slot (false in the test house) | A: an item 0x18+rand(6) / 4+rand(4) / 8+rand(4) |
 | 79 | A Tiny White Box | pop-up | | A: food x 2/3 kept (lose 1/3) |
 | 80 | Scratch-Off Lottery Ticket | pop-up | money check | A: -$20; 33% win $10 x rand(10) |
-| 81 | The Wrong Address | pop-up | | A: -$100 and 50/50 furniture 0x1B5 or 0x1B4 (emulation stopped in the furniture call: UNCONFIRMED) |
-| 82 | The Delivery Truck | pop-up | | rand(100): < 33 item 0x21B, < 66 0x21A, else 0x219 (UNCONFIRMED, same stop); B pays the award ($20 x rand(8)) |
+| 81 | The Wrong Address | pop-up | | A: -$100 and 50/50 furniture 0x1B5 or 0x1B4 (emulation stopped in the furniture call: settled in section 24) |
+| 82 | The Delivery Truck | pop-up | | rand(100): < 33 item 0x21B, < 66 0x21A, else 0x219 (settled in section 24, same stop); B pays the award ($20 x rand(8)) |
 | 83 | Talent Scout | pop-up | a child | A: child leaves, +$500 |
 | 84 | Beauty Contest | pop-up | a child | A: -$10, 33% win $100 |
 | 85-87 | Landscaping / Housekeeping / Total House Care | pop-up | | A: -$20 weeds removed / -$20 socks, wrappers, smudges removed / -$50 all |
-| 88 | The Mysterious Collector | pop-up | (false in the test house) | sells collectibles (UNCONFIRMED) |
+| 88 | The Mysterious Collector | pop-up | (false in the test house) | sells collectibles (settled in section 24) |
 | 89 | Water Pressure Surge | pop-up | | A: none; B: five leaks (props 0x1A, 0x1B, 0x1C, 0x1D, 0x1F) |
 | 90 | Professional Career Training | pop-up | | A: -$250, forced promotion |
 | 91 | The Trainer | pop-up | | A: -$5 and **all food lost** (food set to 0) |
@@ -335,7 +337,7 @@ exactly; where an event rolls again per villager, that second roll is marked. Mo
 | 95 | The Rare Bird | pop-up | (false in the test house) | everyone runs to the yard |
 | 96 | School Fund-raiser | pop-up | | A: -$25, +100 food |
 
-"money check" = `UpdateInterest` then a balance compare; the thresholds are in `events_dump.txt` (UNCONFIRMED
+"money check" = `UpdateInterest` then a balance compare; the thresholds are in `events_dump.txt` (settled in section 24
 values). Exact per-event odds of firing = 1 / (number of eligible events of its kind) at each hourly check.
 
 ## 12. Weather (`CWeather`, Weather global 0xB4BA10, type at +0)
@@ -347,7 +349,7 @@ Types: 0 Normal, 1 Sunny (sun beams), 2 Raining, 3 Stormy (rain + lightning), 4 
 | Change | `CWeather::Update` 0x4CD110 (every frame, skipped while paused): when game s >= end (+0x08): a non-Normal spell always returns to **Normal**; from Normal the next is uniform over Sunny/Raining/Stormy/Foggy/Snowing (**Sunny never starts at night**, rerolled) | | VERIFIED-C |
 | Length | `SetCurrent` 0x4CCF20: Normal 900 + rand(1,500) s; any other 360 + rand(360) s | Normal **15-40 min**, others **6-12 min** on speed 10 | VERIFIED-C |
 | Rain / storm effect | intensity +0x14 > 30: everyone outside switches to taking cover (behaviours 0x186, 0x2B, 0 -> 0x187) | | VERIFIED-C |
-| Start weather | `CWeather::Reset` uses `Random`: the PC clock's hour mod 6, bumped by one if equal to the previous type or (types 4, 5) with 50% | | UNCONFIRMED (when Reset runs) |
+| Start weather | `CWeather::Reset` uses `Random`: the PC clock's minute mod 6, bumped by one if equal to the previous type or (types 4, 5) with 50% | | settled in section 24 (when Reset runs) |
 | Rain items | collectible spawn areas whose base is 0x4F only spawn in Raining or Stormy weather | | VERIFIED-C |
 | Weather Machine event | sets Raining, Snowing or Foggy (section 11) | | VERIFIED-E |
 
@@ -360,8 +362,8 @@ Types: 0 Normal, 1 Sunny (sun beams), 2 Raining, 3 Stormy (rain + lightning), 4 
 | House malfunction | 2-second step: rand(800) == 1 (**1 in 800 per 2 s, mean 26.7 real minutes**, any speed and **also while paused**), no malfunction active, at least 360 real s since the save's start: pick rand(14) (or rand(17) when gs+0x28 > 5): 0 prop 0x1A, 1 0x1C, 2 0x1D, 3 Router offline 0x17, 4 0x1F, 5 0x20, 6 0x1B, 7 dryer lint fire 0x21 (needs a dryer), 8-10 north shower / toilet / sink leaks 0x49 / 0x48 / 0x4A (need renovation 0xE6), 11-13 (and 14-16) ants 0x4D / 0x4E / 0x4F with 0x50 + 0x51. Each case is skipped while its permanent-fix flag (gs+0x8C..0x13C) is set. | | VERIFIED-C |
 | Poo | state+0x48 >= 90 at a unit: reset to 25-49 | | VERIFIED-C |
 
-Prop names other than Router / dryer fire / north leaks / ants: UNCONFIRMED (the patcher's Fix All list names
-the 11 malfunction props 0x17, 0x1A-0x1D, 0x1F-0x21, 0x48-0x4A). The meaning of gs+0x28: UNCONFIRMED.
+Prop names other than Router / dryer fire / north leaks / ants: settled in section 24 (the patcher's Fix All list names
+the 11 malfunction props 0x17, 0x1A-0x1D, 0x1F-0x21, 0x48-0x4A). The meaning of gs+0x28: settled in section 24.
 
 ## 14. Food
 
@@ -401,7 +403,7 @@ and while paused), **G** = game seconds (`CGameTime::Seconds`, frozen while paus
 | Age unit | state+0x00/+0x04 | R | 600 s | 10 min (paused time discarded) | VERIFIED-C |
 | Dead body removal | state+0x04 | R | 240 units | 40 h | VERIFIED-C |
 | Pregnancy | state+0x24 | units | 21 units | 3 h 30 min | VERIFIED-C |
-| Baby cooldown | gs+0x25AE0 | R | birth: 600 x (5-d1/20)(5-d2/20) s; failed try: 1,200 s; drop refusal: 3,300 s; another path 1,800 x (same product) s | 10 min .. 4 h 10 min | VERIFIED-C (writers), UNCONFIRMED (reader) |
+| Baby cooldown | gs+0x25AE0 | R | birth: 600 x (5-d1/20)(5-d2/20) s; failed try: 1,200 s; drop refusal: 3,300 s; another path 1,800 x (same product) s | 10 min .. 12 h 30 min | VERIFIED-C (writers and the one reader, HandleDropOnVillager) |
 | Symptom | state+0x64.. | R | 6..17 h | 6..17 h | VERIFIED-C |
 | Food group | state+0x88.. | R | 86,400 s | 24 h | VERIFIED-C |
 | Interest | CMoney+0x0C | G | 86,400 s, max 2 days paid | 24 h | VERIFIED-C |
@@ -448,7 +450,7 @@ The other frame-path sites are cosmetic (animation frames, birds, butterflies, b
 particles, e-mail wording, names, looks): `frame_sites.txt`.
 
 Behaviour-table sites (4,431) decide how long actions last and which variant plays. Their rewards (needs changed by
-each action) were not decoded in this pass: UNCONFIRMED, future work.
+each action) were not decoded in this pass: settled in section 24, future work.
 
 ## 19. Per-save values the window can read (file offsets)
 
@@ -571,9 +573,36 @@ groups:
 
 | What | Rule | Status |
 |---|---|---|
-| Actions | `CBehavior::CBehavior` registers every action by id (`SetMacro`); each handler's `PlanToInc*` / `PlanToDec*` calls and arguments (rand ranges resolved) are its need changes; `CVillagerPlans::ProcessCurrentPlan` applies each planned change once and marks the step done. The page's Actions group lists the actions any item or furniture piece starts. Which branch of a branching action plans which change is not listed | VERIFIED-C |
+| Actions | `CBehavior::CBehavior` registers every action by id (`SetMacro`); each handler's `PlanToInc*` / `PlanToDec*` calls and arguments (rand ranges resolved) are its need changes; `CVillagerPlans::ProcessCurrentPlan` applies each planned change once and marks the step done. The page's Actions group lists the actions any item or furniture piece starts. Every conditional branch of the 63 was read: no need change depends on age, time of day or weather; a missing or unreachable piece plans none; the other branches (Reading 0x33, Using the toilet 0x62, Barbecuing 0xDA, Needs to sit down 0x189, Jumping on the bed 0x55) are given with their action (section 24) | VERIFIED-C |
 | Furniture drop actions | `theMainScene::HandleDropOnHotSpot` -> `CContentMap::GetHotSpot` ((cell >> 18) & 0x7F) -> `CHotSpot::Dispatch` (handlers set in `CHotSpot::CHotSpot`, 83 hot spots) -> each handler's `NewBehavior` ids; a piece's hot spots come from its placement map (`GetFmapName`: the image name from `ImageList` 0x579E48, `<name>.fmap`), B204 `final_all_enabled` maps; the patcher changes no stock piece's hot spots | VERIFIED-C |
 | Pets | placed through `CFurnitureManager::DropFurniture` -> `CPetManager::SpawnPet`, counted by `NumberOfItemsPlaced`; no pet code calls a need-changing function; a drop on a pet starts behaviour 0x19A (Petting, no need changes) | VERIFIED-C |
 | Stock outfits | `CInventoryManager::MaybeUpdateOutfits`: Discount rows rand(32), Department 32 + rand(12), Designer 44 + rand(6), re-picked 14,400 game s after the last pick | VERIFIED-C |
 | Outfit store | `VF2NormalizeOutfitToolInHand` 0x4BA000 (generator source): `GetToolInHand` / `GetToolInUse` report the stock outfit tool 0x49 / 0x4A with the row's body or head selected | VERIFIED-C |
 | Children's book reader | `GetRandomVillager` selector 6: age >= 280 units with a career and state+0x24 (record +0x0CC, pregnant) zero, or age >= 1,100 units | VERIFIED-C |
+
+## 24. The formerly UNCONFIRMED lines (2026-10-27)
+
+Weather names follow the owner: Sunny = type 0 `eWeather_Sunny`, Normal = type 1 `eWeather_Cloudy`, Raining 2,
+Stormy 3, Foggy 4, Snowing 5 (CodeView enum `EWeather`, Weather.obj).
+
+| What | Rule | Status |
+|---|---|---|
+| Newborn age | `Impregnate` 0x4BB920 -> `SpawnSpecificPeep` age argument 0x28 = 40 units = 2 years | VERIFIED-C |
+| Work accident / act of nature | causes 3 / 4; their only setters `MakeRandomVillagersInjured` / `MakeRandomVillagersDead` have no callers and are not linked into B200; the 20 `AdjustHealth` / `SetHealth` sites pass cause -1, 0, 1 or 2: never happen | VERIFIED-C |
+| Allow Older Pregnancies, on | trampoline in `ChanceOfPregnancy` (a parent's internal age >= 1,000) -> `VF2RollOlderPregnancy`: stock formula without the mother cutoff x 10, capped by `VF2OlderPregnancyCapTenths` (age 50..59: (60 - age) x 10; 60..68: 69 - age; 69+: 1), at least 1, `GetRandom(1000) <` it; `VF2StoreTryForBabyCooldownMaybe` skips the 1,200 s failed-try wait for such a couple | VERIFIED-C |
+| Baby wait reader / drop try | `HandleDropOnVillager` refuses while gs+0x25AE0 runs, cuts > 1 h to 3,300 s; `TryToMakeBaby` 0x4A23C0: success -> wait 0, `Impregnate`, everyone does 0x7B, each spouse trend +300 and happiness + 5 x (desire / 20); failure -> wait = now + (5 - m/20)(5 - f/20) x 1,800 s, trend -50 and happiness -3 each | VERIFIED-C |
+| Work choice | `CVillagerAI::DecideWhatToDo`: `GetRandom(total)` over the eligible actions' weights; x 3 for a need trigger or a held like, / 4 for a dislike; office 0x2C, kitchen 0x47, workshop 0x4B only by day or evening; `InitAI` run as linked: 469 / 553 / 478, min 50, max 45,000, likes 82 / 39 / 81 | VERIFIED-E (weights), VERIFIED-C (rule) |
+| Catch-up work | upkeep 0x4C4A8F: age - processed age > 2 units, not sick, not pregnant, a career -> `RealtimeWorkDone` 0x4C3DB0: weight of the career's work action / 400 tries, each `GetRandom(6) == 0` -> `AdvanceCareer(v, pay true, promote false)` | VERIFIED-C |
+| Heir | `CAdoptionScene::CreateNextGenerationCandidates` 0x4034A0 clones as adult every offspring id != -1; only `CFamilyTree::ReportDeath` 0x457A50 writes -1 (live death behaviour, or 240 units later): a child who left home is still offered | VERIFIED-C |
+| Hammock e-mail | `ImpactGame`: `MakeAllVillagersRunTo` x 750..834, y 184..240 only | VERIFIED-C |
+| Small Package / Medium Brown Box / Sealed Green Bag | yes: item rand(6) + 0x18 (the six medicines) / rand(4) + 4 (groceries) / rand(4) + 8 (organics); someone at home and a free tray place | VERIFIED-C |
+| Wrong Address | yes: -$100; rand(100) < 50 -> 0x1B5 Blue Children's Bed (50.05%), else 0x1B4 Pink (49.95%), to storage | VERIFIED-C |
+| Delivery Truck | yes: rand(100) < 33 -> 0x21B ($4,150 Wall Painting), < 66 -> 0x21A ($350), else 0x219 ($450), to storage; no: rand(8) x $20 | VERIFIED-C |
+| Mysterious Collector | can fire with someone at home and an item on collection page 0x67 or 0x86; award $20 / $30 / $100 per common / uncommon / rare over pages 0x67, 0x4F, 0x5B, 0x86, 0x92; yes: award, collections reset, goals 0x4A, 0x4B, 0x4C, 0x5D (and one more) reset | VERIFIED-C |
+| Rare Bird | yes: -(rand(8) x 10 + 15); everyone runs to x 174..240, y 269..309 and does 0x7D | VERIFIED-C |
+| Money checks | run as linked: Scratch-off > $21; EPA >= $1,312; Oh So Clever, Office Collection, Overdue Book, Professional Fee >= $750; Infringement and Tax Audit fee >= $750 and rand(100) >= 50; Tax Audit gift none. Read: Aesthetic Society, Children's Association, Community Association >= $750; Career Training > $255; Trainer > $5; Electric Bill none | VERIFIED-E / VERIFIED-C |
+| Starting weather | `CWeather::Reset` (only from `theGameState::Init`): type 0; rand(100) < 20 -> next = `Random(0)`, change after 30 game s; `Random(prev)` = PC minute mod 6, a 4 or 5 +1 mod 6 when rand(100) < 50, equal to prev +1 mod 6; weather not saved | VERIFIED-C |
+| Drawing | `CWeather::Draw`: type 0 nothing; type 1 grey tint 0.2 by day and `CSunBeam`; 2 rain; 3 rain and lightning; 4 fog; 5 snow; the tint by day only | VERIFIED-C |
+| Breakdowns | picks 0 toilet, 1 / 2 bathroom sinks, 3 router, 4 kitchen sink, 5 stove, 6 shower, 7 dryer lint fire, 8..10 north bathroom (0x49 / 0x48 / 0x4A), 11..13 ants; with kitchen garbage gs+0x28 > 5 `GetRandom(17)`, 14..16 ants | VERIFIED-C |
+| Patcher drop routes | generator helpers: lounger roll 80 + nap (70 - energy) + sleep 3 x (45 - energy) weights, branch changes as on the page, refused for weather type >= 2; patio / picnic preparing -7 energy +7 dirt +5 trend +7 hunger, drinking -10 hunger, picnic -40 hunger, each +4 dirt +6 poo; bike = treadmill walk / run 50%; gym and yoga = WorkingOut (-4 energy, +5 dirt) / QuickWorkout (-7, +7, +5 trend) 50%; ping-pong = PlayingPooltable; spa receiving +2 dirt, +7..11 energy; umbrella, birthday and holiday helpers plan no need changes | VERIFIED-C |
+| Action branches | Reading: `LinkPeepToFurniture(0x5A)` fails -> head shake, trend -1, else +1; toilet: both occupants (gs+0x25C80 / +0x25CA8) taken -> the wait path skips the changes; BBQ: food <= 10 refusal; Needs to sit down: energy (state+0x34) > 35 -> +3, else +10 (the 45..52 is the lie-down length); Jumping on the bed: -2 energy three times, +3 trend, nothing without a bed | VERIFIED-C |
