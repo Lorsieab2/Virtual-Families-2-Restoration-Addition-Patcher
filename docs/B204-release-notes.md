@@ -52,3 +52,19 @@ The bundle was re-exported from `main` at `f0911bd` (PR #440) from the same 32 e
 - **Family Tree Maker fix:** it opened the last save folder in the list instead of the one chosen.
 - Every patcher window can be minimized and maximized.
 - The first B204 zip (SHA-256 `7c0f9eec...`) is replaced.
+
+## Updated in place (2026-10-27): Clear All Illnesses keeps the food groups
+
+Updated 27 October 2026: Cure no longer resets a family member's food groups (all 32 builds rebuilt). Patch Virtual Families 2 again after updating.
+
+- **The bug:** the Cheat Upgrade **Clear All Illnesses** also zeroed the four food groups (Grains, Dairy, Meat and the fourth) of everyone it cured. Their flags and 24-hour timers sit right after the illness fields, and the cure took them for infections. A cured family had no food groups until the next grocery bag or Food Club delivery, which counts against old age, illness, health and happiness.
+- **The fix (#448):** the cure now clears only what the game's own cures clear: each symptom and its timer, and the mild and serious infections. Health, food groups and everything else are kept.
+- **Rebuilt:** all 32 executables, from `main` at `e0bb126` (#448), seeded from the B203 matrix; 32 distinct executables, new hashes in `docs/b204-matrix-manifest.md`, identities in `data/vf2/release-identities-B204.json`. The three companion DLLs are the same files as before (`vf2time_b200.dll` `3ea0a2a5...`, `vf2kids_b200.dll` `4a6bb5ff...`, `vf2history_b200.dll` `3c7181bc...`).
+- **Game Mechanics:** expanded. Every store item, upgrade and research has its own entry (#445, #446), and every line that was UNCONFIRMED is now settled, with the owner's weather names (#449). The Clear All Illnesses entry says what the cure clears and what it keeps. The Imported Candy entry says its cure skips a runny nose, which is how the stock game behaves.
+- **The bundle** is exported from the newest `main` (with #449). The Game Mechanics files go only into the bundle, never into an executable.
+- **Checks:** `tests/test_cure_keeps_food_groups_exe.py` runs the compiled cure and the game's own food-group count in every built executable. Only the illness fields change, and 4 food groups are still counted after the cure. The same test fails on the first B204 core, where 4 groups dropped to 0. No live test.
+- **Full suite** with release-only tests, against this matrix: 2368 passed, 36 skipped. Six files failed in the parallel pass:
+  - the Family Tree editor test passed when run alone;
+  - two bundle tests read the newest bundle in `outputs\`, which was B203 while the old B204 was moved aside. With the new bundle exported, they passed: 58 passed;
+  - two "generated files" tests are checkout-only. In a worktree that had just run the generator, they passed: 29 passed.
+- **The release gate** on the new zip: **RELEASE GATE PASSED**, no features lost against 24 retained releases (B179 to B203).
