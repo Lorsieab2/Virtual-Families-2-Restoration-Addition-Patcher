@@ -58,7 +58,8 @@ def test_the_store_corner_and_the_codes():
         assert needle in corner.text
     codes = _line("The code is sent to LDW's server")
     assert "no code is kept in the game" in codes.text and "has not been traced" in codes.text
-    assert "store specials" not in TEXT                 # VF2's store has no redraw key (only Esc)
+    none = _line("The store scenes handle no hidden keys.")      # VF2's store has no redraw key (only Esc)
+    assert "No key or key combination redraws the On Sale items or the Flea Market's goods" in none.text
 
 
 def test_dead_code_is_marked_and_never_a_player_action():
@@ -246,6 +247,19 @@ def test_the_store_corner_and_the_promo_code_url():
     key, start, _rel, _l = o.func("?HandleKey@CScrollingStoreScene@@")
     body = key[start:start + 0x27]
     assert body.count(b"\x81\x7d\x0c") == 1 and bytes.fromhex("817d0ce8030000") in body and body.endswith(b"\xc2\x0c\x00")
+    # the On Sale, Flea Market and outfit picks are refreshed only by the inventory itself, never from a key handler
+    objs = {p.name: Obj(p.name) for p in sorted(OBJ_DIR.glob("*.obj"))}
+    for target in ("?MaybeUpdateSaleItems@", "?MaybeUpdateRotatingItems@", "?MaybeUpdateOutfits@"):
+        assert [n for n, ob in objs.items() if ob.references(target)] == ["InventoryManager.obj"], target
+    for caller in ("?GetCategoryItemCount@CInventoryManager@@", "?Update@CInventoryManager@@QAEXXZ"):
+        _d, _s, rel, _l = objs["InventoryManager.obj"].func(caller)
+        assert any(n.startswith("?MaybeUpdateSaleItems@") for n in rel.values()), caller
+    assert [n for n, ob in objs.items() if ob.references("?GetCategoryItemCount@CInventoryManager@@")] == [
+        "ScrollingStoreScene.obj"]
+    assert not [n for n, ob in objs.items() if ob.references("?Update@CInventoryManager@@QAEXXZ")]
+    keyed = [n for n, ob in objs.items() for name, _v, s in ob.syms.values()
+             if s > 0 and name.startswith("?HandleKey@") and "Store" in name]
+    assert keyed == ["ScrollingStoreScene.obj"]
     promo = Obj("PromoCode.obj")
     assert b"promocode.php?code=%s&game=%s" in promo.b
     store = o.b
@@ -268,6 +282,22 @@ def test_the_random_tips():
     assert struct.pack("<I", 0x400) in state and struct.pack("<I", 0x300) in state
     names = Obj("theStringManager.obj").b
     assert b"eRandomTip1\0" in names and b"eRandomTip49\0" in names
+
+
+def test_the_collectibles_lifetime_odds_and_places():
+    o = Obj("CollectableItem.obj")
+    add, start, rel, _l = o.func("?Add@CCollectableItem@@")
+    assert bytes.fromhex("83c078") in add                       # expiry = real seconds + 120
+    assert bytes.fromhex("83ff02") in add                       # 2 slots
+    insects = add.find(bytes.fromhex("83bc83940300004f"))       # the insects' area (base 0x4F) ...
+    assert insects > 0 and bytes.fromhex("83f802") in add[insects:insects + 0x20]   # ... only Raining (2)
+    assert bytes.fromhex("83f803") in add[insects:insects + 0x20]                   # ... or Stormy (3)
+    assert bytes.fromhex("68 0a 01 00 00".replace(" ", "")) in add  # the Rock Hound Certificate for a forced fossil
+    upd, start, rel, _l = o.func("?Update@CCollectableItem@@QAEXXZ")
+    assert bytes.fromhex("b9c8190000b8e40c0000") in upd          # GetRandom(6,600), 3,300 with the Lucky Rock
+    page = [f.text for f in FACTS if f.group == gm.COLLECTIBLES]
+    assert any("lasts 120 seconds of real time" in t for t in page)
+    assert any("insects, leaves and nuts, the Raptor" in t for t in page)
 
 
 def test_the_dead_debug_code_has_no_caller():

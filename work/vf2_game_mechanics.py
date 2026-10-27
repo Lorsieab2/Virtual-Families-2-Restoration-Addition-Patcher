@@ -485,6 +485,16 @@ def _hidden_lines() -> list[Fact]:
            "HandleRedeemCredit -> CPromoCode::Submit(\"promocode.php?code=%s&game=%s\", \"VF2\") -> CWebClient "
            "(ldwsoftware.com, /game_backend/) -> PromoCodeCallback: \"coins\" -> CMoney::Adjust(value); "
            "\"brokerage\" -> CMoney+8 += 0.02 x value; \"invalid\"", sub=True),
+        _f(g, "The store scenes handle no hidden keys. The store menu, the furniture and accessory tabs, the Flea "
+              "Market, On Sale, the Special Upgrades, the Services, the renovations, the career upgrades, the pets "
+              "and the outfits are all pages of one store screen, and its only key is Esc (back to the house). No "
+              "key or key combination redraws the On Sale items or the Flea Market's goods, as Virtual Families 1's "
+              "store page has: they are picked again only when a page is listed, by the clock (see Flea Market and "
+              "On Sale).", C,
+           "every HandleKey in the objects: the store's is CScrollingStoreScene::HandleKey (type 6, 0x3E8 only); the "
+           "pages are SetStoreCategory categories; MaybeUpdateSaleItems / MaybeUpdateRotatingItems / "
+           "MaybeUpdateOutfits are called only from CInventoryManager::GetCategoryItemCount (from SetStoreCategory), "
+           "CInventoryManager::Update (no caller) and Reset (a new family)", sub=True),
         _f(g, "Dead code, never a player action: the Settings box's own Redeem Credit route; the Settings box never "
               "makes that button.", C,
            "theOptionsDialog::HandleMessage id +0x78 = 3 -> RedeemCreditDlg; the constructor builds buttons 2 and 4 "
@@ -974,7 +984,33 @@ def facts() -> list[Fact]:
            "spec 15: CCollectableItem::Update, 3 in 6,600 (3 in 3,300)"))
     add(_f(COLLECTIBLES, "Rarity: rare 4%, uncommon 13%, common 83%; with the Lucky Rock 8%, 26% and 66%. The same "
                          "item never appears twice at once.", C, "spec 15: CCollectableItem::Add 0x44CA10"))
-    add(_f(COLLECTIBLES, "Collectibles vanish again after a while, in real time.", C, "spec 15"))
+    add(_f(COLLECTIBLES, "A collectible lasts 120 seconds of real time from when it appears (the game clock's speed and "
+                         "pausing do not change that), then vanishes unless a family member has picked it up. At most "
+                         "2 are out at once.", C,
+           "CCollectableItem::Add: expiry +0x354 = GetSecondsFromGameStart + 0x78; Update: items outside the mess ids "
+           "0x73..0x85 past their expiry -> Remove; Add looks for a free slot among 2 (+0x34C, stride 0x1C)"))
+    add(_f(COLLECTIBLES, "Where: the game picks one of its collectible spawn areas evenly, then a free spot in it, then "
+                         "one of that area's collection's 4 items of the rarity rolled. The insects' area is taken only "
+                         "in Raining or Stormy weather (the roll is made again otherwise). An event that makes a "
+                         "collectible appear never picks a fossil area without the Rock Hound Certificate, and always "
+                         "gives a rare item.", C,
+           "CCollectableItem::Add: GetRandom(area count +0x5DC); area base 0x4F only with CWeather 2 or 3; forced "
+           "(bool argument) and base 0x67 / 0x86 without HaveUpgrade(0x10A) -> re-roll; forced -> +8 (rare); "
+           "base + GetRandom(4) (+4 uncommon, +8 rare); up to 1,000 IsValidSpawnPos tries"))
+    add(_f(COLLECTIBLES, "The 5 collections, 12 items each (4 common, 4 uncommon, 4 rare), 60 in all, as the Collections "
+                         "screen's 5 pages and the collection cabinet count them: insects, leaves and nuts, the Raptor "
+                         "skeleton's fossil pieces, the Pterodactyl skeleton's fossil pieces and bottle caps.", C,
+           "items 0x4F..0x72 and 0x86..0x9D (CCollectionScene::HandleMouse: page item < 0x24 -> 0x4F + i, else "
+           "0x62 + i; strings eSayCommonInsects..eSayRareBottleCaps 0x748..0x753)"))
+    add(_f(COLLECTIBLES, "A full collection completes its goal: insects, nuts and twigs, Raptor hunter, Pterodactyl "
+                         "hunter and bottle caps; all five complete Master collector. Selling collectibles online counts "
+                         "towards six more goals (5 and 15 of each rarity). The coins each goal awards have not been "
+                         "traced.", C,
+           "goal strings eString_AchievementInsectsDesc 0x323 .. eString_AchievementSuperDuperSellerDesc 0x339; "
+           "eString_GoalAward 0x14 \"You have been awarded %d coins!\""))
+    add(_f(COLLECTIBLES, "The Lucky Rock doubles the roll (about one every 37 seconds of real time) and the rare and "
+                         "uncommon odds; The Mysterious Collector event buys the whole collection back (see Random "
+                         "Events).", C, "CCollectableItem::Update GetRandom(3,300 / 6,600) < 3 with +0x8A8"))
 
     # ------------------------------------------------------------------ The store (spec 16, 23)
     out.extend(_store_lines())
