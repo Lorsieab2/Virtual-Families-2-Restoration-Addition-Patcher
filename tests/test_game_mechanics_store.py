@@ -292,8 +292,17 @@ def test_every_named_action_is_in_the_actions_group():
 
 
 def test_the_cure_row_says_what_its_code_clears():
-    # VF2ClearIllnesses (work/patch_mobile_furniture_pack.py): symptoms state+0x5C..0x62 and their expiries, both
-    # infections (+0x80 word) and +0x84..+0x97, the four food-group flags and expiries (UpdateNutritionAllVillagers)
+    # VF2ClearIllnesses (work/patch_mobile_furniture_pack.py): symptoms state+0x5C..0x62 and their expiries and both
+    # infections (+0x80 word), what the game's own cures write.  Since the 27 October 2026 B204 update it no longer
+    # zeroes +0x84..+0x97, the four food-group flags and expiries (UpdateNutritionAllVillagers); emulated on the built
+    # executables in tests/test_cure_keeps_food_groups_exe.py.
     line = _entry(gm.UPGRADES, "Clear All Illnesses: ")
     assert "every symptom and both infections are cured" in line.text
-    assert "clears all four food groups" in line.text
+    assert "the food groups and everything else are kept" in line.text
+    assert "Before the 27 October 2026 B204 update the same code also cleared all four food groups" in line.text
+
+
+def test_the_imported_candy_cure_skips_a_runny_nose():
+    # theMainScene::DispatchRotatingSundry's health +20 branch: word state+0x80 = 0, then ClearSymptom 2, 5, 3, 1,
+    # 4, 0 -- never 6, the runny nose (B200 desktop object theMainScene.obj)
+    assert "health +20 with every symptom but a runny nose and both infections cured" in TEXT

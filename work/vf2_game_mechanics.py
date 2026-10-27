@@ -1239,7 +1239,7 @@ FLEA_ITEMS = (
     ("Cinnamon Candy", 10, "hunger -2 and happiness +2 to +4 at once, then 3 rewards", C),
     ("Imported Candy", 25, "one of five, 20% each: happiness +5 to +12; happiness -5 with the toilet need set to 90 and "
                            "Using the toilet; happiness -5 and Running away; a skin rash; or health +20 with every "
-                           "symptom and both infections cured", C),
+                           "symptom but a runny nose and both infections cured", C),
     ("Virtuoso Fragrance for Men", 25, "on a family member without a career (every child born in the house): Running "
                                        "away and nothing else. On anyone else, whichever sex: that family member and "
                                        "the head of the family of the other sex (the matriarch for a man, the "
@@ -1421,10 +1421,11 @@ CHEAT_ITEMS = (
                              "two"),
     ("Next Pregnancy Triplets", "a one-shot: the next birth is triplets when 3 child places are free; it replaces the "
                                 "other two"),
-    ("Clear All Illnesses", "for everyone alive at home: every symptom and both infections are cured, and the same "
-                            "code also clears all four food groups (their flags and 24-hour timers), so nobody has a "
-                            "food group until the next grocery bag or Food Club delivery. The unpatched game has no "
-                            "such row"),
+    ("Clear All Illnesses", "for everyone alive at home: every symptom and both infections are cured, clearing only "
+                            "the fields the game's own cures clear (each symptom and its timer, the mild and serious "
+                            "infection); the food groups and everything else are kept. Before the 27 October 2026 "
+                            "B204 update the same code also cleared all four food groups (their flags and 24-hour "
+                            "timers). The unpatched game has no such row"),
     ("Max out Happiness Bar", 'its description: "Fills the Happiness bar for everyone currently in the house."'),
     ("Max out Energy Bar", 'its description: "Fills the Energy bar for everyone currently in the house."'),
     ("Max out Fed Bar", 'its description: "Fills the Fed bar for everyone currently in the house, so nobody is '

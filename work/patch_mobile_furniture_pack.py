@@ -18181,17 +18181,20 @@ static CVillagerState *VF2ResidentState(CVillager &resident) {
         reinterpret_cast<unsigned char *>(&resident) + 0x6AF4);
 }
 
-// Clears every symptom and every infection from one villager, reproducing
-// exactly the two loops CVillagerState::Reset runs and nothing else -- Reset
-// itself goes on to overwrite health, age and a dozen unrelated fields, which
-// a cure must not do.
+// Clears every symptom and both infections from one villager, writing exactly
+// the fields the game's own cures write and nothing else:
 //
-//   symptoms   7 flag bytes at +0x5C, 7 expiry dwords at +0x64
-//   infections 4 flag bytes at +0x84, 4 expiry dwords at +0x88
+//   symptoms   7 flag bytes at +0x5C, 7 expiry dwords at +0x64 -- the pair
+//              CVillagerState::ClearSymptom zeroes for one symptom
+//   infections the mild (+0x80) and serious (+0x81) flags, zeroed as one
+//              16-bit store exactly as the Vancomycin and the Imported Candy
+//              cure in theMainScene do
 //
-// The 16-bit field at +0x80 sits between the two blocks and is cleared by
-// Reset in the same breath as them; it is part of the illness state, so a
-// cure clears it too.  CVillagerState::IsSick reads precisely the seven
+// The four bytes at +0x84 and the four dwords at +0x88 are NOT illness state:
+// they are the food groups' active flags and 24-hour expiries, written by
+// CVillagerManager::UpdateNutritionAllVillagers and counted by
+// CVillagerState::FoodGroupsActive.  No cure in the game touches them, so a
+// cure must not either.  CVillagerState::IsSick reads precisely the seven
 // symptom flags, so zeroing them is what makes a villager well again.
 static void VF2ClearIllnesses(CVillagerState *state) {
     if (!state) return;
@@ -18201,10 +18204,6 @@ static void VF2ClearIllnesses(CVillagerState *state) {
         *reinterpret_cast<int *>(fields + 0x64 + symptom * 4) = 0;
     }
     *reinterpret_cast<unsigned short *>(fields + 0x80) = 0;
-    for (int infection = 0; infection < 4; ++infection) {
-        fields[0x84 + infection] = 0;
-        *reinterpret_cast<int *>(fields + 0x88 + infection * 4) = 0;
-    }
 }
 
 // eVF2ResidentStat picks which of the five house-wide cheats to apply while

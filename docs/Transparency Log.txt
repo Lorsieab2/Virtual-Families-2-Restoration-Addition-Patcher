@@ -767,6 +767,34 @@ Family History log (companion DLL, after B203; not live tested)
   name) to a slot that already has a log; it never starts one.
 - Static and emulated evidence only. No live test.
 
+Clear All Illnesses keeps the food groups (B204, updated 27 October 2026)
+-------------------------------------------------------------------------
+
+- Bug: the Cheat Upgrade Clear All Illnesses (0x153, VF2ClearIllnesses) also
+  zeroed CVillagerState +0x84..+0x97, which its comment called "infections".
+  They are the four food groups: active flag bytes +0x84..+0x87 and 24-hour
+  expiry dwords +0x88..+0x97. CVillagerManager::UpdateNutritionAllVillagers
+  writes flag +0x84+g and expiry +0x88+4g = now + 86,400 s, and
+  CVillagerState::FoodGroupsActive reads them (B200 desktop objects). So every
+  cure took away each cured family member's food groups. Emulating the
+  published B204 core: 4 food groups before the cure, 0 after.
+- The game's own cures write only a symptom's flag (+0x5C+k) and expiry
+  (+0x64+4k) (CVillagerState::ClearSymptom; the six symptom medicines clear the
+  flag) and the infections, mild +0x80 and serious +0x81 (Penicillin clears
+  +0x80; Vancomycin and the Imported Candy cure clear both with one 16-bit
+  store). None touches +0x84..+0x97. The diagnosis dialog only reads.
+- Fix: the cure now clears every symptom flag and expiry and both infections,
+  and nothing else. Health, food groups, the career id and every other field
+  are kept. All 32 B204 builds were rebuilt and the B204 download replaced in
+  place. Patch Virtual Families 2 again after updating.
+- Evidence: tests/test_cure_keeps_food_groups_exe.py runs the compiled cure
+  and the game's FoodGroupsActive in every built executable under unicorn.
+  Only the illness bytes change, and 4 food groups are still counted after
+  the cure. A dead family member is left untouched. Not live tested.
+- Found along the way, stock behaviour, unchanged: the Imported Candy's
+  health +20 cure clears symptoms 0-5 but never symptom 6, the runny nose. The
+  Game Mechanics page now says so.
+
 B153 default-off native debugger input milestone
 -------------------------------------------------
 
