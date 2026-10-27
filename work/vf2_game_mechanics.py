@@ -41,7 +41,8 @@ linked in both executables; the effects were read from the purchase and use code
 section 23; tests/test_game_mechanics_store.py).  Corrections made on the way: the Time Warp, the Lotto Ticket, the
 Health Plan, the Food Club's prices, the On Sale price, Boarding School and the medicines were UNCONFIRMED and are now
 read from the purchase path (HandleMouse -> HandlePurchaseItem -> HandleUpgrade); Bottled Tropical Sunshine sets the
-weather to Normal (type 0) and Bottled Tropical Rain to Stormy (type 3).
+weather to Sunny (type 0) and Bottled Tropical Rain to Stormy (type 3).  Weather uses the owner's names: Sunny, Normal,
+Raining, Stormy, Foggy, Snowing (the code's types 0 to 5; type 1 is the code's eWeather_Cloudy).
 
 Wording: family members, never the code's own word for them.  A patcher option (0 in the core executable) is
 shown as an option, both ways where the spec gives both.  The window describes the game; it fixes nothing.
@@ -319,8 +320,8 @@ def facts() -> list[Fact]:
                  "partner for a baby from 18 until 55; old from 55.", C, "spec 5"))
     add(_f(TIME, "There is no maximum age in the code: old age (below) ends every life by 65 years plus the food "
                  f"groups counted, unless the \"{OPTION_MORTALITY}\" option is on.", E, "spec 4, 5"))
-    add(_f(TIME, "A new baby is created at 2 years of age (40 age units).", U,
-           "spec 5 text: Impregnate passes 0x28; not labelled there"))
+    add(_f(TIME, "A new baby is created at 2 years of age (40 age units).", C,
+           "Impregnate 0x4BB920 -> SpawnSpecificPeep, age argument 0x28 (40 units, 20 per year)"))
     add(_f(TIME, "The store's Time Warp (Special Upgrades, $2,000) makes up 36,600 seconds (10 hours 10 minutes, "
                  "61 age units) at once, all of it, and caps the money it brings at $750.", C,
            "HandleUpgrade 0x48C2E0 case 0x112 on the purchase path HandleMouse -> HandlePurchaseItem: start time moved "
@@ -388,8 +389,10 @@ def facts() -> list[Fact]:
            "HandleMouseDown 0x49EE90 cases 0x18..0x21"))
     add(_f(HEALTH, "Deaths from illness (health reaching 0 while sick) and from starvation (health reaching 0 from "
                    "missed meals).", C, "spec 4"))
-    add(_f(HEALTH, "Deaths by work accident or act of nature: the causes exist; what brings them is not traced.", U,
-           "spec 4"))
+    add(_f(HEALTH, "Deaths by work accident or act of nature never happen: the game has the two causes (3 and 4), "
+                   "but the only code that sets them is never called and is left out of the game, and every other "
+                   "health change names cause 0, 1 or 2.", C,
+           "cause enum 3 / 4; MakeRandomVillagersInjured / MakeRandomVillagersDead have no callers and are not linked into B200; all 20 AdjustHealth / SetHealth call sites pass cause -1, 0, 1 or 2"))
     add(_f(HEALTH, "A family member who has died stays in the house for 40 real hours (240 age units), then is "
                    "taken from the family tree's slot.", C, "spec 4: 0x4C4C9D"))
 
@@ -426,7 +429,11 @@ def facts() -> list[Fact]:
     add(_f(PREGNANCY, f"Patcher option \"{OPTION_PREGNANCIES}\", off: the table above (no babies for mothers over "
                       "50).", E, "spec 6"))
     add(_f(PREGNANCY, f"Patcher option \"{OPTION_PREGNANCIES}\", on: with a parent 50 or older, a chance from 10% at "
-                      "50 down to 0.1% from 69.", U, "spec 6: VF2RollOlderPregnancy, from discoveries.md"))
+                      "50 down to 0.1% from 69: the formula below without the mother-over-50 cutoff, capped by the "
+                      "older parent's age at 10% at 50, 1 point less each year to 1% at 59, 0.9% at 60, 0.1 point "
+                      "less each year to 0.1% at 68 and 0.1% from 69, and never under 0.1%. A failed try the spouses "
+                      "start themselves sets no waiting time for such a couple.", C,
+           "work/patch_mobile_furniture_pack.py: ChanceOfPregnancy hook -> VF2RollOlderPregnancy (GetRandom(1000) < chance in tenths), VF2OlderPregnancyCapTenths, VF2StockPregnancyChanceWithoutCutoff; VF2StoreTryForBabyCooldownMaybe at ProcessCurrentPlan+0xA45"))
     add(_f(PREGNANCY, "Twins and triplets: twins 5.25%, triplets 1.75%, one baby 93%; each parent's fertility over 85 "
                       "adds its excess, in points, to both rolls. Twins need 2 free child places, triplets 3.", C,
            "spec 6: Impregnate 0x4BB920"))
@@ -434,7 +441,16 @@ def facts() -> list[Fact]:
     add(_f(PREGNANCY, "A pregnancy lasts 21 age units: 3 hours 30 minutes of real time.", C, "spec 6: 0x4C47D8"))
     add(_f(PREGNANCY, "After a birth the game sets a waiting time of 10 minutes (both parents' desire 80 or more) to "
                       "4 hours 10 minutes (desire 0) before the next try.", C, "spec 6: gs+0x25AE0 writer"))
-    add(_f(PREGNANCY, "What that waiting time holds back.", U, "spec 6: reader of gs+0x25AE0 not found"))
+    add(_f(PREGNANCY, "What that waiting time holds back: dropping one spouse on the other. While it runs, the "
+                      "spouse shakes their head with \"It is too soon to try to make a baby again.\", and a wait "
+                      "of more than 1 hour is cut to 55 minutes. When it is over, the drop starts a try.", C,
+           "the only reader of gs+0x25AE0 is theMainScene::HandleDropOnVillager 0x49E726 / 0x49E778 (cut to now + 3,300 s at 0x49E78E)"))
+    add(_f(PREGNANCY, "A try from that drop: a success sets no wait, everyone celebrates and each spouse gets 300 "
+                      "mood points and happiness +5 for every 20 points of their desire; a failure sets a wait of "
+                      "(5 - mother's desire / 20) x (5 - father's desire / 20) x 30 minutes of game time (30 "
+                      "minutes with both 80 or more, 12 hours 30 minutes with both under 20), with 50 mood points "
+                      "and 3 happiness off each spouse. A failed try the spouses start themselves sets 20 minutes.",
+           C, "theMainScene::TryToMakeBaby 0x4A23C0: ChanceOfPregnancy, Impregnate, wait = now + product x 0x708; ProcessCurrentPlan+0xA45 writes now + 0x4B0"))
 
     # ------------------------------------------------------------------ Careers (spec 7)
     add(_f(CAREERS_GROUP, "A career is picked at random from 132 (38 in the kitchen, 57 in the office, 37 in the "
@@ -446,9 +462,20 @@ def facts() -> list[Fact]:
                           "Master; a success pays 6% of the salary and adds progress (more in better-equipped rooms, "
                           "less at higher levels). 3,000 progress is a promotion: a new salary and a celebration.", C,
            "spec 7: AdvanceCareer"))
-    add(_f(CAREERS_GROUP, "How often family members choose to work.", U, "spec 7: behaviour entry"))
-    add(_f(CAREERS_GROUP, "During a catch-up, work done while nobody watched adds career progress (unpaid), less "
-                          "when sick and none when pregnant.", U, "spec 7: RealtimeWorkDone 0x4C3DB0"))
+    add(_f(CAREERS_GROUP, "Choosing to work: each time a family member picks what to do next, the pick is a weighted "
+                          "draw among everything they can do then, and the office, kitchen and workshop work are "
+                          "among them only by day and in the evening. Their starting weights are 469 (office), "
+                          "553 (kitchen) and 478 (workshop), each kept between 50 and 45,000; a weight counts 3 "
+                          "times when a need calls for it or its like is held (the Likes text names them "
+                          "\"carbs\", \"cooking\" and \"computers\") and a quarter when that like is a "
+                          "dislike.", C,
+           "CVillagerAI::DecideWhatToDo (GetRandom(total weight)); InitAI run as linked: behaviours 0x2C / 0x47 / 0x4B weights 469 / 553 / 478, min 50, max 45,000, likes 82 / 39 / 81"))
+    add(_f(CAREERS_GROUP, "During a catch-up, for each 10 minutes made up while a family member is more than 20 "
+                          "minutes behind, a family member with a career who is not sick and not pregnant gets one "
+                          "try for every 400 of their work weight (1 at the starting weights, 112 at 45,000), each "
+                          "a 1 in 6 chance (16.67%) of a piece of work: its progress and its pay, as above, with no "
+                          "success roll.", C,
+           "AllVillagersRealtimePhysiologyAndProductivityUpkeep 0x4C4A8F..0x4C4AD6 -> RealtimeWorkDone 0x4C3DB0: weight / 400, GetRandom(6) == 0 -> AdvanceCareer(villager, pay true, promote false)"))
     add(_f(CAREERS_GROUP, "Every career's pay, per real hour, at each level from Beginner to Master:", C,
            "careers.tsv"))
     out.extend(_career_lines())
@@ -505,7 +532,10 @@ def facts() -> list[Fact]:
     add(_f(DATING, "Next generation: when a parent dies while a child is alive, the game offers the next "
                    "generation. Choosing an heir starts it, and everyone else leaves the house.", C,
            "spec 10: ReportDeath, StartNextGeneration"))
-    add(_f(DATING, "Which child may be chosen as the heir.", U, "spec 10: player input"))
+    add(_f(DATING, "The heir is chosen from every child of the current generation still listed in the family tree, "
+                   "each shown as an adult. A child is taken off that list only by their death, so a child who "
+                   "has left home is still offered.", C,
+           "CAdoptionScene::CreateNextGenerationCandidates 0x4034A0: every offspring id != -1 -> ClonePeepAsAdult; CFamilyTree::ReportDeath 0x457A50 is the only writer of -1 to an offspring id"))
     add(_f(DATING, f"Patcher option \"{OPTION_PREGNANCIES}\", on: the next generation is also offered when the "
                    "oldest family member reaches 60 with a child alive. Off: only as above.", C,
            "spec 10: VF2CanStartNextGenerationAtOlderAge"))
@@ -524,19 +554,41 @@ def facts() -> list[Fact]:
            "spec 11: CalcAward and ImpactGame run as linked (t_events)"))
     for text, label in _EVENT_LINES:
         add(_f(EVENTS, text, label, "spec 11 table", sub=True))
-    add(_f(EVENTS, "The money each \"money check\" event needs before it can happen.", U, "spec 11: events_dump"))
+    add(_f(EVENTS, "The money each \"money check\" event needs before it can happen (the family's money at the "
+                   "time):", C, "CanFire of each event"))
+    for text, label in (
+            ("the Scratch-Off Lottery Ticket: more than $21;", E),
+            ("the EPA Visit: $1,312 or more;", E),
+            ("Oh So Clever, Office Collection, Overdue Book and the Professional Association Fee: $750 or more;", E),
+            ("the Infringement Complaint and the Tax Audit fee: $750 or more, and then half the time (49.95%);", E),
+            ("the Aesthetic Society, the Neighborhood Children's Association and the Community Association: "
+             "$750 or more;", C),
+            ("Professional Career Training: more than $255; the Trainer: more than $5;", C),
+            ("the Tax Audit gift: no money check;", E),
+            ("the Electric Bill Correction: no money check.", C)):
+        add(_f(EVENTS, text, label, "CanFire run as linked (E) or read (C)", sub=True))
 
     # ------------------------------------------------------------------ Weather (spec 12)
-    add(_f(WEATHER, "Kinds: normal, sunny, raining, stormy (rain and lightning), foggy and snowing.", C, "spec 12"))
-    add(_f(WEATHER, "After a spell the weather always returns to normal; after normal the next kind is picked "
-                    "evenly from the other five (never sunny at night). The weather stands still while paused.", C,
+    add(_f(WEATHER, "Weather names (the code's type number and enum name): Sunny 0 eWeather_Sunny, Normal 1 "
+                    "eWeather_Cloudy, Raining 2 eWeather_Raining, Stormy 3 eWeather_Stormy, Foggy 4 "
+                    "eWeather_Foggy, Snowing 5 eWeather_Snowing.", C, "CodeView enum EWeather, Weather.obj"))
+    add(_f(WEATHER, "Kinds: Sunny (nothing is drawn over the house), Normal (a grey tint by day, with sun beams), "
+                    "Raining, Stormy (rain and lightning), Foggy and Snowing.", C,
+           "spec 12: CWeather::Draw (type 0 draws nothing; type 1 tint 0.2 by day and CSunBeam)"))
+    add(_f(WEATHER, "After a spell the weather always returns to Sunny; after Sunny the next kind is picked "
+                    "evenly from the other five (never Normal at night). The weather stands still while paused.", C,
            "spec 12: CWeather::Update 0x4CD110"))
-    add(_f(WEATHER, "Normal weather lasts 15 to 40 real minutes; any other kind 6 to 12.", C,
+    add(_f(WEATHER, "Sunny weather lasts 15 to 40 real minutes; any other kind 6 to 12.", C,
            "spec 12: SetCurrent 0x4CCF20"))
     add(_f(WEATHER, "Heavy rain or a storm sends everyone outside to take cover.", C, "spec 12"))
     add(_f(WEATHER, "The collectibles of the rain-only spawn areas appear only in Raining or Stormy weather.", C,
            "spec 12, 15"))
-    add(_f(WEATHER, "The weather when the game starts.", U, "spec 12: when CWeather::Reset runs"))
+    add(_f(WEATHER, "When the game starts (a new family, a change of player, loading a family or starting over) the "
+                    "weather is Sunny; the weather is not saved. With a 20% chance (20.02%) a change follows 30 "
+                    "seconds of game time later, to the kind your PC clock's minute gives (its remainder after "
+                    "dividing by 6, in the order of the names above): a 4 or 5 moves on one kind half the time "
+                    "(50.05%; after Snowing comes Sunny), and a Sunny result moves on to Normal.", C,
+           "CWeather::Reset, called only by theGameState::Init; CWeather::Random(previous)"))
 
     # ------------------------------------------------------------------ Messes and malfunctions (spec 13)
     add(_f(MESSES, "Messes appear every 5 real hours of game time (2.5 hours with 4 or more in the family), not "
@@ -554,7 +606,10 @@ def facts() -> list[Fact]:
                    "north bathroom's shower, toilet and sink (need that renovation), ants (3 of the 14), and six "
                    "other breakdowns. A permanent fix stops its own kind; a pick the house cannot have makes "
                    "nothing.", C, "spec 13: 0x4A28F4"))
-    add(_f(MESSES, "The names of the other breakdowns, and when a 17-way pick is used instead.", U, "spec 13"))
+    add(_f(MESSES, "The six other breakdowns: the toilet, the two bathroom sinks, the kitchen sink, the stove and "
+                   "the shower. When the kitchen trash holds more than 5 (it is full at 20) the pick is one of 17 "
+                   "instead, and the 3 added picks are ants too (6 of the 17).", C,
+           "spec 13: picks 0 toilet, 1 / 2 bathroom sinks, 3 router, 4 kitchen sink, 5 stove, 6 shower, 7 dryer lint fire, 8..10 north bathroom 0x49 / 0x48 / 0x4A, 11..13 ants; GetRandom(17) with gs+0x28 > 5, 14..16 ants"))
 
     # ------------------------------------------------------------------ Collectibles (spec 15)
     add(_f(COLLECTIBLES, "The game rolls for a collectible 30 times a second while it runs (not paused): about one "
@@ -579,7 +634,7 @@ def facts() -> list[Fact]:
                  "an infection ending 3% (mild) or 1.2% (serious) per check, a symptom lasting 6 to 17 hours;",
                  "old age 10% per year over, pregnancy by the table, twins 5.25%, triplets 1.75%;",
                  "work success 56.25% to 100%, a career from 132;",
-                 "weather: the next kind 1 in 5, normal 15 to 40 minutes, others 6 to 12;",
+                 "weather: the next kind 1 in 5, Sunny 15 to 40 minutes, others 6 to 12;",
                  "a collectible 3 in 6,600 per frame (3 in 3,300 with the Lucky Rock), rare 4%, uncommon 13%;",
                  "a mess: under 30 of 100 a weed, under 55 a sock, under 80 a wrapper, else a smudge;",
                  "the Lotto Ticket: $50,000 4 in 32,768, $25,000 8, $5,000 80, $1,000 800, $750 2,000, a grocery bag "
@@ -587,9 +642,10 @@ def facts() -> list[Fact]:
                  "the Imported Candy 1 of 5 and the Dirty Candy 1 of 4, evenly; the Energy Drink, Chamomile Drink and "
                  "Sleeping Pills 15% / 85%, the Mega Chamomile Extract 75% / 25%."):
         add(_f(INDEX, text, C, sub=True))
-    add(_f(INDEX, "The other rolls the game makes: how long actions last and which way they are done, animations, "
-                  "e-mail wording, names and looks. What actions give the family is not decoded yet.", U,
-           "spec 18: 4,431 behaviour sites"))
+    add(_f(INDEX, "The other rolls the game makes change no need: how long each step of an action lasts, which way "
+                  "it faces, its animation, pose and sound, e-mail wording, names and looks. What each action "
+                  "gives is in the Actions group.", C,
+           "spec 18: 4,431 behaviour sites; every conditional branch of the 63 listed actions read"))
     add(_f(INDEX, "Timers, in real time at normal speed (game-clock timers stop while paused; real-time ones run "
                   "while paused and while the game is closed):", C, "spec 17"))
     for text, label in (
@@ -607,7 +663,7 @@ def facts() -> list[Fact]:
             ("a house malfunction: about every 27 minutes, also while paused;", E),
             ("the autosave: every 2 minutes (real time), also while paused, to the same save file a quit "
              "writes; the same in the unpatched game;", E),
-            ("a weather spell: normal 15 to 40 minutes, others 6 to 12 (game clock);", C),
+            ("a weather spell: Sunny 15 to 40 minutes, others 6 to 12 (game clock);", C),
             ("On Sale: every 24 hours (game clock);", C),
             ("the Flea Market, with the patcher: never changes;", E),
             ("the Flea Market, unpatched game: every 6 hours (real time);", E),
@@ -637,8 +693,9 @@ _EVENT_LINES = (
     ("Tax Audit (Email Events): a fee of -$40 to -$114, or a gift of +$500.", E),
     ("Old Friend (Email Events, three kinds): nothing happens.", E),
     ("Oh! A collectible! (Email Event): a collectible appears.", E),
-    ("My Weather Machine (Email Event, normal or sunny weather): rain, snow or fog, a third each.", E),
-    ("An extra hammock (Email Event): everyone runs to the yard.", U),
+    ("My Weather Machine (Email Event, Sunny or Normal weather): rain, snow or fog, a third each.", E),
+    ("An extra hammock (Email Event): everyone runs to the yard (the spot x 750 to 834, y 184 to 240); nothing else "
+     "happens.", C),
     ("Birthday present +$10 to +$50; Preferred Customer +$5 to +$79; Craft Fair +$35 to +$45; Rebate +$50; Helpful "
      "Child +$5 to +$54; Bad Cookies -$5 to -$100 (Email Events).", E),
     ("Office Collection -$4 to -$40 or -$5 to -$50; Overdue Book -$5 to -$50; Bake Sale -$6 to -$60 (Email Events).", E),
@@ -669,16 +726,24 @@ _EVENT_LINES = (
     ("Collecting Contest (Popup Event): yes, +$10 with fewer than 10 collectibles, +$50 with 10 to 20, +$100 with 21 or "
      "more.", E),
     ("Adult-proof (Popup Event, 2 or more children): yes, -$50.", E),
-    ("Small Package, Medium Brown Box, Sealed Green Bag (Popup Events, room in the tray): yes, a random item.", U),
+    ("Small Package, Medium Brown Box, Sealed Green Bag (Popup Events, someone at home and room in the tray): yes, the "
+     "Small Package one of the 6 medicines (Throat Lozenges, Peptic Syrup, Analgesic/Anti-inflammatory, Antitussive "
+     "Syrup, Cortisone Cream, Antihistamine), 1 in 6 each; the Medium Brown Box one of the 4 groceries, 25% each; "
+     "the Sealed Green Bag one of the 4 organics, 25% each.", C),
     ("A Tiny White Box (Popup Event): yes, a third of the food is lost.", E),
     ("Scratch-Off Lottery Ticket (Popup Event): yes, -$20 and a 33% chance of winning $0 to $90 (in $10 steps).", E),
-    ("The Wrong Address (Popup Event): yes, -$100 and one of two pieces of furniture.", U),
-    ("The Delivery Truck (Popup Event): yes, a piece of furniture; no, an amount of $0 to $140 (in $20 steps).", U),
+    ("The Wrong Address (Popup Event): yes, -$100 and a Blue Children's Bed (50.05%) or a Pink Children's Bed "
+     "(49.95%), into storage.", C),
+    ("The Delivery Truck (Popup Event): yes, a Wall Painting into storage: the $4,150 one 33.03%, the $350 one 33.03%, "
+     "the $450 one 33.94%; no, +$0 to +$140 (in $20 steps).", C),
     ("Talent Scout (Popup Event, a child): yes, the child leaves home and the family gets $500.", E),
     ("Beauty Contest (Popup Event, a child): yes, -$10 and a 33% chance of winning $100.", E),
     ("Landscaping -$20, the weeds gone; Housekeeping -$20, the socks, wrappers and smudges gone; Total House Care "
      "-$50, all of them gone (Popup Events).", E),
-    ("The Mysterious Collector (Popup Event): buys collectibles.", U),
+    ("The Mysterious Collector (Popup Event, someone at home and an item collected on either of two of the "
+     "collection pages): yes, every collectible collected is sold, +$20 for each common, +$30 for each uncommon "
+     "and +$100 for each rare across all five pages, and the collections and the collection goals start again "
+     "from nothing.", C),
     ("Water Pressure Surge (Popup Event): no brings five leaks.", E),
     ("Professional Career Training (Popup Event): yes, -$250 and a promotion.", E),
     ("The Trainer (Popup Event): yes, -$5 and all the food is lost.", E),
@@ -686,7 +751,8 @@ _EVENT_LINES = (
     ("The Power Failure (Popup Event): the power goes out. Throw out the food: the food store is reset. Take a chance: no one ill "
      "70.8%, one family member with a stomach upset 20.8%, two 8.3%.", E),
     ("Career Change Counselor (Popup Event): yes, a new random career at level 0.", E),
-    ("The Rare Bird (Popup Event): everyone runs to the yard.", U),
+    ("The Rare Bird (Popup Event): yes, -$15 to -$85 (in $10 steps); everyone runs to the yard (the spot x 174 to 240, "
+     "y 269 to 309) and celebrates.", C),
     ("School Fund-raiser (Popup Event): yes, -$25 and +100 food.", E),
 )
 
@@ -1207,7 +1273,8 @@ FLEA_ITEMS = (
                                 "never come again, and everyone at home starts Celebrating the office upgrade. "
                                 "Anywhere else: \"You can't use this here!\" and it stays in the tray", C),
     ("Bottled Tropical Rain", 50, "the weather becomes Stormy, rain with lightning (see Bottled weather)", C),
-    ("Bottled Tropical Sunshine", 50, "the weather becomes Normal, type 0 (see Bottled weather)", C),
+    ("Bottled Tropical Sunshine", 50, "the weather becomes Sunny, and it is daytime for 3 minutes of game time even "
+                                  "at night (see Bottled weather)", C),
     ("Encyclopedia", 75, "happiness +1 to +3; one like, picked from the first 100 of the 121, is added if it is not "
                          "already a like and one of the 3 like places is free, and that like is taken off the "
                          "dislikes either way; then Studying", C),
@@ -1375,6 +1442,19 @@ CHEAT_ITEMS = (
 )
 
 
+# The branches of an action that change its need changes (beyond a missing or unreachable piece), read from each
+# handler: Reading 0x33 (LinkPeepToFurniture 0x5A fails -> PlanToShakeHead, PlanToDecHappinessTrend(1)), Using the
+# toilet 0x62 (gs+0x25C80 / +0x25CA8 occupants; both taken -> the wait path to 0x208 skips PlanToDecPoo), Barbecuing
+# 0xDA (CFoodStore+0x78 > 10), Needs to sit down 0x189 (state energy +0x34 > 35 -> +3, else +10), Jumping on the bed
+# 0x55 (FindFurniture 0x12 / 0x60).
+ACTION_BRANCHES = {
+    0x033: "-1 with no reachable seat (and a head shake), +1 when seated",
+    0x062: "all three with a free toilet (the north bathroom's too, with that renovation); with every toilet taken, "
+           "the have-to-pee dance and no need changes",
+    0x0DA: "with 10 food or less, a refusal and no need changes",
+    0x055: "with no bed, no need changes",
+}
+
 # Actions (CBehavior handlers, registered by id in CBehavior::CBehavior): id -> (name, the need changes its code
 # plans, whether a change appears on more than one of its branches).  Need changes extracted from each handler's
 # PlanToInc* / PlanToDec* calls and their arguments (rand ranges resolved); names from the action's own label.
@@ -1389,7 +1469,7 @@ ACTION_ITEMS = {
     0x03e: ('Watching TV', (), False),
     0x046: ('Checking weight', (), False),
     0x049: ('Walking on the treadmill', ('dirtiness +8', 'mood points +4'), False),
-    0x055: ('Jumping on the bed', ('energy -2', 'mood points +3'), True),
+    0x055: ('Jumping on the bed', ('energy -6 (-2 three times)', 'mood points +3'), True),
     0x056: ('Studying', ('energy -3', 'mood points +2', 'hunger +2'), False),
     0x059: ('Exercising outdoors', ('health +2', 'energy -5', 'mood points +3'), False),
     0x062: ('Using the toilet', ('dirtiness +40', 'toilet need -40', 'dirtiness -30'), True),
@@ -1433,7 +1513,7 @@ ACTION_ITEMS = {
     0x171: ('Confused', (), False),
     0x175: ('Shaking head', (), False),
     0x176: ('Shaking head', (), False),
-    0x189: ('Needs to sit down', ('energy +45 to 52',), False),
+    0x189: ('Needs to sit down', ('energy +3 (energy over 35) or +10 (energy 35 or less)',), True),
     0x193: ('Playing drums', ('mood points +1', 'energy -2'), False),
     0x194: ('Hugging the bear', ('mood points +3', 'energy +1'), False),
     0x195: ('Driving like a grownup', ('mood points +3', 'energy -2'), False),
@@ -1826,12 +1906,12 @@ def _store_lines() -> list[Fact]:
            "DispatchRotatingSundry 0x49CB90 -> UseTool"))
     add(_f(FLEA, "Bottled weather: the family member \"Deploying Bottled Weather\" gets happiness +1 to +3, walks to "
                  "one fixed spot of the house map (x 1,539, y 208), bends, waits, and then the weather changes. Stormy, Foggy and Snowing last "
-                 "6 to 12 minutes of game time; Normal 15 to 40; then the weather carries on as in Weather.", C,
+                 "6 to 12 minutes of game time; Sunny 15 to 40; then the weather carries on as in Weather.", C,
            "DispatchRotatingSundry cases 0x3B / 0x3C / 0x41 / 0x42: PlanToChangeWeather(3 / 0 / 4 / 5) -> "
-           "CWeather::SetCurrent 0x4CCF20 (0 Normal, 1 Sunny, 2 Raining, 3 Stormy, 4 Foggy, 5 Snowing)"))
-    add(_f(FLEA, "Sunny (type 1, the grey tint with sun beams) is never set by a bottle: Bottled Tropical Sunshine "
-                 "sets type 0, Normal. Sunny comes only from the weather's own change (see Weather).", C,
-           "B200 0x49CB90+0xD00: push 0 before PlanToChangeWeather; SetCurrent case 1 = CSunBeam::Reset"))
+           "CWeather::SetCurrent 0x4CCF20 (0 Sunny, 1 Normal, 2 Raining, 3 Stormy, 4 Foggy, 5 Snowing)"))
+    add(_f(FLEA, "Bottled Tropical Sunshine sets Sunny (type 0) and makes it daytime for 180 seconds of game time. "
+                 "No bottle sets Normal (type 1); Normal comes only from the weather's own change (see Weather).", C,
+           "B200 0x49CB90+0xD00: push 0 before PlanToChangeWeather, OverrideNight(180); every B204 variant pushes 0; SetCurrent case 1 = CSunBeam::Reset"))
     for name, price, effect, label in FLEA_ITEMS:
         hp = f" ({_money(price * 25 // 100)} with the Health Plan)" if name in HEALTH_PLAN_FLEA else ""
         add(_f(FLEA, f"{name}: {_money(price)}{hp}: {effect}.", label,
@@ -1962,10 +2042,26 @@ def _store_lines() -> list[Fact]:
            "theMainScene::HandleDropOnHotSpot -> CContentMap::GetHotSpot ((cell >> 18) & 0x7F) -> CHotSpot::Dispatch "
            "(handlers set in CHotSpot::CHotSpot) -> NewBehavior; the *.png.fmap of each piece (GetFmapName: ImageList "
            "0x579E48), stock and B204 maps compared"))
-    add(_f(FURNITURE, "The need changes of the patcher's own drop routes (the pieces that name one) are in its helper "
-                      "code, which this page has not decoded; the routes and when they run are read from it.", U,
-           "work/patch_mobile_furniture_pack.py: VF2HandleDropOnMobileFurniture and its VF2HandleMobile* / VF2Run* "
-           "helpers"))
+    add(_f(FURNITURE, "The need changes of the patcher's own drop routes (the pieces that name one):", C,
+           "work/patch_mobile_furniture_pack.py: VF2HandleMobileChaise; VF2RunMobilePreparingDrinks / DrinkAtPatioChair / PreparingPicnic / EatAtPicnicTable; VF2ExerciseBikeWalk / Run (CBehavior::WorkoutTreadmill / RunningOnTreadmill); VF2GymDonorBehaviors (WorkingOut -4 energy +5 dirt; QuickWorkout -7 energy +7 dirt +5 trend; GetRandom(2)); VF2PingPongPlay (PlayingPooltable); VF2PlanSpaTreatment; the umbrella, birthday and holiday helpers plan no PlanToInc / PlanToDec"))
+    for text in (
+            "the lounger route: one roll of 80, plus 70 minus energy below 70 energy, plus 3 x (45 minus energy) "
+            "below 45 energy: under 20 relaxing (dirtiness +4, mood points +1, energy +2), under 40 reading (no "
+            "need changes), under 60 studying (mood points +1), under 80 sitting (energy +3), then a nap "
+            "(dirtiness +2, energy +7 to 11) or, in the last part, sleep (dirtiness +2, energy +10); refused in "
+            "Raining, Stormy, Foggy or Snowing weather;",
+            "the patio table and picnic table routes: preparing (energy -7, dirtiness +7, mood points +5, hunger "
+            "+7); drinking (hunger -10, dirtiness +4, toilet need +6) or the picnic (hunger -40, dirtiness +4, "
+            "toilet need +6); refused in Raining, Stormy, Foggy or Snowing weather, for a child under 14 or with "
+            "under 31 food;",
+            "the exercise bike: walking as Walking on the treadmill (dirtiness +8, mood points +4) or running as "
+            "Running on the treadmill (dirtiness +6, mood points +2, energy -8), 50% each;",
+            "the home gym and Doing yoga: working out (energy -4, dirtiness +5) or a quick workout (energy -7, "
+            "dirtiness +7, mood points +5), 50% each;",
+            "ping-pong: as Playing pool, no need changes;",
+            "the spa treatments: receiving one, dirtiness +2 and energy +7 to 11; giving one, no need changes;",
+            "the umbrella, birthday and holiday routes: no need changes."):
+        add(_f(FURNITURE, text, C, "work/patch_mobile_furniture_pack.py: the route's helper"))
     listed = set()
     for tab, _p, _s in tabs:
         add(_f(FURNITURE, f"{tab}:", E, cat, sub=False))
@@ -2063,14 +2159,16 @@ def _store_lines() -> list[Fact]:
 
     # ------------------------------------------------------------------ Actions
     add(_f(ACTIONS, "Every action an item or a furniture piece starts, with every need change its code plans, across "
-                    "all of its branches. Each planned change applies once, when its step plays. An action whose code "
-                    "branches (by age, time of day, weather or a roll) gives only the changes of the branch it takes; "
-                    "which branch plans which change is not listed here. \"No need changes\": the action's code "
-                    "plans none (it moves, animates or speaks only).", C,
+                    "all of its branches. Each planned change applies once, when its step plays. No action's need "
+                    "changes depend on age, time of day or weather, and its rolls pick only its steps, poses and "
+                    "sounds. An action whose piece is missing, taken or out of reach plans no need changes; the "
+                    "other branches that change them are given with their action. \"No need changes\": the "
+                    "action's code plans none (it moves, animates or speaks only).", C,
            "CBehavior handlers (ids from CBehavior::CBehavior SetMacro): PlanToInc* / PlanToDec* calls and arguments"))
     for bid, (name, changes, branched) in ACTION_ITEMS.items():
         what = ", ".join(changes) if changes else "no need changes"
-        tail = ""
+        tail = ACTION_BRANCHES.get(bid, "")
+        tail = f"; {tail}" if tail else ""
         add(_f(ACTIONS, f"{name}: {what}{tail}.", C, f"behaviour {bid:#x}", sub=True))
     return out
 

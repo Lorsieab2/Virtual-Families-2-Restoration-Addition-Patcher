@@ -63,15 +63,18 @@ def test_every_store_item_has_its_own_entry():
 def test_no_vague_words_and_no_cloudy():
     assert not re.search(r"\b(some|etc\.|a bit)\b", TEXT, re.I), re.search(r".{40}\b(some|etc\.|a bit)\b.{40}", TEXT,
                                                                              re.I)
-    assert "Cloudy" not in TEXT and "cloudy" not in TEXT
+    # the code's enum name eWeather_Cloudy appears once, in the "Weather names" line; the page says Normal
+    assert TEXT.count("Cloudy") == 1 and "eWeather_Cloudy" in TEXT and "cloudy" not in TEXT
 
 
 def test_the_weather_bottles_use_the_owners_weather_names():
-    assert "Bottled Tropical Sunshine: $50: the weather becomes Normal, type 0" in TEXT
+    assert "Bottled Tropical Sunshine: $50: the weather becomes Sunny, and it is daytime for 3 minutes" in TEXT
     assert "Bottled Tropical Rain: $50: the weather becomes Stormy, rain with lightning" in TEXT
     assert "Fog In a Bottle: $50: the weather becomes Foggy" in TEXT
     assert "Snow in a Bottle: $50: the weather becomes Snowing" in TEXT
-    assert "Sunny (type 1, the grey tint with sun beams) is never set by a bottle" in TEXT
+    assert "Bottled Tropical Sunshine sets Sunny (type 0)" in TEXT
+    assert "Sunny 0 eWeather_Sunny, Normal 1 eWeather_Cloudy, Raining 2" in TEXT
+    assert "returns to Sunny" in TEXT and "never Normal at night" in TEXT
 
 
 def test_health_plan_and_food_club_prices_are_the_price_codes_arithmetic():
@@ -216,7 +219,7 @@ def test_the_bottles_weather_types(core):
     # DispatchRotatingSundry pushes the EWeather for PlanToChangeWeather: Rain 3, Sunshine 0, Fog 4, Snow 5
     for offset, kind in ((0xC32, 3), (0xD00, 0), (0xEF2, 4), (0xFC0, 5)):
         assert _bytes(core, DISPATCH + offset, 2) == bytes([0x6A, kind]), hex(offset)
-    # CWeather::SetCurrent's switch: case 1 is the sun beams' reset, case 0 the plain Normal weather
+    # CWeather::SetCurrent's switch: case 1 (Normal) is the sun beams' reset, case 0 the plain Sunny weather
     table = struct.unpack("<I", _bytes(core, SET_CURRENT + 0x34, 4))[0]
     cases = [struct.unpack("<I", _bytes(core, table + 4 * k, 4))[0] - SET_CURRENT for k in range(6)]
     assert cases == [0x38, 0x41, 0x59, 0x4D, 0x78, 0x84]
@@ -276,12 +279,15 @@ def test_every_named_action_is_in_the_actions_group():
         assert needle in TEXT
     actions = {f.text.split(":")[0]: f.text for f in _lines(gm.ACTIONS) if f.sub}
     assert actions["Sleeping (adults)"] == "Sleeping (adults): energy +10, dirtiness +2."
-    assert actions["Barbecuing!"] == "Barbecuing!: hunger -7, dirtiness +4, toilet need +4, mood points +4."
+    assert actions["Barbecuing!"] == ("Barbecuing!: hunger -7, dirtiness +4, toilet need +4, mood points +4; with 10 "
+                                      "food or less, a refusal and no need changes.")
+    assert actions["Needs to sit down"] == ("Needs to sit down: energy +3 (energy over 35) or +10 (energy 35 or "
+                                            "less).")
     assert actions["Doing Kung Fu"] == "Doing Kung Fu: no need changes."
     # the hammock's hot spot (5) starts Relaxing in the hammock (behaviour 0x24); the Hammock piece carries it
     assert gm.HOTSPOT_ACTIONS[5] == ("Hammock", (0x24,)) and 5 in gm.FURNITURE_HOTSPOTS[0x1E1]
-    left = [f.text for f in FACTS if f.group in gm.STORE_GROUPS and f.label == gm.UNCONFIRMED]
-    assert len(left) == 1 and "patcher's own drop routes" in left[0], left
+    assert not [f.text for f in FACTS if f.group in gm.STORE_GROUPS and f.label == gm.UNCONFIRMED]
+    assert "the exercise bike: walking as Walking on the treadmill (dirtiness +8, mood points +4)" in TEXT
     assert "Dropped on, with the patcher: the patcher's own route, the spa treatments" in TEXT
 
 
