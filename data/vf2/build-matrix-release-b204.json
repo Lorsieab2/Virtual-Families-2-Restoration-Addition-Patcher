@@ -3,13 +3,13 @@
   "output_prefix": "VF2-B204-matrix",
   "exe_name": "Virtual Families 2 - B204.exe",
   "seed_set": "VF2-B203-matrix",
-  "note": "Patcher matrix for B204, built from main at 412660f (the merge of PR #438), seeded from the B203 matrix. B204 adds the Family History log (#437): a companion DLL, vf2history_b200.dll, that a new dormant .vf2hist loader in every executable loads only when the Experimental setting is on, after the Time Controls and Up to 28 Children DLLs; and the Family Tree Maker (#438) plus the Random Events wording and fonts (#435, #436). The 32 variants are the same feature combinations as B203. No live test of the new features has been done.",
+  "note": "Patcher matrix for B204, rebuilt in place on 27 October 2026 from main at e0bb126 (the merge of PR #448: Clear All Illnesses no longer clears the food groups), seeded from the B203 matrix; the first B204 matrix was built from 412660f (PR #438). B204 adds the Family History log (#437): a companion DLL, vf2history_b200.dll, that a new dormant .vf2hist loader in every executable loads only when the Experimental setting is on, after the Time Controls and Up to 28 Children DLLs; and the Family Tree Maker (#438) plus the Random Events wording and fonts (#435, #436). The 32 variants are the same feature combinations as B203. No live test of the new features has been done.",
   "built_from": {
-    "revision": "412660f",
+    "revision": "e0bb126",
     "ref": "main",
-    "pull_request": 438,
-    "how_to_verify": "git rev-parse 412660f^{tree} must print 4383705bd5ecb36906b42d03384da7f257adaed1. That single object id covers the whole tree and resolves from the published repository alone.",
-    "tree": "4383705bd5ecb36906b42d03384da7f257adaed1"
+    "pull_request": 448,
+    "how_to_verify": "git rev-parse e0bb126^{tree} must print 84f86a9d30ea0707eba6ce1a339dec4e1baee143. That single object id covers the whole tree and resolves from the published repository alone.",
+    "tree": "84f86a9d30ea0707eba6ce1a339dec4e1baee143"
   },
   "seeds": {
     "core": "outputs/VF2-B203-matrix-core",

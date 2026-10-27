@@ -173,9 +173,11 @@ FOOD_GROUPS = set(range(0x84, 0x98))
 
 def test_the_cure_clears_illness_and_keeps_the_food_groups(exe):
     exe.sick_and_fed()
+    # Counted first: for a member with a career, the game's own fifth pass writes 0 into the Grains expiry's low
+    # byte (+0x88), so the snapshot is taken after it and the cure alone is compared.
+    assert exe.call(exe.food_groups_active, (0,), ecx=exe.state) == 4
     before = exe.state_bytes()
     villager_before = bytes(exe.uc.mem_read(exe.villager, VILLAGER_SIZE))
-    assert exe.call(exe.food_groups_active, (0,), ecx=exe.state) == 4
     exe.call(exe.apply, (0,))                          # eVF2ResidentClearIllnesses
     after = exe.state_bytes()
 
