@@ -566,7 +566,14 @@ The owner's rule: every store item, upgrade and service gets its own entry. All 
 | Mood points from items | `UpdateHappinessState` 0x4CBE90: +5 per renovation 0xE1..0xEA, min(placed furniture, 30), the item-and-like table (desktop 0x2ED..0x55F; the Fish Bowl 0x202 skips its like check), 500 x (equipment - 1) for likes 39 / 82 / 81. Like names: string 0x7AF split on commas (120 names; the game has 121 likes, `CLikeList::Add` rand(121)) | VERIFIED-C |
 | Patcher rows | `VF2GetVisibleSpecialUpgradePrice` 0x4B9F60, 0x4B8B50; outfit store `VF2GetOutfitStorePrice` 0x4B9E80 ($75; bodies 50..53 $500), names 0xBED + 2 x (54 x sex + body) / 0xF2B + 2 x (50 x sex + style); Cheat Upgrades and the remodels from the generator source (`VF2ApplyVisibleSpecialUpgrade`, `CHEAT_UPGRADE_ITEMS`, `MOBILE_RENOVATION_STYLE_CATALOG`, `AI_BATHROOM2_STYLE_CATALOG`) | VERIFIED-C |
 
-UNCONFIRMED on the page, each saying why: the behaviour table's actions (what an action itself changes); what a pet
-does; how the store picks a stock outfit row's body; the patcher's Outfit-store tray conversion
-(`VF2NormalizeOutfitToolInHand` 0x4BA000); the children's book reader check (`GetRandomVillager` selector 6, one
-record field not identified).
+Settled 2026-10-27 (the owner: "Investigate the unconfirmed stuff too"), nothing UNCONFIRMED is left in the store
+groups:
+
+| What | Rule | Status |
+|---|---|---|
+| Actions | `CBehavior::CBehavior` registers every action by id (`SetMacro`); each handler's `PlanToInc*` / `PlanToDec*` calls and arguments (rand ranges resolved) are its need changes; `CVillagerPlans::ProcessCurrentPlan` applies each planned change once and marks the step done. The page's Actions group lists the actions any item or furniture piece starts. Which branch of a branching action plans which change is not listed | VERIFIED-C |
+| Furniture drop actions | `theMainScene::HandleDropOnHotSpot` -> `CContentMap::GetHotSpot` ((cell >> 18) & 0x7F) -> `CHotSpot::Dispatch` (handlers set in `CHotSpot::CHotSpot`, 83 hot spots) -> each handler's `NewBehavior` ids; a piece's hot spots come from its placement map (`GetFmapName`: the image name from `ImageList` 0x579E48, `<name>.fmap`), B204 `final_all_enabled` maps; the patcher changes no stock piece's hot spots | VERIFIED-C |
+| Pets | placed through `CFurnitureManager::DropFurniture` -> `CPetManager::SpawnPet`, counted by `NumberOfItemsPlaced`; no pet code calls a need-changing function; a drop on a pet starts behaviour 0x19A (Petting, no need changes) | VERIFIED-C |
+| Stock outfits | `CInventoryManager::MaybeUpdateOutfits`: Discount rows rand(32), Department 32 + rand(12), Designer 44 + rand(6), re-picked 14,400 game s after the last pick | VERIFIED-C |
+| Outfit store | `VF2NormalizeOutfitToolInHand` 0x4BA000 (generator source): `GetToolInHand` / `GetToolInUse` report the stock outfit tool 0x49 / 0x4A with the row's body or head selected | VERIFIED-C |
+| Children's book reader | `GetRandomVillager` selector 6: age >= 280 units with a career and state+0x24 (record +0x0CC, pregnant) zero, or age >= 1,100 units | VERIFIED-C |

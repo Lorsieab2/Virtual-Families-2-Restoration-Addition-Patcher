@@ -90,8 +90,9 @@ CAREER_UPGRADES = "Career upgrades"
 FURNITURE = "Furniture and Accessories"
 PETS = "Pets"
 CLOTHING = "Clothing and Hairstyles"
+ACTIONS = "Actions"
 INDEX = "Chance and timer index"
-STORE_GROUPS = (STORE, FOOD, FLEA, UPGRADES, SERVICES, RENOVATION, CAREER_UPGRADES, FURNITURE, PETS, CLOTHING)
+STORE_GROUPS = (STORE, FOOD, FLEA, UPGRADES, SERVICES, RENOVATION, CAREER_UPGRADES, FURNITURE, PETS, CLOTHING, ACTIONS)
 GROUPS = (TIME, NEEDS, HEALTH, OLD_AGE, PREGNANCY, CAREERS_GROUP, MONEY, LEAVING, DATING, EVENTS, WEATHER, MESSES,
           COLLECTIBLES) + STORE_GROUPS + (INDEX,)
 
@@ -1153,10 +1154,12 @@ MEDICINE_ITEMS = (
 # The Flea Market's 36 goods (gGoodiesList 0x56F5BC, in the store's order): (name, price, effect, label).
 FLEA_ITEMS = (
     ("Multivitamins", 15, "health +3 to +7 and 35 mood points as part of the action, happiness +1 to +3 at once", C),
-    ("Chamomile Drink", 10, "energy -10 to -29 at once, then one of two actions (15% / 85%)", C),
-    ("Energy Drink", 25, "hunger -4 and energy +40 to +89 at once, 5 jumps, then one of two actions (15% / 85%)", C),
-    ("Mega Chamomile Extract", 10, "hunger -7 at once and energy -30 to -59 as part of the action, then one of two "
-                                   "actions (75% / 25%)", C),
+    ("Chamomile Drink", 10, "energy -10 to -29 at once, then Sleeping (adults) (15%) or Taking a nap (85%)",
+     C),
+    ("Energy Drink", 25, "hunger -4 and energy +40 to +89 at once, 5 jumps, then Doing Kung Fu (15%) or Exercising "
+                         "outdoors (85%)", C),
+    ("Mega Chamomile Extract", 10, "hunger -7 at once and energy -30 to -59 as part of the action, then Sleeping "
+                                   "(adults) (75%) or Taking a nap (25%)", C),
     ("Delicious Candy", 7, "hunger -2 and happiness +2 to +3 at once, then 3 rewards for what the family member was "
                            "doing (see Rewards and scolding)", C),
     ("Salty Candy", 10, "3 scoldings for what the family member was doing (see Rewards and scolding); no need changes", C),
@@ -1168,52 +1171,52 @@ FLEA_ITEMS = (
     ("Licorice Candy", 10, "hunger -2 and happiness +2 to +4 at once, then 3 rewards", C),
     ("Mint Candy", 10, "hunger -2 and happiness +2 to +4 at once, then 3 rewards", C),
     ("Cinnamon Candy", 10, "hunger -2 and happiness +2 to +4 at once, then 3 rewards", C),
-    ("Imported Candy", 25, "one of five, 20% each: happiness +5 to +12; happiness -5 with the toilet need set to 90; "
-                           "happiness -5 and the family member runs away (the \"Running away\" action); a skin rash; "
-                           "or health +20 with every symptom and both infections cured", C),
-    ("Virtuoso Fragrance for Men", 25, "on a family member without a career (every child born in the house): the "
-                                       "\"Running away\" action and nothing else. On anyone else, whichever sex: that "
-                                       "family member and the head of the family of the other sex (the matriarch for "
-                                       "a man, the patriarch for a woman) both start the same action, and the wearer "
-                                       "gets 35 mood points and happiness +1 to +3", C),
+    ("Imported Candy", 25, "one of five, 20% each: happiness +5 to +12; happiness -5 with the toilet need set to 90 and "
+                           "Using the toilet; happiness -5 and Running away; a skin rash; or health +20 with every "
+                           "symptom and both infections cured", C),
+    ("Virtuoso Fragrance for Men", 25, "on a family member without a career (every child born in the house): Running "
+                                       "away and nothing else. On anyone else, whichever sex: that family member and "
+                                       "the head of the family of the other sex (the matriarch for a man, the "
+                                       "patriarch for a woman) both start Celebrating marriage, and the wearer gets "
+                                       "35 mood points and happiness +1 to +3", C),
     ("Virtuosa Perfume for Women", 25, "the same code as the Virtuoso Fragrance for Men, with no check of the wearer's "
                                        "sex", C),
     ("Antibacterial hand gel", 12, "health +10 and 35 mood points as part of the action, happiness +1 to +3 at once", C),
-    ("Sunscreen", 12, "25 mood points as part of the action, happiness +1 to +3 at once, then an action", C),
+    ("Sunscreen", 12, "25 mood points as part of the action, happiness +1 to +3 at once, then Exercising outdoors", C),
     ("Towelette", 10, "dirtiness -15 as part of the action, happiness +1 to +3 at once, then dancing and 3 jumps", C),
     ("Kitchen Profession Magazine", 300, "for a family member who works in the kitchen: 10 rounds of career progress "
                                          "(each one piece of successful work, unpaid; see Career upgrades), so it can "
-                                         "bring a promotion, and happiness +8 to +15. Anyone else: the \"Confused\" "
-                                         "action, and the magazine is used up", C),
+                                         "bring a promotion, and happiness +8 to +15. Anyone else: Confused, and the "
+                                         "magazine is used up", C),
     ("Office Profession Magazine", 300, "the same, for a family member who works in the office", C),
     ("Workshop Profession Magazine", 300, "the same, for a family member who works in the workshop", C),
     ("Fog In a Bottle", 50, "the weather becomes Foggy (see Bottled weather)", C),
     ("Snow in a Bottle", 50, "the weather becomes Snowing (see Bottled weather)", C),
-    ("Sleeping Pills", 10, "the same code as the Chamomile Drink: energy -10 to -29 at once, then one of two actions "
-                           "(15% / 85%)", C),
+    ("Sleeping Pills", 10, "the same code as the Chamomile Drink: energy -10 to -29 at once, then Sleeping (adults) "
+                           "(15%) or Taking a nap (85%)", C),
     ("Dirty Candy", 25, "one of four, 25% each: energy +2 to +6 with 2 jumps and a wave; energy -30 to -59 as part of "
                         "the action; the family member's career progress is multiplied by 4 (nothing without a "
                         "career; 3,000 progress is a promotion at the next piece of work); or a stomach upset", C),
-    ("Weed Bomb", 75, "dropped outdoors, on the ground the code checks for: every weed in the yard is removed. Anywhere else: \"You can't use this "
-                      "here!\" and it stays in the tray", C),
-    ("Turtle Adventures", 20, "a movie: everyone at home starts the same action; with a TV next to the family member it "
-                              "is dropped on it is used up, otherwise it goes back to the tray", C),
+    ("Weed Bomb", 75, "dropped outdoors, on the ground the code checks for: every weed in the yard is removed. Anywhere "
+                      "else: \"You can't use this here!\" and it stays in the tray", C),
+    ("Turtle Adventures", 20, "a movie: everyone at home starts Watching TV; with a TV next to the family member it is "
+                              "dropped on it is used up, otherwise it goes back to the tray", C),
     ("Little Man Under the Sea", 20, "a movie, the same as Turtle Adventures", C),
     ("Pluto, the Loneliest Planet", 20, "a movie, the same as Turtle Adventures", C),
     ("Anti-spam Software", 125, "dropped on the computer: installed for good, so the 5 spam e-mails (see Random Events) "
-                                "never come again, and everyone at home starts the same action. Anywhere else: "
-                                "\"You can't use this here!\" and it stays in the tray", C),
+                                "never come again, and everyone at home starts Celebrating the office upgrade. "
+                                "Anywhere else: \"You can't use this here!\" and it stays in the tray", C),
     ("Bottled Tropical Rain", 50, "the weather becomes Stormy, rain with lightning (see Bottled weather)", C),
     ("Bottled Tropical Sunshine", 50, "the weather becomes Normal, type 0 (see Bottled weather)", C),
     ("Encyclopedia", 75, "happiness +1 to +3; one like, picked from the first 100 of the 121, is added if it is not "
                          "already a like and one of the 3 like places is free, and that like is taken off the "
-                         "dislikes either way", C),
+                         "dislikes either way; then Studying", C),
     ("Magic Barker and the Loose Screw", 15, "a children's book. Dropped on a family member 14 or older, that member "
                                              "reads it; dropped on a child (under 14), the game picks the reader at "
                                              "random among those 55 or older and those 14 or older with a career who "
-                                             "pass one more check of their record (and nobody reads if none "
-                                             "qualifies). The reader gets happiness +4 to +5; every child at home "
-                                             "gets happiness +5 and starts the same action", U),
+                                             "are not pregnant (nobody reads if none qualifies). The reader gets "
+                                             "happiness +4 to +5 and starts Telling a story; every child at home gets "
+                                             "happiness +5 and starts Listening to a story", C),
     ("Rockhound Certificate", 1500, "kept for good once bought: the collectible spawn areas that need it become "
                                     "active (its description: the fossils)", C),
 )
@@ -1369,6 +1372,304 @@ CHEAT_ITEMS = (
 )
 
 
+# Actions (CBehavior handlers, registered by id in CBehavior::CBehavior): id -> (name, the need changes its code
+# plans, whether a change appears on more than one of its branches).  Need changes extracted from each handler's
+# PlanToInc* / PlanToDec* calls and their arguments (rand ranges resolved); names from the action's own label.
+ACTION_ITEMS = {
+    0x012: ('Doing laundry', ('energy -3', 'dirtiness +5', 'mood points +2'), False),
+    0x013: ('Doing Kung Fu', (), False),
+    0x021: ('Playing with toys', (), False),
+    0x024: ('Relaxing in the hammock', ('dirtiness +4', 'mood points +1', 'energy +2'), False),
+    0x033: ('Reading', ('mood points -1', 'mood points +1'), False),
+    0x035: ('Sleeping (adults)', ('energy +10', 'dirtiness +2'), False),
+    0x037: ('Sleeping (children)', ('energy +10', 'happiness +5'), False),
+    0x03e: ('Watching TV', (), False),
+    0x046: ('Checking weight', (), False),
+    0x049: ('Walking on the treadmill', ('dirtiness +8', 'mood points +4'), False),
+    0x055: ('Jumping on the bed', ('energy -2', 'mood points +3'), True),
+    0x056: ('Studying', ('energy -3', 'mood points +2', 'hunger +2'), False),
+    0x059: ('Exercising outdoors', ('health +2', 'energy -5', 'mood points +3'), False),
+    0x062: ('Using the toilet', ('dirtiness +40', 'toilet need -40', 'dirtiness -30'), True),
+    0x064: ('Celebrating', ('mood points +50', 'energy -3', 'toilet need +2', 'dirtiness +2'), False),
+    0x067: ('Making the bed', ('energy -3', 'mood points +10', 'dirtiness +2'), False),
+    0x06c: ('Putting away groceries', ('mood points +10 to 24', 'energy -2', 'mood points +4', 'dirtiness +2'), False),
+    0x07a: ('Celebrating marriage', (), False),
+    0x07e: ('Celebrating the office upgrade', (), False),
+    0x07f: ('Celebrating the kitchen upgrade', (), False),
+    0x080: ('Celebrating the workshop upgrade', (), False),
+    0x083: ('Taking a nap', ('energy +7 to 11', 'dirtiness +2'), False),
+    0x08d: ('Mending a button', ('energy -1', 'mood points +3'), False),
+    0x091: ('Swimming in the pool', ('dirtiness +5', 'energy -2', 'mood points +3'), False),
+    0x094: ('Having a cocktail', (), False),
+    0x095: ('Watching the fire', (), False),
+    0x096: ('Playing foosball', (), False),
+    0x097: ('Playing guitar', (), False),
+    0x098: ('Playing piano', (), False),
+    0x099: ('Playing pool', (), False),
+    0x09a: ('Checking out new clothes', (), False),
+    0x0da: ('Barbecuing!', ('hunger -7', 'dirtiness +4', 'toilet need +4', 'mood points +4'), False),
+    0x0dd: ('Playing pinball', ('mood points +5', 'dirtiness +1', 'energy -3'), False),
+    0x0de: ('Playing the slot machine', ('mood points +5', 'dirtiness +1', 'energy -3'), False),
+    0x0df: ('Playing pachinko', ('mood points +5', 'dirtiness +1', 'energy -3'), False),
+    0x0e0: ('Running on the treadmill', ('dirtiness +6', 'mood points +2', 'energy -8'), False),
+    0x0e1: ('Feeding the fish', ('mood points +4',), False),
+    0x0e3: ('Bothering the fish', (), False),
+    0x0e4: ('Admiring the Magic Fish', (), False),
+    0x0ed: ('Dancing to the radio', ('energy -4', 'mood points +2', 'dirtiness +2'), False),
+    0x0f3: ('Using the drying rack', (), False),
+    0x0f4: ('Ironing', (), False),
+    0x0f5: ('Listening to the radio', ('mood points +4',), False),
+    0x10e: ('Telling a story', ('energy -5', 'hunger +2'), False),
+    0x10f: ('Listening to a story', ('energy -3', 'mood points +3'), False),
+    0x118: ('Drawing', ('mood points +2', 'dirtiness +5'), False),
+    0x11d: ('Trying to find stars', (), False),
+    0x11e: ('Playing on the play structure', (), False),
+    0x130: ('Playing quietly', (), False),
+    0x169: ('Running away', (), False),
+    0x16d: ('Dancing to the bubbles', (), False),
+    0x171: ('Confused', (), False),
+    0x175: ('Shaking head', (), False),
+    0x176: ('Shaking head', (), False),
+    0x189: ('Needs to sit down', ('energy +45 to 52',), False),
+    0x193: ('Playing drums', ('mood points +1', 'energy -2'), False),
+    0x194: ('Hugging the bear', ('mood points +3', 'energy +1'), False),
+    0x195: ('Driving like a grownup', ('mood points +3', 'energy -2'), False),
+    0x196: ('Making sandcastles', ('mood points +5', 'energy -5', 'dirtiness +8', 'hunger +3'), False),
+    0x197: ('Cooking like a grownup', ('mood points +3', 'energy -3', 'dirtiness +4', 'hunger +3'), False),
+    0x198: ('Playing with trains', ('mood points +3', 'energy -3', 'hunger +3'), False),
+    0x199: ('Jumping', ('mood points +3', 'energy -6', 'dirtiness +4', 'hunger +3'), False),
+    0x19a: ('Petting the pet', (), False),
+}
+# Hot spots (a map cell's (cell >> 18) & 0x7F) -> (CHotSpot handler, the actions its code can start).
+HOTSPOT_ACTIONS = {
+    1: ('FirePlace', (0x095, )),
+    5: ('Hammock', (0x024, )),
+    7: ('Laundry', (0x012, )),
+    8: ('Treadmill', (0x049, 0x0e0, )),
+    15: ('TV', (0x03e, )),
+    16: ('PlayInPlace', (0x021, )),
+    20: ('Pool', (0x091, )),
+    23: ('Pinball', (0x0dd, )),
+    24: ('Radio', (0x0f5, 0x0ed, )),
+    32: ('Bbq', (0x0da, 0x176, )),
+    33: ('IroningBoard', (0x0f4, )),
+    34: ('AdultBed', (0x055, 0x067, 0x037, 0x035, )),
+    35: ('KidsBeds', (0x055, 0x067, 0x037, )),
+    36: ('Toys', (0x021, )),
+    40: ('KidsTable', (0x130, )),
+    43: ('DryingRack', (0x0f3, )),
+    44: ('BubbleMaker', (0x16d, )),
+    45: ('PlayStructure', (0x11e, )),
+    46: ('BathroomScale', (0x046, )),
+    47: ('Aquarium', (0x0e4, 0x0e1, 0x0e3, )),
+    51: ('SewingKit', (0x08d, )),
+    60: ('BookCase', (0x033, )),
+    64: ('Pachinko', (0x0df, )),
+    65: ('Piano', (0x098, )),
+    66: ('Couch', (0x189, 0x03e, )),
+    68: ('Bar', (0x094, )),
+    69: ('Foosball', (0x096, )),
+    70: ('PoolTable', (0x099, )),
+    71: ('SlotMachine', (0x0de, )),
+    72: ('Telescope', (0x11d, )),
+    83: ('Easel', (0x118, )),
+    84: ('Guitar', (0x097, )),
+    85: ('KidsKitchen', (0x197, )),
+    86: ('TrainTable', (0x198, )),
+    87: ('GiantBear', (0x194, )),
+    88: ('Trampoline', (0x199, )),
+    89: ('SandBox', (0x196, )),
+    90: ('Drum', (0x193, )),
+    91: ('PlayCar', (0x195, )),
+}
+# Each furniture piece's hot spots, read from its shipped placement map (*.png.fmap, B204 final_all_enabled).
+FURNITURE_HOTSPOTS = {
+    0x1ad: (32,),
+    0x1ae: (32,),
+    0x1af: (32,),
+    0x1b0: (32,),
+    0x1b1: (34,),
+    0x1b2: (35,),
+    0x1b3: (35,),
+    0x1b4: (35,),
+    0x1b5: (35,),
+    0x1b6: (34,),
+    0x1b7: (34,),
+    0x1b8: (34,),
+    0x1b9: (34,),
+    0x1ba: (34,),
+    0x1bb: (34,),
+    0x1bd: (66,),
+    0x1be: (66,),
+    0x1bf: (66,),
+    0x1c0: (66,),
+    0x1c1: (66,),
+    0x1c2: (66,),
+    0x1c3: (66,),
+    0x1c4: (66,),
+    0x1c5: (66,),
+    0x1c8: (16,),
+    0x1c9: (16,),
+    0x1cb: (7,),
+    0x1cc: (83,),
+    0x1cd: (33,),
+    0x1ce: (40,),
+    0x1cf: (43,),
+    0x1d1: (51,),
+    0x1d2: (66,),
+    0x1d3: (66,),
+    0x1d4: (66,),
+    0x1d5: (66,),
+    0x1d6: (66,),
+    0x1dd: (16,),
+    0x1de: (36,),
+    0x1df: (7,),
+    0x1e0: (44,),
+    0x1e1: (5,),
+    0x1e2: (16,),
+    0x1e3: (45,),
+    0x1e4: (20,),
+    0x1e5: (20,),
+    0x1ea: (46,),
+    0x1f2: (15,),
+    0x1f3: (15,),
+    0x1f4: (24,),
+    0x1f5: (47,),
+    0x1f6: (36,),
+    0x1f7: (60,),
+    0x1f8: (60,),
+    0x1fa: (66,),
+    0x1fb: (66,),
+    0x1fc: (66,),
+    0x1fd: (66,),
+    0x1fe: (66,),
+    0x1ff: (68,),
+    0x201: (1,),
+    0x202: (47,),
+    0x204: (69,),
+    0x206: (84,),
+    0x207: (24,),
+    0x208: (64,),
+    0x209: (65,),
+    0x20a: (65,),
+    0x20b: (23,),
+    0x20c: (70,),
+    0x215: (71,),
+    0x216: (71, 72),
+    0x217: (8,),
+    0x227: (90,),
+    0x228: (36,),
+    0x229: (36,),
+    0x22a: (87,),
+    0x22b: (91,),
+    0x232: (36,),
+    0x235: (89,),
+    0x236: (85,),
+    0x239: (86,),
+    0x23a: (88,),
+    0x249: (36,),
+    0x24a: (60,),
+    0x24e: (34,),
+    0x24f: (34,),
+    0x250: (34,),
+    0x251: (34,),
+    0x252: (34,),
+    0x253: (60,),
+    0x254: (34,),
+    0x255: (34,),
+    0x25c: (60,),
+    0x260: (34, 66),
+    0x261: (66,),
+    0x262: (66,),
+    0x263: (66,),
+    0x264: (34,),
+    0x265: (34,),
+    0x266: (34,),
+    0x267: (34,),
+    0x268: (34,),
+    0x269: (34,),
+    0x26a: (34,),
+    0x26b: (35,),
+    0x26c: (35,),
+    0x26e: (66,),
+    0x26f: (66,),
+    0x270: (66,),
+    0x271: (66,),
+    0x272: (66,),
+    0x273: (66,),
+    0x274: (66,),
+    0x275: (66,),
+    0x276: (66,),
+    0x277: (66,),
+    0x278: (60,),
+    0x279: (60,),
+    0x27a: (60,),
+    0x27b: (60,),
+    0x27c: (60,),
+    0x282: (60,),
+    0x283: (60,),
+    0x284: (60,),
+    0x290: (34,),
+    0x291: (34,),
+    0x292: (34,),
+    0x293: (34,),
+    0x294: (34,),
+    0x2a4: (35,),
+    0x2a5: (35,),
+    0x2a6: (35,),
+    0x2a7: (35,),
+    0x2a8: (35,),
+    0x2ef: (66,),
+    0x2f0: (66,),
+    0x2f1: (66,),
+    0x2f2: (66,),
+    0x2f3: (66,),
+    0x2f4: (66,),
+    0x2f5: (66,),
+    0x2f6: (66,),
+    0x2f7: (66,),
+    0x2f8: (66,),
+    0x2f9: (66,),
+    0x2fa: (66,),
+    0x2fb: (66,),
+    0x30a: (20,),
+    0x30b: (20,),
+    0x30c: (5,),
+    0x30d: (66,),
+    0x30e: (66,),
+    0x30f: (66,),
+    0x310: (66,),
+    0x311: (60,),
+    0x312: (60,),
+    0x313: (60,),
+    0x314: (34,),
+    0x315: (35,),
+    0x316: (34,),
+    0x317: (34,),
+    0x318: (1,),
+    0x319: (24,),
+    0x31a: (89,),
+    0x31b: (45,),
+    0x31c: (86,),
+    0x31d: (46,),
+    0x31e: (43,),
+    0x321: (40,),
+    0x322: (33,),
+    0x323: (88,),
+    0x324: (15,),
+    0x325: (15,),
+    0x326: (15,),
+    0x327: (34,),
+    0x32c: (8,),
+    0x32e: (70,),
+    0x331: (70,),
+}
+
+
+def _action(bid: int) -> str:
+    return ACTION_ITEMS[bid][0]
+
+
 def _money(value: int) -> str:
     return f"${value:,}"
 
@@ -1420,10 +1721,10 @@ def _store_lines() -> list[Fact]:
                   "twentieth of the way to its highest (at least 1 step); a scolding lowers it by a fifteenth of the "
                   "way to its lowest (at least 1). The candies use these.", C,
            "theMainScene::InvokeReward / InvokeScolding: weight +max(1,(max-w)/20) / -max(1,(w-min)/15)"))
-    add(_f(STORE, "\"An action\": what an item makes a family member do (an animation and what that action itself "
-                  "changes) comes from the behaviour table, which is not decoded; each entry gives only the changes "
-                  "the item's own code makes. \"As part of the action\" changes happen while it plays.", U,
-           "spec 18: behaviour-table rewards not decoded"))
+    add(_f(STORE, "Actions: what an item makes a family member do is named in its entry, and what each action itself "
+                  "changes is in the Actions group. \"As part of the action\" changes are planned steps of the "
+                  "action: each applies once, when its step plays.", C,
+           "CVillagerPlans::ProcessCurrentPlan: each planned change calls the matching Adjust once and marks the step done"))
     add(_f(STORE, WITH_PATCHER + "the Flea Market shows all 36 of its goods at all times; it never changes (the "
                   "game's tip still says three times a day).", E,
            "GetCategoryItemCount 0x46B6D0 / GetCategoryItem 0x46B210 call VF2GetExpandedFleaMarketCount / Item "
@@ -1445,8 +1746,8 @@ def _store_lines() -> list[Fact]:
            cat + "; stock 0x4BB0A0 category 0xE: the same 18"))
     add(_f(FOOD, "Groceries are placed on the kitchen table (anywhere else: \"Groceries must be placed in the "
                  "kitchen.\" and the bag stays in the tray). Each bag gives its food group to everyone at home for "
-                 "24 real hours (see Needs and upkeep) and everyone at home starts the same action. With the Food Club "
-                 "each costs half.", C, "HandleMouseDown 0x49EE90: kitchenTableRect1, UpdateNutritionAllVillagers "
+                 "24 real hours (see Needs and upkeep) and everyone at home starts Putting away "
+                 "groceries. With the Food Club each costs half.", C, "HandleMouseDown 0x49EE90: kitchenTableRect1, UpdateNutritionAllVillagers "
                                         "0x4C74E0 (expiry real s + 86,400), MakeAllVillagersDoIt"))
     for _iid, name, price, group, organic in GROCERY_ITEMS:
         food = 250 if organic else 150
@@ -1600,8 +1901,13 @@ def _store_lines() -> list[Fact]:
                       "(the code skips the like check for it).", C,
            "UpdateHappinessState 0x2ED..0x55F: HaveUpgrade -> CFurnitureManager::IsInWorld; 0x202 jumps past the "
            "Contains(0x19) check"))
-    add(_f(FURNITURE, "What each piece lets the family do, and what that restores, comes from the behaviour table, "
-                      "which is not decoded (see the store's \"An action\").", U, "spec 18"))
+    add(_f(FURNITURE, "Dropping a family member on a piece starts one of the actions of the hot spots on its placement "
+                      "map; each entry below names them (the hot spot's code picks one by its own checks, which are "
+                      "not listed). What each action changes is in the Actions group. A piece without hot spots has "
+                      "no drop action. The patcher changes no stock piece's hot spots.", C,
+           "theMainScene::HandleDropOnHotSpot -> CContentMap::GetHotSpot ((cell >> 18) & 0x7F) -> CHotSpot::Dispatch "
+           "(handlers set in CHotSpot::CHotSpot) -> NewBehavior; the *.png.fmap of each piece (GetFmapName: ImageList "
+           "0x579E48), stock and B204 maps compared"))
     listed = set()
     for tab, _p, _s in tabs:
         add(_f(FURNITURE, f"{tab}:", E, cat, sub=False))
@@ -1616,6 +1922,14 @@ def _store_lines() -> list[Fact]:
                 parts.append("added by the patcher")
             text = "; ".join(parts) + "."
             label, evidence = E, cat
+            drops = []
+            for spot in FURNITURE_HOTSPOTS.get(iid, ()):
+                for bid in HOTSPOT_ACTIONS[spot][1]:
+                    if _action(bid) not in drops:
+                        drops.append(_action(bid))
+            if drops:
+                text += " Dropped on: " + ", ".join(drops) + "."
+                label, evidence = C, cat + "; its map's hot spots"
             if iid == 0x202:
                 text += " 15 mood points to everyone, while placed."
                 label, evidence = C, cat + "; UpdateHappinessState 0x202"
@@ -1633,8 +1947,13 @@ def _store_lines() -> list[Fact]:
            cat + ": category 0x15, 15 items"))
     add(_f(PETS, UNPATCHED + "the Pets tab lists 12 pets and the bowls, without the Turtle and the Hamster.", E,
            "stock exe sha256 1582d9e8: category 0x15 run as linked, 13 items"))
-    add(_f(PETS, "A pet goes to storage when bought and is placed like furniture. What a pet does and gives the family "
-                 "is the pet code's, which is not decoded.", U, "HandlePurchaseItem AddToStorageAndAward"))
+    add(_f(PETS, "A pet goes to storage when bought and is placed like furniture: placed, it counts as one placed "
+                 "piece (1 mood point for everyone every 30 real minutes, within the 30-piece limit) and walks about, "
+                 "following family members. No pet code changes any need. Dropping a family member on a pet starts "
+                 "Petting the pet (no need changes), and the pet walks to the family member and waits.", C,
+           "CFurnitureManager::DropFurniture -> CPetManager::SpawnPet, placed flag counted by NumberOfItemsPlaced; "
+           "no Pet*/PetAI/PetBehavior/PetPlans function calls an Adjust* or PlanToInc*/Dec*; HandleDropOnPet: "
+           "behaviour 0x19A Petting"))
     for _iid, name, price, lock, added in PET_ITEMS:
         tail = "; added by the patcher" if added else ""
         add(_f(PETS, f"{name}: {_money(price)}, {_generation(lock)}{tail}.", E, cat, sub=True))
@@ -1645,10 +1964,14 @@ def _store_lines() -> list[Fact]:
     add(_f(CLOTHING, UNPATCHED + "the tab lists the 6 outfits only.", E,
            "stock exe sha256 1582d9e8: category 0xD run as linked, 6 items"))
     add(_f(CLOTHING, "An outfit goes to the tray and is dropped on a family member of its sex: it changes that "
-                     "member's outfit. On the other sex: \"This outfit is for a male!\" (or female) and it stays in "
+                     "member's outfit and the member starts Checking out new clothes. On the other sex: \"This outfit is for a male!\" (or female) and it stays in "
                      "the tray.", C, "HandleMouseDown 0x49EE90 cases 0x49 / 0x4A: gender +0x6A58, outfit +0x6A84"))
-    add(_f(CLOTHING, "Which outfit a stock row gives: the store holds one per row and hands it over when bought; how "
-                     "the store picks it is not traced.", U, "CInventoryManager::TakeOne copies +0x408 + id x 4"))
+    add(_f(CLOTHING, "Which outfit a stock row gives: the store holds one body value per row and hands it over when "
+                     "bought. Discount Store rows hold a body from 0 to 31, Department Store rows 32 to 43, Designer "
+                     "rows 44 to 49, each picked evenly; the store picks new ones when the Clothing tab is next checked "
+                     "4 hours of game time (14,400 game seconds) after the last pick.", C,
+           "CInventoryManager::MaybeUpdateOutfits: GenCommonBodyType rand(32), GenUncommonBodyType 32 + rand(12), "
+           "GenRareBodyType 44 + rand(6), next pick game s + 0x3840; TakeOne copies +0x408 + id x 4"))
     for name, price, lock in (("Discount Store Male Outfit", 75, 0), ("Discount Store Female Outfit", 75, 0),
                               ("Department Store Male Outfit", 200, 2), ("Department Store Female Outfit", 200, 2),
                               ("Designer Male Outfit", 1500, 4), ("Designer Female Outfit", 1500, 4)):
@@ -1657,9 +1980,12 @@ def _store_lines() -> list[Fact]:
                      "bodies 50 to 53 cost $500; every hairstyle costs $75. Each goes to the tray when bought.", E,
            cat + "; VF2GetOutfitStorePrice 0x4B9E80; VF2GetOutfitStoreLockGeneration 0x4B9D40 (0); "
                  "VF2PurchaseOutfitStoreItem 0x4BA100 -> AddItem"))
-    add(_f(CLOTHING, "Dropped on a family member of its sex, an Outfit-store row gives that member its outfit body or "
-                     "hairstyle; the patcher's code that turns the tray item into the outfit or "
-                     "hairstyle is not decoded.", U, "0x4BA000"))
+    add(_f(CLOTHING, "In hand, an Outfit-store row is treated as the stock outfit tool of its sex, with its own body "
+                     "value (or hairstyle) as the one to give: dropped on a family member of that sex it gives that "
+                     "body value (or hairstyle) and the member starts Checking out new clothes; on the other sex it "
+                     "says \"This outfit is for a male!\" (or female) and stays in the tray.", C,
+           "VF2NormalizeOutfitToolInHand 0x4BA000 (generator source): CToolTray::GetToolInHand / GetToolInUse return "
+           "0x49 / 0x4A and set the stock outfit body or the selected head; HandleMouseDown cases 0x49 / 0x4A"))
     for sex, base in (("Female", 0), ("Male", 1)):
         for body in range(54):
             holiday = " Holiday" if body >= 50 else ""
@@ -1671,6 +1997,18 @@ def _store_lines() -> list[Fact]:
             add(_f(CLOTHING, f"{sex} Hairstyle {style:02d}: $75; hairstyle {style}.", E,
                    f"item {0x480 + 0x40 * base + style:#x}; name string {0xF2B + 2 * (50 * base + style):#x}",
                    sub=True))
+
+    # ------------------------------------------------------------------ Actions
+    add(_f(ACTIONS, "Every action an item or a furniture piece starts, with every need change its code plans, across "
+                    "all of its branches. Each planned change applies once, when its step plays. An action whose code "
+                    "branches (by age, time of day, weather or a roll) gives only the changes of the branch it takes; "
+                    "which branch plans which change is not listed here. \"No need changes\": the action's code "
+                    "plans none (it moves, animates or speaks only).", C,
+           "CBehavior handlers (ids from CBehavior::CBehavior SetMacro): PlanToInc* / PlanToDec* calls and arguments"))
+    for bid, (name, changes, branched) in ACTION_ITEMS.items():
+        what = ", ".join(changes) if changes else "no need changes"
+        tail = ""
+        add(_f(ACTIONS, f"{name}: {what}{tail}.", C, f"behaviour {bid:#x}", sub=True))
     return out
 
 

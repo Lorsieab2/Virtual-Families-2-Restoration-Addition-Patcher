@@ -1,4 +1,4 @@
-﻿"""Game Mechanics: every store item's entry (src/vf2_game_mechanics.py, the groups from "The store: prices and
+"""Game Mechanics: every store item's entry (src/vf2_game_mechanics.py, the groups from "The store: prices and
 buying" to "Clothing and Hairstyles"), pinned to its source.
 
 The page tests always run.  The executable tests re-run the store's own code as linked (unicorn) and are skipped
@@ -132,9 +132,10 @@ def test_like_bonuses_name_the_likes_the_game_shows():
                                  "trash, fixing, shopping, pinball, music, art, gophers").split(",")]
     for number, name in gm.LIKE_NAMES.items():   # string 0x7AF, split on commas as CLikeList::GetListAsString does
         assert likes[number] == name, number
-    assert "Flat Screen TV: $5,000, from generation 3; also on the Living Room tab. 15 mood points for a liking of " \
-           "\"Internet\", while placed." in TEXT
-    assert "Pinball Machine: $3,550, from generation 4. 45 mood points for a liking of \"music\"" in TEXT
+    assert "Flat Screen TV: $5,000, from generation 3; also on the Living Room tab. Dropped on: Watching TV. 15 mood " \
+           "points for a liking of \"Internet\", while placed." in TEXT
+    assert "Pinball Machine: $3,550, from generation 4. Dropped on: Playing pinball. 45 mood points for a liking of " \
+           "\"music\"" in TEXT
     assert "(once, however many of the 4 grills are placed)" in TEXT
 
 
@@ -258,3 +259,25 @@ def test_the_unpatched_tabs(stock_emu):
         assert f"{tab} {count(category)}" in unpatched, tab
     assert count(0x15) == 13 and count(0xD) == 6 and count(0xE) == 18 and count(0x11) == 10 and count(0x1) == 31
     assert stock_emu.file_bytes(0x4B9DE0, 6) == bytes.fromhex("8d50e883fa09")     # lea edx,[eax-0x18]; cmp edx,9
+
+
+def test_every_named_action_is_in_the_actions_group():
+    names = {name for name, _changes, _branched in gm.ACTION_ITEMS.values()}
+    for _handler, actions in gm.HOTSPOT_ACTIONS.values():
+        for bid in actions:
+            assert bid in gm.ACTION_ITEMS, hex(bid)
+    for spots in gm.FURNITURE_HOTSPOTS.values():
+        for spot in spots:
+            assert spot in gm.HOTSPOT_ACTIONS, spot
+    for needle in ("Sleeping (adults)", "Taking a nap", "Doing Kung Fu", "Exercising outdoors", "Celebrating marriage",
+                   "Watching TV", "Studying", "Telling a story", "Listening to a story", "Putting away groceries",
+                   "Checking out new clothes", "Petting the pet", "Running away", "Using the toilet"):
+        assert needle in names, needle
+        assert needle in TEXT
+    actions = {f.text.split(":")[0]: f.text for f in _lines(gm.ACTIONS) if f.sub}
+    assert actions["Sleeping (adults)"] == "Sleeping (adults): energy +10, dirtiness +2."
+    assert actions["Barbecuing!"] == "Barbecuing!: hunger -7, dirtiness +4, toilet need +4, mood points +4."
+    assert actions["Doing Kung Fu"] == "Doing Kung Fu: no need changes."
+    # the hammock's hot spot (5) starts Relaxing in the hammock (behaviour 0x24); the Hammock piece carries it
+    assert gm.HOTSPOT_ACTIONS[5] == ("Hammock", (0x24,)) and 5 in gm.FURNITURE_HOTSPOTS[0x1E1]
+    assert not [f for f in FACTS if f.group in gm.STORE_GROUPS and f.label == gm.UNCONFIRMED]
