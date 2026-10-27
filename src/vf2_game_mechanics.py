@@ -41,8 +41,9 @@ linked in both executables; the effects were read from the purchase and use code
 section 23; tests/test_game_mechanics_store.py).  Corrections made on the way: the Time Warp, the Lotto Ticket, the
 Health Plan, the Food Club's prices, the On Sale price, Boarding School and the medicines were UNCONFIRMED and are now
 read from the purchase path (HandleMouse -> HandlePurchaseItem -> HandleUpgrade); Bottled Tropical Sunshine sets the
-weather to Sunny (type 0) and Bottled Tropical Rain to Stormy (type 3).  Weather uses the owner's names: Sunny, Normal,
-Raining, Stormy, Foggy, Snowing (the code's types 0 to 5; type 1 is the code's eWeather_Cloudy).
+weather to type 0 and Bottled Tropical Rain to Stormy (type 3).  Weather uses the owner's names: Normal (the plain
+sky, the code's type 0 eWeather_Sunny), Sunny (the grey tint with sun beams, type 1 eWeather_Cloudy), Raining,
+Stormy, Foggy, Snowing.
 
 Wording: family members, never the code's own word for them.  A patcher option (0 in the core executable) is
 shown as an option, both ways where the spec gives both.  The window describes the game; it fixes nothing.
@@ -439,18 +440,29 @@ def facts() -> list[Fact]:
            "spec 6: Impregnate 0x4BB920"))
     add(_f(PREGNANCY, "A family has room for 6 children per generation.", C, "spec 10: AddOffspring"))
     add(_f(PREGNANCY, "A pregnancy lasts 21 age units: 3 hours 30 minutes of real time.", C, "spec 6: 0x4C47D8"))
+    add(_f(PREGNANCY, "The baby waiting time, as you play it: however long it is, dropping one spouse on the other "
+                      "while more than 1 hour of it is left cuts it to 55 minutes from that moment, so once you try "
+                      "you never wait more than 55 minutes. It is real time on your PC's clock: it runs while the game "
+                      "is paused or closed, the game's speed does not change it, and the Time Warp moves it on by its "
+                      "10 hours 10 minutes.", C,
+           "HandleDropOnVillager 0x49E773..0x49E78E: wait > now + 3,600 -> wait = now + 3,300; now = "
+           "ldwGameState::GetSecondsFromGameStart 0x475830 (_time64 minus the save's start time) at every writer and "
+           "the reader"))
     add(_f(PREGNANCY, "After a birth the game sets a waiting time of 10 minutes (both parents' desire 80 or more) to "
-                      "4 hours 10 minutes (desire 0) before the next try.", C, "spec 6: gs+0x25AE0 writer"))
+                      "4 hours 10 minutes (desire 0) of real time before the next try.", C,
+           "spec 6: gs+0x25AE0 writer 0x4C4886, now + 600 x product"))
     add(_f(PREGNANCY, "What that waiting time holds back: dropping one spouse on the other. While it runs, the "
-                      "spouse shakes their head with \"It is too soon to try to make a baby again.\", and a wait "
-                      "of more than 1 hour is cut to 55 minutes. When it is over, the drop starts a try.", C,
-           "the only reader of gs+0x25AE0 is theMainScene::HandleDropOnVillager 0x49E726 / 0x49E778 (cut to now + 3,300 s at 0x49E78E)"))
+                      "spouse shakes their head with \"It is too soon to try to make a baby again.\" (and the wait is "
+                      "cut as above). When it is over, the drop starts a try.", C,
+           "the only reader of gs+0x25AE0 is theMainScene::HandleDropOnVillager 0x49E726 / 0x49E778"))
     add(_f(PREGNANCY, "A try from that drop: a success sets no wait, everyone celebrates and each spouse gets 300 "
                       "mood points and happiness +5 for every 20 points of their desire; a failure sets a wait of "
-                      "(5 - mother's desire / 20) x (5 - father's desire / 20) x 30 minutes of game time (30 "
-                      "minutes with both 80 or more, 12 hours 30 minutes with both under 20), with 50 mood points "
-                      "and 3 happiness off each spouse. A failed try the spouses start themselves sets 20 minutes.",
-           C, "theMainScene::TryToMakeBaby 0x4A23C0: ChanceOfPregnancy, Impregnate, wait = now + product x 0x708; ProcessCurrentPlan+0xA45 writes now + 0x4B0"))
+                      "(5 - mother's desire / 20) x (5 - father's desire / 20) x 30 minutes of real time (30 "
+                      "minutes with both 80 or more, up to 12 hours 30 minutes with both under 20, cut to 55 minutes "
+                      "by the next drop), with 50 mood points and 3 happiness off each spouse. A failed try the "
+                      "spouses start themselves sets 20 minutes of real time.",
+           C, "theMainScene::TryToMakeBaby 0x4A23C0: ChanceOfPregnancy, Impregnate, wait = now + product x 0x708; "
+              "ProcessCurrentPlan+0xA45 writes now + 0x4B0"))
 
     # ------------------------------------------------------------------ Careers (spec 7)
     add(_f(CAREERS_GROUP, "A career is picked at random from 132 (38 in the kitchen, 57 in the office, 37 in the "
@@ -569,25 +581,25 @@ def facts() -> list[Fact]:
         add(_f(EVENTS, text, label, "CanFire run as linked (E) or read (C)", sub=True))
 
     # ------------------------------------------------------------------ Weather (spec 12)
-    add(_f(WEATHER, "Weather names (the code's type number and enum name): Sunny 0 eWeather_Sunny, Normal 1 "
+    add(_f(WEATHER, "Weather names (the code's type number and enum name): Normal 0 eWeather_Sunny, Sunny 1 "
                     "eWeather_Cloudy, Raining 2 eWeather_Raining, Stormy 3 eWeather_Stormy, Foggy 4 "
                     "eWeather_Foggy, Snowing 5 eWeather_Snowing.", C, "CodeView enum EWeather, Weather.obj"))
-    add(_f(WEATHER, "Kinds: Sunny (nothing is drawn over the house), Normal (a grey tint by day, with sun beams), "
+    add(_f(WEATHER, "Kinds: Normal (the plain sky: nothing is drawn over the house), Sunny (a grey tint by day, with sun beams), "
                     "Raining, Stormy (rain and lightning), Foggy and Snowing.", C,
            "spec 12: CWeather::Draw (type 0 draws nothing; type 1 tint 0.2 by day and CSunBeam)"))
-    add(_f(WEATHER, "After a spell the weather always returns to Sunny; after Sunny the next kind is picked "
-                    "evenly from the other five (never Normal at night). The weather stands still while paused.", C,
+    add(_f(WEATHER, "After a spell the weather always returns to Normal; after Normal the next kind is picked "
+                    "evenly from the other five (never Sunny at night). The weather stands still while paused.", C,
            "spec 12: CWeather::Update 0x4CD110"))
-    add(_f(WEATHER, "Sunny weather lasts 15 to 40 real minutes; any other kind 6 to 12.", C,
+    add(_f(WEATHER, "Normal weather lasts 15 to 40 real minutes; any other kind, Sunny too, 6 to 12.", C,
            "spec 12: SetCurrent 0x4CCF20"))
     add(_f(WEATHER, "Heavy rain or a storm sends everyone outside to take cover.", C, "spec 12"))
     add(_f(WEATHER, "The collectibles of the rain-only spawn areas appear only in Raining or Stormy weather.", C,
            "spec 12, 15"))
     add(_f(WEATHER, "When the game starts (a new family, a change of player, loading a family or starting over) the "
-                    "weather is Sunny; the weather is not saved. With a 20% chance (20.02%) a change follows 30 "
+                    "weather is Normal; the weather is not saved. With a 20% chance (20.02%) a change follows 30 "
                     "seconds of game time later, to the kind your PC clock's minute gives (its remainder after "
                     "dividing by 6, in the order of the names above): a 4 or 5 moves on one kind half the time "
-                    "(50.05%; after Snowing comes Sunny), and a Sunny result moves on to Normal.", C,
+                    "(50.05%; after Snowing comes Normal), and a Normal result moves on to Sunny.", C,
            "CWeather::Reset, called only by theGameState::Init; CWeather::Random(previous)"))
 
     # ------------------------------------------------------------------ Messes and malfunctions (spec 13)
@@ -634,7 +646,7 @@ def facts() -> list[Fact]:
                  "an infection ending 3% (mild) or 1.2% (serious) per check, a symptom lasting 6 to 17 hours;",
                  "old age 10% per year over, pregnancy by the table, twins 5.25%, triplets 1.75%;",
                  "work success 56.25% to 100%, a career from 132;",
-                 "weather: the next kind 1 in 5, Sunny 15 to 40 minutes, others 6 to 12;",
+                 "weather: the next kind 1 in 5, Normal 15 to 40 minutes, Sunny and the others 6 to 12;",
                  "a collectible 3 in 6,600 per frame (3 in 3,300 with the Lucky Rock), rare 4%, uncommon 13%;",
                  "a mess: under 30 of 100 a weed, under 55 a sock, under 80 a wrapper, else a smudge;",
                  "the Lotto Ticket: $50,000 4 in 32,768, $25,000 8, $5,000 80, $1,000 800, $750 2,000, a grocery bag "
@@ -663,12 +675,12 @@ def facts() -> list[Fact]:
             ("a house malfunction: about every 27 minutes, also while paused;", E),
             ("the autosave: every 2 minutes (real time), also while paused, to the same save file a quit "
              "writes; the same in the unpatched game;", E),
-            ("a weather spell: Sunny 15 to 40 minutes, others 6 to 12 (game clock);", C),
+            ("a weather spell: Normal 15 to 40 minutes before the next spell, Sunny and the others 6 to 12 (game clock);", C),
             ("On Sale: every 24 hours (game clock);", C),
             ("the Flea Market, with the patcher: never changes;", E),
             ("the Flea Market, unpatched game: every 6 hours (real time);", E),
             ("a body removed: 40 hours after death (real time);", C),
-            ("the baby waiting time: 10 minutes to 4 hours 10 minutes (real time);", C),
+            ("the baby waiting time: 10 minutes to 12 hours 30 minutes (real time), cut to 55 minutes by a drop;", C),
             ("time away made up: at most 31,000 seconds, or 24 hours when more than 24 hours away.", E)):
         add(_f(INDEX, text, label, "spec 17", sub=True))
     return out
@@ -693,7 +705,7 @@ _EVENT_LINES = (
     ("Tax Audit (Email Events): a fee of -$40 to -$114, or a gift of +$500.", E),
     ("Old Friend (Email Events, three kinds): nothing happens.", E),
     ("Oh! A collectible! (Email Event): a collectible appears.", E),
-    ("My Weather Machine (Email Event, Sunny or Normal weather): rain, snow or fog, a third each.", E),
+    ("My Weather Machine (Email Event, Normal or Sunny weather): rain, snow or fog, a third each.", E),
     ("An extra hammock (Email Event): everyone runs to the yard (the spot x 750 to 834, y 184 to 240); nothing else "
      "happens.", C),
     ("Birthday present +$10 to +$50; Preferred Customer +$5 to +$79; Craft Fair +$35 to +$45; Rebate +$50; Helpful "
@@ -1273,8 +1285,7 @@ FLEA_ITEMS = (
                                 "never come again, and everyone at home starts Celebrating the office upgrade. "
                                 "Anywhere else: \"You can't use this here!\" and it stays in the tray", C),
     ("Bottled Tropical Rain", 50, "the weather becomes Stormy, rain with lightning (see Bottled weather)", C),
-    ("Bottled Tropical Sunshine", 50, "the weather becomes Sunny, and it is daytime for 3 minutes of game time even "
-                                  "at night (see Bottled weather)", C),
+    ("Bottled Tropical Sunshine", 50, "gives Sunny weather (owner)", C),
     ("Encyclopedia", 75, "happiness +1 to +3; one like, picked from the first 100 of the 121, is added if it is not "
                          "already a like and one of the 3 like places is free, and that like is taken off the "
                          "dislikes either way; then Studying", C),
@@ -1906,16 +1917,18 @@ def _store_lines() -> list[Fact]:
            "DispatchRotatingSundry 0x49CB90 -> UseTool"))
     add(_f(FLEA, "Bottled weather: the family member \"Deploying Bottled Weather\" gets happiness +1 to +3, walks to "
                  "one fixed spot of the house map (x 1,539, y 208), bends, waits, and then the weather changes. Stormy, Foggy and Snowing last "
-                 "6 to 12 minutes of game time; Sunny 15 to 40; then the weather carries on as in Weather.", C,
+                 "6 to 12 minutes of game time; Normal 15 to 40; then the weather carries on as in Weather.", C,
            "DispatchRotatingSundry cases 0x3B / 0x3C / 0x41 / 0x42: PlanToChangeWeather(3 / 0 / 4 / 5) -> "
-           "CWeather::SetCurrent 0x4CCF20 (0 Sunny, 1 Normal, 2 Raining, 3 Stormy, 4 Foggy, 5 Snowing)"))
-    add(_f(FLEA, "Bottled Tropical Sunshine sets Sunny (type 0) and makes it daytime for 180 seconds of game time. "
-                 "No bottle sets Normal (type 1); Normal comes only from the weather's own change (see Weather).", C,
-           "B200 0x49CB90+0xD00: push 0 before PlanToChangeWeather, OverrideNight(180); every B204 variant pushes 0; SetCurrent case 1 = CSunBeam::Reset"))
+           "CWeather::SetCurrent 0x4CCF20 (0 Normal, 1 Sunny, 2 Raining, 3 Stormy, 4 Foggy, 5 Snowing)"))
     for name, price, effect, label in FLEA_ITEMS:
         hp = f" ({_money(price * 25 // 100)} with the Health Plan)" if name in HEALTH_PLAN_FLEA else ""
         add(_f(FLEA, f"{name}: {_money(price)}{hp}: {effect}.", label,
                "DispatchRotatingSundry 0x49CB90 (case table 0x49DD64 / 0x49DCF4)", sub=True))
+        if name == "Bottled Tropical Sunshine":
+            add(_f(FLEA, "The code reading, a contradiction to live-check: the bottle sets type 0, the plain sky "
+                         "the owner calls Normal, and makes it daytime for 180 seconds of game time (B200 "
+                         "0x49D890: push 0 before PlanToChangeWeather; the plan step calls OverrideNight(180) at 0x4CAFDC).", C,
+                   "B200 0x49CB90+0xD00; every B204 variant pushes 0; SetCurrent case 1 = CSunBeam::Reset", sub=True))
 
     # ------------------------------------------------------------------ Special Upgrades
     add(_f(UPGRADES, "The Special Upgrades act on the whole family at once.", C, "HandleUpgrade 0x48C2E0 cases "
