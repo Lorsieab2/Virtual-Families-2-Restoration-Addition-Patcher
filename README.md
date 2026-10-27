@@ -200,8 +200,7 @@ play reports; superseded claims are marked rather than deleted.*
 The GUI reads its checkboxes from the shipped manifest, so the exact list follows
 the release you downloaded. The B204 bundle offers 39 settings, grouped the way
 the GUI groups them: the 38 of B203 (B202 added **Up to 28 Children** to the 37 of B201)
-plus the **Family History log**, new in B204. Up to 28 Children is in the Experimental section; the
-Family History log is a normal Optional row, on by default (since the 26 October 2026 update of B204).
+plus the **Family History log**, new in B204 (on by default; only Up to 28 Children is Experimental).
 
 That number is not simply the count of settings the patcher defines, which is
 40. The settings list drops any optional setting that has no packaged source
