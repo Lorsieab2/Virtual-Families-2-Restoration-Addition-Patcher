@@ -2,8 +2,9 @@
 
 Every executable since B201 has the dormant Time Controls loader (.vf2time) and,
 since Up to 28 Children, the .vf2kids loader too (and, from the Family History
-log on, the .vf2hist loader). The exporter refuses such a build unless it is
-handed the DLLs (--time-controls-dll, --up-to-28-children-dll, --family-history-dll),
+log on, the .vf2hist loader; from R Refreshes the Store on, the .vf2rfsh loader). The exporter refuses such a build unless it is
+handed the DLLs (--time-controls-dll, --up-to-28-children-dll, --family-history-dll,
+--store-refresh-dll),
 and export_release_bundle.py, the script a release is made with, passed
 neither: B201 was exported only after a hand edit to it that was never
 committed, and a B202 export from main stopped at "pass --time-controls-dll".
@@ -110,6 +111,11 @@ class TheReleaseScriptHandsOverBothDlls(unittest.TestCase):
 
     def test_an_exporter_without_the_flag_is_refused(self):
         self.help_text = self.help_text.replace("--up-to-28-children-dll", "--something-else")
+        self.assertEqual(1, self._run())
+        self.assertIsNone(self.exporter_argv, "exported although the DLL could not be passed")
+
+    def test_an_exporter_without_the_store_refresh_flag_is_refused(self):
+        self.help_text = self.help_text.replace("--store-refresh-dll", "--something-else")
         self.assertEqual(1, self._run())
         self.assertIsNone(self.exporter_argv, "exported although the DLL could not be passed")
 

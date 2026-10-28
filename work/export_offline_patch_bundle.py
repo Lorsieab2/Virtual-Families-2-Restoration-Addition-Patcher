@@ -98,6 +98,8 @@ FINAL_PLAYTEST_DEFAULT_ON_SETTINGS = frozenset({
     "ai_generated_bathroom2_renovations",
     "time_controls",
     "family_history",
+    "r_refreshes_store",
+    "expanded_flea_market",
 })
 # up_to_28_children is Experimental: the final playtest profile leaves it off too, like Enable All.
 # Empty by design. The owner's standing instruction is that a playtest ships
@@ -341,6 +343,8 @@ SOURCE_BACKED_OPTIONAL_SETTINGS = {
     "time_controls",
     "up_to_28_children",
     "family_history",
+    "r_refreshes_store",
+    "expanded_flea_market",
 }
 EXECUTABLE_OVERLAY_OPTIONAL_SETTINGS = {
     "island_events",
@@ -583,6 +587,20 @@ SETTINGS = [
         "id": "store_scroll_bar",
         "label": "Store Scroll Bar",
         "description": "Adds a scroll bar to the store screen.",
+        "default": True,
+        "category": "optional",
+    },
+    {
+        "id": "expanded_flea_market",
+        "label": "All 36 Flea Market goods",
+        "description": "The store's Flea Market lists all 36 of its goods at all times (as every earlier patched build did): 33 of them can be bought again and again, and the 3 one-off goods once. Unticked, the Flea Market is the original game's: 5 of the 36 goods, picked at random and picked again 6 hours of real time later, one of each to a pick. Ticking it again keeps the counts the original Flea Market left: a good bought while it was unticked shows as sold out.",
+        "default": True,
+        "category": "optional",
+    },
+    {
+        "id": "r_refreshes_store",
+        "label": "R Refreshes the Store",
+        "description": "Cheat: in the store, press R (or Shift+R) to pick the store's random items again, the game's own way, with the game's own odds. On the Clothing and Hairstyles page R picks the six Discount, Department and Designer outfits again (hairstyles are not picked at random, so they stay); outfits you already bought keep their own looks. On the Flea Market page R picks 5 new goods, but only while All 36 Flea Market goods is unticked: with it ticked every good is already listed, so R does nothing there. R does nothing on any other page or outside the store, never touches On Sale, and does nothing while a box (the buy box, the bank, a message) is open. Installs a small companion DLL in the Virtual Families 2 Patcher Files folder next to the game; unticking the setting removes it and the game is unmodified again.",
         "default": True,
         "category": "optional",
     },
@@ -1078,6 +1096,8 @@ RUNTIME_FLAG_SECTION_BY_SETTING = {
     "time_controls": ".vf2time",
     "up_to_28_children": ".vf2kids",
     "family_history": ".vf2hist",
+    "r_refreshes_store": ".vf2rfsh",
+    "expanded_flea_market": ".vf2flea",
     "same_sex_marriage": ".vf2same",
     "holiday_furniture": ".vf2goal",
     "mobile_furniture_behaviors": ".vf2beh",
@@ -1451,6 +1471,112 @@ def family_history_asset_patches(
             "note": note + " Disabling Family History log removes only this exact file.",
         })
     return records
+
+
+def store_refresh_post_asset_patches(
+    executable_sources: list[Path],
+    *,
+    output_exe_name: str,
+    build_manifest_data: dict[str, Any],
+) -> list[dict[str, Any]]:
+    contract = build_manifest_data.get("StoreRefresh")
+    if not isinstance(contract, dict):
+        return []
+    runtime_flag = contract.get("runtime_flag")
+    if not isinstance(runtime_flag, dict):
+        raise ValueError("Build manifest has an invalid StoreRefresh contract.")
+    return setting_runtime_flag_post_asset_patches(
+        executable_sources,
+        output_exe_name=output_exe_name,
+        runtime_flag=runtime_flag,
+        section_name=RUNTIME_FLAG_SECTION_BY_SETTING["r_refreshes_store"],
+        setting_id="r_refreshes_store",
+        feature_label="R Refreshes the Store",
+    )
+
+
+STORE_REFRESH_DLL_NAME = "vf2refresh_b200.dll"
+STORE_REFRESH_INI_NAME = "vf2refresh.ini"
+STORE_REFRESH_INI_TEXT = "[Patches]\r\nRefreshKey=1\r\n"
+
+
+def store_refresh_asset_patches(
+    bundle_dir: Path,
+    dll_path: Path | None,
+    build_manifest_data: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """The companion DLL and its one-line ini, placed beside the game only while R Refreshes the Store is on.
+
+    The executable carries a dormant loader (.vf2rfsh byte, 0 in every build); the post-asset toggle sets it
+    to 1 and these two files are what that loader loads (after the other companion DLLs). With the setting
+    off the files are removed and the byte stays 0: the game never looks for the DLL. A build without the
+    loader (B204 and earlier) has no StoreRefresh contract and gets no records.
+    """
+    contract = build_manifest_data.get("StoreRefresh")
+    if not isinstance(contract, dict):
+        return []
+    if (contract.get("companion_dll") != STORE_REFRESH_DLL_NAME
+            or contract.get("companion_ini") != STORE_REFRESH_INI_NAME):
+        raise ValueError("Build manifest's StoreRefresh contract names another companion file.")
+    if dll_path is None:
+        raise ValueError(
+            "This build has the R Refreshes the Store loader; pass --store-refresh-dll with the built "
+            f"{STORE_REFRESH_DLL_NAME} (runtime\\native\\build_b200refresh.bat) or the setting would do nothing."
+        )
+    if not dll_path.is_file() or dll_path.name != STORE_REFRESH_DLL_NAME:
+        raise ValueError(f"--store-refresh-dll must be an existing {STORE_REFRESH_DLL_NAME}: {dll_path}")
+    require_vf2_pe32_x86(dll_path, label="R Refreshes the Store DLL")
+    data = dll_path.read_bytes()
+    if b"B200Refresh_Startup" not in data or b"B200Refresh_TestPlan" in data:
+        raise ValueError(
+            "The R Refreshes the Store DLL must be the shipped build (exports B200Refresh_Startup, no test "
+            "entry points)."
+        )
+    payload_dir = bundle_dir / "payload" / "StoreRefresh"
+    payload_dir.mkdir(parents=True, exist_ok=True)
+    staged_dll = payload_dir / STORE_REFRESH_DLL_NAME
+    staged_dll.write_bytes(data)
+    staged_ini = payload_dir / STORE_REFRESH_INI_NAME
+    staged_ini.write_bytes(STORE_REFRESH_INI_TEXT.encode("ascii"))
+    records: list[dict[str, Any]] = []
+    for staged, note in (
+        (staged_dll, "R Refreshes the Store companion DLL, loaded by the executable's dormant .vf2rfsh loader."),
+        (staged_ini, "R Refreshes the Store switch (RefreshKey=1) read by the companion DLL."),
+    ):
+        records.append({
+            "file_path": f"{TIME_CONTROLS_PATCHER_FOLDER}/{staged.name}",
+            "source_path": relative_posix(staged.relative_to(bundle_dir)),
+            "source_sha256": sha256_file(staged),
+            "source_size": staged.stat().st_size,
+            "overwrite_existing": True,
+            "allow_missing_target": True,
+            "remove_when_disabled": True,
+            "requires": ["core_executable", "r_refreshes_store"],
+            "note": note + " Disabling R Refreshes the Store removes only this exact file.",
+        })
+    return records
+
+
+def expanded_flea_market_post_asset_patches(
+    executable_sources: list[Path],
+    *,
+    output_exe_name: str,
+    build_manifest_data: dict[str, Any],
+) -> list[dict[str, Any]]:
+    contract = build_manifest_data.get("ExpandedFleaMarket")
+    if not isinstance(contract, dict):
+        return []
+    runtime_flag = contract.get("runtime_flag")
+    if not isinstance(runtime_flag, dict):
+        raise ValueError("Build manifest has an invalid ExpandedFleaMarket contract.")
+    return setting_runtime_flag_post_asset_patches(
+        executable_sources,
+        output_exe_name=output_exe_name,
+        runtime_flag=runtime_flag,
+        section_name=RUNTIME_FLAG_SECTION_BY_SETTING["expanded_flea_market"],
+        setting_id="expanded_flea_market",
+        feature_label="All 36 Flea Market goods",
+    )
 
 
 OUTFIT_PICTURES_DLL_NAME = "vf2outfits_b200.dll"
@@ -1853,6 +1979,16 @@ def b152_runtime_flag_post_asset_patches(
             build_manifest_data=build_manifest_data,
         ),
         *up_to_28_children_post_asset_patches(
+            executable_sources,
+            output_exe_name=output_exe_name,
+            build_manifest_data=build_manifest_data,
+        ),
+        *store_refresh_post_asset_patches(
+            executable_sources,
+            output_exe_name=output_exe_name,
+            build_manifest_data=build_manifest_data,
+        ),
+        *expanded_flea_market_post_asset_patches(
             executable_sources,
             output_exe_name=output_exe_name,
             build_manifest_data=build_manifest_data,
@@ -5005,6 +5141,11 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
             Path(args.outfit_pictures_dll).resolve() if getattr(args, "outfit_pictures_dll", None) else None,
             build_manifest_data,
         ))
+        asset_patches.extend(store_refresh_asset_patches(
+            bundle_dir,
+            Path(args.store_refresh_dll).resolve() if getattr(args, "store_refresh_dll", None) else None,
+            build_manifest_data,
+        ))
     # Invisible Workspace Upgrades is emitted AFTER the misc/optional visual
     # records on purpose. Records that share a target with distinct requires
     # are a layered override and the patcher applies them in manifest order,
@@ -5578,6 +5719,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--mobile-sound-assets-dir", help="Folder containing all 67 pinned mobile behavior sound .ogg files to place behind the mobile_sound_assets setting.")
     parser.add_argument("--invisible-upgrades-dir", help="Folder containing invisible upgrade .png files to place in payload/OptionalVisualMods/Invisible Upgrades and target to Images/Upgrades.")
     parser.add_argument("--original-upgrades-dir", help="Folder containing original upgrade .png files to bundle as restore/reference sources for Invisible Upgrades.")
+    parser.add_argument("--store-refresh-dll", help="The built vf2refresh_b200.dll (runtime\\native\\build_b200refresh.bat) to ship behind the r_refreshes_store setting. Required when the build has the R Refreshes the Store loader.")
     parser.add_argument("--outfit-pictures-dll", help="The built vf2outfits_b200.dll (runtime\\native\\build_b200outfits.bat) to ship behind the fix_vanilla_game_bugs setting. Required when the build has the Outfit Pictures loader.")
     parser.add_argument("--family-history-dll", help="The built vf2history_b200.dll (runtime\\native\\build_b200history.bat) to ship behind the family_history setting. Required when the build has the Family History loader.")
     parser.add_argument("--up-to-28-children-dll", help="The built vf2kids_b200.dll (runtime\\native\\build_b200kids.bat) to ship behind the up_to_28_children setting. Required when the build has the Up to 28 Children loader.")

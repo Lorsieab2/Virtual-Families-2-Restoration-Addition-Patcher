@@ -843,6 +843,60 @@ Outfit pictures: each tray outfit keeps its own (Fix Vanilla Game Bugs, B204 upd
 - Evidence: static (capstone + pefile) and emulated (the real DLL with the real
   game code under unicorn, at the link address and relocated). No live test.
 
+R Refreshes the Store and All 36 Flea Market goods (final B204 rebuild; not live tested)
+---------------------------------------------------------------------------------------
+
+- Owner request 2026-10-27: pressing R in the store refreshes the Flea Market
+  and the store's random clothing. Two settings, both Optional and on by
+  default: r_refreshes_store (the cheat, companion DLL vf2refresh_b200.dll,
+  dormant .vf2rfsh loader byte) and expanded_flea_market (the patcher's
+  36-goods Flea Market, now one .vf2flea byte; it used to be unconditional).
+- The store's random items, from the B200 desktop objects: the six stock
+  outfit rows CInventoryManager +450h..+464h, picked by MaybeUpdateOutfits
+  (GenCommonBodyType rand 32, GenUncommonBodyType 32 + rand 12,
+  GenRareBodyType 44 + rand 6, next pick game seconds + 3840h; force = true
+  skips the clock test, as Reset does); the Flea Market's 5 goods +488h..+498h,
+  picked by MaybeUpdateRotatingItems (next pick +4A0h = real seconds + 5460h).
+  The hairstyles are fixed rows; nothing picks them. TakeOne copies the
+  store's current outfit pick into the purchase (+468h / +46Ch), so a redraw
+  never changes an outfit already bought.
+- The Flea Market draw also sets each pooled good's stock count
+  [InventoryManager + item*4] to 1; Reset sets 33 of the 36 to -1
+  (unlimited). The store shows "sold out" at 0 (GetNumAvailable). So with the
+  36 goods listed the DLL never runs that draw: 33 goods would sell out for
+  good. R does nothing on the Flea Market while .vf2flea is 1 (or absent).
+- The DLL replaces one pointer: CScrollingStoreScene's vtable slot 2
+  (HandleKey), found through RTTI because the function there is the
+  identical-code-folded HandleKey five scene vtables share. Typed characters
+  arrive as HandleKey(5, char, 0). R / Shift+R on category 0Dh calls
+  MaybeUpdateOutfits(true); on category 0Fh with .vf2flea 0 it sets +4A0h to 0
+  and calls the store's own SetStoreCategory(0Fh), whose GetCategoryItemCount
+  runs the game's pick (if the real clock is still 0 the old value is put
+  back). Everything else goes to the game's own HandleKey. The stock store
+  handles only Esc, so no stock key is displaced.
+- Every store box is shown with ldwDialog::DoModal(scene, false), which calls
+  ldwEventManager::SetModal; ldwEventManager::HandleKey stops at a modal
+  entry, so no key reaches the store while a box is open.
+- Pins: 3 for the DLL (the folded HandleKey, SetStoreCategory's head,
+  MaybeUpdateOutfits) plus the RTTI chain, proved on all 128 B200-B204 matrix
+  executables and on a core executable built from this branch; 7 more proved
+  for the tests only.
+- Emulated evidence (the real DLL and the real game code under unicorn, at the
+  link address and relocated): the clothing redraw (the game's own bounds 20h,
+  20h, 0Ch, 0Ch, 6, 6, the 4-hour clock, nothing else written), Shift+R, the
+  Flea Market left alone with the 36 goods, the stock Flea Market (.vf2flea 0)
+  picked again by R with the game's own shuffle and stock counts, the clock-0
+  case, other pages and keys untouched, Esc still the game's, a modal box
+  stopping R in the game's own dispatch, the setting off writing nothing, a
+  damaged executable left alone, and the branch executable's own loader.
+- Found, not fixed (owner to decide): with the 36 goods listed, the stock
+  counts are never reset, so a good bought under the original Flea Market (a
+  save first played without the patcher, or with All 36 Flea Market goods
+  unticked) shows as sold out once the 36-goods list is back.
+- Static and emulated evidence only. No live test. The final B204 rebuild
+  must carry the new executable code (both bytes, the loader line and the two
+  gated hooks) and ship vf2refresh_b200.dll.
+
 B153 default-off native debugger input milestone
 -------------------------------------------------
 

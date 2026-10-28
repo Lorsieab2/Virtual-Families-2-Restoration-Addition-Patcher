@@ -79,6 +79,29 @@
         "Starting a new family or Start Over in a save slot starts that slot's log again. It is not yet tested in a running game, so back up your saves first."
       ]
     },
+    "expanded_flea_market": {
+      "section": "Patching",
+      "title": "All 36 Flea Market goods",
+      "setting": true,
+      "guide": [
+        "The store's Flea Market lists all 36 of its goods at all times, as every earlier patched build did.",
+        "33 goods can be bought again and again; the 3 one-off goods once each.",
+        "It is on by default. Untick it and rebuild for the original game's Flea Market: 5 goods, picked at random and picked again 6 hours of real time later.",
+        "Watch out when ticking it again: a good bought while it was unticked shows as sold out."
+      ]
+    },
+    "r_refreshes_store": {
+      "section": "Patching",
+      "title": "R Refreshes the Store",
+      "setting": true,
+      "guide": [
+        "A cheat: in the store, press R (or Shift+R) to pick the store's random items again, the game's own way.",
+        "On the Clothing and Hairstyles page R picks the six outfits again. Hairstyles stay, and outfits you already bought keep their looks.",
+        "On the Flea Market page R picks 5 new goods, but only while All 36 Flea Market goods is unticked; with it ticked every good is already there, so R does nothing.",
+        "R does nothing on any other page, outside the store, or while a box is open. It never changes On Sale.",
+        "It is on by default. Unticking it and rebuilding turns it off."
+      ]
+    },
     "fix_vanilla_game_bugs": {
       "section": "Patching",
       "title": "Fix Vanilla Game Bugs",

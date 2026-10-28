@@ -15,8 +15,9 @@
 #             the release test run, --release, with VF2_KIDS_EXE and VF2_B200_MATRIX_GLOB pointing at the new
 #               matrix, so the tests that need it run. This is the run the release gate reads.
 #   last:     the companion DLLs (runtime\native\build_b200time.bat, build_b200kids.bat, build_b200history.bat,
-#               build_b200outfits.bat). Last, because tests\test_b200_time_controls.py,
-#               test_b200_up_to_28_children.py, test_b200_family_history.py and test_b200_outfit_pictures.py
+#               build_b200outfits.bat, build_b200refresh.bat). Last, because tests\test_b200_time_controls.py,
+#               test_b200_up_to_28_children.py, test_b200_family_history.py, test_b200_outfit_pictures.py and
+#               test_b200_store_refresh.py
 #               rebuild the same runtime\build files; building the release DLLs after them means runtime\build
 #               holds the build this script made on purpose.
 #
@@ -63,8 +64,8 @@ if (-not $SkipMatrix) {
 }
 
 # The early run: no matrix yet, so the tests that need one skip rather than read a half-built folder.
-$saved = @{ kids = $env:VF2_KIDS_EXE; glob = $env:VF2_B200_MATRIX_GLOB }
-Remove-Item Env:VF2_KIDS_EXE, Env:VF2_B200_MATRIX_GLOB -ErrorAction SilentlyContinue
+$saved = @{ kids = $env:VF2_KIDS_EXE; glob = $env:VF2_B200_MATRIX_GLOB; refresh = $env:VF2_REFRESH_EXE }
+Remove-Item Env:VF2_KIDS_EXE, Env:VF2_B200_MATRIX_GLOB, Env:VF2_REFRESH_EXE -ErrorAction SilentlyContinue
 & $Python scripts\run_tests_parallel.py --release --workers $Workers --out (Join-Path $runDir "tests-early")
 $early = $LASTEXITCODE
 Write-Host "early test run: exit $early"
@@ -81,14 +82,17 @@ if ($matrix) {
 }
 $env:VF2_KIDS_EXE = Join-Path $root "outputs\$prefix-core\$exeName"
 $env:VF2_B200_MATRIX_GLOB = Join-Path $root "outputs\$prefix-*\*.exe"
+# The R Refreshes the Store tests run the new core executable's own .vf2rfsh loader and .vf2flea byte.
+$env:VF2_REFRESH_EXE = $env:VF2_KIDS_EXE
 if (-not (Test-Path -LiteralPath $env:VF2_KIDS_EXE)) { throw "No core executable at $env:VF2_KIDS_EXE" }
 & $Python scripts\run_tests_parallel.py --release --workers $Workers --out (Join-Path $runDir "tests-release")
 $gate = $LASTEXITCODE
 if ($null -ne $saved.kids) { $env:VF2_KIDS_EXE = $saved.kids }
 if ($null -ne $saved.glob) { $env:VF2_B200_MATRIX_GLOB = $saved.glob }
+if ($null -ne $saved.refresh) { $env:VF2_REFRESH_EXE = $saved.refresh } else { Remove-Item Env:VF2_REFRESH_EXE -ErrorAction SilentlyContinue }
 if ($gate -ne 0) { throw "The release test run still fails alone; see $runDir\tests-release\summary.txt. DLLs not built." }
 
-foreach ($bat in @("build_b200time.bat", "build_b200kids.bat", "build_b200history.bat", "build_b200outfits.bat")) {
+foreach ($bat in @("build_b200time.bat", "build_b200kids.bat", "build_b200history.bat", "build_b200outfits.bat", "build_b200refresh.bat")) {
     & cmd.exe /d /c "`"$(Join-Path $root "runtime\native\$bat")`"" > (Join-Path $runDir "$bat.log") 2>&1
     if ($LASTEXITCODE -ne 0) { throw "$bat failed; see $runDir\$bat.log" }
 }

@@ -266,5 +266,30 @@ Changelog
   only while Fix Vanilla Game Bugs is on; it needs executables built with its
   loader.
 
+- All 36 Flea Market goods (final B204 rebuild; an Optional patch, on by
+  default): the Flea Market lists all 36 of its goods at all times, as every
+  earlier patched build did. It is now one byte (.vf2flea) in the patched
+  executable, read only by the two Flea Market hooks. Unticked, the Flea
+  Market is the original game's: 5 goods picked at random, picked again 6
+  hours of real time after the last pick, each one to a pick. Ticking it again
+  keeps the stock counts the original Flea Market left, so a good bought while
+  it was unticked shows as sold out.
+
+- R Refreshes the Store (final B204 rebuild; an Optional patch and a cheat, on
+  by default): in the store, R (or Shift+R) on the Clothing and Hairstyles page
+  calls the game's own forced outfit pick, CInventoryManager::
+  MaybeUpdateOutfits(true): the six stock outfits are picked again with the
+  game's odds and the next timed pick is 4 game hours later. Hairstyles and
+  outfits already bought are not touched. On the Flea Market page R makes the
+  game's own pick (MaybeUpdateRotatingItems) happen now, only while All 36
+  Flea Market goods is unticked; with it ticked R does nothing there, because
+  the game's pick would set each good's stock to 1 and 33 goods that never run
+  out would sell out for good. R does nothing on any other page, outside the
+  store, or while a store box is open. Installs vf2refresh_b200.dll in the
+  Virtual Families 2 Patcher Files folder only while the setting is on; it
+  replaces one pointer (the store screen's key handler, found through the
+  game's type information) and needs executables built with its .vf2rfsh
+  loader. The save gets only what the game itself saves for its own pick.
+
 Have fun! -Lorsieab2 :)
 

@@ -485,6 +485,23 @@ FAMILY_HISTORY_FLAG_SYMBOL = "_gVF2FamilyHistory"
 FAMILY_HISTORY_DLL_NAME = "vf2history_b200.dll"
 FAMILY_HISTORY_INI_NAME = "vf2history.ini"
 FAMILY_HISTORY_STARTUP = "B200History_Startup"
+# "R Refreshes the Store" (after B204): the companion DLL vf2refresh_b200.dll (runtime/native/b200refresh).
+# One dormant byte; zero never loads the DLL. It rides the same theGame::Init wrapper as the other companion
+# DLLs and is loaded after them, once. The DLL installs nothing unless its own pins match and vf2refresh.ini
+# says RefreshKey=1. No generated code reads anything of it.
+STORE_REFRESH_SETTING = "r_refreshes_store"
+STORE_REFRESH_FLAG_SECTION = ".vf2rfsh"
+STORE_REFRESH_FLAG_SYMBOL = "_gVF2StoreRefresh"
+STORE_REFRESH_DLL_NAME = "vf2refresh_b200.dll"
+STORE_REFRESH_INI_NAME = "vf2refresh.ini"
+STORE_REFRESH_STARTUP = "B200Refresh_Startup"
+# "All 36 Flea Market goods" (after B204, on by default): one dormant byte gating the Flea Market expansion
+# (VF2GetExpandedFleaMarketCount / Item). 1 lists all 36 goods at all times, as every build before it did;
+# 0 returns -1 from both hooks, so GetCategoryItemCount / GetCategoryItem run their stock bodies: 5 goods,
+# picked by MaybeUpdateRotatingItems every 6 real hours. The R Refreshes the Store DLL reads the byte too.
+EXPANDED_FLEA_MARKET_SETTING = "expanded_flea_market"
+EXPANDED_FLEA_MARKET_FLAG_SECTION = ".vf2flea"
+EXPANDED_FLEA_MARKET_FLAG_SYMBOL = "_gVF2ExpandedFleaMarket"
 # "Outfit Pictures" (B204 update; part of Fix Vanilla Game Bugs, owner-approved 2026-10-27): the companion
 # DLL vf2outfits_b200.dll (runtime/native/b200outfits). It has no byte of its own: it rides the existing
 # dormant .vf2bugs byte of Fix Vanilla Game Bugs (one setting, one section: the release gate binds each
@@ -13881,13 +13898,21 @@ extern "C" bool __cdecl VF2RemoveOwnedUpgrade(int itemId) {{
     return true;
 }}
 
+// "All 36 Flea Market goods" (see EXPANDED_FLEA_MARKET_* in the generator). 1 = list all 36 goods; 0 = -1
+// from both hooks, so the stock bodies run (5 goods, MaybeUpdateRotatingItems every 6 real hours).
+#pragma section(".vf2flea", read, write)
+extern "C" __declspec(allocate(".vf2flea"))
+volatile unsigned char gVF2ExpandedFleaMarket = 0;
+
 extern "C" int __cdecl VF2GetExpandedFleaMarketCount(CInventoryManager* inventory, int category) {{
     if (category != kVF2FleaMarketCategory) return -1;
+    if (gVF2ExpandedFleaMarket != 1) return -1;
     return kVF2FleaMarketGoodiesCount;
 }}
 
 extern "C" int __cdecl VF2GetExpandedFleaMarketItem(CInventoryManager* inventory, int category, int index) {{
     if (category != kVF2FleaMarketCategory) return -1;
+    if (gVF2ExpandedFleaMarket != 1) return -1;
     if (index < 0 || index >= kVF2FleaMarketGoodiesCount) return 0;
     return (int)gGoodiesList[index];
 }}
@@ -16108,6 +16133,29 @@ static void VF2LoadFamilyHistoryDll() {
     if (startup) startup();
 }
 
+// R Refreshes the Store loader (see STORE_REFRESH_* in the generator). Zero = never loads the companion
+// DLL. It is loaded by the same wrapper, after the other companion DLLs, once; nothing else reads the byte.
+#pragma section(".vf2rfsh", read, write)
+extern "C" __declspec(allocate(".vf2rfsh"))
+volatile unsigned char gVF2StoreRefresh = 0;
+
+static void VF2LoadStoreRefreshDll() {
+    unsigned short path[512];
+    unsigned long length = GetModuleFileNameW(0, path, 400);
+    if (length == 0 || length >= 400) return;
+    unsigned long cut = length;
+    while (cut > 0 && path[cut - 1] != 92) --cut;
+    if (cut == 0) return;
+    const char *tail = "__VF2_STORE_REFRESH_RELATIVE_PATH__";
+    unsigned long out = cut;
+    for (const char *c = tail; *c; ++c) path[out++] = (unsigned short)(unsigned char)*c;
+    path[out] = 0;
+    void *module = LoadLibraryW(path);
+    if (!module) return;
+    void (__cdecl *startup)() = (void (__cdecl *)())GetProcAddress(module, "B200Refresh_Startup");
+    if (startup) startup();
+}
+
 // Outfit Pictures loader (see OUTFIT_PICTURES_* in the generator): part of Fix Vanilla Game Bugs, so it
 // rides that setting's .vf2bugs byte (zero = never loads the companion DLL). It is loaded by the same
 // wrapper, after every other companion DLL, once.
@@ -16135,6 +16183,7 @@ extern "C" void *__cdecl VF2GameStateGetAfterTimeControlsLoad() {
         if (gVF2TimeControls == 1) VF2LoadTimeControlsDll();
         if (gVF2UpTo28Children == 1) VF2LoadUpTo28ChildrenDll();
         if (gVF2FamilyHistory == 1) VF2LoadFamilyHistoryDll();
+        if (gVF2StoreRefresh == 1) VF2LoadStoreRefreshDll();
         if (gVF2FixVanillaGameBugs == 1) VF2LoadOutfitPicturesDll();
     }
     return theGameState::Get();
@@ -18611,6 +18660,10 @@ extern "C" void __cdecl VF2ApplyVisibleSpecialUpgrade(int itemId) {
     special_upgrade_helper_cpp = special_upgrade_helper_cpp.replace(
         "__VF2_FAMILY_HISTORY_RELATIVE_PATH__",
         TIME_CONTROLS_PATCHER_FOLDER + "\\\\" + FAMILY_HISTORY_DLL_NAME,
+    )
+    special_upgrade_helper_cpp = special_upgrade_helper_cpp.replace(
+        "__VF2_STORE_REFRESH_RELATIVE_PATH__",
+        TIME_CONTROLS_PATCHER_FOLDER + "\\\\" + STORE_REFRESH_DLL_NAME,
     )
     special_upgrade_helper_cpp = special_upgrade_helper_cpp.replace(
         "__VF2_OUTFIT_PICTURES_RELATIVE_PATH__",
@@ -25987,6 +26040,66 @@ def patch_family_history_manifest(manifest):
         "log": "<save folder>\\Virtual Families 2 Patcher\\Save <N>\\Logs\\Family History\\Family History <k>.txt",
         "save_format": "unchanged",
         "flag_off": "the DLL is never loaded: the game is the unmodified build",
+    }
+
+
+def patch_store_refresh_manifest(manifest):
+    """R Refreshes the Store: the dormant .vf2rfsh byte is compiled into every executable (special upgrade
+    helper C++); the loader is the Time Controls wrapper on theGame::Init's first call, which loads the R
+    Refreshes the Store DLL after the other companion DLLs. Requires patch_time_controls_loader."""
+    if "TimeControls" not in manifest:
+        raise RuntimeError("R Refreshes the Store rides the Time Controls loader; patch it first")
+    manifest["StoreRefresh"] = {
+        "status": "dormant loader installed in every executable",
+        "offline_patcher_setting": STORE_REFRESH_SETTING,
+        "category": "optional",
+        "default": True,
+        "hook": (
+            "theGame::Init's first call (theGameState::Get) -> "
+            "VF2GameStateGetAfterTimeControlsLoad, which loads "
+            f"{TIME_CONTROLS_PATCHER_FOLDER}\\{STORE_REFRESH_DLL_NAME} once when the byte is 1, "
+            "after the Time Controls, Up to 28 Children and Family History DLLs"
+        ),
+        "runtime_flag": {
+            "symbol": STORE_REFRESH_FLAG_SYMBOL,
+            "source_section": STORE_REFRESH_FLAG_SECTION,
+            "size": 1,
+            "default": "00",
+            "enabled": "01",
+            "linked_location_status": "pending_link_metadata",
+        },
+        "companion_dll": STORE_REFRESH_DLL_NAME,
+        "companion_ini": STORE_REFRESH_INI_NAME,
+        "startup_export": STORE_REFRESH_STARTUP,
+        "save_format": "unchanged",
+        "flag_off": "the DLL is never loaded: the game is the unmodified build",
+    }
+
+
+def patch_expanded_flea_market_manifest(manifest):
+    """All 36 Flea Market goods: the dormant .vf2flea byte is compiled into every executable (outfit store
+    helper C++) and read by VF2GetExpandedFleaMarketCount / Item, the GetCategoryItemCount /
+    GetCategoryItem hooks of patch_inventory_manager. Requires those hooks."""
+    hooks = manifest.get("InventoryManager", {}).get("expanded_flea_market", {}).get("hooks")
+    if not hooks:
+        raise RuntimeError("All 36 Flea Market goods gates the expanded Flea Market hooks; patch them first")
+    manifest["ExpandedFleaMarket"] = {
+        "status": "the Flea Market expansion is gated by a runtime byte in every executable",
+        "offline_patcher_setting": EXPANDED_FLEA_MARKET_SETTING,
+        "category": "optional",
+        "default": True,
+        "hook": "VF2GetExpandedFleaMarketCount / VF2GetExpandedFleaMarketItem return -1 unless the byte is 1",
+        "runtime_flag": {
+            "symbol": EXPANDED_FLEA_MARKET_FLAG_SYMBOL,
+            "source_section": EXPANDED_FLEA_MARKET_FLAG_SECTION,
+            "size": 1,
+            "default": "00",
+            "enabled": "01",
+            "linked_location_status": "pending_link_metadata",
+        },
+        "flag_on": "the Flea Market lists all 36 goods of gGoodiesList at all times (every build before it)",
+        "flag_off": "the stock Flea Market: 5 goods picked by MaybeUpdateRotatingItems, again 6 real hours later",
+        "save_format": "unchanged",
     }
 
 
@@ -42036,6 +42149,10 @@ def main():
     patch_up_to_28_children_manifest(manifest)
     # Family History (.vf2hist; the same loader loads its DLL after Up to 28 Children).
     patch_family_history_manifest(manifest)
+    # R Refreshes the Store (.vf2rfsh; the same loader loads its DLL after Family History).
+    patch_store_refresh_manifest(manifest)
+    # All 36 Flea Market goods (.vf2flea; gates the expanded Flea Market hooks).
+    patch_expanded_flea_market_manifest(manifest)
     # Outfit Pictures (part of Fix Vanilla Game Bugs; the same loader loads its DLL last, on .vf2bugs).
     patch_outfit_pictures_manifest(manifest)
     # Invisible furniture counts as its stock donor where stock code tests

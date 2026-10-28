@@ -490,7 +490,7 @@ def _hidden_lines() -> list[Fact]:
               "and the outfits are all pages of one store screen, and its only key is Esc (back to the house). No "
               "key or key combination redraws the On Sale items or the Flea Market's goods, as Virtual Families 1's "
               "store page has: they are picked again only when a page is listed, by the clock (see Flea Market and "
-              "On Sale).", C,
+              "On Sale). The patcher's R is listed below, with the patcher's keys.", C,
            "every HandleKey in the objects: the store's is CScrollingStoreScene::HandleKey (type 6, 0x3E8 only); the "
            "pages are SetStoreCategory categories; MaybeUpdateSaleItems / MaybeUpdateRotatingItems / "
            "MaybeUpdateOutfits are called only from CInventoryManager::GetCategoryItemCount (from SetStoreCategory), "
@@ -570,7 +570,7 @@ def _hidden_lines() -> list[Fact]:
            "CVillagerState::ChanceOfPregnancy, CScrollingStoreScene::UpdateScene, CVillagerPlans::PlanToGo", sub=True),
         _f(g, "The Flea Market's tip says its goods change 3 times a day, and random tip 52 says several times a day. "
               "The code: in the unpatched game they change every 6 hours of real time (4 times a day); with the "
-              "patcher every good is always on sale (see Flea Market).", C,
+              "patcher's \"All 36 Flea Market goods\" option on (the default) every good is always on sale (see Flea Market).", C,
            "eTipFleaMarket 0x873 (CScrollingStoreScene::UpdateScene, category 0xF); stock MaybeUpdateRotatingItems "
            "0x4BA710 (spec 22)", sub=True),
         # ---- developer code
@@ -585,11 +585,25 @@ def _hidden_lines() -> list[Fact]:
            "theAlignPetsScene: no constructor call; ENABLE_DEBUGGER_FEATURES off in every release (docs/discoveries.md "
            "2026-07-13)"),
         # ---- the patcher
-        _f(g, "The patcher adds no key and no hidden click. Its Time Controls (every B201 and later build, when the "
-              "Time Controls option is on) is a button on the Settings screen that opens its own window, where Enter "
-              "or Esc close it. The Up to 28 Children and Family History additions add no input.", C,
+        _f(g, "The patcher adds one key, R in the store, and no hidden click. Its Time Controls (every B201 and "
+              "later build, when the Time Controls option is on) is a button on the Settings screen that opens its "
+              "own window, where Enter or Esc close it. The Up to 28 Children, Family History and outfit picture "
+              "additions add no input.", C,
            "runtime/native/b200time: button id 9 at x 30 (theOptionsDialog), dialog IDOK / IDCANCEL -> EndDialog; no "
-           "key handling in runtime/native/b200time, b200kids or b200history"),
+           "key handling in runtime/native/b200time, b200kids, b200history or b200outfits; the key: "
+           "runtime/native/b200refresh"),
+        _f(g, f"R (a patcher key, option \"{OPTION_REFRESH}\", a cheat, on by default; after B204): in the store, "
+              "R or Shift+R picks the store's random items again, the game's own way. On the Clothing and "
+              "Hairstyles page: the 6 stock outfits (see Clothing and Hairstyles). On the Flea Market page: 5 new "
+              "goods, only while \"All 36 Flea Market goods\" is off (see the store). Nothing on any other page "
+              "or screen, never On Sale, and nothing while a box (the buy box, the bank, a message, Redeem "
+              "Credit) is open: each store box takes the keys first. The store has no text box, so typing never "
+              "triggers it. Every other key, Esc included, is the game's own.", E,
+           "vf2refresh_b200.dll replaces only CScrollingStoreScene's vtable slot 2 (HandleKey, found through RTTI: "
+           "the function is shared by 5 scenes); typed characters reach it as HandleKey(5, char, 0); page = "
+           "[scene+0D4h]; every store box: ldwDialog::DoModal(scene, false) -> SetModal, and "
+           "ldwEventManager::HandleKey stops at a modal handler; all emulated (tests/test_b200_store_refresh.py)",
+           sub=True),
     ]
     return out
 
@@ -1060,7 +1074,7 @@ def facts() -> list[Fact]:
              "writes; the same in the unpatched game;", E),
             ("a weather spell: Normal 15 to 40 minutes of game time before the next spell, Sunny and the others 6 to 12;", C),
             ("On Sale: every 24 hours of game time;", C),
-            ("the Flea Market, with the patcher: never changes;", E),
+            ("the Flea Market, with the patcher: never changes (with its option \"All 36 Flea Market goods\" off, as in the unpatched game);", E),
             ("the Flea Market, unpatched game: every 6 hours of real time;", E),
             ("a body removed: 240 age units after death (40 hours of game time), the time closed counted in full;", C),
             ("the baby waiting time: 10 minutes to 12 hours 30 minutes of real time, cut to 55 minutes by a drop;", C),
@@ -1562,7 +1576,9 @@ HEALTH_PLAN_FLEA = frozenset(("Sweet Mango", "Perfect Bananas", "Virtuoso Fragra
                               "Workshop Profession Magazine"))
 OPTION_RENOVATIONS = "Add mobile room renovations"
 OPTION_BATHROOM2 = "2nd Bathroom Mobile-Style Renovations (AI-Generated Art Warning)"
-STORE_OPTION_NAMES = (OPTION_CHEATS, OPTION_RENOVATIONS, OPTION_BATHROOM2)
+OPTION_FLEA = "All 36 Flea Market goods"
+OPTION_REFRESH = "R Refreshes the Store"
+STORE_OPTION_NAMES = (OPTION_CHEATS, OPTION_RENOVATIONS, OPTION_BATHROOM2, OPTION_FLEA, OPTION_REFRESH)
 
 # The game's Likes text (string 0x7AF), comma-separated, the n-th name for like n (CLikeList::GetListAsString).
 LIKE_NAMES = {2: "resting", 25: "fish", 28: "swimming", 39: "cooking", 45: "quiet", 57: "strolling", 65: "shaving",
@@ -2257,9 +2273,13 @@ def _store_lines() -> list[Fact]:
                   "action: each applies once, when its step plays.", C,
            "CVillagerPlans::ProcessCurrentPlan: each planned change calls the matching Adjust once and marks the step done"))
     add(_f(STORE, WITH_PATCHER + "the Flea Market shows all 36 of its goods at all times; it never changes (the "
-                  "game's tip still says three times a day; there is no Flea Market clock in real time or game time).", E,
+                  "game's tip still says three times a day; there is no Flea Market clock in real time or game time). "
+                  f"This is the option \"{OPTION_FLEA}\", on by default; with it off the Flea Market is the "
+                  "unpatched game's, below.", E,
            "GetCategoryItemCount 0x46B6D0 / GetCategoryItem 0x46B210 call VF2GetExpandedFleaMarketCount / Item "
-           "0x4B9A90 / 0x4B9AB0 first (36 for category 15); the stock rotation 0x46BEB0 is never reached"))
+           "0x4B9A90 / 0x4B9AB0 first (36 for category 15); the stock rotation 0x46BEB0 is never reached; after B204 "
+           "both return -1 unless the .vf2flea byte is 1 (generator source; tests/test_b200_store_refresh.py runs "
+           "both states of a build from feat/r-refreshes-store)"))
     add(_f(STORE, UNPATCHED + "the Flea Market shows 5 of its 36 goods, picked at random, and changes them every 6 "
                   "hours of real time: the first time it is opened more than 6 real hours after the last change it picks 5 "
                   "new ones (the time counts while paused and while the game is closed). The game's tip says three "
@@ -2268,6 +2288,22 @@ def _store_lines() -> list[Fact]:
            "SetStoreCategory 0x432050(15) -> GetCategoryItemCount 0x4BB0A0 -> MaybeUpdateRotatingItems 0x4BA710, "
            "run as linked after Reset 0x4BA8F0: 5 goods at real s T, the same 5 at T + 21,600, 5 new at "
            "T + 21,601 and at T + 86,400; next change = real s + 21,600"))
+    add(_f(STORE, f"Patcher option \"{OPTION_FLEA}\" (on by default; every patched build before it always "
+                  "listed the 36): with it on, the 33 goods that start unlimited can be bought again and again and "
+                  "the 3 one-offs once. The 36-goods list keeps whatever stock counts the unpatched game's Flea "
+                  "Market left, so a good bought with the option off (or in a save first played unpatched) shows "
+                  "as sold out.", E,
+           "CInventoryManager::Reset: stock count = itemInfo field 4 (-1 for 33 goods, 1 for 0x29, 0x33, 0x10A); "
+           "the unpatched pick sets each pooled good's count to 1; TakeOne lowers a count above 0; "
+           "GetNumAvailable 0 -> \"sold out\" (DrawVisibleStoreItem image 0x27A, HandleMouse string 0x6C1)"))
+    add(_f(STORE, f"Patcher option \"{OPTION_REFRESH}\" (a cheat, on by default), on the Flea Market page: "
+                  f"with \"{OPTION_FLEA}\" off, R or Shift+R makes the unpatched game's own pick happen now: 5 "
+                  "goods shuffled the game's way, each set to one in stock, and the next pick 6 hours of real time "
+                  f"later. With \"{OPTION_FLEA}\" on, R does nothing there: every good is listed, and the "
+                  "game's pick would set each good's stock to 1, so the 33 unlimited goods would sell out for good.", E,
+           "vf2refresh_b200.dll: next-pick time InventoryManager+4A0h = 0, then the store's own "
+           "SetStoreCategory(0Fh) -> GetCategoryItemCount -> MaybeUpdateRotatingItems (the old time is put back "
+           "if the real clock is 0); emulated in a branch build, .vf2flea 0 and 1 (tests/test_b200_store_refresh.py)"))
     add(_f(STORE, "On Sale: 3 furniture items, changed every game day (24 hours of game time, 24 real hours at Normal speed; the clock "
                   "stops while paused), at half price. Buying one takes it off the list.", C,
            "spec 16: MaybeUpdateSaleItems 0x46C000; CalcPrice category 3; HandlePurchaseItem TakeOne"))
@@ -2532,6 +2568,14 @@ def _store_lines() -> list[Fact]:
                      "4 hours of game time (14,400 game seconds) after the last pick.", C,
            "CInventoryManager::MaybeUpdateOutfits: GenCommonBodyType rand(32), GenUncommonBodyType 32 + rand(12), "
            "GenRareBodyType 44 + rand(6), next pick game s + 0x3840; TakeOne copies +0x408 + id x 4"))
+    add(_f(CLOTHING, f"Patcher option \"{OPTION_REFRESH}\" (a cheat, on by default): on this tab R or Shift+R "
+                     "picks the 6 stock outfits again at once, with the same odds (Discount 0 to 31, Department "
+                     "32 to 43, Designer 44 to 49), and the next timed pick is 4 hours of game time later, as after "
+                     "any pick. The hairstyles are not picked at random, so they stay; an outfit already bought "
+                     "keeps its own. Unpatched (and with the option off) no key does this.", E,
+           "vf2refresh_b200.dll: CInventoryManager::MaybeUpdateOutfits(true), the forced pick Reset makes; "
+           "emulated: GetRandom bounds 20h, 20h, 0Ch, 0Ch, 6, 6, only +450h..+464h and +470h written "
+           "(tests/test_b200_store_refresh.py)"))
     add(_f(CLOTHING, WITH_PATCHER + "each outfit in the tray keeps the outfit it was bought with: the tray shows "
                      "each one's own picture, and dropping it on a family member gives that one (part of Fix Vanilla "
                      "Game Bugs). The pictures are kept beside the save, so they stay after loading it; an outfit "

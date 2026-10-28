@@ -130,7 +130,8 @@ class ToolsTabTests(unittest.TestCase):
 
     def test_a_setting_with_a_guide_has_its_question_mark_on_its_row(self):
         import json
-        self.assertEqual(guides.setting_keys(), ["family_history", "fix_vanilla_game_bugs"])
+        self.assertEqual(guides.setting_keys(), ["family_history", "expanded_flea_market", "r_refreshes_store",
+                                                "fix_vanilla_game_bugs"])
         rows = [{"id": "family_history", "label": "Family History log", "description": "The log.",
                  "default": False, "category": "experimental"},
                 {"id": "time_controls", "label": "Time Controls", "description": "Speeds.", "default": True,

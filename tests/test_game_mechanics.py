@@ -114,7 +114,8 @@ class PageTests(unittest.TestCase):
             if re.search(r"6 (real )?hours|21,600|six hours", fact.text):
                 self.assertRegex(fact.text, r"(?i)unpatched", fact.text)
         index = [(f.text, f.label) for f in self.facts if f.group == gm.INDEX and "Flea Market" in f.text]
-        self.assertEqual(index, [("the Flea Market, with the patcher: never changes;", gm.VERIFIED_E),
+        self.assertEqual(index, [("the Flea Market, with the patcher: never changes (with its option \"All 36 Flea Market " + 
+                                  "goods\" off, as in the unpatched game);", gm.VERIFIED_E),
                                  ("the Flea Market, unpatched game: every 6 hours of real time;", gm.VERIFIED_E)])
 
     def test_the_special_upgrades_page_both_ways(self):

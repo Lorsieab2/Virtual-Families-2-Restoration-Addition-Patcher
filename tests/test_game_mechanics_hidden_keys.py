@@ -83,9 +83,30 @@ def test_the_house_click_spots():
     assert len(gm.CLICK_SPOTS) == 16
 
 
-def test_the_patcher_adds_no_key():
-    line = _line("The patcher adds no key and no hidden click")
+def test_the_patcher_adds_one_key():
+    line = _line("The patcher adds one key, R in the store, and no hidden click")
     assert "Time Controls" in line.text and "Settings screen" in line.text
+    r = _line("R (a patcher key")
+    assert r.sub and r.label == gm.VERIFIED_E
+    for needle in (gm.OPTION_REFRESH, "on by default", "Shift+R", "Clothing and Hairstyles", "Flea Market",
+                   "only while \"All 36 Flea Market goods\" is off", "never On Sale", "while a box",
+                   "Esc included, is the game's own"):
+        assert needle in r.text, needle
+    for needle in ("vtable slot 2", "RTTI", "HandleKey(5, char, 0)", "SetModal"):
+        assert needle in r.evidence, needle
+    # the stock store line still says the unpatched store has no such key
+    assert "The patcher's R is listed below" in _line("The store scenes handle no hidden keys.").text
+
+
+def test_the_r_key_lines_in_the_store_and_the_clothing_tab():
+    clothing = [f for f in FACTS if f.group == gm.CLOTHING and f.text.startswith(f"Patcher option \"{gm.OPTION_REFRESH}\"")]
+    assert len(clothing) == 1 and clothing[0].label == gm.VERIFIED_E
+    assert "Discount 0 to 31, Department 32 to 43, Designer 44 to 49" in clothing[0].text
+    assert "hairstyles are not picked at random" in clothing[0].text and "MaybeUpdateOutfits(true)" in clothing[0].evidence
+    store = [f for f in FACTS if f.group == gm.STORE and f.text.startswith(f"Patcher option \"{gm.OPTION_REFRESH}\"")]
+    assert len(store) == 1 and "R does nothing there" in store[0].text and "+4A0h = 0" in store[0].evidence
+    flea = [f for f in FACTS if f.group == gm.STORE and f.text.startswith(f"Patcher option \"{gm.OPTION_FLEA}\"")]
+    assert len(flea) == 1 and "sold out" in flea[0].text
 
 
 # ------------------------------------------------------------------------------------------------- the object files
