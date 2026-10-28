@@ -198,11 +198,8 @@ checked against `manifest.json`, the release notes and the owner's confirmed
 play reports; superseded claims are marked rather than deleted.*
 
 The GUI reads its checkboxes from the shipped manifest, so the exact list follows
-the release you downloaded. The next B204 bundle offers 41 settings, grouped the way
-the GUI groups them: the 39 of the first B204 bundles (the 38 of B203 plus the **Family History log**;
-B202 added **Up to 28 Children** to the 37 of B201) plus **All 36 Flea Market goods** and
-**R Refreshes the Store**, both new in the final B204 rebuild and both on by default (only Up to 28
-Children is Experimental).
+the release you downloaded. The next B204 bundle offers 41 settings: the 39 of the
+first B204 bundles plus **All 36 Flea Market goods** and **R Refreshes the Store** (both on by default).
 
 That number is not simply the count of settings the patcher defines, which is
 42. The settings list drops any optional setting that has no packaged source
