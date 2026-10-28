@@ -19,7 +19,8 @@ run again on its own, and only failures that persist alone count. The summary is
 
 Environment variables pass straight through, so a test that needs one skips exactly as it would alone. A
 release run sets the ones the release gate needs before starting the runner: `VF2_VCVARS32`,
-`VF2_B200_CORE_EXE`, `VF2_B201_CORE_EXE`, `VF2_KIDS_EXE` (the new matrix's core executable),
+`VF2_B200_CORE_EXE`, `VF2_B201_CORE_EXE`, `VF2_KIDS_EXE` (the new matrix's core executable), `VF2_REFRESH_EXE`
+(the same core executable, from the R Refreshes the Store build on: it carries the `.vf2rfsh` loader and `.vf2flea` byte),
 `VF2_B200_MATRIX_GLOB` (a glob over the new matrix's executables), and any of `VF2_VANILLA_EXE`,
 `VF2_VERIFY_RELEASE`, `VF2_LINK_TEST` that apply. As before, the `work\` suite needs the gitignored build
 inputs (`work\vanilla_runtime_payload`, `work\desktop_obj_files`, `outputs\`, ...) in the checkout it runs in.

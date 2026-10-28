@@ -12,7 +12,7 @@ How each file runs
     suites can never share one pytest session anyway.
   * from the folder it is normally run from: tests/ files from the repository root (as CI runs them), work/
     files from work/ (as AGENTS.md says), with that folder on PYTHONPATH. Every other environment variable
-    (VF2_B200_CORE_EXE, VF2_B201_CORE_EXE, VF2_KIDS_EXE, VF2_B200_MATRIX_GLOB, VF2_VCVARS32, VF2_VANILLA_EXE,
+    (VF2_B200_CORE_EXE, VF2_B201_CORE_EXE, VF2_KIDS_EXE, VF2_REFRESH_EXE, VF2_B200_MATRIX_GLOB, VF2_VCVARS32, VF2_VANILLA_EXE,
     VF2_VERIFY_RELEASE, ...) passes through unchanged, so a test that needs one skips exactly as it would alone.
   * with a SHORT --basetemp under %TEMP% (deep temp paths pass the 260-character limit), one per process.
 
