@@ -110,7 +110,8 @@ def test_names_agree_everywhere():
     # the R byte is read only by the loader; the Flea Market byte only by the two expansion hooks (each count
     # includes the symbol constant and the declaration)
     assert gen.count("gVF2StoreRefresh") == 3 and gen.count("gVF2StoreRefresh ==") == 1
-    assert gen.count("gVF2ExpandedFleaMarket") == 4 and gen.count("if (gVF2ExpandedFleaMarket != 1) return -1;") == 2
+    assert gen.count("gVF2ExpandedFleaMarket") == 5 and gen.count("if (gVF2ExpandedFleaMarket != 1) return -1;") == 2
+    assert gen.count("if (gVF2ExpandedFleaMarket != 1) return false;") == 1     # the always-in-stock rule
     assert S.DLL_NAME == "vf2refresh_b200.dll" and S.INI_KEY == "RefreshKey" and S.INI_NAME == "vf2refresh.ini"
     assert S.PATCHER_FOLDER == "Virtual Families 2 Patcher Files" and S.FLEA_FLAG_SECTION == ".vf2flea"
 
@@ -124,9 +125,28 @@ def test_the_expansion_hooks_fall_through_unless_the_byte_is_1():
             body.index("if (gVF2ExpandedFleaMarket != 1) return -1;"), fn
 
 
-def test_the_generator_manifest_contracts():
+def test_the_33_goods_are_always_in_stock_with_all_36():
+    """Owner, 2026-10-27: "Always in stock when 36 is on." The GetNumAvailable hook answers 1 for the 33 goods
+    Reset stocks as unlimited, first thing and only while the byte is 1; the 3 one-off goods keep their count."""
     sys.path.insert(0, str(ROOT / "work"))
     import patch_mobile_furniture_pack as P
+    if not (P.SRC_OBJS / "InventoryManager.obj").is_file():
+        pytest.skip("the desktop object files are not present")
+    unlimited, one_off = P.flea_market_unlimited_goods()
+    assert len(unlimited) == 33 and sorted(one_off) == [0x29, 0x33, 0x10A]
+    gen = _gen_text()
+    body = gen[gen.index('extern "C" int __cdecl VF2GetOutfitStoreNumAvailable(int itemId) {{'):]
+    assert body.index("if (VF2FleaMarketGoodAlwaysInStock(itemId)) return 1;") < body.index("VF2MarriageEmailUnavailable")
+    rule = gen[gen.index("static bool VF2FleaMarketGoodAlwaysInStock(int itemId) {{"):]
+    rule = rule[:rule.index("}}\n}}") + 4]
+    assert "if (gVF2ExpandedFleaMarket != 1) return false;" in rule and "{flea_unlimited_cases} return true;" in rule
+    assert "InventoryManager" not in rule.split("{{", 1)[1], "the rule must not write or read a count"
+
+
+def test_the_generator_manifest_contracts(monkeypatch):
+    sys.path.insert(0, str(ROOT / "work"))
+    import patch_mobile_furniture_pack as P
+    monkeypatch.setattr(P, "flea_market_unlimited_goods", lambda: ([0x26] * 33, [0x29, 0x33, 0x10A]))   # CI has no objects
     manifest = {"TimeControls": {}}
     P.patch_store_refresh_manifest(manifest)
     c = manifest["StoreRefresh"]

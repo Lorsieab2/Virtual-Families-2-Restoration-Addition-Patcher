@@ -310,11 +310,13 @@ release bundle, like almost everything else)
   (`VF2GetExpandedFleaMarketCount` / `VF2GetExpandedFleaMarketItem`). Unticked, both hooks step aside and the
   Flea Market is the original game's: 5 of the 36 goods, picked at random, picked again the first time the
   page is opened more than 6 hours of real time after the last pick, and each good one to a pick (the
-  game's own pick sets each listed good's stock to 1). **Watch out when you tick it again:** the 36-goods
-  list keeps the stock counts the original Flea Market left, so a good you bought while it was unticked
-  shows as sold out, and one that was listed then can be bought once more. The same is already true of a
-  save first played without the patcher. Nothing resets those counts yet; the owner has not decided
-  whether the 36-goods list should.
+  game's own pick sets each listed good's stock to 1). While it is ticked the 33 ordinary goods are
+  **always in stock** (the owner, 2026-10-27: "Always in stock when 36 is on."), whatever count the
+  original Flea Market left -- a good bought while it was unticked, or in a save first played without
+  the patcher, is buyable again. The patcher's `GetNumAvailable` hook answers "in stock" for them and
+  writes nothing, so the save's counts are kept and count again the moment the setting is unticked.
+  The 3 one-off goods (the Towelette, the Anti-spam Software and the Rockhound Certificate, which the
+  game stocks one of) keep their one purchase either way, as in every earlier patched build.
 - **R Refreshes the Store** (`.vf2rfsh`, an Optional patch and a cheat, **on by default**; new in the final
   B204 rebuild) - in the store, press **R** (or Shift+R) to pick the store's random items again, the
   game's own way and with the game's own odds:

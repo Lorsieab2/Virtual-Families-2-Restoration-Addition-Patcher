@@ -593,7 +593,7 @@ SETTINGS = [
     {
         "id": "expanded_flea_market",
         "label": "All 36 Flea Market goods",
-        "description": "The store's Flea Market lists all 36 of its goods at all times (as every earlier patched build did): 33 of them can be bought again and again, and the 3 one-off goods once. Unticked, the Flea Market is the original game's: 5 of the 36 goods, picked at random and picked again 6 hours of real time later, one of each to a pick. Ticking it again keeps the counts the original Flea Market left: a good bought while it was unticked shows as sold out.",
+        "description": "The store's Flea Market lists all 36 of its goods at all times (as every earlier patched build did): 33 of them can be bought again and again, and the 3 one-off goods once. Unticked, the Flea Market is the original game's: 5 of the 36 goods, picked at random and picked again 6 hours of real time later, one of each to a pick. While it is ticked the 33 ordinary goods are always in stock, even one bought while it was unticked; the saved stock counts are not changed.",
         "default": True,
         "category": "optional",
     },

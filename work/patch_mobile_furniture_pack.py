@@ -13040,8 +13040,45 @@ SPECIAL_UPGRADE_HELPER_SECTION_BEGIN = "// VF2 generated special-upgrade helper 
 SPECIAL_UPGRADE_HELPER_SECTION_END = "// VF2 generated special-upgrade helper section: end"
 
 
+FLEA_MARKET_GOODIES_SYMBOL = "?gGoodiesList@@3PAW4EInventoryItem@@A"
+FLEA_MARKET_GOODIES_COUNT = 0x24
+FLEA_MARKET_UNLIMITED_COUNT = 33
+
+
+def flea_market_unlimited_goods():
+    """The Flea Market goods CInventoryManager::Reset stocks as unlimited (itemInfo field +4 = -1), read from the
+    pristine desktop InventoryManager.obj: gGoodiesList's 36 items, less the 3 one-off goods (field +4 = 1, one in
+    stock, which a purchase uses up for good). "All 36 Flea Market goods" keeps these 33 always in stock (owner,
+    2026-10-27), whatever stock count the unpatched Flea Market's pick left."""
+    source_path = SRC_OBJS / "InventoryManager.obj"
+    obj = CoffObject(source_path)
+    goods_sym = obj.symbol(FLEA_MARKET_GOODIES_SYMBOL)
+    goods_sec = obj.section(goods_sym.section)
+    raw = goods_sec.raw_ptr + goods_sym.value
+    goods = list(struct.unpack_from(f"<{FLEA_MARKET_GOODIES_COUNT}I", obj.buf, raw))
+    info_sym = obj.symbol(INVENTORY_ITEMINFO)
+    info_sec = obj.section(info_sym.section)
+    info_raw = info_sec.raw_ptr + info_sym.value
+    unlimited, one_off = [], []
+    for item in goods:
+        if not INVENTORY_ITEMINFO_FIRST_ITEM_ID <= item <= INVENTORY_ITEMINFO_LAST_ITEM_ID:
+            raise RuntimeError(f"Flea Market good {item:#x} has no itemInfo record")
+        stock = struct.unpack_from("<i", obj.buf, info_raw + item * INVENTORY_ITEMINFO_RECORD_SIZE + 4)[0]
+        if stock == -1:
+            unlimited.append(item)
+        elif stock == 1:
+            one_off.append(item)
+        else:
+            raise RuntimeError(f"Flea Market good {item:#x} starts with an unexpected stock count {stock}")
+    if len(set(goods)) != FLEA_MARKET_GOODIES_COUNT or len(unlimited) != FLEA_MARKET_UNLIMITED_COUNT:
+        raise RuntimeError(f"Flea Market goods drifted: {len(unlimited)} unlimited of {len(set(goods))}")
+    return unlimited, one_off
+
+
 def write_outfit_store_helpers(manifest):
     helper_path = PATCHED / "vf2_special_upgrade_effects.cpp"
+    flea_unlimited, flea_one_off = flea_market_unlimited_goods()
+    flea_unlimited_cases = " ".join(f"case {item:#x}:" for item in flea_unlimited)
     invisible_have_upgrade_cases = "\n".join(
         f"    case {donor:#x}: invisible = {invisible:#x}; break;"
         for donor, invisible in sorted(INVISIBLE_HAVE_UPGRADE_COPIES.items())
@@ -14130,7 +14167,20 @@ extern "C" int __cdecl VF2GetOutfitStoreBodyValue(int itemId) {{
     return -1;
 }}
 
+// "All 36 Flea Market goods" on: the 33 goods CInventoryManager::Reset stocks as unlimited are always in stock
+// (owner, 2026-10-27), whatever count the unpatched Flea Market's pick left at InventoryManager + item * 4 (it
+// sets each pooled good to 1, and a purchase then 0, "sold out"). Nothing is written: the saved counts stay as
+// they are and count again the moment the byte is 0. The 3 one-off goods keep their own count (one purchase).
+static bool VF2FleaMarketGoodAlwaysInStock(int itemId) {{
+    if (gVF2ExpandedFleaMarket != 1) return false;
+    switch (itemId) {{
+    {flea_unlimited_cases} return true;
+    default: return false;
+    }}
+}}
+
 extern "C" int __cdecl VF2GetOutfitStoreNumAvailable(int itemId) {{
+    if (VF2FleaMarketGoodAlwaysInStock(itemId)) return 1;
     if (itemId == {MARRIAGE_EMAIL_ITEM_ID:#x} && VF2MarriageEmailUnavailable()) {{
         // A second resident adult means the stock proposal path has no valid
         // candidate state.  Hide the purchase instead of queueing the email
@@ -26098,6 +26148,12 @@ def patch_expanded_flea_market_manifest(manifest):
             "linked_location_status": "pending_link_metadata",
         },
         "flag_on": "the Flea Market lists all 36 goods of gGoodiesList at all times (every build before it)",
+        "always_in_stock": {
+            "items": [hex(item) for item in flea_market_unlimited_goods()[0]],
+            "hook": "VF2GetOutfitStoreNumAvailable (the GetNumAvailable head hook) returns 1 while the byte is 1",
+            "one_off_goods_keep_their_count": [hex(item) for item in flea_market_unlimited_goods()[1]],
+            "save_counts": "never written",
+        },
         "flag_off": "the stock Flea Market: 5 goods picked by MaybeUpdateRotatingItems, again 6 real hours later",
         "save_format": "unchanged",
     }

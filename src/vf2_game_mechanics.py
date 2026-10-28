@@ -2290,12 +2290,14 @@ def _store_lines() -> list[Fact]:
            "T + 21,601 and at T + 86,400; next change = real s + 21,600"))
     add(_f(STORE, f"Patcher option \"{OPTION_FLEA}\" (on by default; every patched build before it always "
                   "listed the 36): with it on, the 33 goods that start unlimited can be bought again and again and "
-                  "the 3 one-offs once. The 36-goods list keeps whatever stock counts the unpatched game's Flea "
-                  "Market left, so a good bought with the option off (or in a save first played unpatched) shows "
-                  "as sold out.", E,
+                  "the 3 one-offs once. The 33 are always in stock while the option is on, even a good the "
+                  "unpatched game's Flea Market sold out (with the option off, or in a save first played "
+                  "unpatched); the save's own stock counts are not changed and count again when it is off.", E,
            "CInventoryManager::Reset: stock count = itemInfo field 4 (-1 for 33 goods, 1 for 0x29, 0x33, 0x10A); "
            "the unpatched pick sets each pooled good's count to 1; TakeOne lowers a count above 0; "
-           "GetNumAvailable 0 -> \"sold out\" (DrawVisibleStoreItem image 0x27A, HandleMouse string 0x6C1)"))
+           "GetNumAvailable 0 -> \"sold out\" (DrawVisibleStoreItem image 0x27A, HandleMouse string 0x6C1); "
+           "the patcher's GetNumAvailable hook answers 1 for the 33 while .vf2flea is 1 (emulated in a branch "
+           "build, tests/test_b200_store_refresh.py)"))
     add(_f(STORE, f"Patcher option \"{OPTION_REFRESH}\" (a cheat, on by default), on the Flea Market page: "
                   f"with \"{OPTION_FLEA}\" off, R or Shift+R makes the unpatched game's own pick happen now: 5 "
                   "goods shuffled the game's way, each set to one in stock, and the next pick 6 hours of real time "
