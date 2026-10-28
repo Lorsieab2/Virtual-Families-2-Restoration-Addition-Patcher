@@ -2532,6 +2532,20 @@ def _store_lines() -> list[Fact]:
                      "4 hours of game time (14,400 game seconds) after the last pick.", C,
            "CInventoryManager::MaybeUpdateOutfits: GenCommonBodyType rand(32), GenUncommonBodyType 32 + rand(12), "
            "GenRareBodyType 44 + rand(6), next pick game s + 0x3840; TakeOne copies +0x408 + id x 4"))
+    add(_f(CLOTHING, WITH_PATCHER + "each outfit in the tray keeps the outfit it was bought with: the tray shows "
+                     "each one's own picture, and dropping it on a family member gives that one (part of Fix Vanilla "
+                     "Game Bugs). The pictures are kept beside the save, so they stay after loading it; an outfit "
+                     "bought before the fix shows and gives what the unpatched game does.", C,
+           "vf2outfits_b200.dll: the buy's AddItem (HandlePurchaseItem), both SwapSlots calls, the DrawItem calls "
+           "of CToolTray::Draw / DrawToolInHand and both GetOutfit calls of HandleMouseDown 0x49EE90; run on the "
+           "B200 code in tests/b200_outfits_scenarios.py, not yet seen in a running game"))
+    add(_f(CLOTHING, UNPATCHED + "every outfit of a sex in the tray shows, and puts on, the last one bought: two "
+                     "male outfits bought with different pictures both show the second, and the first one dropped "
+                     "on a family member gives the second.", C,
+           "stock exe sha256 1582d9e8: TakeOne 0x4BA0FE copies the row's body into +0x468 (rows 0x12..0x14) / "
+           "+0x46C (0x15..0x17); GetOutfit 0x4BA6E0 and DrawItem 0x4BA24C / 0x4BA25D read 0x49 from +0x468 and "
+           "0x4A from +0x46C; the apply 0x442C8E / 0x442D14 writes it to +0x6A84; a tray place holds only "
+           "(item, uses)"))
     for name, price, lock in (("Discount Store Male Outfit", 75, 0), ("Discount Store Female Outfit", 75, 0),
                               ("Department Store Male Outfit", 200, 2), ("Department Store Female Outfit", 200, 2),
                               ("Designer Male Outfit", 1500, 4), ("Designer Female Outfit", 1500, 4)):

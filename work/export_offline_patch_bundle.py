@@ -449,7 +449,7 @@ SETTINGS = [
     {
         "id": "fix_vanilla_game_bugs",
         "label": "Fix Vanilla Game Bugs",
-        "description": "Fixes bugs in the original game's menus. Start Over on the title screen asks before restarting instead of just continuing the current game. Choosing Pause Game: Yes in Settings while already paused no longer leaves the game stuck paused after one Space press. The invisible Change Player click spot above the title buttons is removed. The title screen now always shows the current player's name, keeps the Manage Games button, and labels the first button Play or Continue correctly.",
+        "description": "Fixes bugs in the original game. Start Over on the title screen asks before restarting instead of just continuing the current game. Choosing Pause Game: Yes in Settings while already paused no longer leaves the game stuck paused after one Space press. The invisible Change Player click spot above the title buttons is removed. The title screen now always shows the current player's name, keeps the Manage Games button, and labels the first button Play or Continue correctly. Every Male Outfit and Female Outfit in the tool tray keeps the picture it was bought with: in the original game every outfit of a sex in the tray shows, and puts on, the last one bought. The pictures are kept beside each save in Virtual Families 2 Patcher Data\\Outfits; the save file itself is not changed, and outfits bought before this fix show what they showed before. Installs a small companion DLL (vf2outfits_b200.dll) in the Virtual Families 2 Patcher Files folder next to the game; unticking the setting removes it.",
         "default": True,
         "category": "main",
     },
@@ -1449,6 +1449,75 @@ def family_history_asset_patches(
             "remove_when_disabled": True,
             "requires": ["core_executable", "family_history"],
             "note": note + " Disabling Family History log removes only this exact file.",
+        })
+    return records
+
+
+OUTFIT_PICTURES_DLL_NAME = "vf2outfits_b200.dll"
+OUTFIT_PICTURES_INI_NAME = "vf2outfits.ini"
+OUTFIT_PICTURES_INI_TEXT = "[Patches]\r\nOutfitPictures=1\r\n"
+
+
+def outfit_pictures_asset_patches(
+    bundle_dir: Path,
+    dll_path: Path | None,
+    build_manifest_data: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """The Outfit Pictures companion DLL and its one-line ini, placed beside the game only while Fix Vanilla
+    Game Bugs is on (it is one of that setting's fixes).
+
+    The executable's loader loads the DLL while the Fix Vanilla Game Bugs byte (.vf2bugs) is 1, after the
+    other companion DLLs; that byte has its own post-asset toggle (fix_vanilla_game_bugs_post_asset_patches),
+    so these two files are the only records. With the setting off the files are removed and the byte is 0:
+    the game never looks for the DLL. A build without the loader (the B204 executables first published, and
+    earlier) has no OutfitPictures contract and gets no records.
+    """
+    contract = build_manifest_data.get("OutfitPictures")
+    if not isinstance(contract, dict):
+        return []
+    if (contract.get("companion_dll") != OUTFIT_PICTURES_DLL_NAME
+            or contract.get("companion_ini") != OUTFIT_PICTURES_INI_NAME):
+        raise ValueError("Build manifest's OutfitPictures contract names another companion file.")
+    flag = contract.get("runtime_flag")
+    if not isinstance(flag, dict) or flag.get("source_section") != RUNTIME_FLAG_SECTION_BY_SETTING["fix_vanilla_game_bugs"]:
+        raise ValueError("Build manifest's OutfitPictures contract does not ride the Fix Vanilla Game Bugs byte.")
+    if contract.get("offline_patcher_setting") != "fix_vanilla_game_bugs":
+        raise ValueError("Build manifest's OutfitPictures contract names another setting.")
+    if dll_path is None:
+        raise ValueError(
+            "This build has the Outfit Pictures loader; pass --outfit-pictures-dll with the built "
+            f"{OUTFIT_PICTURES_DLL_NAME} (runtime\\native\\build_b200outfits.bat) or the fix would do nothing."
+        )
+    if not dll_path.is_file() or dll_path.name != OUTFIT_PICTURES_DLL_NAME:
+        raise ValueError(f"--outfit-pictures-dll must be an existing {OUTFIT_PICTURES_DLL_NAME}: {dll_path}")
+    require_vf2_pe32_x86(dll_path, label="Outfit Pictures DLL")
+    data = dll_path.read_bytes()
+    if b"B200Outfits_Startup" not in data or b"B200Outfits_TestPlan" in data:
+        raise ValueError(
+            "The Outfit Pictures DLL must be the shipped build (exports B200Outfits_Startup, no test entry points)."
+        )
+    payload_dir = bundle_dir / "payload" / "OutfitPictures"
+    payload_dir.mkdir(parents=True, exist_ok=True)
+    staged_dll = payload_dir / OUTFIT_PICTURES_DLL_NAME
+    staged_dll.write_bytes(data)
+    staged_ini = payload_dir / OUTFIT_PICTURES_INI_NAME
+    staged_ini.write_bytes(OUTFIT_PICTURES_INI_TEXT.encode("ascii"))
+    records: list[dict[str, Any]] = []
+    for staged, note in (
+        (staged_dll, "Outfit Pictures companion DLL (Fix Vanilla Game Bugs), loaded by the executable's loader "
+                     "while the .vf2bugs byte is 1."),
+        (staged_ini, "Outfit Pictures switch (OutfitPictures=1) read by the companion DLL."),
+    ):
+        records.append({
+            "file_path": f"{TIME_CONTROLS_PATCHER_FOLDER}/{staged.name}",
+            "source_path": relative_posix(staged.relative_to(bundle_dir)),
+            "source_sha256": sha256_file(staged),
+            "source_size": staged.stat().st_size,
+            "overwrite_existing": True,
+            "allow_missing_target": True,
+            "remove_when_disabled": True,
+            "requires": ["core_executable", "fix_vanilla_game_bugs"],
+            "note": note + " Disabling Fix Vanilla Game Bugs removes only this exact file.",
         })
     return records
 
@@ -4430,7 +4499,7 @@ def write_transparency_log(bundle_dir: Path, manifest: dict[str, Any], files_dir
         "- Allow Older Pregnancies is an exact-SHA post-asset toggle of the dormant .vf2preg byte; age-50+ failed attempts skip the stock cooldown deadline write. The same byte permits the native Next Generation flow when the oldest active living non-departed villager reaches age 60 while still requiring a surviving child. Native StartNextGeneration and its 30-record MakeRoomInTree rollover remain unchanged. The setting does not add another executable overlay dimension.",
         "- Same-sex marriage support is linked behind the default-zero .vf2same byte. When enabled, only the post-spawn marriage candidate gender field is flipped; the proposal scene keeps native Accept, Reject, close, proposal-state, parent-storage, and selector behavior. Same-sex spouse drops use the native private-romantic-time sequence, TryToMakeBaby returns before pregnancy, and refusal/argument routes are not used for the established same-sex spouse pair.",
         "- Older Villager Mortality Curve is an exact-SHA post-asset toggle of the dormant .vf2mort byte; flag-off resumes the stock old-age block and it does not add another executable overlay dimension.",
-        "- Fix Vanilla Game Bugs is an exact-SHA post-asset toggle of the dormant .vf2bugs byte (on by default): title Start Over confirms before restarting, Settings Pause Yes is idempotent, the invisible title Change Player hotspot is emptied, and the title refreshes its player name, Manage Games button and Play/Continue label on every visit. Flag-off runs the stock instructions at every site and it does not add another executable overlay dimension.",
+        "- Fix Vanilla Game Bugs is an exact-SHA post-asset toggle of the dormant .vf2bugs byte (on by default): title Start Over confirms before restarting, Settings Pause Yes is idempotent, the invisible title Change Player hotspot is emptied, and the title refreshes its player name, Manage Games button and Play/Continue label on every visit, and (in executables with the Outfit Pictures loader) the byte also loads vf2outfits_b200.dll, which keeps each tool-tray outfit's own picture. Flag-off runs the stock instructions at every site and it does not add another executable overlay dimension.",
         "- F5 enables and toggles the native debugger overlay; Up/Down change pages, F6 selects Waypoint Editor, F7 selects Light Source Editor, and F4 exits an editor. B153 recognizes VF2's internal key codes as well as Win32/SDL fallbacks.",
     ]
     )
@@ -4929,6 +4998,11 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
         asset_patches.extend(family_history_asset_patches(
             bundle_dir,
             Path(args.family_history_dll).resolve() if getattr(args, "family_history_dll", None) else None,
+            build_manifest_data,
+        ))
+        asset_patches.extend(outfit_pictures_asset_patches(
+            bundle_dir,
+            Path(args.outfit_pictures_dll).resolve() if getattr(args, "outfit_pictures_dll", None) else None,
             build_manifest_data,
         ))
     # Invisible Workspace Upgrades is emitted AFTER the misc/optional visual
@@ -5504,6 +5578,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--mobile-sound-assets-dir", help="Folder containing all 67 pinned mobile behavior sound .ogg files to place behind the mobile_sound_assets setting.")
     parser.add_argument("--invisible-upgrades-dir", help="Folder containing invisible upgrade .png files to place in payload/OptionalVisualMods/Invisible Upgrades and target to Images/Upgrades.")
     parser.add_argument("--original-upgrades-dir", help="Folder containing original upgrade .png files to bundle as restore/reference sources for Invisible Upgrades.")
+    parser.add_argument("--outfit-pictures-dll", help="The built vf2outfits_b200.dll (runtime\\native\\build_b200outfits.bat) to ship behind the fix_vanilla_game_bugs setting. Required when the build has the Outfit Pictures loader.")
     parser.add_argument("--family-history-dll", help="The built vf2history_b200.dll (runtime\\native\\build_b200history.bat) to ship behind the family_history setting. Required when the build has the Family History loader.")
     parser.add_argument("--up-to-28-children-dll", help="The built vf2kids_b200.dll (runtime\\native\\build_b200kids.bat) to ship behind the up_to_28_children setting. Required when the build has the Up to 28 Children loader.")
     parser.add_argument("--time-controls-dll", help="The built vf2time_b200.dll (runtime\\native\\build_b200time.bat) to ship behind the time_controls setting. Required when the build has the Time Controls loader.")

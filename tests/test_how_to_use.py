@@ -53,12 +53,19 @@ class GuideContentTests(unittest.TestCase):
 
     def test_the_family_history_setting_is_covered(self):
         self.assertIn("family_history", guides.keys())
-        self.assertEqual(guides.setting_keys(), ["family_history"])
+        self.assertEqual(guides.setting_keys(), ["family_history", "fix_vanilla_game_bugs"])
         text = guides.guide("family_history").text
         self.assertNotIn("Experimental", text)        # a normal row, on by default (owner, 2026-10-26)
         for needle in ("on by default", "Family History", "remarriage", "divorce", "Twins and triplets",
                        "Email Event", "Popup Event", "current spouse", "backfilled, no date", "head and body",
                        "Virtual Families 2 Patcher\\Save N\\Logs\\Family History", "back up your saves"):
+            self.assertIn(needle, text)
+
+    def test_the_fix_vanilla_game_bugs_setting_is_covered(self):
+        text = guides.guide("fix_vanilla_game_bugs").text
+        for needle in ("on by default", "Start Over", "Male Outfit and Female Outfit", "last one bought",
+                       "Virtual Families 2 Patcher Data\\Outfits", "save itself is not changed",
+                       "not yet tested in a running game"):
             self.assertIn(needle, text)
 
     def test_unknown_key_fails_loudly(self):
