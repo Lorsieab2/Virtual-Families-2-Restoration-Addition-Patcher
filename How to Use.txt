@@ -31,6 +31,16 @@ https://github.com/Lorsieab2/Virtual-Families-2-Restoration-Addition-Patcher/
 
 6. Review the optional patch checkboxes.
 
+   Two store settings, both on by default:
+   - All 36 Flea Market goods: the Flea Market lists all 36 of its goods all
+     the time. Untick it for the original game's Flea Market: 5 goods, picked
+     again after 6 hours of real time.
+   - R Refreshes the Store (a cheat): in the store, press R on the Clothing
+     and Hairstyles page to pick the six outfits again (hairstyles stay;
+     outfits you already bought keep their looks). On the Flea Market page R
+     picks 5 new goods, but only while All 36 Flea Market goods is unticked.
+     R does nothing anywhere else, and nothing while a box is open.
+
 7. Optional but recommended: click Dry Run (Validate Only).
    Dry Run validates that the patcher's working. It does not actually
    change/write files.

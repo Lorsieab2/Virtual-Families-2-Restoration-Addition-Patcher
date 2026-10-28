@@ -53,13 +53,23 @@ class GuideContentTests(unittest.TestCase):
 
     def test_the_family_history_setting_is_covered(self):
         self.assertIn("family_history", guides.keys())
-        self.assertEqual(guides.setting_keys(), ["family_history"])
+        self.assertEqual(guides.setting_keys(), ["family_history", "expanded_flea_market", "r_refreshes_store"])
         text = guides.guide("family_history").text
         self.assertNotIn("Experimental", text)        # a normal row, on by default (owner, 2026-10-26)
         for needle in ("on by default", "Family History", "remarriage", "divorce", "Twins and triplets",
                        "Email Event", "Popup Event", "current spouse", "backfilled, no date", "head and body",
                        "Virtual Families 2 Patcher\\Save N\\Logs\\Family History", "back up your saves"):
             self.assertIn(needle, text)
+
+    def test_the_store_settings_are_covered(self):
+        flea = guides.guide("expanded_flea_market").text
+        for needle in ("all 36", "on by default", "5 goods", "6 hours of real time", "sold out"):
+            self.assertIn(needle, flea)
+        r = guides.guide("r_refreshes_store").text
+        for needle in ("press R", "Shift+R", "Clothing and Hairstyles", "Hairstyles stay", "already bought",
+                       "only while All 36 Flea Market goods is unticked", "outside the store", "box is open",
+                       "On Sale", "on by default"):
+            self.assertIn(needle, r)
 
     def test_unknown_key_fails_loudly(self):
         with self.assertRaises(KeyError):

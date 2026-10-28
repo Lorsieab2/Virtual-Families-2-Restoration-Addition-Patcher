@@ -198,16 +198,19 @@ checked against `manifest.json`, the release notes and the owner's confirmed
 play reports; superseded claims are marked rather than deleted.*
 
 The GUI reads its checkboxes from the shipped manifest, so the exact list follows
-the release you downloaded. The B204 bundle offers 39 settings, grouped the way
-the GUI groups them: the 38 of B203 (B202 added **Up to 28 Children** to the 37 of B201)
-plus the **Family History log**, new in B204 (on by default; only Up to 28 Children is Experimental).
+the release you downloaded. The next B204 bundle offers 41 settings, grouped the way
+the GUI groups them: the 39 of the first B204 bundles (the 38 of B203 plus the **Family History log**;
+B202 added **Up to 28 Children** to the 37 of B201) plus **All 36 Flea Market goods** and
+**R Refreshes the Store**, both new in the final B204 rebuild and both on by default (only Up to 28
+Children is Experimental).
 
 That number is not simply the count of settings the patcher defines, which is
-40. The settings list drops any optional setting that has no packaged source
+42. The settings list drops any optional setting that has no packaged source
 assets -- in B201, as in B180, the two named just below -- and the export adds
 one setting of its own, `core_assets`, which copies the support files and
-generated assets that are not tied to a single feature. So 40 defined, less 2
-without packaged assets, plus 1 generated, is the 39 the GUI shows. (Before
+generated assets that are not tied to a single feature. So 42 defined, less 2
+without packaged assets, plus 1 generated, is the 41 the GUI shows. (The first
+B204 bundles: 40 - 2 + 1 = 39. Before
 the Family History log it was 39 - 2 + 1: B202's and B203's bundles offered 38 settings;
 before Up to 28 Children existed the same sum was 38 - 2 + 1: B201's bundle offered
 37 settings; before Time Controls the B198 through B200 bundles offered 36,
@@ -273,9 +276,9 @@ verified against the shipped `manifest.json`.
 
 Release bundles are exported with the all-enabled release profile, so **nearly
 all of these arrive on** when you pick **Defaults** in the GUI — including
-**Cheat Upgrades**. Of B204's 39 settings, 37 arrive enabled and two arrive
+**Cheat Upgrades**. Of the final B204 rebuild's 41 settings, 39 arrive enabled and two arrive
 off (**Swap Invisible Furniture Graphics with Transparent Graphics**, and the
-Experimental **Up to 28 Children**). (B204 as first published: 36 on, with the Family History log off.) (B202 and B203: 38 settings, 36 on.) (B198 through B200: 36 settings, 35 on;
+Experimental **Up to 28 Children**). (The first B204 bundles: 39 settings, 37 on. B204 as first published: 36 on, with the Family History log off.) (B202 and B203: 38 settings, 36 on.) (B198 through B200: 36 settings, 35 on;
 B201: 37 settings, 36 on; superseded.) The
 `(on)` marks below are a reading aid on entries whose default has surprised
 people, **not** an exhaustive index -- an unmarked entry is not thereby off.
@@ -302,6 +305,40 @@ release bundle, like almost everything else)
 - **Allow Same-Sex Marriage** (no settings row; see [What's included](#whats-included)) - flips only the spawned candidate's gender field when the in-game **Enable Same-Sex Marriage** Special Upgrade is on; same-sex spouses keep native private romantic time and never become pregnant. **Corrected 2026-09-29:** listed here before as a `.vf2same` one-byte runtime flag. It is not one -- its state is a byte saved with the game, turned on and off by the Cheat Upgrades row.
 - **Older Villager Mortality Curve** (`.vf2mort`) - replaces only the annual old-age death roll with a calibrated curve that accelerates past effective age 110. Active food groups still subtract 0-4 effective years. No hard maximum age.
 - **Store Scroll Bar** (`.vf2scrl`) (on) - adds a scroll bar to the store.
+- **All 36 Flea Market goods** (`.vf2flea`, an Optional patch, **on by default**; new in the final B204
+  rebuild) - the store's Flea Market lists all 36 of its goods at all times, as every patched build before
+  it did: the 33 ordinary goods can be bought again and again, the 3 one-off goods once. This used to be
+  built in; it is now one byte in the patched executable read by the two Flea Market hooks
+  (`VF2GetExpandedFleaMarketCount` / `VF2GetExpandedFleaMarketItem`). Unticked, both hooks step aside and the
+  Flea Market is the original game's: 5 of the 36 goods, picked at random, picked again the first time the
+  page is opened more than 6 hours of real time after the last pick, and each good one to a pick (the
+  game's own pick sets each listed good's stock to 1). **Watch out when you tick it again:** the 36-goods
+  list keeps the stock counts the original Flea Market left, so a good you bought while it was unticked
+  shows as sold out, and one that was listed then can be bought once more. The same is already true of a
+  save first played without the patcher. Nothing resets those counts yet; the owner has not decided
+  whether the 36-goods list should.
+- **R Refreshes the Store** (`.vf2rfsh`, an Optional patch and a cheat, **on by default**; new in the final
+  B204 rebuild) - in the store, press **R** (or Shift+R) to pick the store's random items again, the
+  game's own way and with the game's own odds:
+  - on the **Clothing and Hairstyles** page, the six stock outfits (Discount, Department and Designer, male
+    and female) are picked again with the game's own forced pick, `CInventoryManager::MaybeUpdateOutfits(true)`,
+    the one the game makes for a new family; the next timed pick moves to 4 hours of game time later, as after
+    any pick. Hairstyles are never picked at random, so they stay. An outfit already bought keeps its own
+    look: the store copies the pick into the purchase, and R changes only the store's rows;
+  - on the **Flea Market** page, only while **All 36 Flea Market goods** is unticked: the game's own pick
+    (`MaybeUpdateRotatingItems`) happens now, 5 new goods with the game's own stock rules, and the next one
+    6 hours of real time later. With All 36 Flea Market goods ticked (the default) R does nothing there:
+    every good is already listed, and the game's pick would set each good's stock to 1, so 33 goods that
+    never run out would sell out for good after one purchase each;
+  - nowhere else: not on any other store page, not On Sale, not outside the store, and not while a box
+    (the buy box, the bank, a message, Redeem Credit) is open, because every store box takes the keys
+    first. The store screen has no text box, so typing never triggers it.
+  A companion DLL (`vf2refresh_b200.dll`) in the Virtual Families 2 Patcher Files folder does the work: it
+  replaces one pointer, the store screen's own key handler (found through the game's type information;
+  the other screens that share the stock handler keep theirs), and every other key still reaches the game.
+  The save gets only what the game itself saves for its own pick. With the setting off the DLL is not
+  installed and the executable never loads it. **Not live tested yet**: proved by emulating the built
+  executable and the real DLL (see `tests/test_b200_store_refresh.py`).
 - **Up to 28 Children** (`.vf2kids`, in the patcher's own **Experimental** section (red heading, under Optional Patches, with the warning "Experimental: not yet tested in a running game. Back up your saves before using it."), off by default; Enable All and `--enable-all` leave it off, so it is only ever ticked deliberately; added after B201, not yet in a release) - one
   generation may have up to 28 children instead of 6. Only the first 6 appear in the Family Tree, as
   before; every child, the 7th to the 28th included, can be chosen to inherit the house in Next
