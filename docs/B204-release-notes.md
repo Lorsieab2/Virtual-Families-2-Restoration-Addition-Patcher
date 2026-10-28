@@ -68,3 +68,15 @@ Updated 27 October 2026: Cure no longer resets a family member's food groups (al
   - two bundle tests read the newest bundle in `outputs\`, which was B203 while the old B204 was moved aside. With the new bundle exported, they passed: 58 passed;
   - two "generated files" tests are checkout-only. In a worktree that had just run the generator, they passed: 29 passed.
 - **The release gate** on the new zip: **RELEASE GATE PASSED**, no features lost against 24 retained releases (B179 to B203).
+
+## Updated in place (2026-10-27, second update): outfit pictures, R Refreshes the Store, All 36 Flea Market goods
+
+Updated 27 October 2026 (second update): the Cure fix; each bought outfit keeps its own picture; R Refreshes the Store; the All 36 Flea Market goods setting, with all 36 always in stock when it is on; Game Mechanics: every item, every time says game time or real time, and the Hidden keys, clicks and cheats group. Patch Virtual Families 2 again after updating.
+
+- **Cure fix (#448):** Clear All Illnesses keeps the four food groups (see the section above).
+- **Outfit pictures (#454):** each bought outfit keeps its own picture. A new companion DLL, `vf2outfits_b200.dll`, ships with `vf2outfits.ini` and is loaded by the Fix Vanilla Game Bugs byte (`.vf2bugs`).
+- **R Refreshes the Store (#455):** a new companion DLL, `vf2refresh_b200.dll`, loaded by a new `.vf2rfsh` byte. Pressing R refreshes the Store's stock.
+- **All 36 Flea Market goods (#455, #456, #457):** a new setting (`.vf2flea` byte). While it is on, all 36 Flea Market goods are always in stock, and an owned one-off keeps its checkmark. The bundle now lists 41 settings.
+- **Game Mechanics (#452, #453):** every item has its entry, every time says whether it is game time or real time, and a new group lists the Hidden keys, clicks and cheats.
+- **Rebuilt:** all 32 executables, from `main` at `551b924` (#457), seeded from the B203 matrix; 32 distinct executables, none identical to the previous B204 build. New hashes in `docs/b204-matrix-manifest.md`, identities in `data/vf2/release-identities-B204.json`. `vf2outfits_b200.dll` (`0ff96da2...`) and `vf2refresh_b200.dll` (`10ae09db...`) are built from `551b924`. The other three companion DLLs are the same files as before (`vf2time_b200.dll` `3ea0a2a5...`, `vf2kids_b200.dll` `4a6bb5ff...`, `vf2history_b200.dll` `3c7181bc...`); their source has not changed.
+- **No live test** of the outfit pictures, R Refreshes the Store or the All 36 Flea Market goods setting.
