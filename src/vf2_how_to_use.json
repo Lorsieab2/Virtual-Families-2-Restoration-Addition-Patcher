@@ -87,7 +87,7 @@
         "The store's Flea Market lists all 36 of its goods at all times, as every earlier patched build did.",
         "33 goods can be bought again and again; the 3 one-off goods once each.",
         "It is on by default. Untick it and rebuild for the original game's Flea Market: 5 goods, picked at random and picked again 6 hours of real time later.",
-        "Watch out when ticking it again: a good bought while it was unticked shows as sold out."
+        "While it is ticked the 33 ordinary goods are always in stock, even one that sold out while it was unticked."
       ]
     },
     "r_refreshes_store": {

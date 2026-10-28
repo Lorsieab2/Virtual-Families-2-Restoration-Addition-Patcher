@@ -70,7 +70,7 @@ class GuideContentTests(unittest.TestCase):
             self.assertIn(needle, text)
     def test_the_store_settings_are_covered(self):
         flea = guides.guide("expanded_flea_market").text
-        for needle in ("all 36", "on by default", "5 goods", "6 hours of real time", "sold out"):
+        for needle in ("all 36", "on by default", "5 goods", "6 hours of real time", "always in stock"):
             self.assertIn(needle, flea)
         r = guides.guide("r_refreshes_store").text
         for needle in ("press R", "Shift+R", "Clothing and Hairstyles", "Hairstyles stay", "already bought",

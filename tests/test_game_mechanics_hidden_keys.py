@@ -106,7 +106,8 @@ def test_the_r_key_lines_in_the_store_and_the_clothing_tab():
     store = [f for f in FACTS if f.group == gm.STORE and f.text.startswith(f"Patcher option \"{gm.OPTION_REFRESH}\"")]
     assert len(store) == 1 and "R does nothing there" in store[0].text and "+4A0h = 0" in store[0].evidence
     flea = [f for f in FACTS if f.group == gm.STORE and f.text.startswith(f"Patcher option \"{gm.OPTION_FLEA}\"")]
-    assert len(flea) == 1 and "sold out" in flea[0].text
+    assert len(flea) == 1 and "always in stock while the option is on" in flea[0].text
+    assert "sold out" not in flea[0].text.split("always in stock")[0], "the old warning came back"
 
 
 # ------------------------------------------------------------------------------------------------- the object files

@@ -121,6 +121,7 @@ FLEA_COUNT_CASE = 0x46B799          # GetCategoryItemCount: case 0Eh (return 12h
 GET_SECONDS_FROM_GAME_START = 0x475830  # ldwGameState::GetSecondsFromGameStart() thiscall (the real clock the pick uses)
 STRING_MANAGER_GET = 0x4A87A0       # theStringManager::Get() (SetStoreCategory's first call)
 GAME_STATE_GET = 0x499620           # theGameState::Get() (MaybeUpdateRotatingItems' first call)
+GET_NUM_AVAILABLE = 0x46B920        # CInventoryManager::GetNumAvailable (the patcher's head hook, then the stock body)
 GET_STRING = 0x4A8940               # theStringManager::GetString(StringId) thiscall
 TEXT_SET_TEXT = 0x480300            # ldwTextControl::SetText(const char *) thiscall: the page title
 SET_STORE_CATEGORY_TEXT = 0x48CF2E  # SetStoreCategory: the default case's title, GetString(48Bh) -> SetText
@@ -201,6 +202,15 @@ PINS = [
         dll=False,
     ),
     Pin(
+        "get_num_available", GET_NUM_AVAILABLE,
+        "558BEC51FF7508E8E4E4040083C4045983F8FF74045DC20400568B7508578BF981FE130100007516B9906F7000E8EEAA050084C0"
+        "752D5F33C05E5DC20400",
+        "CInventoryManager::GetNumAvailable(item): the patcher's head hook (VF2GetOutfitStoreNumAvailable; not -1 "
+        "returns at once), then the stock body: item 113h asks IsRoomToPopulate, items below E1h return the stock "
+        "count [this + item*4]. The store shows \"sold out\" at 0.",
+        dll=False,
+    ),
+    Pin(
         "event_manager_handle_key", EVENT_MANAGER_HANDLE_KEY,
         "558BEC8B0183EC108B0085C07447538B5D08568B7510578B7D0C660F1F4400000F10000F1145F0660F73D804660F7EC0A802"
         "74118B4DF05657538B018B4008FFD084C0750D807DF80075078B45FC85C075CE5F5E5B8BE55DC20C00",
@@ -218,7 +228,8 @@ ADDRESS_CONSTANTS = ("STORE_HANDLE_KEY", "INVENTORY_MANAGER", "MAYBE_UPDATE_OUTF
 TEST_ADDRESS_CONSTANTS = ("GAME_TIME", "GAME_TIME_SECONDS", "GEN_COMMON_BODY", "GEN_RARE_BODY",
                           "GEN_UNCOMMON_BODY", "GET_RANDOM", "GET_CATEGORY_ITEM_COUNT",
                           "EVENT_MANAGER_HANDLE_KEY", "MAYBE_UPDATE_ROTATING", "GET_SECONDS_FROM_GAME_START",
-                          "STRING_MANAGER_GET", "GET_STRING", "TEXT_SET_TEXT", "GAME_STATE_GET")
+                          "STRING_MANAGER_GET", "GET_STRING", "TEXT_SET_TEXT", "GAME_STATE_GET",
+                          "GET_NUM_AVAILABLE")
 # Core-variant numbers used only to prove things; never emitted to the DLL.
 CORE_ONLY_CONSTANTS = ("IMAGE_BASE", "STORE_VTABLE", "STORE_SLOT_HANDLE_KEY", "CLOTHING_COUNT_CASE",
                        "RESET_FORCED_DRAW", "FLEA_COUNT_CASE", "SET_STORE_CATEGORY_TEXT", *TEST_ADDRESS_CONSTANTS)

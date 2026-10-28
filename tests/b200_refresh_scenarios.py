@@ -527,7 +527,56 @@ def scenario_byte_one_lists_all_36_again(w):
     assert w.key(TYPE_CHAR, ord("r")) == 0 and w.inventory_bytes() == before and w.randoms == []
 
 
-FLEA_STOCK = [scenario_stock_flea_market_r_picks_five_new_goods, scenario_stock_flea_market_counts_are_the_games,
+def _available(w, item):
+    """The executable's own CInventoryManager::GetNumAvailable (the patcher's hook, then the stock body)."""
+    eax = w.e.call(w.s("GET_NUM_AVAILABLE"), (item,), ecx=w.inventory) & 0xFFFFFFFF
+    return struct.unpack("<i", struct.pack("<I", eax))[0]
+
+
+def scenario_a_good_sold_out_under_stock_is_in_stock_with_all_36(w):
+    """Owner, 2026-10-27: "Always in stock when 36 is on." A good the stock Flea Market sold out (its pick set the
+    count to 1, a purchase to 0) is buyable again while the .vf2flea byte is 1, and sold out again at 0. The
+    executable's own GetNumAvailable answers; the saved counts are never written."""
+    pool = goods(w.exe_path)
+    ordinary = [g for g in pool if g not in ONE_OFF_GOODS]
+    assert len(ordinary) == 33
+    w.set_flea(0)
+    w.page(FLEA)                                   # the stock pick: each pooled good's count is 1
+    listed = w.flea_rows()
+    sold = next(g for g in listed if g not in ONE_OFF_GOODS)
+    w.e.w32(w.inventory + 4 * sold, 0)             # bought: what TakeOne leaves
+    one_off = ONE_OFF_GOODS[0]
+    w.e.w32(w.inventory + 4 * one_off, 0)          # a one-off bought
+    assert _available(w, sold) == 0, "stock: the good is sold out"
+    assert _available(w, one_off) == 0
+    before = w.inventory_bytes()
+    w.set_flea(1)
+    for g in ordinary:
+        assert _available(w, g) == 1, f"{g:#x} is not in stock with all 36 goods"
+    assert _available(w, one_off) == 0, "a bought one-off stays bought"
+    w.page(FLEA)
+    assert w.item_count() == 36
+    assert w.inventory_bytes() == before, "the saved counts were written"
+    w.set_flea(0)
+    assert _available(w, sold) == 0, "back to stock: the count counts again"
+
+
+def scenario_other_store_counts_are_untouched_by_all_36(w):
+    """Only the 33 Flea Market goods: every other row with a stock count answers the same with the byte 0 or 1."""
+    pool = set(goods(w.exe_path))
+    others = [i for i in range(1, 0xE1) if i not in pool and i != 0x113]
+    for item in others:
+        w.e.w32(w.inventory + 4 * item, 0)
+    w.set_flea(0)
+    off = [_available(w, i) for i in others]
+    w.set_flea(1)
+    on = [_available(w, i) for i in others]
+    assert off == on
+
+
+FLEA_STOCK = [scenario_a_good_sold_out_under_stock_is_in_stock_with_all_36,
+              scenario_other_store_counts_are_untouched_by_all_36,
+              scenario_stock_flea_market_r_picks_five_new_goods, scenario_stock_flea_market_counts_are_the_games,
               scenario_stock_flea_market_clock_at_zero_changes_nothing,
               scenario_stock_flea_market_clothing_r_is_unchanged, scenario_byte_one_lists_all_36_again]
 
