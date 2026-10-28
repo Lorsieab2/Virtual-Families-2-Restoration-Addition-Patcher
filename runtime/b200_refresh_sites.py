@@ -122,6 +122,16 @@ GET_SECONDS_FROM_GAME_START = 0x475830  # ldwGameState::GetSecondsFromGameStart(
 STRING_MANAGER_GET = 0x4A87A0       # theStringManager::Get() (SetStoreCategory's first call)
 GAME_STATE_GET = 0x499620           # theGameState::Get() (MaybeUpdateRotatingItems' first call)
 GET_NUM_AVAILABLE = 0x46B920        # CInventoryManager::GetNumAvailable (the patcher's head hook, then the stock body)
+STORE_DRAW_NUM_AVAILABLE = 0x4B8860 # VF2StoreDrawNumAvailable: DrawVisibleStoreItem's checkmark question (generated)
+DRAW_CHECKMARK_CALL = 0x48B30A      # DrawVisibleStoreItem: item < 1ADh; push item; ecx = InventoryManager; call it; jnz; image 27Ah
+HANDLE_PURCHASE_ITEM = 0x48BF20     # CScrollingStoreScene::HandlePurchaseItem() thiscall: the buy box's Buy
+PURCHASE_TRAY_ADD = 0x48C163        # its tray branch: TakeOne, the outfit ids, GetUseCount, ToolTray.AddItem
+PURCHASE_SAVE = 0x48C280            # its end: theGameState::Get()->SaveCurrentGame()
+TAKE_ONE = 0x46C480                 # CInventoryManager::TakeOne(item)
+GET_USE_COUNT = 0x46BAF0            # CInventoryManager::GetUseCount(item)
+TOOL_TRAY = 0x704000                # the global CToolTray ToolTray
+TOOL_TRAY_ADD_ITEM = 0x4AB330       # CToolTray::AddItem(item, uses)
+SAVE_CURRENT_GAME = 0x49AB50        # theGameState::SaveCurrentGame()
 GET_STRING = 0x4A8940               # theStringManager::GetString(StringId) thiscall
 TEXT_SET_TEXT = 0x480300            # ldwTextControl::SetText(const char *) thiscall: the page title
 SET_STORE_CATEGORY_TEXT = 0x48CF2E  # SetStoreCategory: the default case's title, GetString(48Bh) -> SetText
@@ -211,6 +221,35 @@ PINS = [
         dll=False,
     ),
     Pin(
+        "draw_checkmark_call", DRAW_CHECKMARK_CALL,
+        "81FBAD0100007D5653B9C0526800E843D5020085C075478B4DF0687A020000",
+        "DrawVisibleStoreItem: the patcher's VF2StoreDrawNumAvailable(InventoryManager, item) answers whether the "
+        "row draws its checkmark (image 27Ah at 0).",
+        dll=False,
+    ),
+    Pin(
+        "handle_purchase_head", HANDLE_PURCHASE_ITEM,
+        "558BEC6AFF68AB224F0064A1000000005081EC90000000A100C6590033C58945F05657508D45F464A3000000008BF1E8CCD6"
+        "000083BED400000016",
+        "CScrollingStoreScene::HandlePurchaseItem() head: esi = the scene; category [esi+0D4h] 16h (the bank) is "
+        "the other branch; the item is [esi+160h].",
+        dll=False,
+    ),
+    Pin(
+        "purchase_tray_add", PURCHASE_TRAY_ADD,
+        "50B9C0526800E81203FEFF8B8E600100008D41EE83F8027711C7866001000049000000B849000000EB1B8BC183F9157C1483F9"
+        "177F0FC786600100004A000000B84A00000050B9C0526800E83DF9FDFF50FFB660010000B900407000E86CF10100",
+        "HandlePurchaseItem, an item below E1h: TakeOne(item) (a count of 0 is left as it is), then "
+        "ToolTray.AddItem(item, GetUseCount(item)): every purchase puts one in the tray.",
+        dll=False,
+    ),
+    Pin(
+        "purchase_save", PURCHASE_SAVE,
+        "E89BD300008BC8E8C4E800008B4DF464890D00000000595F5E8B4DF033CD",
+        "HandlePurchaseItem's end: theGameState::Get()->SaveCurrentGame(), then the SEH unwind.",
+        dll=False,
+    ),
+    Pin(
         "event_manager_handle_key", EVENT_MANAGER_HANDLE_KEY,
         "558BEC8B0183EC108B0085C07447538B5D08568B7510578B7D0C660F1F4400000F10000F1145F0660F73D804660F7EC0A802"
         "74118B4DF05657538B018B4008FFD084C0750D807DF80075078B45FC85C075CE5F5E5B8BE55DC20C00",
@@ -229,7 +268,9 @@ TEST_ADDRESS_CONSTANTS = ("GAME_TIME", "GAME_TIME_SECONDS", "GEN_COMMON_BODY", "
                           "GEN_UNCOMMON_BODY", "GET_RANDOM", "GET_CATEGORY_ITEM_COUNT",
                           "EVENT_MANAGER_HANDLE_KEY", "MAYBE_UPDATE_ROTATING", "GET_SECONDS_FROM_GAME_START",
                           "STRING_MANAGER_GET", "GET_STRING", "TEXT_SET_TEXT", "GAME_STATE_GET",
-                          "GET_NUM_AVAILABLE")
+                          "GET_NUM_AVAILABLE", "STORE_DRAW_NUM_AVAILABLE", "HANDLE_PURCHASE_ITEM", "TAKE_ONE",
+                          "GET_USE_COUNT", "TOOL_TRAY", "TOOL_TRAY_ADD_ITEM", "SAVE_CURRENT_GAME")
 # Core-variant numbers used only to prove things; never emitted to the DLL.
 CORE_ONLY_CONSTANTS = ("IMAGE_BASE", "STORE_VTABLE", "STORE_SLOT_HANDLE_KEY", "CLOTHING_COUNT_CASE",
-                       "RESET_FORCED_DRAW", "FLEA_COUNT_CASE", "SET_STORE_CATEGORY_TEXT", *TEST_ADDRESS_CONSTANTS)
+                       "RESET_FORCED_DRAW", "FLEA_COUNT_CASE", "SET_STORE_CATEGORY_TEXT", "DRAW_CHECKMARK_CALL",
+                       "PURCHASE_TRAY_ADD", "PURCHASE_SAVE", *TEST_ADDRESS_CONSTANTS)

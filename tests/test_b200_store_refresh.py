@@ -110,8 +110,8 @@ def test_names_agree_everywhere():
     # the R byte is read only by the loader; the Flea Market byte only by the two expansion hooks (each count
     # includes the symbol constant and the declaration)
     assert gen.count("gVF2StoreRefresh") == 3 and gen.count("gVF2StoreRefresh ==") == 1
-    assert gen.count("gVF2ExpandedFleaMarket") == 5 and gen.count("if (gVF2ExpandedFleaMarket != 1) return -1;") == 2
-    assert gen.count("if (gVF2ExpandedFleaMarket != 1) return false;") == 1     # the always-in-stock rule
+    assert gen.count("gVF2ExpandedFleaMarket") == 6 and gen.count("if (gVF2ExpandedFleaMarket != 1) return -1;") == 2
+    assert gen.count("if (gVF2ExpandedFleaMarket != 1) return false;") == 2     # in stock, and the owned mark
     assert S.DLL_NAME == "vf2refresh_b200.dll" and S.INI_KEY == "RefreshKey" and S.INI_NAME == "vf2refresh.ini"
     assert S.PATCHER_FOLDER == "Virtual Families 2 Patcher Files" and S.FLEA_FLAG_SECTION == ".vf2flea"
 
@@ -125,9 +125,9 @@ def test_the_expansion_hooks_fall_through_unless_the_byte_is_1():
             body.index("if (gVF2ExpandedFleaMarket != 1) return -1;"), fn
 
 
-def test_the_33_goods_are_always_in_stock_with_all_36():
-    """Owner, 2026-10-27: "Always in stock when 36 is on." The GetNumAvailable hook answers 1 for the 33 goods
-    Reset stocks as unlimited, first thing and only while the byte is 1; the 3 one-off goods keep their count."""
+def test_all_36_goods_are_always_in_stock_and_owned_one_offs_keep_their_mark():
+    """Owner, 2026-10-27: "Make all 36 always in stock." The GetNumAvailable hook answers 1 for all 36 goods,
+    first thing and only while the byte is 1; the draw site alone asks whether a one-off is owned, for its mark."""
     sys.path.insert(0, str(ROOT / "work"))
     import patch_mobile_furniture_pack as P
     if not (P.SRC_OBJS / "InventoryManager.obj").is_file():
@@ -139,8 +139,16 @@ def test_the_33_goods_are_always_in_stock_with_all_36():
     assert body.index("if (VF2FleaMarketGoodAlwaysInStock(itemId)) return 1;") < body.index("VF2MarriageEmailUnavailable")
     rule = gen[gen.index("static bool VF2FleaMarketGoodAlwaysInStock(int itemId) {{"):]
     rule = rule[:rule.index("}}\n}}") + 4]
-    assert "if (gVF2ExpandedFleaMarket != 1) return false;" in rule and "{flea_unlimited_cases} return true;" in rule
+    assert "if (gVF2ExpandedFleaMarket != 1) return false;" in rule and "{flea_goods_cases} return true;" in rule
     assert "InventoryManager" not in rule.split("{{", 1)[1], "the rule must not write or read a count"
+    owned = gen[gen.index("static bool VF2FleaMarketOneOffOwned(int itemId) {{"):]
+    owned = owned[:owned.index("}}\n}}") + 4]
+    assert "{flea_one_off_cases} return InventoryManager.HaveUpgrade((EInventoryItem)itemId);" in owned
+    draw = gen[gen.index('extern "C" int __fastcall VF2StoreDrawNumAvailable('):]
+    draw = draw[:draw.index("\n}}\n")]
+    assert "if (VF2FleaMarketOneOffOwned(itemId)) return 0;" in draw
+    assert gen.count("VF2FleaMarketOneOffOwned(itemId)") == 1, "only the draw asks (the click keeps buying)"
+    assert "if len(flea_goods) != FLEA_MARKET_GOODIES_COUNT:" in gen
 
 
 def test_the_generator_manifest_contracts(monkeypatch):
@@ -176,7 +184,8 @@ def test_exporter_settings():
                    "Flea Market", "All 36 Flea Market goods", "On Sale", "outside the store", "box",
                    "Virtual Families 2 Patcher Files"):
         assert needle.lower() in r["description"].lower(), needle
-    for needle in ("all 36", "5 of the 36", "6 hours of real time", "one-off"):
+    for needle in ("all 36", "5 of the 36", "6 hours of real time", "always in stock", "Towelette", "Anti-spam Software",
+                   "Rockhound Certificate", "checkmark"):
         assert needle.lower() in f["description"].lower(), needle
     for sid, sec in (("r_refreshes_store", ".vf2rfsh"), ("expanded_flea_market", ".vf2flea")):
         assert X.RUNTIME_FLAG_SECTION_BY_SETTING[sid] == sec

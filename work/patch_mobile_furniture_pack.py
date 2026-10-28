@@ -13078,7 +13078,11 @@ def flea_market_unlimited_goods():
 def write_outfit_store_helpers(manifest):
     helper_path = PATCHED / "vf2_special_upgrade_effects.cpp"
     flea_unlimited, flea_one_off = flea_market_unlimited_goods()
-    flea_unlimited_cases = " ".join(f"case {item:#x}:" for item in flea_unlimited)
+    flea_goods = sorted(flea_unlimited + flea_one_off)
+    if len(flea_goods) != FLEA_MARKET_GOODIES_COUNT:
+        raise RuntimeError(f"All 36 Flea Market goods: {len(flea_goods)} goods, not {FLEA_MARKET_GOODIES_COUNT}")
+    flea_goods_cases = " ".join(f"case {item:#x}:" for item in flea_goods)
+    flea_one_off_cases = " ".join(f"case {item:#x}:" for item in sorted(flea_one_off))
     invisible_have_upgrade_cases = "\n".join(
         f"    case {donor:#x}: invisible = {invisible:#x}; break;"
         for donor, invisible in sorted(INVISIBLE_HAVE_UPGRADE_COPIES.items())
@@ -14167,14 +14171,30 @@ extern "C" int __cdecl VF2GetOutfitStoreBodyValue(int itemId) {{
     return -1;
 }}
 
-// "All 36 Flea Market goods" on: the 33 goods CInventoryManager::Reset stocks as unlimited are always in stock
-// (owner, 2026-10-27), whatever count the unpatched Flea Market's pick left at InventoryManager + item * 4 (it
-// sets each pooled good to 1, and a purchase then 0, "sold out"). Nothing is written: the saved counts stay as
-// they are and count again the moment the byte is 0. The 3 one-off goods keep their own count (one purchase).
+// "All 36 Flea Market goods" on: all 36 goods are always in stock (owner, 2026-10-27: "Make all 36 always in
+// stock"), whatever count the unpatched Flea Market's pick left at InventoryManager + item * 4 (it sets each
+// pooled good to 1, and a purchase then 0, "sold out"), the 3 one-off goods (the Towelette, the Anti-spam
+// Software and the Rockhound Certificate; Reset stocks one of each) included. Nothing is written: the saved
+// counts stay as they are and count again the moment the byte is 0. A repeat purchase is the stock purchase
+// path: the Towelette and the Anti-spam Software go to the tray again (TakeOne leaves a count of 0 at 0), the
+// Rockhound Certificate's owned byte is set again (TakeOne) and HandleUpgrade has no case for it; no
+// achievement counts any of them.
 static bool VF2FleaMarketGoodAlwaysInStock(int itemId) {{
     if (gVF2ExpandedFleaMarket != 1) return false;
     switch (itemId) {{
-    {flea_unlimited_cases} return true;
+    {flea_goods_cases} return true;
+    default: return false;
+    }}
+}}
+
+// The store's owned checkmark for a one-off good the family owns (the Anti-spam Software installed, the
+// Rockhound Certificate bought: InventoryManager.HaveUpgrade), drawn while the row stays buyable: only
+// VF2StoreDrawNumAvailable (the draw's call site) asks this, the click keeps the in-stock answer above. The
+// Towelette is never owned (HaveUpgrade has no rule for it), so it never shows one.
+static bool VF2FleaMarketOneOffOwned(int itemId) {{
+    if (gVF2ExpandedFleaMarket != 1) return false;
+    switch (itemId) {{
+    {flea_one_off_cases} return InventoryManager.HaveUpgrade((EInventoryItem)itemId);
     default: return false;
     }}
 }}
@@ -14337,6 +14357,8 @@ extern "C" int __fastcall VF2StoreDrawNumAvailable(
 ) {{
     (void)unused;
     if (VF2OneShotUpgradeArmed(itemId)) return 0;
+    // An owned Flea Market one-off with all 36 goods listed: the checkmark, while the click can still buy it.
+    if (VF2FleaMarketOneOffOwned(itemId)) return 0;
     // Rows whose "active" is live game state rather than purchase history --
     // the Special Upgrades, Unlock Everything, the price multipliers, the
     // marriage toggles and both renovation catalogues. Reporting zero draws
@@ -26149,9 +26171,10 @@ def patch_expanded_flea_market_manifest(manifest):
         },
         "flag_on": "the Flea Market lists all 36 goods of gGoodiesList at all times (every build before it)",
         "always_in_stock": {
-            "items": [hex(item) for item in flea_market_unlimited_goods()[0]],
+            "items": [hex(item) for item in sorted(sum(flea_market_unlimited_goods(), []))],
             "hook": "VF2GetOutfitStoreNumAvailable (the GetNumAvailable head hook) returns 1 while the byte is 1",
-            "one_off_goods_keep_their_count": [hex(item) for item in flea_market_unlimited_goods()[1]],
+            "one_off_goods": [hex(item) for item in flea_market_unlimited_goods()[1]],
+            "owned_checkmark": "VF2StoreDrawNumAvailable returns 0 for an owned one-off (HaveUpgrade) while the byte is 1",
             "save_counts": "never written",
         },
         "flag_off": "the stock Flea Market: 5 goods picked by MaybeUpdateRotatingItems, again 6 real hours later",

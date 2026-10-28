@@ -305,18 +305,23 @@ release bundle, like almost everything else)
 - **Store Scroll Bar** (`.vf2scrl`) (on) - adds a scroll bar to the store.
 - **All 36 Flea Market goods** (`.vf2flea`, an Optional patch, **on by default**; new in the final B204
   rebuild) - the store's Flea Market lists all 36 of its goods at all times, as every patched build before
-  it did: the 33 ordinary goods can be bought again and again, the 3 one-off goods once. This used to be
+  it did. This used to be
   built in; it is now one byte in the patched executable read by the two Flea Market hooks
   (`VF2GetExpandedFleaMarketCount` / `VF2GetExpandedFleaMarketItem`). Unticked, both hooks step aside and the
   Flea Market is the original game's: 5 of the 36 goods, picked at random, picked again the first time the
   page is opened more than 6 hours of real time after the last pick, and each good one to a pick (the
-  game's own pick sets each listed good's stock to 1). While it is ticked the 33 ordinary goods are
-  **always in stock** (the owner, 2026-10-27: "Always in stock when 36 is on."), whatever count the
-  original Flea Market left -- a good bought while it was unticked, or in a save first played without
-  the patcher, is buyable again. The patcher's `GetNumAvailable` hook answers "in stock" for them and
-  writes nothing, so the save's counts are kept and count again the moment the setting is unticked.
-  The 3 one-off goods (the Towelette, the Anti-spam Software and the Rockhound Certificate, which the
-  game stocks one of) keep their one purchase either way, as in every earlier patched build.
+  game's own pick sets each listed good's stock to 1). While it is ticked **all 36 goods are always in
+  stock** (the owner, 2026-10-27: "Make all 36 always in stock."), whatever count the original Flea
+  Market left -- a good bought while it was unticked, or in a save first played without the patcher, is
+  buyable again -- and that includes the 3 goods the game stocks only one of: the Towelette, the
+  Anti-spam Software and the Rockhound Certificate (earlier patched builds sold each of those once).
+  Buying one of them again is the game's own purchase: the Towelette and the Anti-spam Software go to
+  the tray again, one more tray item each time like any good (with a full tray the game keeps the money
+  and adds nothing, as for every good), and buying the Rockhound Certificate again leaves it owned: no
+  second certificate, no extra goal or fossil. No goal counts any of the three. An owned Anti-spam
+  Software (installed) or Rockhound Certificate still shows its owned checkmark while it can be
+  bought again. The patcher's `GetNumAvailable` hook answers "in stock" and writes nothing, so the
+  save's counts are kept and count again the moment the setting is unticked.
 - **R Refreshes the Store** (`.vf2rfsh`, an Optional patch and a cheat, **on by default**; new in the final
   B204 rebuild) - in the store, press **R** (or Shift+R) to pick the store's random items again, the
   game's own way and with the game's own odds:

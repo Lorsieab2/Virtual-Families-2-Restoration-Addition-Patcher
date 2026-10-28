@@ -2289,15 +2289,22 @@ def _store_lines() -> list[Fact]:
            "run as linked after Reset 0x4BA8F0: 5 goods at real s T, the same 5 at T + 21,600, 5 new at "
            "T + 21,601 and at T + 86,400; next change = real s + 21,600"))
     add(_f(STORE, f"Patcher option \"{OPTION_FLEA}\" (on by default; every patched build before it always "
-                  "listed the 36): with it on, the 33 goods that start unlimited can be bought again and again and "
-                  "the 3 one-offs once. The 33 are always in stock while the option is on, even a good the "
-                  "unpatched game's Flea Market sold out (with the option off, or in a save first played "
-                  "unpatched); the save's own stock counts are not changed and count again when it is off.", E,
+                  "listed the 36): with it on, all 36 goods are always in stock, even a good the unpatched "
+                  "game's Flea Market sold out (with the option off, or in a save first played unpatched) and the "
+                  "3 the game stocks only one of (the Towelette, the Anti-spam Software, the Rockhound "
+                  "Certificate; earlier patched builds sold those once). A repeat purchase is the game's own: "
+                  "the Towelette and the Anti-spam Software go to the tray again (nothing with a full tray, as "
+                  "for any good), the Rockhound Certificate stays owned, and no goal counts any of them. An owned "
+                  "Anti-spam Software or certificate keeps its checkmark. The save's own stock counts are not "
+                  "changed and count again when the option is off.", E,
            "CInventoryManager::Reset: stock count = itemInfo field 4 (-1 for 33 goods, 1 for 0x29, 0x33, 0x10A); "
            "the unpatched pick sets each pooled good's count to 1; TakeOne lowers a count above 0; "
            "GetNumAvailable 0 -> \"sold out\" (DrawVisibleStoreItem image 0x27A, HandleMouse string 0x6C1); "
-           "the patcher's GetNumAvailable hook answers 1 for the 33 while .vf2flea is 1 (emulated in a branch "
-           "build, tests/test_b200_store_refresh.py)"))
+           "the patcher's GetNumAvailable hook answers 1 for the 36 while .vf2flea is 1; HandlePurchaseItem: "
+           "items below E1h TakeOne + ToolTray.AddItem, 0x10A TakeOne (owned byte) + HandleUpgrade (no case), "
+           "IncrementProgress only for items 4..0xB; VF2StoreDrawNumAvailable 0 for an owned one-off "
+           "(HaveUpgrade); each emulated in a branch build, 4 repeat purchases each "
+           "(tests/test_b200_store_refresh.py)"))
     add(_f(STORE, f"Patcher option \"{OPTION_REFRESH}\" (a cheat, on by default), on the Flea Market page: "
                   f"with \"{OPTION_FLEA}\" off, R or Shift+R makes the unpatched game's own pick happen now: 5 "
                   "goods shuffled the game's way, each set to one in stock, and the next pick 6 hours of real time "

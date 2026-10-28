@@ -169,7 +169,7 @@ class World:
             return v % n, 0                    # cdecl: the caller pops
         e.seam_live(self.s("GET_RANDOM"), get_random)
         e.seam_live(self.s("GAME_TIME_SECONDS"), lambda emu: (GAME_SECONDS, 0))
-        self.game_state = state = e.alloc(0x40)
+        self.game_state = state = e.alloc(0x26400)
         e.seam_live(self.s("GAME_STATE_GET"), lambda emu: (state, 0))
         e.seam_live(self.s("GET_SECONDS_FROM_GAME_START"), lambda emu: (self.real_seconds, 0))
         strings = e.alloc(0x40)
@@ -206,6 +206,11 @@ class World:
                 out.update(a + i for i in range(len(was)) if now[i] != was[i])
         return out
 
+    def slot_is_the_dll_s(self):
+        """Only the store's HandleKey slot changed (some of its 4 bytes may keep their value), and it now points
+        into the DLL."""
+        slot = self.s("STORE_SLOT_HANDLE_KEY")
+        return self.changed_code() <= {slot + k for k in range(4)} and DLL_BASE <= self.e.r32(slot) < DLL_BASE + 0x100000
     def status(self):
         a = self.e.dll_export("B200Refresh_Status")
         keys = ("magic", "version", "requested", "resolved", "installed", "writeMask", "redraws", "passed",
@@ -422,7 +427,7 @@ def scenario_only_the_store_slot_is_written(w):
     slot = w.s("STORE_SLOT_HANDLE_KEY")
     assert w.plan[0]["va"] == slot
     assert DLL_BASE <= struct.unpack("<I", w.plan[0]["bytes"])[0] < DLL_BASE + 0x100000
-    assert w.changed_code() == {slot + k for k in range(4)}
+    assert w.changed_code() <= {slot + k for k in range(4)} and DLL_BASE <= w.e.r32(slot) < DLL_BASE + 0x100000
     hk = w.s("STORE_HANDLE_KEY")
     others = []
     for _name, sva, raw, _ch, _vs in G.Exe(Path(w.exe_path).read_bytes()).read_only_data():
@@ -533,32 +538,129 @@ def _available(w, item):
     return struct.unpack("<i", struct.pack("<I", eax))[0]
 
 
+TOWELETTE, ANTI_SPAM, ROCKHOUND = 0x29, 0x33, 0x10A
+ANTI_SPAM_INSTALLED = 0x6C                   # theGameState +6Ch: HaveUpgrade(33h) (set by installing it)
+OWNED_BYTE = 0x2A3                           # InventoryManager + item + 2A3h: HaveUpgrade(item) for items E1h..1ACh
+
+
+def _draws_checkmark(w, item):
+    """The executable's own VF2StoreDrawNumAvailable (DrawVisibleStoreItem's question): 0 draws the checkmark."""
+    return w.e.call(w.s("STORE_DRAW_NUM_AVAILABLE"), (item,), ecx=w.inventory) & 0xFFFFFFFF == 0
+
+
 def scenario_a_good_sold_out_under_stock_is_in_stock_with_all_36(w):
-    """Owner, 2026-10-27: "Always in stock when 36 is on." A good the stock Flea Market sold out (its pick set the
-    count to 1, a purchase to 0) is buyable again while the .vf2flea byte is 1, and sold out again at 0. The
-    executable's own GetNumAvailable answers; the saved counts are never written."""
+    """Owner, 2026-10-27: "Make all 36 always in stock." Every good the stock Flea Market sold out (its pick set
+    the count to 1, a purchase to 0), the 3 one-off goods included, is buyable again while the .vf2flea byte is 1,
+    and sold out again at 0. The executable's own GetNumAvailable answers; the saved counts are never written."""
     pool = goods(w.exe_path)
-    ordinary = [g for g in pool if g not in ONE_OFF_GOODS]
-    assert len(ordinary) == 33
+    assert len(pool) == 36
     w.set_flea(0)
     w.page(FLEA)                                   # the stock pick: each pooled good's count is 1
-    listed = w.flea_rows()
-    sold = next(g for g in listed if g not in ONE_OFF_GOODS)
-    w.e.w32(w.inventory + 4 * sold, 0)             # bought: what TakeOne leaves
-    one_off = ONE_OFF_GOODS[0]
-    w.e.w32(w.inventory + 4 * one_off, 0)          # a one-off bought
-    assert _available(w, sold) == 0, "stock: the good is sold out"
-    assert _available(w, one_off) == 0
+    for g in pool:
+        w.e.w32(w.inventory + 4 * g, 0)            # every one bought: what TakeOne leaves
+    for g in (pool[0],) + ONE_OFF_GOODS[:2]:
+        assert _available(w, g) == 0, f"stock: {g:#x} is sold out"
     before = w.inventory_bytes()
     w.set_flea(1)
-    for g in ordinary:
+    for g in pool:
         assert _available(w, g) == 1, f"{g:#x} is not in stock with all 36 goods"
-    assert _available(w, one_off) == 0, "a bought one-off stays bought"
     w.page(FLEA)
     assert w.item_count() == 36
     assert w.inventory_bytes() == before, "the saved counts were written"
     w.set_flea(0)
-    assert _available(w, sold) == 0, "back to stock: the count counts again"
+    assert _available(w, pool[0]) == 0 and _available(w, TOWELETTE) == 0, "back to stock: the counts count again"
+
+
+def scenario_an_owned_one_off_keeps_its_checkmark(w):
+    """All 36 on: an owned one-off still draws the store's owned checkmark (HaveUpgrade), while the click's
+    GetNumAvailable keeps it buyable; one not owned, and the Towelette, draw none."""
+    gs = w.game_state
+    w.set_flea(1)
+    for item in (ANTI_SPAM, ROCKHOUND, TOWELETTE):
+        assert not _draws_checkmark(w, item) and _available(w, item) == 1, hex(item)
+    w.e.write(gs + ANTI_SPAM_INSTALLED, b"\x01")                     # installed
+    w.e.write(w.inventory + ROCKHOUND + OWNED_BYTE, b"\x01")         # bought
+    w.e.w32(w.inventory + 4 * TOWELETTE, 0)
+    for item in (ANTI_SPAM, ROCKHOUND):
+        assert _draws_checkmark(w, item) and _available(w, item) == 1, hex(item)
+    assert not _draws_checkmark(w, TOWELETTE) and _available(w, TOWELETTE) == 1
+    w.set_flea(0)                                  # stock: owned means sold out, as before
+    assert _available(w, ROCKHOUND) == 0 and _draws_checkmark(w, ROCKHOUND)
+
+
+def _purchase(w, item):
+    """The buy box's Buy: the executable's own HandlePurchaseItem for `item` on the Flea Market page."""
+    w.e.w32(w.scene + S.STORE_CATEGORY_FIELD, FLEA)
+    w.e.w32(w.scene + 0x160, item)
+    w.e.call(w.s("HANDLE_PURCHASE_ITEM"), (), ecx=w.scene)
+
+
+def _tray(w):
+    return w.e.read(w.s("TOOL_TRAY"), 0x200)
+
+
+def _tray_items(w):
+    """(item, uses) of every tray place the purchases filled, read where CToolTray keeps them."""
+    raw = _tray(w)
+    return [struct.unpack_from("<ii", raw, 8 * k) for k in range(14)]
+
+
+def scenario_buying_each_one_off_again_and_again_corrupts_nothing(w):
+    """The owner's safety check: all 36 on, buy the Towelette, the Anti-spam Software and the Rockhound
+    Certificate 4 times each through the executable's own HandlePurchaseItem. Each purchase saves once, each
+    Towelette and Anti-spam Software is one more tray item (as any Flea Market good), the Rockhound
+    Certificate's owned byte is 1 and stays 1, no stock count goes below 0, and nothing else in the inventory
+    changes."""
+    gs = w.game_state
+    saves = []
+    w.e.seam_live(w.s("SAVE_CURRENT_GAME"), lambda emu: (saves.append(1) or 1, 0))
+    w.set_flea(1)
+    for g in (TOWELETTE, ANTI_SPAM, ROCKHOUND):
+        w.e.w32(w.inventory + 4 * g, 1) if g < 0xE1 else None
+    # CToolTray::AddItem ends in UpdateHintText(place) (the tray's hint text, a screen control the emulator has
+    # not built): a recorded seam. AddItem's own bytes are checked first, so the seam is that call's target.
+    add = w.s("TOOL_TRAY_ADD_ITEM")
+    assert w.e.read(add, 0x29) == bytes.fromhex("558BEC568BF1E8") + w.e.read(add + 7, 4) + bytes.fromhex(
+        "8BC883F9FF750732C05E5DC20800") + bytes.fromhex("8B45088904CE8B450C8944CE04518BCE"), "AddItem is not the stock one"
+    hint_call = add + 0x29
+    assert w.e.read(hint_call, 1) == b"\xE8"
+    hint = (hint_call + 5 + struct.unpack("<i", w.e.read(hint_call + 1, 4))[0]) & 0xFFFFFFFF
+    hints = []
+    w.e.seam_live(hint, lambda emu: (hints.append(emu.arg(0)) or 0, 4))
+    w.e.w32(w.s("TOOL_TRAY") + 0x74, 14)            # the tray's place count (CToolTray +74h; 0 before the game sets it)
+    inv0 = w.inventory_bytes()
+    tray0 = _tray_items(w)
+    for round_ in range(4):
+        for item in (TOWELETTE, ANTI_SPAM, ROCKHOUND):
+            before = len(saves)
+            _purchase(w, item)
+            assert len(saves) == before + 1, (hex(item), round_, "a purchase saves once")
+            assert _available(w, item) == 1, "still for sale"
+    inv = w.inventory_bytes()
+    changed = {i for i in range(INVENTORY_SIZE) if inv[i] != inv0[i]}
+    allowed = {4 * TOWELETTE + k for k in range(4)} | {4 * ANTI_SPAM + k for k in range(4)}
+    allowed |= {ROCKHOUND + OWNED_BYTE}
+    assert changed <= allowed, f"the purchases wrote elsewhere in the inventory: {sorted(changed)}"
+    assert w.e.rs32(w.inventory + 4 * TOWELETTE) == 0 and w.e.rs32(w.inventory + 4 * ANTI_SPAM) == 0, \
+        "a count went below 0 or was raised"
+    assert w.e.read(w.inventory + ROCKHOUND + OWNED_BYTE, 1) == b"\x01", "the Rockhound Certificate is owned"
+    tray = _tray_items(w)
+    added = [p for p, q in zip(tray, tray0) if p != q]
+    assert sorted(i for i, _u in added) == sorted([TOWELETTE] * 4 + [ANTI_SPAM] * 4), \
+        f"the tray did not get exactly 4 Towelettes and 4 Anti-spam Software: {added}"
+    assert all(u > 0 for _i, u in added)
+    assert w.e.read(gs + ANTI_SPAM_INSTALLED, 1) == b"\x00", "buying is not installing"
+    assert len(hints) == 8, "one tray hint per tray item"
+    # a full tray: the stock AddItem refuses (the money is spent, as for any good bought with a full tray) and
+    # nothing is written past the tray's 14 places
+    for _ in range(5):
+        _purchase(w, TOWELETTE)
+    full = _tray_items(w)
+    assert sum(1 for i, _u in full[2:] if i) == 12, "the 12 free places are filled"
+    after = _tray(w)
+    _purchase(w, TOWELETTE)
+    assert _tray(w) == after and len(saves) == 12 + 6, "a purchase with a full tray writes no tray place"
+    assert w.e.rs32(w.inventory + 4 * TOWELETTE) == 0
 
 
 def scenario_other_store_counts_are_untouched_by_all_36(w):
@@ -575,6 +677,8 @@ def scenario_other_store_counts_are_untouched_by_all_36(w):
 
 
 FLEA_STOCK = [scenario_a_good_sold_out_under_stock_is_in_stock_with_all_36,
+              scenario_an_owned_one_off_keeps_its_checkmark,
+              scenario_buying_each_one_off_again_and_again_corrupts_nothing,
               scenario_other_store_counts_are_untouched_by_all_36,
               scenario_stock_flea_market_r_picks_five_new_goods, scenario_stock_flea_market_counts_are_the_games,
               scenario_stock_flea_market_clock_at_zero_changes_nothing,
@@ -625,7 +729,7 @@ def scenario_setting_on_installs(w):
     st = w.status()
     assert st["magic"] == S.STATUS_MAGIC and st["requested"] == 1 and st["resolved"] == 1
     assert st["installed"] == 1 and st["writeMask"] == 1
-    assert w.changed_code() == {w.s("STORE_SLOT_HANDLE_KEY") + k for k in range(4)}
+    assert w.slot_is_the_dll_s()
     w.page(CLOTHING)
     w.clear()
     assert w.key(TYPE_CHAR, ord("r")) == 1 and len(w.randoms) == 6
@@ -706,7 +810,7 @@ def scenario_loader_cases(exe, dll, delta):
         if not installs:
             assert not w.changed_code() and st["installed"] == 0
             continue
-        assert st["installed"] == 1 and w.changed_code() == {w.s("STORE_SLOT_HANDLE_KEY") + k for k in range(4)}
+        assert st["installed"] == 1 and w.slot_is_the_dll_s()
         w.page(CLOTHING)
         w.clear()
         assert w.key(TYPE_CHAR, ord("r")) == 1 and len(w.randoms) == 6

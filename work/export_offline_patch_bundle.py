@@ -593,7 +593,7 @@ SETTINGS = [
     {
         "id": "expanded_flea_market",
         "label": "All 36 Flea Market goods",
-        "description": "The store's Flea Market lists all 36 of its goods at all times (as every earlier patched build did): 33 of them can be bought again and again, and the 3 one-off goods once. Unticked, the Flea Market is the original game's: 5 of the 36 goods, picked at random and picked again 6 hours of real time later, one of each to a pick. While it is ticked the 33 ordinary goods are always in stock, even one bought while it was unticked; the saved stock counts are not changed.",
+        "description": "The store's Flea Market lists all 36 of its goods at all times (as every earlier patched build did). Unticked, the Flea Market is the original game's: 5 of the 36 goods, picked at random and picked again 6 hours of real time later, one of each to a pick. While it is ticked all 36 goods are always in stock, even one bought while it was unticked and the 3 the game stocks only one of (the Towelette, the Anti-spam Software and the Rockhound Certificate): buying one of those again adds another to the tray, or leaves the certificate owned, and an owned one keeps its checkmark. The saved stock counts are not changed.",
         "default": True,
         "category": "optional",
     },
