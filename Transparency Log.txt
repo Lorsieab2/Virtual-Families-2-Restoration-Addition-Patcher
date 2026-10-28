@@ -265,6 +265,7 @@ Changelog
   Installs vf2outfits_b200.dll in the Virtual Families 2 Patcher Files folder
   only while Fix Vanilla Game Bugs is on; it needs executables built with its
   loader.
+
 - All 36 Flea Market goods (final B204 rebuild; an Optional patch, on by
   default): the Flea Market lists all 36 of its goods at all times, as every
   earlier patched build did. It is now one byte (.vf2flea) in the patched

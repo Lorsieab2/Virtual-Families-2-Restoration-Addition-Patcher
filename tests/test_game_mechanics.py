@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """Game Mechanics (src/vf2_game_mechanics.py and its window): the page's groups, labels, words and settled rules.
 
 The rules themselves are pinned against the B200 core executable in tests/test_game_mechanics_b200_exe.py; here
