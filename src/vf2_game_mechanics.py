@@ -2542,8 +2542,10 @@ def _store_lines() -> list[Fact]:
     add(_f(CLOTHING, UNPATCHED + "every outfit of a sex in the tray shows, and puts on, the last one bought: two "
                      "male outfits bought with different pictures both show the second, and the first one dropped "
                      "on a family member gives the second.", C,
-           "TakeOne copies the row's body into +0x468 (rows 0x12..0x14) / +0x46C (0x15..0x17); a tray place holds "
-           "only (item, uses); DrawItem and GetOutfit read 0x49 from +0x468 and 0x4A from +0x46C"))
+           "stock exe sha256 1582d9e8: TakeOne 0x4BA0FE copies the row's body into +0x468 (rows 0x12..0x14) / "
+           "+0x46C (0x15..0x17); GetOutfit 0x4BA6E0 and DrawItem 0x4BA24C / 0x4BA25D read 0x49 from +0x468 and "
+           "0x4A from +0x46C; the apply 0x442C8E / 0x442D14 writes it to +0x6A84; a tray place holds only "
+           "(item, uses)"))
     for name, price, lock in (("Discount Store Male Outfit", 75, 0), ("Discount Store Female Outfit", 75, 0),
                               ("Department Store Male Outfit", 200, 2), ("Department Store Female Outfit", 200, 2),
                               ("Designer Male Outfit", 1500, 4), ("Designer Female Outfit", 1500, 4)):
