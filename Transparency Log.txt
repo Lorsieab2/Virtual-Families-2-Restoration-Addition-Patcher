@@ -272,9 +272,11 @@ Changelog
   executable, read only by the two Flea Market hooks. Unticked, the Flea
   Market is the original game's: 5 goods picked at random, picked again 6
   hours of real time after the last pick, each one to a pick. While it is
-  ticked the 33 ordinary goods are always in stock, whatever count the
-  original Flea Market left (nothing is written to the save); the 3 one-off
-  goods keep their one purchase.
+  ticked all 36 goods are always in stock, whatever count the original Flea
+  Market left (nothing is written to the save), the Towelette, the Anti-spam
+  Software and the Rockhound Certificate included: buying one again is the
+  game's own purchase (another tray item for the first two; the certificate
+  stays owned), and an owned one still shows its checkmark.
 
 - R Refreshes the Store (final B204 rebuild; an Optional patch and a cheat, on
   by default): in the store, R (or Shift+R) on the Clothing and Hairstyles page
