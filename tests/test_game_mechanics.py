@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """Game Mechanics (src/vf2_game_mechanics.py and its window): the page's groups, labels, words and settled rules.
 
 The rules themselves are pinned against the B200 core executable in tests/test_game_mechanics_b200_exe.py; here
@@ -22,7 +22,7 @@ class PageTests(unittest.TestCase):
 
     def test_groups_are_the_owners_list_in_order(self):
         self.assertEqual(gm.GROUPS, (
-            "Time and ageing", "Needs and upkeep", "Health and sickness", "Old age", "Pregnancy and babies",
+            "Time and ageing", "Hidden keys, clicks and cheats", "Needs and upkeep", "Health and sickness", "Old age", "Pregnancy and babies",
             "Careers", "Money and interest", "Leaving home", "Dating, marriage and the next generation",
             "Random Events", "Weather", "Messes and malfunctions", "Collectibles", "The store: prices and buying",
             "Food and Medicine", "Flea Market", "Special Upgrades", "Services", "Home Renovation", "Career upgrades",
@@ -114,7 +114,8 @@ class PageTests(unittest.TestCase):
             if re.search(r"6 (real )?hours|21,600|six hours", fact.text):
                 self.assertRegex(fact.text, r"(?i)unpatched", fact.text)
         index = [(f.text, f.label) for f in self.facts if f.group == gm.INDEX and "Flea Market" in f.text]
-        self.assertEqual(index, [("the Flea Market, with the patcher: never changes;", gm.VERIFIED_E),
+        self.assertEqual(index, [("the Flea Market, with the patcher: never changes (with its option \"All 36 Flea Market " + 
+                                  "goods\" off, as in the unpatched game);", gm.VERIFIED_E),
                                  ("the Flea Market, unpatched game: every 6 hours of real time;", gm.VERIFIED_E)])
 
     def test_the_special_upgrades_page_both_ways(self):
@@ -188,8 +189,10 @@ class PageTests(unittest.TestCase):
         self.assertNotRegex(self.text, r"\d+ real (minutes|hours|seconds)\b(?! after the last change| at Normal speed)")
 
     def test_no_line_is_left_unconfirmed(self):
-        # Every former UNCONFIRMED line is now read from the code (VERIFIED-C) or run as linked (VERIFIED-E).
-        self.assertEqual([f.text for f in self.facts if f.label == gm.UNCONFIRMED], [])
+        # Every former UNCONFIRMED line is now read from the code (VERIFIED-C) or run as linked (VERIFIED-E).  The
+        # one exception is a live report the code contradicts (the owner's rule, 2026-10-27: write both cases).
+        self.assertEqual([f.text for f in self.facts if f.label == gm.UNCONFIRMED],
+                         [f.text for f in self.facts if f.text.startswith("Bottled Tropical Sunshine: $50: seen live")])
         for start in ("What that waiting time holds back", "The Mysterious Collector", "The Wrong Address"):
             fact = next(f for f in self.facts if f.text.startswith(start))
             self.assertEqual(fact.label, gm.VERIFIED_C, start)

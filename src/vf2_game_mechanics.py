@@ -45,6 +45,15 @@ weather to type 0 and Bottled Tropical Rain to Stormy (type 3).  Weather uses th
 sky, the code's type 0 eWeather_Sunny), Sunny (the grey tint with sun beams, type 1 eWeather_Cloudy), Raining,
 Stormy, Foggy, Snowing.
 
+Hidden keys, clicks and cheats (2026-10-27, the owner's rules "PUT IMPORTANT STUFF LIKE HIDDEN KEY COMBOS AND CHEAT
+CODES IN GAME MECHANICS", "places you can click for random tips and hidden cheats", "beware of making false claims
+over verified dead developer code"): every key handler, typed-character table, click spot, tip and code path was read
+by symbol from the B200 desktop objects (work/desktop_obj_files), each with its caller chain from a live screen;
+code with no caller is given as "Dead code, never a player action".  VF2's store has no key that redraws its
+specials (Virtual Families 1's store page has one): the store reads Esc only.  Where a live report and the code
+disagree, both are written, each labelled (the owner's rule "for cases where the code contradicts live observation
+write both cases down"; the Bottled Tropical Sunshine is the one such case).  tests/test_game_mechanics_hidden_keys.py.
+
 Wording: family members, never the code's own word for them.  A patcher option (0 in the core executable) is
 shown as an option, both ways where the spec gives both.  The window describes the game; it fixes nothing.
 """
@@ -70,6 +79,7 @@ LABEL_NOTE = ("VERIFIED-E: the game's own code was run with the game's own input
               "UNCONFIRMED: not yet shown either way.")
 
 TIME = "Time and ageing"
+HIDDEN = "Hidden keys, clicks and cheats"
 NEEDS = "Needs and upkeep"
 HEALTH = "Health and sickness"
 OLD_AGE = "Old age"
@@ -95,7 +105,7 @@ CLOTHING = "Clothing and Hairstyles"
 ACTIONS = "Actions"
 INDEX = "Chance and timer index"
 STORE_GROUPS = (STORE, FOOD, FLEA, UPGRADES, SERVICES, RENOVATION, CAREER_UPGRADES, FURNITURE, PETS, CLOTHING, ACTIONS)
-GROUPS = (TIME, NEEDS, HEALTH, OLD_AGE, PREGNANCY, CAREERS_GROUP, MONEY, LEAVING, DATING, EVENTS, WEATHER, MESSES,
+GROUPS = (TIME, HIDDEN, NEEDS, HEALTH, OLD_AGE, PREGNANCY, CAREERS_GROUP, MONEY, LEAVING, DATING, EVENTS, WEATHER, MESSES,
           COLLECTIBLES) + STORE_GROUPS + (INDEX,)
 
 BULLET, SUB_BULLET = "• ", "    – "
@@ -284,6 +294,320 @@ def _career_lines() -> list[Fact]:
     return lines
 
 
+# The random tips (theStringManager eRandomTip1.. , string ids 0x9E3..0xA1E), in the game's order, in short: the
+# page gives what each says, not the game's own wording.
+RANDOM_TIPS = (
+    "praise behaviours selectively", "punishing too many behaviours can depress a family member",
+    "family members have minds of their own", "work without play makes a dull life", "living alone is hard",
+    "the house and its improvements pass down the generations", "a compatible spouse makes a family member happiest",
+    "two people working in the same room share its resources", "jobs are not all equal",
+    "careers have different pay curves", "life is full of drama", "money can buy a little happiness",
+    "family members sometimes leave appliances running", "repairing the house helps the generations to come",
+    "an untidy house wears down anyone's cheer", "the weeds in the yard never stop",
+    "different illnesses need different treatments", "the family lives in your time zone",
+    "family members like your affection", "couples who want children are less happy without them",
+    "couples who do not want children may still have them", "couples differ in how easily they have children",
+    "career room upgrades make promotions come faster", "you live and you learn",
+    "a very sad family member may need food", "getting ahead at work is a great joy",
+    "a large family brings joy, and loose socks", "they still do not like the red glove",
+    "children move out at a certain age", "it is nice to stay indoors when it rains",
+    "repeated illness may mean an infection", "praising a behaviour reinforces it", "who made this house?",
+    "working family members are paid hourly too", "save for interest, or spend on new things",
+    "encourage meals and discourage snacking", "there is more to life than money",
+    "learn from yesterday, live for today, hope for tomorrow", "someone sick a lot should see a doctor",
+    "furniture placed outside the gates is sold at once", "medical treatment is expensive",
+    "it is never too late for a happy childhood", "random events can be good or bad",
+    "waiting for the perfect match, but for how long?", "the ability to have children falls with age",
+    "marriage proposals come less often with age", "older family members slow down",
+    "older family members change what they find fun", "more babies in a large family can cause friction",
+    "difficult children can be sent to boarding school", "psychotherapy helps fears and depression",
+    "the Flea Market changes its goods several times a day (of real time)","the Flea Market has real bargains",
+    "fixing up the house is satisfying", "rare fossils need special training", "tired of weeding? hire a Gardener",
+    "tired of tidying? hire a Maid", "socks piling up? a washer and dryer helps", "couples can choose to adopt",
+    "it is evening in their world when it is evening in yours")
+
+# The house's click spots (theMainScene::MapClickFeedback, the hotspot under a left click that does not pick up a
+# family member, a pet, a tool or a furniture piece): (hotspot, what the click does, evidence).
+CLICK_SPOTS = (
+    ("The fridge", "opens it and shows \"Food available:\" with the food the family has", "hotspot 0x16: SetProp(3), "
+     "Say(eSayFoodLevel 0x734, CFoodStore+0x78)"),
+    ("The kitchen trash", "shows \"Trash:\" with the trash count (full at 20) and plays a sound", "hotspot 0xD: "
+     "Say(eSayTrashLevel 0x7AE, gs+0x28), sound 0x84"),
+    ("The router", "shows \"Router error!\" while the router is offline (a malfunction or the Power Failure event), "
+     "else \"Status: online\", with a sound", "hotspot 0x1E: prop 0x17 -> eString_RouterError 0xDA, else eSayRouter "
+     "0x7AC; sound 0xA3"),
+    ("The collection cabinet", "shows \"Collectibles Found: N / 60\", N counted over the 5 collections",
+     "hotspot 4: CollectionCount(0x67, 0x4F, 0x5B, 0x86, 0x92) summed, eString_CollectiblesFound 0x241 + \" / 60\""),
+    ("The sock pile", "shows \"There are N socks here\" (\"There is 1 sock here\"); with no socks, nothing",
+     "hotspot 0x49: gs+0x148 > 0, strings 0x242..0x245"),
+    ("The TV", "turns it on; clicked while on, turns it off and everyone watching it starts Objecting",
+     "hotspot 0xF: prop 0x32; off -> ChangeAllBehavior(0x3E..0x45 -> 0xBE Objecting)"),
+    ("The computers", "turns both off if on (clicking never turns them on)", "hotspot 0x12: ClearProp 0x24, 0x25"),
+    ("The bathroom sink", "turns its running water on, or off when it is running", "hotspot 0xA: props 1 and 2 "
+     "both set -> both cleared, else both set"),
+    ("The shower", "turns it on, or off when it is running", "hotspot 0xB: prop 0x29 toggled"),
+    ("The kitchen sink", "turns it on, or off when it is running", "hotspot 0x1A: prop 0x10 toggled"),
+    ("The toilet", "plays a sound, toggles the toilet and says \"This is the toilet\", or \"The toilet is broken!\" "
+     "while it is broken", "hotspot 9: sound 0x83, prop 0x3B toggled, prop 0x1A -> eString_ToiletBroken 0xDB, else "
+     "eString_ThisIsToilet 0xDC"),
+    ("With the 2nd Bathroom: the north bathroom's toilet", "the same, while the renovation is not under construction "
+     "(\"The toilet is broken!\" while the north toilet is broken)", "hotspot 0x3F: HaveUpgrade(0xE6), prop 0x43 "
+     "clear, sound 0x83, prop 0x3C toggled, prop 0x48 -> 0xDB else 0xDC"),
+    ("With the 2nd Bathroom: the north shower", "turns it on, or off when it is running", "hotspot 0x4B: "
+     "HaveUpgrade(0xE6), prop 0x47 toggled"),
+    ("With the 2nd Bathroom: the north sink", "turns it on; it then never turns off by a click, because the code turns "
+     "on the main bathroom sink's second prop instead of the north sink's (a stock slip)", "hotspot 3: "
+     "HaveUpgrade(0xE6); both 0x4B and 0x4C set -> both cleared, else SetProp(0x4B) and SetProp(2), never 0x4C"),
+    ("With the Pinball Machine, the MP3 Player and Speakers, the Paper Shredder, the Pro Blender and Electric Mixer or "
+     "the Pro Food Processor and Slicers: that piece", "plays its sound only", "hotspots 0x17 / 0x18 / 0x1D / 0x1B / "
+     "0x1C: HaveUpgrade(0x20B / 0x207 / 0xF2 / 0xFA / 0xF9), sounds 0xE6 / 0xE7 / 0xA8 / 0xC1 / 0xA2"),
+    ("A room that needs renovating", "shows \"Ew! This room is full of bugs!\" (infested), \"Ew! This room is "
+     "contaminated!\", \"Ugh! This room is filthy and broken!\" (the broken dining room, living room and master "
+     "bedroom) or \"Hmm...just a foundation here!\" (the broken laundry room, the unfinished bathroom and kids' room, "
+     "the front and back porches)", "hotspots 0x34 / 0x35 / 0x36, 0x38, 0x39 / 0x37, 0x3A, 0x3B, 0x3D, 0x3E: strings "
+     "0x831 / 0x832 / 0x834 / 0x833"),
+)
+
+
+def _hidden_lines() -> list[Fact]:
+    """Every hidden key, click spot, code and tip (the B200 desktop objects work/desktop_obj_files, by symbol)."""
+    g = HIDDEN
+    out = [
+        _f(g, "How keys reach the game: letters, digits and punctuation arrive only as typed characters (so Shift, Caps "
+              "Lock and the number pad with Num Lock on give the same keys as typing them), and only these keys arrive "
+              "as keys: Esc, Tab, Enter, Backspace (as the typed character 8), Delete, Insert, Home, End, Page Up, "
+              "Page Down, the four arrows and F1 to F10. F11, F12, Print Screen, Scroll Lock, Pause and Shift, Ctrl or "
+              "Alt on their own never reach any screen, and no screen reads Shift, Ctrl or Alt together with a key or "
+              "a click. Only the left mouse button is read: the right and middle buttons do nothing anywhere.", C,
+           "ldwGameWindowImpl::CheckForEvents: SDL_TEXTINPUT (0x303) of one byte -> HandleKey(5, char, 0); "
+           "SDL_KEYDOWN/UP (0x300/0x301) -> HandleKey(6/7, code, sym) through tables $LN76/$LN80/$LN81: Esc 0x3E8, "
+           "Tab 0x3EA, Enter 0x3EB, Left 0x3EC, Right 0x3ED, Up 0x3EE, Down 0x3EF, PgUp 0x3F0, PgDn 0x3F1, Home 0x3F2, "
+           "End 0x3F3, Insert 0x3F4, Delete 0x3F5, F1..F10 0x3FA..0x403, Backspace -> HandleKey(5, 8, 8); mouse "
+           "events only for button 1 (motion 1, down 2, up 3); ldwEventManager::HandleKey dispatches to the active "
+           "screen (ldwScene::SetActive subscribes with flags 0xF)"),
+        _f(g, "Alt+F4 closes the game window the same way as the window's close button (the same quit flag). F4 "
+              "without Alt does nothing on any screen.", C,
+           "CheckForEvents $LN17: F4 with KMOD_ALT (mod & 0x300) sets the window's closed flag +0x1D, as SDL_QUIT "
+           "(0x100) does; otherwise code 0x3FD, which no live screen handler compares"),
+        _f(g, "There is no cheat code, no typed password and no setting, registry key or command-line switch that "
+              "turns on a hidden key. ldw.ini's [ldw] section is read for FullScreen, ForceFullScreen, ForceWindowed, "
+              "ForceStaticSplash (a still picture instead of the opening movie) and Distributor (the name after "
+              "\"Version 1.2.4,\" on the title screen) only.", C,
+           "every GetConfigValue / GetConfigString caller: theGameState::InitGameInfo / Load, theOptionsDialog, "
+           "theSplashScene::Activate, theMenuScene ctor; no GetCommandLine / __argv / registry read in the game's "
+           "own code (the ATL CRegKey code belongs to the Flash player)"),
+        # ---- the house
+        _f(g, "In the house (the typed keys are the same in the unpatched game):", C,
+           "theMainScene::HandleKey 0x0: type 5 -> HandleKeyCharacter (table $LN67/$LN69, chars 0x20..0x77), type 6 "
+           "-> HandleKeyDown; stock exe sha256 1582d9e8 has the same character handler at 0x43BA30 (tables "
+           "0x43BCEC / 0x43BCA0)"),
+        _f(g, "Space: pauses the game, or unpauses it at the speed it had (Slow, Fast, 5x and 10x from the patcher's "
+              "Time Controls are kept); unpausing also clears the message line.", C,
+           "HandleKeyCharacter $LN43: speed field gs+0x25B18 >= 999 -> SetSpeed(field - 999), field = that or 10 when "
+           "it was 0, CDealerSay::Reset; else SetSpeed(999) and field + 999", sub=True),
+        _f(g, "1 to 9: move the view to one of 9 fixed places, laid out like the number pad: 7, 8, 9 the top of the "
+              "house map, 4, 5, 6 the middle, 1, 2, 3 the bottom; 1, 4 and 7 the left side, 3, 6 and 9 the right. "
+              "Unless a family member is being carried, the selection is cleared too.", C,
+           "HandleKeyCharacter $LN12..$LN28: CWorldView::ScrollTo (-40,1410) (520,1410) (1250,1410) / (-40,827) "
+           "(520,827) (1250,827) / (-40,50) (540,50) (1240,50); SetNoFocus when +0x60 == -1", sub=True),
+        _f(g, "S: opens the store at its menu. D: does what the Details button does (the selected family member's "
+              "Details screen; with the hired Maid or Gardener selected it asks whether to fire them). C: the "
+              "Collections screen. F: the Family screen (the family tree). T: the Goals screen. Esc: the game menu. "
+              "Both cases work (s or S).", C,
+           "HandleKeyCharacter -> HandleMessage(8, n): S 3 -> SetStoreCategory(0x17) + ChangeScene(0xF); D 1 -> "
+           "HandleVillagerDetailsButton (focus 0x23/0x24 -> the fire message box); C 4 -> scene 0xB; F 7 -> scene 8; "
+           "T 8 -> scene 0xA; HandleKeyDown 0x3E8 -> HandleMessage(8, 0) -> theGameMenuDialog", sub=True),
+        _f(g, "M and P are taken and do nothing. Every other key does nothing in the house.", C,
+           "HandleKeyCharacter $LN31 (M, P, m, p) returns true with no action; $LN2 / $LN47 the rest", sub=True),
+        _f(g, "Dead code, never a player action: F then W moves a hidden counter from 1 to 2, and any other key sets it "
+              "back to 0, but nothing in the game ever reads that counter.", C,
+           "HandleKeyCharacter $LN36 / $LN40 / $LN47 write theMainScene+0x50; the constructor writes 0; no other "
+           "read of +0x50 in theMainScene.obj", sub=True),
+        # ---- other screens
+        _f(g, "On the other screens: Esc does what the screen's first button does, and on two screens that button does "
+              "more than leave:", C,
+           "each scene's HandleKey: type 6 and code 0x3E8 -> HandleMessage(8, 1) (CCollectionScene 8, 0)"),
+        _f(g, "The store, the Family screen, the Goals screen and the Collections screen: Esc goes back to the house. "
+              "On the Collections screen F1 does the same.", C,
+           "CScrollingStoreScene / CFamilyTreeScene / CAchievementsScene HandleMessage(8, 1) -> scene 0; "
+           "CCollectionScene::HandleKey 0x3E8 or 0x3FA -> HandleMessage(8, 0) -> scene 0", sub=True),
+        _f(g, "The Details screen: Esc is its Done button (a name typed there is kept).", C,
+           "theVillagerScene::HandleKey 0x3E8 -> HandleMessage(8, +0xE4 = 1): GetText -> CFamilyTree::ChangeName, "
+           "scene 0", sub=True),
+        _f(g, "The adoption screen: Esc adopts the person shown, exactly as the Adopt button does (the button that "
+              "shows the next person is message 2).", C,
+           "CAdoptionScene::HandleKey 0x3E8 -> HandleMessage(8, 1): the candidate joins (StartFamilyTree / "
+           "StartNextGeneration), scene 0; message 2 -> GeneratePeepCandidate", sub=True),
+        _f(g, "The dating screen: Esc accepts, as the accept button does: the chosen suitor marries in (the marriage "
+              "goals, money and happiness changes all happen) and everyone starts Celebrating marriage; with no "
+              "suitor chosen, everyone celebrates and the game returns to the house with no marriage. The decline "
+              "button is message 2 (Shaking head). Whether a suitor is already chosen when the screen opens is "
+              "not traced.", C,
+           "CDatingScene::HandleKey 0x3E8 -> HandleMessage(8, 1): +0x10 != -1 -> NewBehavior 0x63, achievements, "
+           "CMoney::Adjust, UpdateParents, happiness; then MakeAllVillagersDoIt(0x7A); message 2 -> 0x175", sub=True),
+        _f(g, "Help (from the game menu): F1 goes back to the house; nothing else.", C,
+           "theHelpScene::HandleKey 0x3FA -> scene 0; reached from theGameMenuDialog::HandleMessage -> ChangeScene(0xD)",
+           sub=True),
+        _f(g, "The title screen and the loading screen take no keys.", C,
+           "theMenuScene::HandleKey and theLoadingScene::HandleKey return false", sub=True),
+        _f(g, "The opening movie: a typed key skips to the next opening picture, then to the loading screen. F1 skips "
+              "straight to the house, before the loading screen has loaded the art and the family; what the game "
+              "then shows has not been traced (never run).", C,
+           "theSplashScene::HandleKey: type 5 -> CMoviePlayer::Stop, next page (+0x14 < +0x2C) or scene 0xC; "
+           "0x3FA -> SetActive(false), scene 0; theGame::GameUpdate runs the 7 loading steps only in scene 0xC",
+           sub=True),
+        _f(g, "Dialog boxes: in a Yes/No or OK box Enter is Yes/OK and Esc is No/Cancel. In the store's buy box Enter "
+              "and Esc both cancel; only its Buy and more-money buttons do otherwise. In the new-player name box, the "
+              "family-tree card and the Redeem Credit box Enter is OK and Esc is Cancel. The bank and the doctor's "
+              "diagnosis close on Enter or Esc. In the change-player box both press its first button; what that does "
+              "there has not been decoded.", C,
+           "theMessageBoxDlg: 0x3EB -> message 1 -> result 0, 0x3E8 -> message 2 -> result -1; thePurchaseDialog::"
+           "HandleMessage: messages 3 / 4 -> results 0 / 1, others -1; theCreateNickNameDlg, CFamilyTreeInfoDlg, "
+           "RedeemCreditDlg: 0x3EB -> 1, 0x3E8 -> 2; CBankingDlg, theDiagnosisDialog, theChangePlayerDlg: 0x3E8 or "
+           "0x3EB -> 1", sub=True),
+        _f(g, "Typing in a name box: Backspace deletes the last letter, Enter or Tab finish; any character from space "
+              "up is taken (a number box takes digits, and a minus sign first).", C,
+           "ldwTextControlImpl::HandleKey: char 8 deletes, 0x0D / 9 -> EndEdit, 0x20..0xFF (digits, '-' at 0 for "
+           "a numeric box)", sub=True),
+        # ---- click spots
+        _f(g, "The store's hidden Redeem Credit corner: press and hold the left mouse button in the top-right corner of "
+              "the store (x 972 to 1,024 and y 0 to 51) without moving out of it. After more "
+              "than 5 seconds of game time (5 to 6 seconds of real time at Normal speed; never while paused) a Redeem "
+              "Credit box opens to type a code. The same in the unpatched game.", C,
+           "CScrollingStoreScene::HandleMouse type 2 in gCreditTriggerRect {972, 0, 1024, 51} -> +0x164 = 1, +0x168 = "
+           "CGameTime::Seconds() + 5; type 1 outside or type 3 -> 0; UpdateScene: Seconds() > +0x168 -> "
+           "RedeemCreditDlg; stock exe: the same rect at file offset 0x134834"),
+        _f(g, "The code is sent to LDW's server (ldwsoftware.com/game_backend/promocode.php, game VF2); no code is "
+              "kept in the game. A reply of coins adds that many dollars (\"N coins have been added to your "
+              "balance.\"); a brokerage reply adds 2 points of interest per point (0.02 each), though its message says "
+              "N%; \"invalid\" says the code is not valid; no reply says there was a problem. Whether LDW's server "
+              "still answers has not been traced (it was not contacted).", C,
+           "HandleRedeemCredit -> CPromoCode::Submit(\"promocode.php?code=%s&game=%s\", \"VF2\") -> CWebClient "
+           "(ldwsoftware.com, /game_backend/) -> PromoCodeCallback: \"coins\" -> CMoney::Adjust(value); "
+           "\"brokerage\" -> CMoney+8 += 0.02 x value; \"invalid\"", sub=True),
+        _f(g, "The store scenes handle no hidden keys. The store menu, the furniture and accessory tabs, the Flea "
+              "Market, On Sale, the Special Upgrades, the Services, the renovations, the career upgrades, the pets "
+              "and the outfits are all pages of one store screen, and its only key is Esc (back to the house). No "
+              "key or key combination redraws the On Sale items or the Flea Market's goods, as Virtual Families 1's "
+              "store page has: they are picked again only when a page is listed, by the clock (see Flea Market and "
+              "On Sale). The patcher's R is listed below, with the patcher's keys.", C,
+           "every HandleKey in the objects: the store's is CScrollingStoreScene::HandleKey (type 6, 0x3E8 only); the "
+           "pages are SetStoreCategory categories; MaybeUpdateSaleItems / MaybeUpdateRotatingItems / "
+           "MaybeUpdateOutfits are called only from CInventoryManager::GetCategoryItemCount (from SetStoreCategory), "
+           "CInventoryManager::Update (no caller) and Reset (a new family)", sub=True),
+        _f(g, "Dead code, never a player action: the Settings box's own Redeem Credit route; the Settings box never "
+              "makes that button.", C,
+           "theOptionsDialog::HandleMessage id +0x78 = 3 -> RedeemCreditDlg; the constructor builds buttons 2 and 4 "
+           "only", sub=True),
+        _f(g, "In the house, clicking these spots (a left click that does not pick up a family member, a pet, a tool "
+              "or a furniture piece). Each message shows on the message line for 5 to 6 seconds of real time:", C,
+           "theMainScene::HandleMouseDown -> HandleMapClick -> MapClickFeedback (hotspot table $LN73/$LN88, base 3); "
+           "CDealerSay::Say: shown until GetSecondsFromGameStart + 5"),
+    ]
+    for spot, does, evidence in CLICK_SPOTS:
+        out.append(_f(g, f"{spot}: {does}.", C, evidence, sub=True))
+    out += [
+        _f(g, "Two of the house map's ground kinds (types 4 and 5) give a click sound and a little animation where "
+              "clicked, not while paused. Which ground those two are has not been decoded.", C,
+           "HandleMapClick: CContentMap::GetMaterial 4 or 5, not IsPaused -> sound 0x56, CFloatingAnim 0", sub=True),
+        _f(g, "Dragging a family member over a spot names what they would do there, on the message line.", C,
+           "theMainScene::HandleMouseMove -> SayCurrentContent while +0x60 (the carried member) != -1", sub=True),
+        _f(g, "The Details screen: letting go of the left button in its top-left corner (x 0 to 90, y 0 to 90) opens the "
+              "store's Services list for that family member: the children's list when they have no career, the "
+              "adults' list when they have one.", C,
+           "theVillagerScene::HandleMouse type 3, x in +0x90 (0) .. +0x5A, y <= 0x5A: SetStoreCategory(0x13 when "
+           "CareerType() == 0, else 0x12), scene 0xF"),
+        _f(g, "The Collections screen: pointing at a collectible shows \"N of 4 (common, uncommon or rare) (bugs, "
+              "leaves & nuts, fossil pieces or bottle caps) found.\"; a click in the left margin (x under 70) or the "
+              "right margin (x over 950) turns to the previous or the next of its 5 pages, wrapping round.", C,
+           "CCollectionScene::HandleMouse type 1 -> CollectionCount, strings 0x748..0x753, CDealerSay::Say; type 2: "
+           "x < +0x10 + 0x46 -> page - 1 (0 -> 4), x > +0x10 + 0x3B6 -> page + 1 (5 -> 0)"),
+        _f(g, "The title screen: a click or a drag changes how the butterflies fly and hands them the mouse point; 7 "
+              "seconds of real time after the last click they change back. That they fly to the point is not decoded.", C,
+           "theMenuScene::HandleMouse types 1 (button held) and 2: ChangeButterflyStates(0), the point to "
+           "UpdateButterflies, +0x20 = GetSecondsFromGameStart + 7; UpdateScene resets the state after it"),
+        # ---- tips
+        _f(g, "Random tips: the loading screen shows one of the first 30 random tips, chosen when the game starts "
+              "(once per run), each 1 in 30 (tips 1 to 8 a hair likelier: 1,093 against 1,092 in 32,768). In "
+              "short, the 30 are:", C,
+           "theLoadingScene ctor (theGame::Init): GetString(0x9E3 + GetRandom(30)); GetRandom = rand() % n; 32,768 "
+           "% 30 = 8"),
+    ]
+    def tip_line(n, tip):
+        return _f(g, f"Tip {n}: {tip}{'' if tip.endswith('?') else '.'}", C, f"string {0x9E2 + n:#x}", sub=True)
+    out += [tip_line(n, tip) for n, tip in enumerate(RANDOM_TIPS[:30], 1)]
+    out += [
+        _f(g, "Dead code, never a player action: tips 31 to 60 are shown only by a click spot left over from an 800 x "
+              "600 screen. It sits at x 171 to 221, y 488 to 584, but the code takes it only for a click outside the "
+              "house view, and at the game's 1,024 x 768 the view covers x 64 to 1,024, y 0 to 730, so no click can "
+              "reach it. Tips 31 to 60, in short:", C,
+           "HandleMouseDown 0x1132: reached only when the click is outside CWorldView::scm_sRect (CWorldView::Reset: "
+           "{64, 0, width 1,024, height 768 - 38}); rect +0x98..+0xA4 = {0xAB, 0x1E8, 0xDD, 0x248} (+0xA8 = 0); "
+           "then sound 0xBD and Say(0x9E3 + GetRandom(60)); SetToWideScreen has no caller"),
+    ]
+    out += [tip_line(n, tip) for n, tip in enumerate(RANDOM_TIPS[30:], 31)]
+    out += [
+        _f(g, "The tutorial and its one-time tips are not random: each shows once, when its moment comes, and is then "
+              "marked as shown and saved. The Last Tip button shows the last one again. Where each comes from:", C,
+           "CTutorialTip::Queue / ConfigureTip / WasDisplayed / SetDisplayed / SaveState; theMainScene::HandleMessage "
+           "6 -> HandleLastTipButton -> RepeatLastTip"),
+        _f(g, "The first family's tutorial, in steps: welcome and moving about the house, selecting, dragging and "
+              "dropping a family member (the bathroom sink, a wrapper to throw away, groceries), praise and scolding, "
+              "the Details screen, work, the store, e-mail and a marriage proposal, the first furniture and making a "
+              "baby.", C,
+           "eTTipInstruct1..eTTipInfo28 (0x845..0x860): CTutorialTip::Reset, CAdoptionScene, theMainScene::"
+           "UpdateScene / HandleMouseDown / InvokeReward, CHotSpot::BathroomSink, CBehavior::ThrowAwayWrapper, "
+           "CEnvironment::SetPropGroceries, theVillagerScene, CScrollingStoreScene, CDatingScene, "
+           "CFurnitureManager::HavePeepsAdmireFurniture, CBehavior::GoInHouse", sub=True),
+        _f(g, "One-time tips: the first visit to the Collections, Family and Goals screens; a drag that misses; waiting "
+              "for and failing at work; a couple not in the mood; the first pregnancy; that the game runs in real "
+              "time; a confused family member; children and nursing mothers not working; a death that starts a new "
+              "generation; college; the Flea Market, the furniture sale, the game store and the Special Upgrades the "
+              "first time they open; a room that needs renovating; something in the way; the family lost with the "
+              "Family Tree full.", C,
+           "0x861..0x86D, 0x870..0x879: CCollectionScene / CFamilyTreeScene / CAchievementsScene::UpdateScene, "
+           "CBehavior work / Confused / RunAwayFrom*, CVillager::StartEmbrace, CVillagerAI::AdvanceState, "
+           "CVillagerState::ChanceOfPregnancy, CScrollingStoreScene::UpdateScene, CVillagerPlans::PlanToGo", sub=True),
+        _f(g, "The Flea Market's tip says its goods change 3 times a day, and random tip 52 says several times a day. "
+              "The code: in the unpatched game they change every 6 hours of real time (4 times a day); with the "
+              "patcher's \"All 36 Flea Market goods\" option on (the default) every good is always on sale (see Flea Market).", C,
+           "eTipFleaMarket 0x873 (CScrollingStoreScene::UpdateScene, category 0xF); stock MaybeUpdateRotatingItems "
+           "0x4BA710 (spec 22)", sub=True),
+        # ---- developer code
+        _f(g, "Dead code, never a player action: the developers' debugger and editors. F5 (show the debugger), Up "
+              "and Down (its pages), F6 (the waypoint editor: W, S), F7 (the light editor: + and -, L, D, S) and F4 "
+              "(leave) are read only by code that nothing calls; the screen that lines up the people's pictures "
+              "(the arrows, Esc and letter commands) is built but never opened; a test box for the day and night cycle "
+              "and an end-of-game screen (any key) are never built. The patcher's own debugger test build (2026-07) was never shipped.", C,
+           "CDebugger::HandleKeyDown / HandleKeyCharacter / Register: no caller; CWaypointEditor / CLightSourceEditor "
+           "only through CDebugger; theMainScene::Debug is a bare ret; theAlignVillagerScene built at loading step 5 "
+           "(theGame::GameUpdate) but no code sets scene 4; CDayNightCycleTestDlg, theGamewinScene, "
+           "theAlignPetsScene: no constructor call; ENABLE_DEBUGGER_FEATURES off in every release (docs/discoveries.md "
+           "2026-07-13)"),
+        # ---- the patcher
+        _f(g, "The patcher adds one key, R in the store, and no hidden click. Its Time Controls (every B201 and "
+              "later build, when the Time Controls option is on) is a button on the Settings screen that opens its "
+              "own window, where Enter or Esc close it. The Up to 28 Children, Family History and outfit picture "
+              "additions add no input.", C,
+           "runtime/native/b200time: button id 9 at x 30 (theOptionsDialog), dialog IDOK / IDCANCEL -> EndDialog; no "
+           "key handling in runtime/native/b200time, b200kids, b200history or b200outfits; the key: "
+           "runtime/native/b200refresh"),
+        _f(g, f"R (a patcher key, option \"{OPTION_REFRESH}\", a cheat, on by default; after B204): in the store, "
+              "R or Shift+R picks the store's random items again, the game's own way. On the Clothing and "
+              "Hairstyles page: the 6 stock outfits (see Clothing and Hairstyles). On the Flea Market page: 5 new "
+              "goods, only while \"All 36 Flea Market goods\" is off (see the store). Nothing on any other page "
+              "or screen, never On Sale, and nothing while a box (the buy box, the bank, a message, Redeem "
+              "Credit) is open: each store box takes the keys first. The store has no text box, so typing never "
+              "triggers it. Every other key, Esc included, is the game's own.", E,
+           "vf2refresh_b200.dll replaces only CScrollingStoreScene's vtable slot 2 (HandleKey, found through RTTI: "
+           "the function is shared by 5 scenes); typed characters reach it as HandleKey(5, char, 0); page = "
+           "[scene+0D4h]; every store box: ldwDialog::DoModal(scene, false) -> SetModal, and "
+           "ldwEventManager::HandleKey stops at a modal handler; all emulated (tests/test_b200_store_refresh.py)",
+           sub=True),
+    ]
+    return out
+
+
 def facts() -> list[Fact]:
     """Every line of the page, in GROUPS order."""
     out: list[Fact] = []
@@ -363,6 +687,9 @@ def facts() -> list[Fact]:
                  "Normal speed (the food groups, symptoms and the baby waiting time), 1 hour 1 minute at 10x.", C,
            "HandleUpgrade 0x48C2E0 case 0x112 on the purchase path HandleMouse -> HandlePurchaseItem: start time moved "
            "back 3,660 x option s, AllVillagersTimeflowUpkeep(true) (86,400 cap only), money capped at +750"))
+
+    # ------------------------------------------------------------------ Hidden keys, clicks and cheats
+    out.extend(_hidden_lines())
 
     # ------------------------------------------------------------------ Needs and upkeep (spec 2, 14)
     add(_f(NEEDS, "The family's needs are worked out once per age unit (every 10 minutes of game time) for everyone alive "
@@ -671,7 +998,33 @@ def facts() -> list[Fact]:
            "spec 15: CCollectableItem::Update, 3 in 6,600 (3 in 3,300)"))
     add(_f(COLLECTIBLES, "Rarity: rare 4%, uncommon 13%, common 83%; with the Lucky Rock 8%, 26% and 66%. The same "
                          "item never appears twice at once.", C, "spec 15: CCollectableItem::Add 0x44CA10"))
-    add(_f(COLLECTIBLES, "Collectibles vanish again after a while, in real time.", C, "spec 15"))
+    add(_f(COLLECTIBLES, "A collectible lasts 120 seconds of real time from when it appears (the game clock's speed and "
+                         "pausing do not change that), then vanishes unless a family member has picked it up. At most "
+                         "2 are out at once.", C,
+           "CCollectableItem::Add: expiry +0x354 = GetSecondsFromGameStart + 0x78; Update: items outside the mess ids "
+           "0x73..0x85 past their expiry -> Remove; Add looks for a free slot among 2 (+0x34C, stride 0x1C)"))
+    add(_f(COLLECTIBLES, "Where: the game picks one of its collectible spawn areas evenly, then a free spot in it, then "
+                         "one of that area's collection's 4 items of the rarity rolled. The insects' area is taken only "
+                         "in Raining or Stormy weather (the roll is made again otherwise). An event that makes a "
+                         "collectible appear never picks a fossil area without the Rock Hound Certificate, and always "
+                         "gives a rare item.", C,
+           "CCollectableItem::Add: GetRandom(area count +0x5DC); area base 0x4F only with CWeather 2 or 3; forced "
+           "(bool argument) and base 0x67 / 0x86 without HaveUpgrade(0x10A) -> re-roll; forced -> +8 (rare); "
+           "base + GetRandom(4) (+4 uncommon, +8 rare); up to 1,000 IsValidSpawnPos tries"))
+    add(_f(COLLECTIBLES, "The 5 collections, 12 items each (4 common, 4 uncommon, 4 rare), 60 in all, as the Collections "
+                         "screen's 5 pages and the collection cabinet count them: insects, leaves and nuts, the Raptor "
+                         "skeleton's fossil pieces, the Pterodactyl skeleton's fossil pieces and bottle caps.", C,
+           "items 0x4F..0x72 and 0x86..0x9D (CCollectionScene::HandleMouse: page item < 0x24 -> 0x4F + i, else "
+           "0x62 + i; strings eSayCommonInsects..eSayRareBottleCaps 0x748..0x753)"))
+    add(_f(COLLECTIBLES, "A full collection completes its goal: insects, nuts and twigs, Raptor hunter, Pterodactyl "
+                         "hunter and bottle caps; all five complete Master collector. Selling collectibles online counts "
+                         "towards six more goals (5 and 15 of each rarity). The coins each goal awards have not been "
+                         "traced.", C,
+           "goal strings eString_AchievementInsectsDesc 0x323 .. eString_AchievementSuperDuperSellerDesc 0x339; "
+           "eString_GoalAward 0x14 \"You have been awarded %d coins!\""))
+    add(_f(COLLECTIBLES, "The Lucky Rock doubles the roll (about one every 37 seconds of real time) and the rare and "
+                         "uncommon odds; The Mysterious Collector event buys the whole collection back (see Random "
+                         "Events).", C, "CCollectableItem::Update GetRandom(3,300 / 6,600) < 3 with +0x8A8"))
 
     # ------------------------------------------------------------------ The store (spec 16, 23)
     out.extend(_store_lines())
@@ -721,7 +1074,7 @@ def facts() -> list[Fact]:
              "writes; the same in the unpatched game;", E),
             ("a weather spell: Normal 15 to 40 minutes of game time before the next spell, Sunny and the others 6 to 12;", C),
             ("On Sale: every 24 hours of game time;", C),
-            ("the Flea Market, with the patcher: never changes;", E),
+            ("the Flea Market, with the patcher: never changes (with its option \"All 36 Flea Market goods\" off, as in the unpatched game);", E),
             ("the Flea Market, unpatched game: every 6 hours of real time;", E),
             ("a body removed: 240 age units after death (40 hours of game time), the time closed counted in full;", C),
             ("the baby waiting time: 10 minutes to 12 hours 30 minutes of real time, cut to 55 minutes by a drop;", C),
@@ -1223,7 +1576,9 @@ HEALTH_PLAN_FLEA = frozenset(("Sweet Mango", "Perfect Bananas", "Virtuoso Fragra
                               "Workshop Profession Magazine"))
 OPTION_RENOVATIONS = "Add mobile room renovations"
 OPTION_BATHROOM2 = "2nd Bathroom Mobile-Style Renovations (AI-Generated Art Warning)"
-STORE_OPTION_NAMES = (OPTION_CHEATS, OPTION_RENOVATIONS, OPTION_BATHROOM2)
+OPTION_FLEA = "All 36 Flea Market goods"
+OPTION_REFRESH = "R Refreshes the Store"
+STORE_OPTION_NAMES = (OPTION_CHEATS, OPTION_RENOVATIONS, OPTION_BATHROOM2, OPTION_FLEA, OPTION_REFRESH)
 
 # The game's Likes text (string 0x7AF), comma-separated, the n-th name for like n (CLikeList::GetListAsString).
 LIKE_NAMES = {2: "resting", 25: "fish", 28: "swimming", 39: "cooking", 45: "quiet", 57: "strolling", 65: "shaving",
@@ -1330,7 +1685,9 @@ FLEA_ITEMS = (
                                 "never come again, and everyone at home starts Celebrating the office upgrade. "
                                 "Anywhere else: \"You can't use this here!\" and it stays in the tray", C),
     ("Bottled Tropical Rain", 50, "the weather becomes Stormy, rain with lightning (see Bottled weather)", C),
-    ("Bottled Tropical Sunshine", 50, "gives Sunny weather (owner)", C),
+    ("Bottled Tropical Sunshine", 50, "seen live, the owner's report in play: gives Sunny weather (when it was seen "
+                                      "and how it was tested were not recorded; not re-tested against the code "
+                                      "reading below)", U),
     ("Encyclopedia", 75, "happiness +1 to +3; one like, picked from the first 100 of the 121, is added if it is not "
                          "already a like and one of the 3 like places is free, and that like is taken off the "
                          "dislikes either way; then Studying", C),
@@ -1916,9 +2273,13 @@ def _store_lines() -> list[Fact]:
                   "action: each applies once, when its step plays.", C,
            "CVillagerPlans::ProcessCurrentPlan: each planned change calls the matching Adjust once and marks the step done"))
     add(_f(STORE, WITH_PATCHER + "the Flea Market shows all 36 of its goods at all times; it never changes (the "
-                  "game's tip still says three times a day; there is no Flea Market clock in real time or game time).", E,
+                  "game's tip still says three times a day; there is no Flea Market clock in real time or game time). "
+                  f"This is the option \"{OPTION_FLEA}\", on by default; with it off the Flea Market is the "
+                  "unpatched game's, below.", E,
            "GetCategoryItemCount 0x46B6D0 / GetCategoryItem 0x46B210 call VF2GetExpandedFleaMarketCount / Item "
-           "0x4B9A90 / 0x4B9AB0 first (36 for category 15); the stock rotation 0x46BEB0 is never reached"))
+           "0x4B9A90 / 0x4B9AB0 first (36 for category 15); the stock rotation 0x46BEB0 is never reached; after B204 "
+           "both return -1 unless the .vf2flea byte is 1 (generator source; tests/test_b200_store_refresh.py runs "
+           "both states of a build from feat/r-refreshes-store)"))
     add(_f(STORE, UNPATCHED + "the Flea Market shows 5 of its 36 goods, picked at random, and changes them every 6 "
                   "hours of real time: the first time it is opened more than 6 real hours after the last change it picks 5 "
                   "new ones (the time counts while paused and while the game is closed). The game's tip says three "
@@ -1927,6 +2288,22 @@ def _store_lines() -> list[Fact]:
            "SetStoreCategory 0x432050(15) -> GetCategoryItemCount 0x4BB0A0 -> MaybeUpdateRotatingItems 0x4BA710, "
            "run as linked after Reset 0x4BA8F0: 5 goods at real s T, the same 5 at T + 21,600, 5 new at "
            "T + 21,601 and at T + 86,400; next change = real s + 21,600"))
+    add(_f(STORE, f"Patcher option \"{OPTION_FLEA}\" (on by default; every patched build before it always "
+                  "listed the 36): with it on, the 33 goods that start unlimited can be bought again and again and "
+                  "the 3 one-offs once. The 36-goods list keeps whatever stock counts the unpatched game's Flea "
+                  "Market left, so a good bought with the option off (or in a save first played unpatched) shows "
+                  "as sold out.", E,
+           "CInventoryManager::Reset: stock count = itemInfo field 4 (-1 for 33 goods, 1 for 0x29, 0x33, 0x10A); "
+           "the unpatched pick sets each pooled good's count to 1; TakeOne lowers a count above 0; "
+           "GetNumAvailable 0 -> \"sold out\" (DrawVisibleStoreItem image 0x27A, HandleMouse string 0x6C1)"))
+    add(_f(STORE, f"Patcher option \"{OPTION_REFRESH}\" (a cheat, on by default), on the Flea Market page: "
+                  f"with \"{OPTION_FLEA}\" off, R or Shift+R makes the unpatched game's own pick happen now: 5 "
+                  "goods shuffled the game's way, each set to one in stock, and the next pick 6 hours of real time "
+                  f"later. With \"{OPTION_FLEA}\" on, R does nothing there: every good is listed, and the "
+                  "game's pick would set each good's stock to 1, so the 33 unlimited goods would sell out for good.", E,
+           "vf2refresh_b200.dll: next-pick time InventoryManager+4A0h = 0, then the store's own "
+           "SetStoreCategory(0Fh) -> GetCategoryItemCount -> MaybeUpdateRotatingItems (the old time is put back "
+           "if the real clock is 0); emulated in a branch build, .vf2flea 0 and 1 (tests/test_b200_store_refresh.py)"))
     add(_f(STORE, "On Sale: 3 furniture items, changed every game day (24 hours of game time, 24 real hours at Normal speed; the clock "
                   "stops while paused), at half price. Buying one takes it off the list.", C,
            "spec 16: MaybeUpdateSaleItems 0x46C000; CalcPrice category 3; HandlePurchaseItem TakeOne"))
@@ -1971,7 +2348,8 @@ def _store_lines() -> list[Fact]:
         add(_f(FLEA, f"{name}: {_money(price)}{hp}: {effect}.", label,
                "DispatchRotatingSundry 0x49CB90 (case table 0x49DD64 / 0x49DCF4)", sub=True))
         if name == "Bottled Tropical Sunshine":
-            add(_f(FLEA, "The code reading, a contradiction to live-check: the bottle sets type 0, the plain sky "
+            add(_f(FLEA, "The code reading, which contradicts the live report above, so both are given: the bottle "
+                         "sets type 0, the plain sky "
                          "the owner calls Normal, and makes it daytime for 180 seconds of game time (B200 "
                          "0x49D890: push 0 before PlanToChangeWeather; the plan step calls OverrideNight(180) at 0x4CAFDC).", C,
                    "B200 0x49CB90+0xD00; every B204 variant pushes 0; SetCurrent case 1 = CSunBeam::Reset", sub=True))
@@ -2190,6 +2568,28 @@ def _store_lines() -> list[Fact]:
                      "4 hours of game time (14,400 game seconds) after the last pick.", C,
            "CInventoryManager::MaybeUpdateOutfits: GenCommonBodyType rand(32), GenUncommonBodyType 32 + rand(12), "
            "GenRareBodyType 44 + rand(6), next pick game s + 0x3840; TakeOne copies +0x408 + id x 4"))
+    add(_f(CLOTHING, f"Patcher option \"{OPTION_REFRESH}\" (a cheat, on by default): on this tab R or Shift+R "
+                     "picks the 6 stock outfits again at once, with the same odds (Discount 0 to 31, Department "
+                     "32 to 43, Designer 44 to 49), and the next timed pick is 4 hours of game time later, as after "
+                     "any pick. The hairstyles are not picked at random, so they stay; an outfit already bought "
+                     "keeps its own. Unpatched (and with the option off) no key does this.", E,
+           "vf2refresh_b200.dll: CInventoryManager::MaybeUpdateOutfits(true), the forced pick Reset makes; "
+           "emulated: GetRandom bounds 20h, 20h, 0Ch, 0Ch, 6, 6, only +450h..+464h and +470h written "
+           "(tests/test_b200_store_refresh.py)"))
+    add(_f(CLOTHING, WITH_PATCHER + "each outfit in the tray keeps the outfit it was bought with: the tray shows "
+                     "each one's own picture, and dropping it on a family member gives that one (part of Fix Vanilla "
+                     "Game Bugs). The pictures are kept beside the save, so they stay after loading it; an outfit "
+                     "bought before the fix shows and gives what the unpatched game does.", C,
+           "vf2outfits_b200.dll: the buy's AddItem (HandlePurchaseItem), both SwapSlots calls, the DrawItem calls "
+           "of CToolTray::Draw / DrawToolInHand and both GetOutfit calls of HandleMouseDown 0x49EE90; run on the "
+           "B200 code in tests/b200_outfits_scenarios.py, not yet seen in a running game"))
+    add(_f(CLOTHING, UNPATCHED + "every outfit of a sex in the tray shows, and puts on, the last one bought: two "
+                     "male outfits bought with different pictures both show the second, and the first one dropped "
+                     "on a family member gives the second.", C,
+           "stock exe sha256 1582d9e8: TakeOne 0x4BA0FE copies the row's body into +0x468 (rows 0x12..0x14) / "
+           "+0x46C (0x15..0x17); GetOutfit 0x4BA6E0 and DrawItem 0x4BA24C / 0x4BA25D read 0x49 from +0x468 and "
+           "0x4A from +0x46C; the apply 0x442C8E / 0x442D14 writes it to +0x6A84; a tray place holds only "
+           "(item, uses)"))
     for name, price, lock in (("Discount Store Male Outfit", 75, 0), ("Discount Store Female Outfit", 75, 0),
                               ("Department Store Male Outfit", 200, 2), ("Department Store Female Outfit", 200, 2),
                               ("Designer Male Outfit", 1500, 4), ("Designer Female Outfit", 1500, 4)):

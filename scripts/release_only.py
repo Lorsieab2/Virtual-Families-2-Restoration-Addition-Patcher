@@ -28,6 +28,8 @@ REPO = Path(__file__).resolve().parents[1]
 RELEASE_ONLY = (
     "tests/test_b200_time_controls.py::test_every_mutation_is_caught",
     "tests/test_b200_family_history.py::test_every_mutation_is_caught",
+    "tests/test_b200_outfit_pictures.py::test_every_mutation_is_caught",
+    "tests/test_b200_store_refresh.py::test_every_mutation_is_caught",
     "work/test_patch_mobile_furniture_pack.py::MobileRenovationArtTests::"
     "test_ai_bathroom2_rows_work_without_first_bathroom_toggle",
     "work/test_patch_mobile_furniture_pack.py::MobileRenovationArtTests::"

@@ -795,6 +795,54 @@ Clear All Illnesses keeps the food groups (B204, updated 27 October 2026)
   health +20 cure clears symptoms 0-5 but never symptom 6, the runny nose. The
   Game Mechanics page now says so.
 
+Outfit pictures: each tray outfit keeps its own (Fix Vanilla Game Bugs, B204 update 27 October 2026)
+------------------------------------------------------------------------------------------------------
+
+- Stock bug, proved in the B200 desktop objects and the B200 core executable:
+  CInventoryManager::TakeOne copies the store row's picture (+0x408 + item x 4)
+  into ONE field per sex, +0x468 for the male rows 0x12..0x14 and +0x46C for the
+  female rows 0x15..0x17. CScrollingStoreScene::HandlePurchaseItem then turns
+  the item into the tray item 0x49 / 0x4A and calls ToolTray.AddItem(item,
+  uses). A tray place is (item, uses), 8 bytes, nine places, no spare field;
+  the save holds exactly those 0x48 bytes. CToolTray::Draw and DrawToolInHand
+  draw 0x49 / 0x4A through DrawItem, whose jump table reads +0x468 / +0x46C, and
+  theMainScene::HandleMouseDown sets the villager's body (+0x6A84) to
+  GetOutfit(0x49 / 0x4A) before UseTool. B97's GetOutfit prefix
+  (VF2GetOutfitStoreBodyValue) answers only the patcher's own expansion
+  outfits. So every tray outfit of a sex showed, and put on, the last one
+  bought. Emulated on the B200 core: two male outfits bought at pictures 5 and
+  9 both drew 9, and the first one put 9 on.
+- Fix (owner-approved 2026-10-27, part of Fix Vanilla Game Bugs, on by
+  default): a new companion DLL, vf2outfits_b200.dll (runtime/native/
+  b200outfits), keeps each tray place's picture. Seven call retargets and two
+  vtable slots, found by 22 pins proved on the B200 core and resolved on all
+  129 B200-B204 matrix executables: the buy's AddItem (the place it fills gets
+  the picture just bought), both SwapSlots calls (the pictures move with the
+  outfits), the two DrawItem calls (the place's picture is lent to +0x468 /
+  +0x46C for that one call, then put back, so the saved field never changes),
+  both GetOutfit calls of the apply (the place in the hand gives its own), and
+  theGameState's Save and Load slots (chained to whatever they hold). An
+  outfit the DLL did not see bought (an old save's), and every expansion outfit
+  and hairstyle, gives exactly what it gave before.
+- Sidecar: "<save folder>\Virtual Families 2 Patcher Data\Outfits\<save
+  file>.dat", 188 bytes: "VF2OUTFT", version 1, "VF2B200", the save file's
+  FNV-1a 64 and size, the tray's nine (item, uses) and CInventoryManager
+  +0x450..+0x470 as the save holds them, the nine pictures (-1 unknown), and a
+  FNV-1a 64 of all of it. Written after theGameState::Save through a temp file
+  and a replace; used after a load only when it describes the loaded save (its
+  hash, or, for a save a tool rewrote, its tray and outfit fields exactly); the
+  game's slot + 20 backup keeps the previous one. A damaged file is moved
+  aside as ".unreadable-N.dat", a file another program holds is never moved or
+  replaced, and a save without one shows the stock pictures. No game record and
+  no save byte is written.
+- Loader: no byte of its own. The release gate binds each setting to exactly
+  one runtime-flag section, so the loader rides Fix Vanilla Game Bugs' own
+  .vf2bugs byte: one line in the Time Controls wrapper, after every other
+  companion DLL. It needs a matrix rebuild; the B204 executables published
+  before this update have no loader and get no DLL records.
+- Evidence: static (capstone + pefile) and emulated (the real DLL with the real
+  game code under unicorn, at the link address and relocated). No live test.
+
 R Refreshes the Store and All 36 Flea Market goods (final B204 rebuild; not live tested)
 ---------------------------------------------------------------------------------------
 

@@ -254,6 +254,17 @@ Changelog
   Installs vf2history_b200.dll in the Virtual Families 2 Patcher Files folder
   only while the setting is on; it needs executables built with its loader.
 
+- Fix Vanilla Game Bugs, outfit pictures (27 October 2026 update of B204): in
+  the original game every Male Outfit and every Female Outfit in the tool tray
+  shows, and puts on, the picture of the last one bought. Now each outfit in
+  the tray keeps the picture it was bought with, in the tray, in your hand and
+  when you drop it on a family member. Each save's pictures are kept in a small
+  file beside it (Virtual Families 2 Patcher Data\Outfits in the save folder);
+  the save file itself is not changed, and outfits bought before the fix show
+  what they showed before. Not yet tested in a running game.
+  Installs vf2outfits_b200.dll in the Virtual Families 2 Patcher Files folder
+  only while Fix Vanilla Game Bugs is on; it needs executables built with its
+  loader.
 - All 36 Flea Market goods (final B204 rebuild; an Optional patch, on by
   default): the Flea Market lists all 36 of its goods at all times, as every
   earlier patched build did. It is now one byte (.vf2flea) in the patched

@@ -102,7 +102,11 @@ Vanilla Virtual Families 2 saves are compatible with the modded version!
 The modded game uses its own save folder under Documents/LDW using the modded
 EXE name. To play existing saves in the modded game, copy the contents of your
 original Documents/LDW/Virtual Families 2 save folder into the modded save
-folder shown after patching.
+folder shown after patching. When you move saves between modded folders, copy
+the "Virtual Families 2 Patcher Data" folder beside them too: it holds the
+patcher's small per-save files (for example the pictures of the outfits in your
+tray, kept by Fix Vanilla Game Bugs). Without it the saves still load, and the
+tray's outfits show what the original game shows.
 
 If no valid install is detected:
 Make sure you selected the official Virtual Families 2 install folder, not a

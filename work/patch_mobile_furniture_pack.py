@@ -502,6 +502,17 @@ STORE_REFRESH_STARTUP = "B200Refresh_Startup"
 EXPANDED_FLEA_MARKET_SETTING = "expanded_flea_market"
 EXPANDED_FLEA_MARKET_FLAG_SECTION = ".vf2flea"
 EXPANDED_FLEA_MARKET_FLAG_SYMBOL = "_gVF2ExpandedFleaMarket"
+# "Outfit Pictures" (B204 update; part of Fix Vanilla Game Bugs, owner-approved 2026-10-27): the companion
+# DLL vf2outfits_b200.dll (runtime/native/b200outfits). It has no byte of its own: it rides the existing
+# dormant .vf2bugs byte of Fix Vanilla Game Bugs (one setting, one section: the release gate binds each
+# setting to exactly one runtime-flag section). The same theGame::Init wrapper loads it after the other
+# companion DLLs, once, only while .vf2bugs is 1; the DLL installs nothing unless its own pins match and
+# vf2outfits.ini says OutfitPictures=1. No generated code reads anything of it.
+OUTFIT_PICTURES_SETTING = VANILLA_BUGS_SETTING
+OUTFIT_PICTURES_FLAG_SECTION = VANILLA_BUGS_FLAG_SECTION
+OUTFIT_PICTURES_DLL_NAME = "vf2outfits_b200.dll"
+OUTFIT_PICTURES_INI_NAME = "vf2outfits.ini"
+OUTFIT_PICTURES_STARTUP = "B200Outfits_Startup"
 OLDER_MORTALITY_HELPER_SYMBOL = "_VF2RollOlderVillagerMortality"
 LONGEVITY_AGE_HELPER_SYMBOL = "_VF2AwardLongevityGoals"
 LONGEVITY_LOAD_HELPER_SYMBOL = "@VF2VillagerLoadStateAndReconcileLongevity@12"
@@ -16145,6 +16156,26 @@ static void VF2LoadStoreRefreshDll() {
     if (startup) startup();
 }
 
+// Outfit Pictures loader (see OUTFIT_PICTURES_* in the generator): part of Fix Vanilla Game Bugs, so it
+// rides that setting's .vf2bugs byte (zero = never loads the companion DLL). It is loaded by the same
+// wrapper, after every other companion DLL, once.
+static void VF2LoadOutfitPicturesDll() {
+    unsigned short path[512];
+    unsigned long length = GetModuleFileNameW(0, path, 400);
+    if (length == 0 || length >= 400) return;
+    unsigned long cut = length;
+    while (cut > 0 && path[cut - 1] != 92) --cut;
+    if (cut == 0) return;
+    const char *tail = "__VF2_OUTFIT_PICTURES_RELATIVE_PATH__";
+    unsigned long out = cut;
+    for (const char *c = tail; *c; ++c) path[out++] = (unsigned short)(unsigned char)*c;
+    path[out] = 0;
+    void *module = LoadLibraryW(path);
+    if (!module) return;
+    void (__cdecl *startup)() = (void (__cdecl *)())GetProcAddress(module, "B200Outfits_Startup");
+    if (startup) startup();
+}
+
 extern "C" void *__cdecl VF2GameStateGetAfterTimeControlsLoad() {
     static bool tried = false;
     if (!tried) {
@@ -16153,6 +16184,7 @@ extern "C" void *__cdecl VF2GameStateGetAfterTimeControlsLoad() {
         if (gVF2UpTo28Children == 1) VF2LoadUpTo28ChildrenDll();
         if (gVF2FamilyHistory == 1) VF2LoadFamilyHistoryDll();
         if (gVF2StoreRefresh == 1) VF2LoadStoreRefreshDll();
+        if (gVF2FixVanillaGameBugs == 1) VF2LoadOutfitPicturesDll();
     }
     return theGameState::Get();
 }
@@ -18632,6 +18664,8 @@ extern "C" void __cdecl VF2ApplyVisibleSpecialUpgrade(int itemId) {
     special_upgrade_helper_cpp = special_upgrade_helper_cpp.replace(
         "__VF2_STORE_REFRESH_RELATIVE_PATH__",
         TIME_CONTROLS_PATCHER_FOLDER + "\\\\" + STORE_REFRESH_DLL_NAME,
+        "__VF2_OUTFIT_PICTURES_RELATIVE_PATH__",
+        TIME_CONTROLS_PATCHER_FOLDER + "\\\\" + OUTFIT_PICTURES_DLL_NAME,
     )
     special_upgrade_helper_cpp = special_upgrade_helper_cpp.replace(
         "__VF2_TIME_CONTROLS_RELATIVE_PATH__",
@@ -26064,6 +26098,46 @@ def patch_expanded_flea_market_manifest(manifest):
         "flag_on": "the Flea Market lists all 36 goods of gGoodiesList at all times (every build before it)",
         "flag_off": "the stock Flea Market: 5 goods picked by MaybeUpdateRotatingItems, again 6 real hours later",
         "save_format": "unchanged",
+    }
+
+
+def patch_outfit_pictures_manifest(manifest):
+    """Outfit Pictures (part of Fix Vanilla Game Bugs): the loader is the Time Controls wrapper on
+    theGame::Init's first call, which loads the Outfit Pictures DLL after every other companion DLL while
+    the Fix Vanilla Game Bugs byte (.vf2bugs) is 1. Requires patch_fix_vanilla_game_bugs and
+    patch_time_controls_loader."""
+    if "TimeControls" not in manifest:
+        raise RuntimeError("Outfit Pictures rides the Time Controls loader; patch it first")
+    if "FixVanillaGameBugs" not in manifest:
+        raise RuntimeError("Outfit Pictures rides the Fix Vanilla Game Bugs byte; patch it first")
+    manifest["OutfitPictures"] = {
+        "status": "dormant loader installed in every executable",
+        "offline_patcher_setting": OUTFIT_PICTURES_SETTING,
+        "part_of": "FixVanillaGameBugs",
+        "category": "main",
+        "default": True,
+        "hook": (
+            "theGame::Init's first call (theGameState::Get) -> "
+            "VF2GameStateGetAfterTimeControlsLoad, which loads "
+            f"{TIME_CONTROLS_PATCHER_FOLDER}\\{OUTFIT_PICTURES_DLL_NAME} once when the Fix Vanilla Game Bugs "
+            "byte is 1, after the Time Controls, Up to 28 Children and Family History DLLs"
+        ),
+        "runtime_flag": {
+            "symbol": VANILLA_BUGS_FLAG_SYMBOL,
+            "source_section": OUTFIT_PICTURES_FLAG_SECTION,
+            "shared_with": "FixVanillaGameBugs",
+        },
+        "companion_dll": OUTFIT_PICTURES_DLL_NAME,
+        "companion_ini": OUTFIT_PICTURES_INI_NAME,
+        "startup_export": OUTFIT_PICTURES_STARTUP,
+        "stock_defect": (
+            "every Male Outfit (49h) and every Female Outfit (4Ah) in the tool tray shows and puts on the "
+            "picture of the last one bought: the tray keeps (item, uses) only, and the draws and GetOutfit "
+            "read one field per sex (CInventoryManager +468h / +46Ch)"
+        ),
+        "sidecar": "<save folder>\\Virtual Families 2 Patcher Data\\Outfits\\<save file>.dat",
+        "save_format": "unchanged",
+        "flag_off": "the DLL is never loaded: the stock tray",
     }
 
 
@@ -42077,6 +42151,8 @@ def main():
     patch_store_refresh_manifest(manifest)
     # All 36 Flea Market goods (.vf2flea; gates the expanded Flea Market hooks).
     patch_expanded_flea_market_manifest(manifest)
+    # Outfit Pictures (part of Fix Vanilla Game Bugs; the same loader loads its DLL last, on .vf2bugs).
+    patch_outfit_pictures_manifest(manifest)
     # Invisible furniture counts as its stock donor where stock code tests
     # the donor's item id (every executable).
     patch_invisible_furniture_parity(manifest)

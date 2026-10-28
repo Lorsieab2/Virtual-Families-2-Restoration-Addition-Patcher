@@ -450,7 +450,7 @@ MUTATIONS = [
     ("a key press read as R", "if (type == (int)RFSH_KEY_TYPE_CHARACTER &&", "if (type != 7 &&",
      "scenario_other_keys_are_the_games"),
     ("the game's own handler skipped", "    return ((HandleKeyFn)SITE(STORE_HANDLE_KEY))(scene, type, code, sym);",
-     "    return false;", "scenario_other_keys_are_the_games"),
+     "    return sym == 0x7FFFFFFF;", "scenario_other_keys_are_the_games"),
     ("the wrong slot", "    StoreSlot = vt + 4 * RFSH_HANDLE_KEY_VSLOT;", "    StoreSlot = vt + 4 * (RFSH_HANDLE_KEY_VSLOT + 1);",
      "scenario_only_the_store_slot_is_written"),
     ("installs with the setting off", '    return GetPrivateProfileIntW(L"Patches", L"RefreshKey", 0, path) == 1;',
