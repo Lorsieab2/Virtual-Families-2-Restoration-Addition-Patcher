@@ -41,6 +41,7 @@ GUI_TOOL_FILES = (
     "vf2_family_tree.py",
     "vf2_family_tree_window.py",
     "vf2_member_info.py",
+    "vf2_relationships.py",
     "vf2_line_colours.py",
     "vf2_tree_editor_tools.py",
     "vf2_gdiplus.py",
