@@ -166,12 +166,24 @@ actions, as before. **Tools** holds:
   player's edits and every member the tree has ever seen in that save, so a spouse who died with no children, an
   earlier spouse after a remarriage, a divorced spouse and a founder who died childless stay on the tree once seen.
   When the Family History log is there (`...\Save <N>\Logs\Family History`), it adds twins and triplets, causes
-  and ages at death, earlier marriages, why someone left home and which event brought an adopted child. Code:
+  and ages at death, earlier marriages, why someone left home and which event brought an adopted child. The
+  **Family Member Info** tab has a **Relationships** dropdown (the Virtual Villagers patcher's, v1.35.85): pick a
+  kind of relative, such as "First cousins (6)", to list everyone of that kind by name, and click a name to select
+  them on the tree. It covers parents, children, full and half siblings, twins and triplets, grandparents and
+  grandchildren of any generation ("Great-great-grandmother", then "3× great-grandmother"), aunts, uncles, nieces,
+  nephews, great-aunts, cousins of any degree and removal, half and double forms, partners (the other parent of a
+  child), in-laws and step-relations, worked out only from the parents the tree records. The living, the dead and
+  those no longer in the house are all listed, the dead and the gone marked. Read-only. Two family members with the
+  same name and look are two people, each with their own age, parents (their own seat in the save's Family Tree,
+  never chosen by name), number and edits; an edit an earlier build made for both is kept in the tree file but
+  shown on neither. A title line you retyped keeps your words, with its counts and date those of the tree now.
+  Big trees are laid out several times faster, the picture exactly the same. Code:
   `src/vf2_genealogy.py` (the family), `src/vf2_family_history.py` (the log), `src/vf2_tree_memory.py` (the tree
   file), `src/vf2_family_tree.py` (the picture), `src/vf2_family_tree_window.py`, `src/vf2_member_info.py`,
-  `src/vf2_tree_editor_tools.py`, `src/vf2_line_colours.py`, `src/vf2_gdiplus.py` and the pictures in
+  `src/vf2_relationships.py`, `src/vf2_tree_editor_tools.py`, `src/vf2_line_colours.py`, `src/vf2_gdiplus.py` and the pictures in
   `src/family_tree_backgrounds/`; the evidence: `docs/family-tree-maker.md`; tests: `tests/test_family_tree.py`
-  and `tests/test_family_tree_memory.py`.
+  and `tests/test_family_tree_memory.py`, `tests/test_relationships.py`, `tests/test_tree_namesakes.py`,
+  `tests/test_tree_big_speed.py`.
 - **How to Use...** opens the guide: one short page per control. A small **?** button beside each control
   opens the page for it. The pages are `src/vf2_how_to_use.json`, read by `src/vf2_how_to_use.py`.
 
@@ -853,7 +865,7 @@ These three do more than change eligibility or wording:
 - `src/offline_vf2_patcher.py` - command-line patcher and validation/apply/restore engine.
 - `src/offline_vf2_patcher_gui.py` - Tkinter GUI, plus its icon assets under `src/assets/`.
 - `src/vf2_tools_gui.py`, `src/vf2_save_backup.py`, `src/vf2_rename_family.py`, `src/vf2_save_reader.py`, `src/vf2_how_to_use.py` and `src/vf2_how_to_use.json` - the GUI's Tools tab, Back Up / Restore Saves, Rename Family and the How to Use guides.
-- `src/vf2_genealogy.py`, `src/vf2_family_history.py`, `src/vf2_tree_memory.py`, `src/vf2_family_tree.py`, `src/vf2_family_tree_window.py`, `src/vf2_member_info.py`, `src/vf2_tree_editor_tools.py`, `src/vf2_line_colours.py`, `src/vf2_gdiplus.py` and `src/family_tree_backgrounds/` - the Family Tree Maker.
+- `src/vf2_genealogy.py`, `src/vf2_family_history.py`, `src/vf2_tree_memory.py`, `src/vf2_family_tree.py`, `src/vf2_family_tree_window.py`, `src/vf2_member_info.py`, `src/vf2_relationships.py`, `src/vf2_tree_editor_tools.py`, `src/vf2_line_colours.py`, `src/vf2_gdiplus.py` and `src/family_tree_backgrounds/` - the Family Tree Maker.
 - `tests/` - the patcher, exporter, and GUI test modules that run against `src/`.
 - `work/` - the reverse-engineering and build tree: disassembly dumps, analysis and
   export scripts, and the full test suite the shipped tools are synced from.

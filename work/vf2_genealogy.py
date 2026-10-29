@@ -100,6 +100,12 @@ class Person:
     slot: int | None = None             # the villager record they are matched to, if any
     unknowns: list[str] = field(default_factory=list)   # what the records do not say (shown, never guessed)
     sources: list[str] = field(default_factory=list)    # where each fact came from
+    # Namesakes (two family members of one name, head and body; mark_namesakes): 1 the oldest, 2 the next...; 0
+    # none.  `marker` is what tells them apart for good (their seat in the save's Family Tree), and `edit_suffix`
+    # what their tree edits' key adds to "name|head|body" while they have a namesake (vf2_family_tree.entry_key).
+    namesake_rank: int = 0
+    marker: str = ""
+    edit_suffix: str = ""
 
     @property
     def key(self) -> Key:
@@ -670,6 +676,28 @@ def finish(village: Village) -> None:
     spouses(village)
     _generations(village)
     number_people(village)
+    mark_namesakes(village)
+
+
+def mark_namesakes(village: Village) -> None:
+    """Two or more family members of one name, head and body are each their own person (the Virtual Villagers Fun
+    Patcher's v1.35.85 fix, ported): ranked oldest first in the family's order, each marked by their seat in the
+    save's Family Tree (which never moves to another member), so the tree keeps each one's edits apart
+    (vf2_family_tree.entry_key, settle_namesakes).  Their parents come from that seat, never from the name, so
+    no parent is ever guessed between them.  A baby on the way is never a namesake."""
+    groups: dict[Key, list[Person]] = {}
+    for p in village.people.values():
+        p.namesake_rank, p.marker, p.edit_suffix = 0, p.seat or "", ""
+        if not p.upcoming:
+            groups.setdefault(p.key, []).append(p)
+    for group in groups.values():
+        if len(group) < 2:
+            continue
+        group.sort(key=lambda q: (q.order_key(), q.id))
+        markers = [q.marker for q in group]
+        for rank, q in enumerate(group, 1):
+            q.namesake_rank = rank
+            q.edit_suffix = f"|{q.marker}" + (f"|{rank}" if markers.count(q.marker) > 1 else "")
 
 
 def _parents_by_sex(people: dict[int, Person], couple: list[int]) -> tuple[int | None, int | None]:

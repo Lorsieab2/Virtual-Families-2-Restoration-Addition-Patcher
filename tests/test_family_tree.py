@@ -399,8 +399,8 @@ def test_every_background_and_logo_ships_byte_for_byte_in_both_trees():
     shipped = {f"family_tree_backgrounds/{n}" for n in src}
     assert shipped <= set(exporter.GUI_TOOL_FILES) and shipped <= verifier.REQUIRED_RUNNERS
     for module in ("vf2_genealogy.py", "vf2_family_history.py", "vf2_tree_memory.py", "vf2_family_tree.py",
-                   "vf2_family_tree_window.py", "vf2_member_info.py", "vf2_line_colours.py",
-                   "vf2_tree_editor_tools.py", "vf2_gdiplus.py"):
+                   "vf2_family_tree_window.py", "vf2_member_info.py", "vf2_relationships.py",
+                   "vf2_line_colours.py", "vf2_tree_editor_tools.py", "vf2_gdiplus.py"):
         assert module in exporter.GUI_TOOL_FILES and module in verifier.REQUIRED_RUNNERS
 
 
