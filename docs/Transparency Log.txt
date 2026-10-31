@@ -3313,3 +3313,39 @@ B183 PLAYTEST BUILD EVIDENCE.
   events. This is build/startup evidence only; the Exercise Bike, Home Gym and
   spa visual complaints remain unconfirmed until the owner performs live
   gameplay QA.
+
+
+Picture Maker (Tools tab, B205)
+-------------------------------
+
+- What it is: a Tools tab window that draws family members as Virtual
+  Families 2 draws them and saves them as clear (transparent) PNG pictures:
+  "From my save" (everyone a save names, and the outfits in the tool tray)
+  and "Make your own" (any sex, age, head, outfit, body frame and head turn).
+  Python only (src/vf2_picture_maker.py, src/vf2_people_pictures.py,
+  src/vf2_picture_image.py, src/vf2_people_links.json); no executable or DLL
+  changes. Reads the save, the Up to 28 Children file and the Outfit Pictures
+  file; writes only the PNGs the player saves.
+- The pictures come from the game folder the player picks (its Images); no
+  game art ships. The patcher's Holiday outfits (bodies 50-53) are drawn from
+  the patcher's own frames (Images\VillagerBodies, Images\VillagerDetailBodies)
+  when the game folder has them.
+- How people are drawn (the B200 desktop objects): a body cell and a head
+  cell joined by CAnimManager's link points (CAnimManager::LoadAssets, from
+  Assets\animpts.dat and its own constants); below age 280 the body is drawn
+  at age / 700 + 0.5 and the head at (age / 14 + 80) / 100; from age 900 the
+  old head. CVillager::DrawDetailVillager, CVillager::DrawEventVillager,
+  CVillagerManager::DrawVillager (shadow, body, head, an expecting mother's
+  babies from carrying.png), CFamilyTreeScene::DrawPeep and
+  CInventoryManager::DrawItem (a tray outfit) are reproduced.
+- Evidence: tests/test_picture_maker.py runs those functions, LoadAssets and
+  ldwGameWindowImpl::BlitRectWithAlpha from the B200 desktop objects under
+  unicorn (tests/vf2_people_emu.py): every planned draw equals the game's, the
+  link file equals what LoadAssets builds, every scaled pixel equals the
+  blitter's, and whole pictures equal a Pillow composite of the game's sheets.
+  Each check was shown to fail on a changed rule. Static and emulated
+  evidence only; the game was never run.
+- Not checked against the game: where the patched game places a Holiday
+  outfit (taken from the patcher's generated vf2_villager_body_frames.cpp,
+  not run), and a tray picture of a Holiday outfit. Not drawn: the Family
+  Tree's frame round a portrait; the house is shown at its normal zoom.

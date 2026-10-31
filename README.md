@@ -198,6 +198,34 @@ actions, as before. **Tools** holds:
   `src/family_tree_backgrounds/`; the evidence: `docs/family-tree-maker.md`; tests: `tests/test_family_tree.py`
   and `tests/test_family_tree_memory.py`, `tests/test_relationships.py`, `tests/test_tree_namesakes.py`,
   `tests/test_tree_big_speed.py`.
+- **Picture Maker...** draws family members exactly as Virtual Families 2 draws them and saves them as PNG
+  pictures with a clear background: the Fish and Plant Tycoon patcher's Picture Studio made for this game. **From
+  my save** lists everyone in a family's save by where they are (at home, left home, died, earlier generations only
+  in the Family Tree) and the Male and Female Outfits in the tool tray. A family member at home can be drawn in
+  the house (any of the 56 body frames: walking NE/SE/SW/NW, 15 actions, 9 sitting and lying; any of the 12 head
+  turns; the shadow; an expecting mother's 1-3 babies in her arms), on the Details screen (the big body and big
+  head, 3 head turns), on an event screen (head turned or facing you) or in the Family Tree; anyone else only in
+  the Family Tree, as the game does. A tray outfit is drawn as the tray draws it (column 14 of the actions sheet at
+  70%), with its own picture when the patcher's Outfit Pictures file is there for that very save, else the last
+  one of its sex bought, as the original game shows them. **Make your own** offers both sexes, every age (the body
+  drawn at age / 700 + 0.5 and the head at (age / 14 + 80) / 100 below 14 years, the old head from 45 years), all
+  50 heads (the patcher's 100 hairstyles), all 50 outfits (Discount 0-31, Department 32-43, Designer 44-49) and,
+  with a patched game, the patcher's four Holiday outfits (50-53), drawn from the patcher's own frames where the
+  game's cell would go. **Patched look** follows the game folder chosen (on when it has the patcher's frames). PNGs
+  are cut to the drawn pixels (with a small margin, or none) at the game's size, 2x or 4x (crisp) or a custom size
+  (smooth). The pictures come from the game folder; no game art ships. Saves and game folders are only read.
+  How it is checked (`tests/test_picture_maker.py`, with the B200 desktop objects and the original game): the game's
+  own `CAnimManager::LoadAssets` builds the link points (`src/vf2_people_links.json`, made by
+  `scripts/build_vf2_people_links.py`), and `DrawDetailVillager`, `DrawEventVillager`, `DrawVillager` with
+  `DrawCarriedItems`, `CFamilyTreeScene::DrawPeep` and `CInventoryManager::DrawItem` run under unicorn
+  (`tests/vf2_people_emu.py`): every draw planned is the game's (image, cell, place, size); the game's blitter
+  `BlitRectWithAlpha` runs on real cells and every scaled pixel matches; whole pictures match a Pillow composite of
+  the game's sheets pixel for pixel. Not checked against the game: the expansion outfits' placement (taken from the
+  patcher's own generated drawing code, not run), an expansion outfit's tray picture, and anything in a running
+  game (it was never started). The Family Tree's own frame is not drawn, and the house view is the normal zoom with
+  the family member standing on the floor. Code: `src/vf2_picture_maker.py` (the window and the save),
+  `src/vf2_people_pictures.py` (the people as the game draws them), `src/vf2_picture_image.py` (the pictures, the
+  PNG reader and writer, the game's scaled draw).
 - **How to Use...** opens the guide: one short page per control. A small **?** button beside each control
   opens the page for it. The pages are `src/vf2_how_to_use.json`, read by `src/vf2_how_to_use.py`.
 
