@@ -1,4 +1,4 @@
-"""The Tools tab: Back Up Saves, Restore Saves, Rename Family, Game Speed, Game Mechanics, the Family Tree Maker
+"""The Tools tab: Back Up Saves, Restore Saves, Copy Player Slot, Rename Family, Game Speed, Game Mechanics, the Family Tree Maker
 (vf2_family_tree_window, its family read by vf2_genealogy) and the guide.
 
 A mixin for VF2PatcherGUI (offline_vf2_patcher_gui.py), kept in its own file so the window's patching code
@@ -20,6 +20,7 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import messagebox, ttk
 
+import vf2_copy_slot
 import vf2_game_mechanics_window
 import vf2_game_speed
 import vf2_how_to_use
@@ -129,6 +130,8 @@ class ToolsTabMixin:
         self._help_button(links, "back_up_saves").pack(side="left", padx=(3, 0))
         self._link(links, "Restore Saves...", self.restore_saves).pack(side="left", padx=(18, 0))
         self._help_button(links, "restore_saves").pack(side="left", padx=(3, 0))
+        self._link(links, "Copy Player Slot...", self.copy_player_slot).pack(side="left", padx=(18, 0))
+        self._help_button(links, "copy_player_slot").pack(side="left", padx=(3, 0))
         self._link(links, "Rename Family...", self.rename_family).pack(side="left", padx=(18, 0))
         self._help_button(links, "rename_family").pack(side="left", padx=(3, 0))
         self._link(links, "Game Speed...", self.game_speed).pack(side="left", padx=(18, 0))
@@ -632,6 +635,220 @@ class ToolsTabMixin:
             parent=parent,
         )
         return True
+
+    # -- Copy Player Slot ---------------------------------------------------
+
+    def copy_player_slot(self) -> tk.Toplevel | None:
+        """Pick a save folder, a family and an empty slot, then type the copy's name (laid out as Rename Family).
+
+        The lists are read from the saves and are only for choosing; every refusal comes from vf2_copy_slot. The
+        copy asks first (Cancel is the default) and runs off the main thread."""
+        folders = self._tool_save_folders("Copy Player Slot")
+        if folders is None:
+            return None
+        folders = [folder for folder in folders
+                   if any(s.problem is None for s in vf2_copy_slot.read_slots(folder))]
+        if not folders:
+            messagebox.showinfo(
+                "Copy Player Slot",
+                f"No {TOOLS_GAME_TITLE} family saves were found in your Documents\\LDW folder.\n\n"
+                "The game makes a family's save the first time it saves that family.",
+            )
+            return None
+        return self._show_copy_dialog(folders)
+
+    def _confirm_copy(self, parent: tk.Toplevel, text: str) -> bool:
+        """The copy's Yes/No prompt. True only on "Yes"; "No" is the default (focused; Return and Escape answer
+        No), as the Virtual Villagers patcher's Move Files to Save Folders confirmation."""
+        window = tk.Toplevel(parent)
+        window.title("Copy Player Slot")
+        window.transient(parent)
+        frame = ttk.Frame(window, padding=16)
+        frame.pack(fill="both", expand=True)
+        ttk.Label(frame, text=text, wraplength=560, justify="left").pack(anchor="w")
+        outcome = {"yes": False}
+
+        def yes() -> None:
+            outcome["yes"] = True
+            window.destroy()
+
+        buttons = ttk.Frame(frame)
+        buttons.pack(anchor="w", pady=(14, 0))
+        ttk.Button(buttons, text="Yes", command=yes).pack(side="left")
+        no = ttk.Button(buttons, text="No", command=window.destroy, default="active")
+        no.pack(side="left", padx=(8, 0))
+        window.bind("<Return>", lambda _event: window.destroy())
+        window.bind("<Escape>", lambda _event: window.destroy())
+        window.protocol("WM_DELETE_WINDOW", window.destroy)
+        parent._vf2_confirm = window                 # the tests answer it
+        self._hold(window, focus=no)
+        parent.wait_window(window)
+        if parent.winfo_exists():                    # hold the copy dialog again, as it was before the prompt
+            with contextlib.suppress(tk.TclError):
+                parent.grab_set()
+        return outcome["yes"]
+
+    def _show_copy_dialog(self, folders: list[Path]) -> tk.Toplevel:
+        dialog, frame = self._scrolling_dialog("Copy Player Slot")
+        ttk.Label(
+            frame,
+            text=(
+                "Copies a family into an empty save slot of the same save folder, under a new name, with everything the "
+                "patcher keeps for it: the game's previous save, Up to 28 Children, the outfit pictures, the Family "
+                "History log and the Family Tree Maker's tree file. The game must be closed. The save folder is backed "
+                "up first, into <save folder>\\Backups\\Backup <date and time> (before copy). A slot in use is never "
+                "written."
+            ),
+            wraplength=560, justify="left",
+        ).grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, 10))
+        folder_var = tk.StringVar()
+        target_var = tk.StringVar()
+        name_var = tk.StringVar()
+        counter_var = tk.StringVar()
+        problem_var = tk.StringVar()
+        state: dict = {"slots": [], "empty": []}
+
+        ttk.Label(frame, text="Save folder:").grid(row=1, column=0, sticky="w")
+        folder_box = ttk.Combobox(frame, textvariable=folder_var, values=[folder.name for folder in folders],
+                                  state="readonly", width=48)
+        folder_box.grid(row=1, column=1, columnspan=2, sticky="we", pady=2)
+        ttk.Label(frame, text="Family to copy:").grid(row=2, column=0, sticky="nw", pady=(4, 0))
+        slot_list = tk.Listbox(frame, height=5, width=60, exportselection=False)
+        slot_list.grid(row=2, column=1, columnspan=2, sticky="we", pady=(4, 2))
+        ttk.Label(frame, text="Into empty slot:").grid(row=3, column=0, sticky="w", pady=(8, 0))
+        target_box = ttk.Combobox(frame, textvariable=target_var, state="readonly", width=30)
+        target_box.grid(row=3, column=1, sticky="w", pady=(8, 0))
+        ttk.Label(frame, text="New name:").grid(row=4, column=0, sticky="w", pady=(8, 0))
+        name_entry = ttk.Entry(frame, textvariable=name_var, width=36)
+        name_entry.grid(row=4, column=1, sticky="w", pady=(8, 0))
+        counter = ttk.Label(frame, textvariable=counter_var)
+        counter.grid(row=4, column=2, sticky="w", padx=(8, 0), pady=(8, 0))
+        ttk.Label(frame, textvariable=problem_var, foreground="#a01010", wraplength=560, justify="left").grid(
+            row=5, column=0, columnspan=3, sticky="w", pady=(4, 0))
+        buttons = ttk.Frame(frame)
+        buttons.grid(row=6, column=0, columnspan=3, sticky="w", pady=(12, 0))
+        copy_button = ttk.Button(buttons, text="Copy")
+        copy_button.pack(side="left")
+        ttk.Button(buttons, text="Close", command=dialog.destroy).pack(side="left", padx=(8, 0))
+
+        def folder() -> Path | None:
+            index = folder_box.current()
+            return folders[index] if 0 <= index < len(folders) else None
+
+        def chosen_slot():
+            picked = slot_list.curselection()
+            return state["slots"][picked[0]] if picked else None
+
+        def chosen_target() -> int | None:
+            index = target_box.current()
+            return state["empty"][index] if 0 <= index < len(state["empty"]) else None
+
+        def check(*_args) -> None:
+            name = name_var.get()
+            counter_var.set(f"{len(name)} / {vf2_copy_slot.MAX_LENGTH} characters")
+            counter.configure(foreground="#a01010" if len(name) > vf2_copy_slot.MAX_LENGTH else "")
+            info = chosen_slot()
+            where = folder()
+            problem = None
+            if where is None:
+                problem = "No save folder was found for this game."
+            elif info is None:
+                problem = "Choose a family."
+            elif info.problem:
+                problem = info.problem
+            elif not state["empty"]:
+                problem = "This save folder has no empty slot: all five are in use."
+            elif chosen_target() is None:
+                problem = "Choose an empty slot."
+            elif name:
+                problem = vf2_rename_family.name_problem(name)
+            problem_var.set(problem or "")
+            copy_button.configure(state="normal" if problem is None and bool(name) else "disabled")
+
+        def load_slots(*_args) -> None:
+            slot_list.delete(0, "end")
+            state["slots"], state["empty"] = [], []
+            where = folder()
+            if where is not None:
+                state["slots"] = vf2_copy_slot.read_slots(where)
+                for info in state["slots"]:
+                    slot_list.insert("end", info.label)
+                first = next((n for n, info in enumerate(state["slots"]) if not info.problem), None)
+                if first is not None:
+                    slot_list.selection_set(first)
+                state["empty"] = [info.slot for info in state["slots"]
+                                  if vf2_copy_slot.target_problem(where, info.slot) is None]
+            target_box.configure(values=[f"Save {slot}" for slot in state["empty"]])
+            if state["empty"]:
+                target_box.current(0)
+            else:
+                target_var.set("")
+            check()
+
+        def start() -> None:
+            info = chosen_slot()
+            where = folder()
+            target = chosen_target()
+            check()
+            if info is None or where is None or target is None or problem_var.get():
+                return
+            new_name = name_var.get()
+            if not self._confirm_copy(dialog, vf2_copy_slot.confirmation_text(where, info.slot, info.name, target,
+                                                                              new_name)):
+                return
+            try:
+                result = self._run_with_wait(
+                    "Copying the family…\n\nThe save folder is backed up first.",
+                    lambda: vf2_copy_slot.copy_slot(where, info.slot, target, new_name),
+                )
+            except (vf2_copy_slot.CopyError, vf2_save_backup.BackupError, OSError) as exc:
+                self.status_var.set("Copy Player Slot: nothing was copied.")
+                messagebox.showerror("Copy Player Slot", str(exc), parent=dialog)
+                load_slots()
+                return
+            self.status_var.set(f"Copy Player Slot: {result.old_name} (Save {result.source}) copied to Save "
+                                f"{result.target} as {result.new_name}.")
+            lines = [f"\"{result.old_name}\" (Save {result.source}) is copied to Save {result.target} as "
+                     f"\"{result.new_name}\" ({where.name}).",
+                     f"{len(result.files)} file(s) written and read back; the settings file lists the new family."]
+            if result.set_aside:
+                lines.append("Set aside (a deleted family's files in that slot): "
+                             + ", ".join(aside.name for _old, aside in result.set_aside))
+            for path, why in result.skipped:
+                lines.append(f"Not copied: {path.name} ({why}).")
+            lines += result.notes
+            lines.append(f"Backup: {result.backup.backup_folder}")
+            messagebox.showinfo("Copy Player Slot", "\n\n".join(lines), parent=dialog)
+            name_var.set("")
+            load_slots()
+
+        def choose(index: int) -> None:          # a click on a family (the tests)
+            slot_list.selection_clear(0, "end")
+            slot_list.selection_set(index)
+            check()
+
+        copy_button.configure(command=start)
+        folder_box.bind("<<ComboboxSelected>>", load_slots)
+        target_box.bind("<<ComboboxSelected>>", check)
+        slot_list.bind("<<ListboxSelect>>", check)
+        name_var.trace_add("write", check)
+        frame.columnconfigure(1, weight=1)
+        folder_box.current(0)
+        load_slots()
+        dialog.protocol("WM_DELETE_WINDOW", dialog.destroy)
+        dialog._vf2_folder_box = folder_box
+        dialog._vf2_folder_var = folder_var        # kept: a dropped StringVar empties its box
+        dialog._vf2_target_var = target_var
+        dialog._vf2_target_box = target_box
+        dialog._vf2_slot_list = slot_list
+        dialog._vf2_name_var = name_var
+        dialog._vf2_counter_var = counter_var
+        dialog._vf2_problem_var = problem_var
+        dialog._vf2_copy_button = copy_button
+        dialog._vf2_start = start
+        dialog._vf2_choose = choose
+        self._hold(dialog, focus=name_entry)
+        return dialog
 
     # -- Rename Family ------------------------------------------------------
 
