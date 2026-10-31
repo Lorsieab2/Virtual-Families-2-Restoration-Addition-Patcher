@@ -1,4 +1,4 @@
-﻿Virtual Families 2 Restoration/Addition Patcher Transparency Log
+Virtual Families 2 Restoration/Addition Patcher Transparency Log
 ================================================================
 
 Purpose
@@ -293,6 +293,23 @@ Changelog
   replaces one pointer (the store screen's key handler, found through the
   game's type information) and needs executables built with its .vf2rfsh
   loader. The save gets only what the game itself saves for its own pick.
+
+- Copy Player Slot (Tools tab, after B204): copies one family into an empty
+  save slot of the same save folder under a new name, with everything kept for
+  it: the save, the game's previous save (slot + 20), the Up to 28 Children and
+  outfit pictures files (Virtual Families 2 Patcher Data\Children and
+  \Outfits), and Virtual Families 2 Patcher\Save N (the Family History log and
+  the Family Tree Maker's tree file; not its pictures, which it makes again).
+  The new name goes into the copied save and the slot menu, and the settings
+  file marks the slot in use. Each Children and Outfits file is re-keyed to the
+  copied save's hash and size, so its DLL uses it for the copy; the log's first
+  lines say the new save number, and a Family Renamed record notes the name.
+  It asks first (No is the default), refuses while the game runs and never
+  writes a slot in use; a deleted family's files in the empty slot are renamed
+  "(set aside before copy <date>)", never deleted. The save folder is backed up
+  first as "Backup <date> (before copy)". Every file goes through a temporary
+  file and is read back; any failure puts the folder back as it was. No other
+  slot is touched. Code: vf2_copy_slot.py. No live test.
 
 Have fun! -Lorsieab2 :)
 

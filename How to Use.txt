@@ -59,7 +59,7 @@ https://github.com/Lorsieab2/Virtual-Families-2-Restoration-Addition-Patcher/
 
 Tools tab:
 The patcher window has two tabs. Patches is where you choose and apply patches.
-Tools holds Back Up Saves, Restore Saves, Rename Family and Game Speed for your
+Tools holds Back Up Saves, Restore Saves, Copy Player Slot, Rename Family and Game Speed for your
 Virtual Families 2 families (they live in Documents/LDW/<game folder name>), Game
 Mechanics, and a How to Use guide for
 every button. Small ? buttons beside controls open the page for that control.
@@ -70,7 +70,12 @@ family saves (your own saves are unchanged), so a restored backup opens paused
 and never catches up on the time since it was made. Restore Saves shows
 exactly what will change, asks first, and backs up your current saves before
 it restores anything.
-Rename Family changes the name a family slot is shown under. Virtual Families 2
+Copy Player Slot copies a family into an empty save slot of the same save
+folder under a new name, with everything the patcher keeps for it (the game's
+previous save, Up to 28 Children, outfit pictures, the Family History log and
+the Family Tree Maker's tree file). Quit the game first; it asks before it
+copies, never writes a slot in use, and backs up your saves first as
+"Backup <date> (before copy)".Rename Family changes the name a family slot is shown under. Virtual Families 2
 has no family surname: a slot is shown under the player name typed when it was
 started. Quit the game first; the new name can have up to 19 characters (the
 game keeps no more), and your saves are backed up first as

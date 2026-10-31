@@ -108,7 +108,8 @@ class ToolsTabTests(unittest.TestCase):
         walk(self.app.tools_tab)
         links = [str(w.cget("text")) for w in found
                  if w.winfo_class() == "TLabel" and str(w.cget("style")) == "Link.TLabel"]
-        self.assertEqual(links, ["Back Up Saves", "Restore Saves...", "Rename Family...", "Game Speed...",
+        self.assertEqual(links, ["Back Up Saves", "Restore Saves...", "Copy Player Slot...", "Rename Family...",
+                                 "Game Speed...",
                                  "Family Tree Maker...", "Game Mechanics...", "How to Use..."])
         boxes = [str(w.cget("text")) for w in found if w.winfo_class() == "TLabelframe"]
         self.assertEqual(boxes, ["Virtual Families 2", "How to Use"])
@@ -343,6 +344,123 @@ class ToolsTabTests(unittest.TestCase):
         self.error.assert_called_once()
         self.assertIn("Close the game first", self.error.call_args[0][1])
         self.assertEqual(self.app.status_var.get(), "Rename Family: nothing was renamed.")
+
+    # -- Copy Player Slot ---------------------------------------------------
+
+    def test_copy_player_slot_is_on_the_tools_tab_with_a_guide(self):
+        self.assertIn("copy_player_slot", self.app.help_keys)
+
+    def test_the_copy_dialog_offers_families_and_empty_slots(self):
+        self._real_saves()
+        dialog = self.app.copy_player_slot()
+        try:
+            self.assertEqual(dialog._vf2_slot_list.get(0), "Save 1: Lorsieab2")
+            self.assertEqual(dialog._vf2_slot_list.curselection(), (0,))
+            # The real settings mark slots 1-3 in use; slot 5 holds a file: only Save 4 is empty.
+            self.assertEqual(list(dialog._vf2_target_box.cget("values")), ["Save 4"])
+            self.assertEqual(str(dialog._vf2_copy_button.cget("state")), "disabled")
+            dialog._vf2_name_var.set("NEW PLAYER")
+            self.assertIn("empty slot", dialog._vf2_problem_var.get())
+            dialog._vf2_name_var.set("The Copies")
+            self.assertEqual(dialog._vf2_problem_var.get(), "")
+            self.assertEqual(str(dialog._vf2_copy_button.cget("state")), "normal")
+        finally:
+            dialog.destroy()
+
+    def test_the_copy_asks_first_and_no_changes_nothing(self):
+        import vf2_copy_slot as cs
+        self._real_saves()
+        before = self._snapshot()
+        dialog = self.app.copy_player_slot()
+        dialog._vf2_name_var.set("The Copies")
+        asked = []
+
+        def answer_no(parent, text):
+            asked.append(text)
+            return False
+
+        with mock.patch.object(self.app, "_confirm_copy", answer_no):
+            dialog._vf2_start()
+        self.assertEqual(asked, [cs.confirmation_text(self.folder, 1, b"Lorsieab2", 4, "The Copies")])
+        self.assertEqual(self._snapshot(), before)
+        self.assertFalse((self.folder / "Backups").exists())
+        dialog.destroy()
+
+    def test_the_prompt_names_everything_and_its_default_is_no(self):
+        import vf2_copy_slot as cs
+        text = cs.confirmation_text(self.folder, 1, b"Lorsieab2", 4, "The Copies")
+        for part in ('"Lorsieab2" (Save 1)', "Save 4", '"The Copies"', FOLDER, "backed up first", "(before copy)"):
+            self.assertIn(part, text)
+        import tkinter as tk
+        parent = self.app.root
+        for key in ("<Return>", "<Escape>"):
+            with self.subTest(key=key):
+                holder = tk.Toplevel(parent)
+
+                missed = []
+
+                def press(key=key, holder=holder):
+                    window = holder._vf2_confirm
+                    window.focus_force()
+                    window.update()
+                    window.event_generate(key)
+
+                def give_up(holder=holder, missed=missed):        # never hang the suite
+                    window = getattr(holder, "_vf2_confirm", None)
+                    if window is not None and window.winfo_exists():
+                        missed.append(True)
+                        window.destroy()
+
+                holder.after(50, press)
+                holder.after(3000, give_up)
+                self.assertFalse(self.app._confirm_copy(holder, text))
+                self.assertEqual(missed, [], f"{key} did not close the prompt")
+                holder.destroy()
+        holder = tk.Toplevel(parent)
+
+        def press_yes():
+            window = holder._vf2_confirm
+            [button.invoke() for frame in window.winfo_children() for row in frame.winfo_children()
+             for button in row.winfo_children() if str(button.cget("text")) == "Yes"]
+
+        holder.after(50, press_yes)
+        holder.after(3000, lambda: holder._vf2_confirm.winfo_exists() and holder._vf2_confirm.destroy())
+        self.assertTrue(self.app._confirm_copy(holder, text))
+        holder.destroy()
+
+    def test_a_confirmed_copy_backs_up_and_copies(self):
+        import vf2_save_reader as reader
+        self._real_saves()
+        dialog = self.app.copy_player_slot()
+        dialog._vf2_name_var.set("The Copies")
+        with mock.patch.object(self.app, "_confirm_copy", return_value=True):
+            dialog._vf2_start()
+        self.assertEqual(reader.read_family_save(self.folder / "Virtual Families 24.ldw").nickname, "The Copies")
+        self.assertEqual(reader.read_settings(self.folder / "Virtual Families 20.ldw").player_names[3], "The Copies")
+        backups = sb.list_backups(self.folder)
+        self.assertTrue(backups and backups[0].before_copy)
+        self.assertIn("copied to Save 4 as The Copies", self.app.status_var.get())
+        self.assertTrue(dialog.winfo_exists())
+        dialog.destroy()
+
+    def test_a_running_game_stops_the_copy(self):
+        self._real_saves()
+        before = self._snapshot()
+
+        class Running(NoGame):
+            def find_game(self, save_folder_name):
+                return [(7, save_folder_name + ".exe")]
+
+        dialog = self.app.copy_player_slot()
+        dialog._vf2_name_var.set("The Copies")
+        with mock.patch.object(sb, "WindowsProcesses", Running), \
+                mock.patch.object(self.app, "_confirm_copy", return_value=True):
+            dialog._vf2_start()
+        self.assertEqual(self._snapshot(), before)
+        self.error.assert_called_once()
+        self.assertIn("Close the game first", self.error.call_args[0][1])
+        self.assertEqual(self.app.status_var.get(), "Copy Player Slot: nothing was copied.")
+        dialog.destroy()
 
     # -- Game Speed ---------------------------------------------------------
 

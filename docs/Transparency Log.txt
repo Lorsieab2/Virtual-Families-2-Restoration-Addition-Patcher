@@ -767,6 +767,40 @@ Family History log (companion DLL, after B203; not live tested)
   name) to a slot that already has a log; it never starts one.
 - Static and emulated evidence only. No live test.
 
+Copy Player Slot (Tools tab, after B204)
+----------------------------------------
+
+- src/vf2_copy_slot.py, tests/test_copy_slot.py and the Tools tab tests. A
+  family in save slot N is copied into an empty slot M of the same folder under
+  a new name. Files of slot N, each found from the code that writes it:
+  Virtual Families 2<N>.ldw and <N+20>.ldw (ldwGameState::Save rotation);
+  Virtual Families 2 Patcher Data\Children and \Outfits\Virtual Families
+  2<N>.ldw.dat and <N+20>.ldw.dat (b200kids.cpp / b200outfits.cpp SidecarPath);
+  Virtual Families 2 Patcher\Save N\ (b200history.cpp HistoryFile;
+  vf2_tree_memory / vf2_family_tree data_folder), except its Family Tree
+  pictures folder, which the Family Tree Maker makes again.
+- The new name is written where Rename Family writes it (gs+0x25ABC in the save
+  and in N+20 when that holds the old name; the slot-menu entry at settings
+  +0x10 + 0x15 x (M-1)); the settings in-use flag (+0x79 + M-1) is set to 1.
+  The copies must parse with vf2_save_reader exactly as the originals but for
+  the name, and differ in no byte outside the name field.
+- Children and Outfits sidecars carry the save file's FNV-1a 64 and size (+24,
+  +32) and an FNV-1a 64 checksum of the rest. One that describes save N or
+  N+20 is re-keyed to that save's copy and checked again; a valid one that
+  describes neither is copied unchanged (its DLL treats it the same for the
+  copy); a damaged one is not copied. Family History files' "Family: <name>
+  (Save N)" first lines say Save M and the newest gets a "Family Renamed"
+  record with "Copied from: Save N"; .tree files get slot M and the new name.
+- Safety: a Yes/No prompt first (No is the default; Return and Escape answer
+  No); refused while the game runs (checked again after the backup) and for a
+  slot with a save file or an in-use flag; "Backup <date> (before copy)" first;
+  leftovers of a deleted family in slot M renamed "(set aside before copy
+  <date>)"; every new file written to a temporary file then renamed into place
+  (never over an existing file), the settings file swapped in and read back;
+  any failure removes the new files and folders and puts the settings file and
+  set-aside files back. Two-way checked: each safety step removed in turn makes
+  the tests fail.
+- Static and test evidence only. No live test.
 Clear All Illnesses keeps the food groups (B204, updated 27 October 2026)
 -------------------------------------------------------------------------
 
