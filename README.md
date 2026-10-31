@@ -113,7 +113,21 @@ actions, as before. **Tools** holds:
   shows exactly which files will be replaced, added and removed, restores only after the player says yes, and
   first backs up the current saves as `Backup <date> (before restore)`, so a restore can be undone. It rolls
   back if a file fails. **Delete Backup...** removes one backup.
-- **Rename Family...** changes the name a family slot is shown under. Virtual Families 2 has no family
+- **Copy Player Slot...** copies one family into an empty save slot of the same save folder under a new name
+  (`src/vf2_copy_slot.py`; tests: `tests/test_copy_slot.py`). It copies every file kept for the slot: the save,
+  the game's previous save at slot + 20, the Up to 28 Children and outfit pictures sidecars
+  (`Virtual Families 2 Patcher Data\Children` and `\Outfits`, both `<save file>.dat`), and
+  `Virtual Families 2 Patcher\Save <N>` (the Family History log and the Family Tree Maker's tree file and edits;
+  not its pictures, which it makes again). The new name is written where Rename Family writes it, in the copied
+  save and the slot menu, and the settings file marks the slot in use. Each Children and Outfits sidecar is
+  re-keyed to the copied save's FNV-1a hash and size (one for another save is copied unchanged, a damaged one is
+  not copied), the log's `Family: <name> (Save <N>)` lines say the new save number and a `Family Renamed` record
+  notes the name, and `.tree` files get the new slot and name. It asks first (No is the default; Return and
+  Escape answer No), refuses while the game runs and never writes a slot in use (a save file there, or the
+  settings' in-use flag); a deleted family's leftovers in the empty slot are renamed
+  `(set aside before copy <date>)`, never deleted. It backs up first as `Backup <date> (before copy)`, writes
+  every file through a temporary file, reads everything back and puts the folder back as it was if anything fails.
+  No other slot is touched. No live test.- **Rename Family...** changes the name a family slot is shown under. Virtual Families 2 has no family
   surname: the slot is shown under the player name typed when it was started (main menu `Player:`, Change
   Player, the daily email). The tool writes that name (gs+0x25ABC) in the slot's save, its entry in the slot
   menu (`Virtual Families 20.ldw`) and the previous save at slot + 20 when it still holds the old name. The
