@@ -294,5 +294,15 @@ Changelog
   game's type information) and needs executables built with its .vf2rfsh
   loader. The save gets only what the game itself saves for its own pick.
 
+- Picture Maker (Tools tab, B205): draws family members exactly as the game
+  draws them (in the house, on the Details screen, on an event screen, in the
+  Family Tree, and the tool tray's outfits) and saves them as clear PNG
+  pictures at the game's size, 2x, 4x or a custom size. The pictures are read
+  from the game folder the player picks; no game art ships. A patched game
+  shows the patcher's Holiday outfits from the patcher's own frames. Saves and
+  game folders are only read; nothing is written but the PNGs the player
+  saves. Checked against the game's own drawing code run under emulation and
+  pixel for pixel against the game's sheets; never tested in a running game.
+
 Have fun! -Lorsieab2 :)
 

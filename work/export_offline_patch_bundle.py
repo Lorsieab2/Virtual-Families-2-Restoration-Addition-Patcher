@@ -45,6 +45,12 @@ GUI_TOOL_FILES = (
     "vf2_line_colours.py",
     "vf2_tree_editor_tools.py",
     "vf2_gdiplus.py",
+    # The Picture Maker (the Tools tab's link): the window, the people drawn as the game draws them, the link
+    # points from the game's own CAnimManager tables, and the pictures (no game art: it is read from the game).
+    "vf2_picture_maker.py",
+    "vf2_people_pictures.py",
+    "vf2_people_links.json",
+    "vf2_picture_image.py",
 ) + tuple(f"family_tree_backgrounds/{name}" for name in (
     "blue-board-on-wood.png",
     "blue-island.png",
@@ -4435,6 +4441,12 @@ family saves (your own saves are unchanged), so a restored backup opens paused
 and never catches up on the time since it was made. Restore Saves shows
 exactly what will change, asks first, and backs up your current saves before
 it restores anything.
+Picture Maker draws your family members exactly as the game draws them and
+saves them as PNG pictures with a clear background: everyone in a save (in the
+house in any body frame and head turn, on the Details screen, on an event
+screen or in the Family Tree, and the outfits in the tool tray), or family
+members you make yourself from any head, outfit and age. The pictures come
+from the game folder you pick; your saves and game folders are only read.
 
 Crash capture QA only (optional):
 The patcher never changes Windows Error Reporting settings or launches the

@@ -1,5 +1,5 @@
 """The Tools tab: Back Up Saves, Restore Saves, Rename Family, Game Speed, Game Mechanics, the Family Tree Maker
-(vf2_family_tree_window, its family read by vf2_genealogy) and the guide.
+(vf2_family_tree_window, its family read by vf2_genealogy), the Picture Maker (vf2_picture_maker) and the guide.
 
 A mixin for VF2PatcherGUI (offline_vf2_patcher_gui.py), kept in its own file so the window's patching code
 stays as it was.  It needs from the window: ``root``, ``status_var``, ``notebook``, ``_run_with_wait`` and the
@@ -139,6 +139,8 @@ class ToolsTabMixin:
         self._help_button(family, "family_tree").pack(side="left", padx=(3, 0))
         self._link(family, "Game Mechanics...", self.game_mechanics).pack(side="left", padx=(18, 0))
         self._help_button(family, "game_mechanics").pack(side="left", padx=(3, 0))
+        self._link(family, "Picture Maker...", self.picture_maker).pack(side="left", padx=(18, 0))
+        self._help_button(family, "picture_maker").pack(side="left", padx=(3, 0))
 
         guide = ttk.LabelFrame(tab, text="How to Use", padding=10)
         guide.pack(fill="x", pady=(10, 0))
@@ -195,6 +197,16 @@ class ToolsTabMixin:
         window = vf2_game_mechanics_window.open_game_mechanics(self.root)
         self._game_mechanics_window = window
         return window
+
+    # -- Picture Maker ------------------------------------------------------
+
+    def picture_maker(self):
+        """The Picture Maker (vf2_picture_maker): the family in a save, and family members made from parts, drawn
+        as the game draws them and saved as clear PNGs. One at a time: a second click brings it to the front."""
+        import vf2_family_tree_window as tree_window
+        import vf2_picture_maker
+        folders = vf2_save_backup.find_save_folders(vf2_save_backup.documents_folder())
+        return vf2_picture_maker.open_picture_maker(self, folders, tree_window._guess_game_folder(self))
 
     # -- How to Use ---------------------------------------------------------
 
