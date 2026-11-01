@@ -59,9 +59,10 @@ PRESET_BUTTONS = (
 )
 # Owner's Defaults ticks every patch except these (owner, 2026-11-01: "everything except Up to 28
 # Children"; both Cheat settings and both Invisible Furniture settings are ON in it -- the transparent
-# swap overrides the visible graphics). Of the two exclusive text settings it ticks "Use Unicode Font
-# (overrides in-game fonts)" and leaves "Render Unicode with In-Game Fonts" off (owner, 2026-11-01).
-OWNERS_DEFAULT_OFF_SETTING_IDS = frozenset({"up_to_28_children", "render_unicode_in_game_fonts"})
+# swap overrides the visible graphics). Of the two exclusive text settings it ticks "Render Unicode with
+# In-Game Fonts" and leaves "Use Unicode Font (overrides in-game fonts)" off (owner, 2026-11-01, later the
+# same day: it was the reverse before).
+OWNERS_DEFAULT_OFF_SETTING_IDS = frozenset({"up_to_28_children", "use_unicode_font"})
 PATCH_SELECTION_SETTINGS_TITLE = "Patch Selection Settings"
 
 

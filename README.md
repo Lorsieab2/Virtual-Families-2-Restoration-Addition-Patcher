@@ -404,7 +404,8 @@ verified against the shipped `manifest.json`.
 **Choosing a set.** Above the list are the Virtual Villagers patcher's four buttons, each with a **?**:
 **Select All Patches** (everything but Experimental), **Default Patches** (the defaults below), **Owner's
 Defaults** (everything except Up to 28 Children: every cheat and both invisible-furniture settings, the
-transparent swap overriding the visible graphics) and **Deselect All Patches**. **Patch Selection
+transparent swap overriding the visible graphics; of the two text settings Render Unicode with In-Game
+Fonts, so Use Unicode Font stays off) and **Deselect All Patches**. **Patch Selection
 Settings...** opens a window with a search box and one tick box per patch; **Tick These** / **Untick These**
 apply the chosen patches, ticking what each needs (or unticking what needs it) as a click does.
 
