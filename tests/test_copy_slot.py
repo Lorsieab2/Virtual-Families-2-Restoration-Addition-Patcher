@@ -126,8 +126,9 @@ class Base(unittest.TestCase):
         return {p.relative_to(self.folder) for p in self.folder.rglob("*")
                 if p.is_dir() and p.relative_to(self.folder).parts[0] != "Backups"}
 
-    def copy(self, name: str = "The Copies", source: int = 1, target: int = 4, processes=None):
-        return cs.copy_slot(self.folder, source, target, name, processes=processes or NoGame(), now=WHEN)
+    def copy(self, name: str = "The Copies", source: int = 1, target: int = 4, processes=None, replace: bool = False):
+        return cs.copy_slot(self.folder, source, target, name, processes=processes or NoGame(), now=WHEN,
+                            replace=replace)
 
 
 class SidecarFormatTests(unittest.TestCase):
@@ -224,6 +225,25 @@ class CopyTests(Base):
         self.assertEqual(r.read_family_save(self.folder / "Virtual Families 24.ldw").nickname, "Smiths Two")
         self.assertEqual([s.label for s in rf.read_slots(self.folder)][3], "Save 4: Smiths Two")
 
+    def test_the_settings_agree_with_the_games_own_rebuild_at_start(self):
+        """theGameState::Load() loads each slot's save at every start: one that loads gives the slot its player name
+        and a set flag, one that does not clears the flag. After the copy the settings already say that for the
+        copied slot, and the copy changed no other slot's entry."""
+        before = r.parse_settings((self.folder / "Virtual Families 20.ldw").read_bytes())
+        self.copy("Smiths Two")
+        settings = r.parse_settings((self.folder / "Virtual Families 20.ldw").read_bytes())
+        copied = r.read_family_save(self.folder / "Virtual Families 24.ldw")
+        self.assertTrue(settings.slot_in_use[3])
+        self.assertEqual(settings.player_names[3], copied.nickname)
+        for k in (0, 1, 2, 4):
+            self.assertEqual((settings.player_names[k], settings.slot_in_use[k]),
+                             (before.player_names[k], before.slot_in_use[k]))
+        # The only per-slot fields of the 0x90-byte block: the five entries at +0x10 and the five flags at +0x79.
+        per_slot = {rf.MENU_FIRST + rf.MENU_FIELD * k + i for k in range(5) for i in range(rf.MENU_FIELD)}
+        per_slot |= {cs.FLAG_FIRST + k for k in range(5)}
+        base = r.HEADER_SIZE
+        self.assertEqual(per_slot, set(range(base + 0x10, base + 0x10 + 5 * 0x15)) | set(range(base + 0x79, base + 0x7E)))
+
     def test_the_same_name_is_allowed_and_adds_no_rename_record(self):
         self.copy("Lorsieab2")
         logs = self.folder / PATCHER / "Save 4" / "Logs" / "Family History"
@@ -293,19 +313,18 @@ class RefusalTests(Base):
     def assert_nothing_changed(self, before):
         self.assertEqual(self.snapshot(backups=True), before)
 
-    def test_a_used_target_is_refused(self):
+    def test_a_used_target_is_refused_unless_replacing(self):
         before = self.snapshot(backups=True)
         with self.assertRaisesRegex(cs.CopyError, "in use"):
-            self.copy(target=2)                       # a save is there
-        with self.assertRaisesRegex(cs.CopyError, "in use"):
-            self.copy(target=3)                       # no save file, but the settings mark it in use
+            self.copy(target=2)                       # a save is there, and replace was not given
         self.write(5, b"anything at all")
         before = self.snapshot(backups=True)
         with self.assertRaisesRegex(cs.CopyError, "in use"):
             self.copy(target=5)
         self.assert_nothing_changed(before)
-        with self.assertRaisesRegex(cs.CopyError, "other than"):
-            self.copy(target=1)
+        for replace in (False, True):
+            with self.assertRaisesRegex(cs.CopyError, "other than"):
+                cs.copy_slot(self.folder, 1, 1, "The Copies", processes=NoGame(), now=WHEN, replace=replace)
         self.assert_nothing_changed(before)
 
     def test_refused_while_the_game_runs(self):
@@ -385,21 +404,26 @@ class LeftoverTests(Base):
         self.stale_log = self.put(f"{PATCHER}/Save 4/Logs/Family History/Family History 1.txt",
                                   b"Family: Gone (Save 4)\r\n")
 
-    def test_a_deleted_familys_files_are_set_aside_never_overwritten(self):
+    def test_a_deleted_familys_files_go_into_the_replaced_by_copy_folder(self):
+        unreadable = self.put(f"{DATA}/Outfits/Virtual Families 24.ldw.unreadable-1.dat", b"set aside by the DLL")
+        before = self.snapshot()
         result = self.copy()
-        stamp = "(set aside before copy 2026-10-31 12-00-00)"
-        self.assertEqual((self.folder / f"Virtual Families 224 {stamp}.ldw").read_bytes(),
-                         b"a deleted family's previous save")
-        self.assertEqual((self.folder / DATA / "Children" / f"Virtual Families 24.ldw {stamp}.dat").read_bytes(),
-                         b"old kids")
-        self.assertEqual((self.folder / PATCHER / f"Save 4 {stamp}" / "Logs" / "Family History" /
-                          "Family History 1.txt").read_bytes(), b"Family: Gone (Save 4)\r\n")
-        self.assertEqual(len(result.set_aside), 3)
+        aside = self.folder / "Backups" / "Replaced by copy 2026-10-31 12-00-00 - Save 4 - (no name)"
+        self.assertEqual(result.aside_folder, aside)
+        self.assertFalse(result.replaced)
+        for path in (self.stale, self.stale_kids, self.stale_log, unreadable):
+            relative = path.relative_to(self.folder)
+            self.assertEqual((aside / relative).read_bytes(), before[relative], relative)
+        self.assertFalse(unreadable.exists())               # nothing of the old family stays beside the copy
         self.assertNotIn(b"Gone", (self.folder / PATCHER / "Save 4" / "Logs" / "Family History" /
                                    "Family History 1.txt").read_bytes())
-        # Nothing reads a set-aside file as a save or a sidecar.
-        self.assertIsNone(r.classify_save_file(f"Virtual Families 224 {stamp}.ldw"))
-        self.assertIsNone(sb.file_slot(Path(DATA, "Children", f"Virtual Families 24.ldw {stamp}.dat")))
+        # Nothing reads it: no file of it is left in the save folder proper, and it is never a restorable backup.
+        self.assertFalse(any("Replaced by copy" in str(p) for p in self.snapshot()))
+        self.assertEqual([b.path.name for b in sb.list_backups(self.folder)],
+                         ["Backup 2026-10-31 12-00-00 (before copy)"])
+        self.assertNotIn("Backups", [p.relative_to(self.folder).parts[0]
+                                     for p in self.folder.rglob("*") if p.is_file()
+                                     and sb.file_slot(p.relative_to(self.folder)) is not None])
 
     def test_a_failure_puts_the_set_aside_files_back(self):
         before, folders = self.snapshot(), self.folders()
@@ -408,6 +432,103 @@ class LeftoverTests(Base):
             self.copy()
         self.assertEqual(self.snapshot(), before)
         self.assertEqual(self.folders(), folders)
+
+
+class EmptySlotTests(Base):
+    """The owner, 2026-11-01: "the game sees (game name)1-5.ldw as player slots". The fixture's settings mark Save 3
+    in use (a stale entry) but there is no "Virtual Families 23.ldw"."""
+
+    def test_a_slot_with_no_save_is_empty_whatever_the_settings_say(self):
+        settings = r.parse_settings((self.folder / "Virtual Families 20.ldw").read_bytes())
+        self.assertTrue(settings.slot_in_use[2])
+        self.assertTrue(cs.slot_is_empty(self.folder, 3))
+        self.assertIsNone(cs.target_problem(self.folder, 3))
+        self.assertEqual(cs.read_slots(self.folder)[2].label, "Save 3: (empty)")
+        result = self.copy("Third Copy", target=3)
+        self.assertFalse(result.replaced)
+        after = r.parse_settings((self.folder / "Virtual Families 20.ldw").read_bytes())
+        self.assertEqual((after.player_names[2], after.slot_in_use[2]), ("Third Copy", True))
+        self.assertEqual(r.read_family_save(self.folder / "Virtual Families 23.ldw").nickname, "Third Copy")
+
+    def test_a_save_the_settings_call_new_player_is_a_player(self):
+        raw = bytearray((self.folder / "Virtual Families 20.ldw").read_bytes())
+        raw[cs.FLAG_FIRST + 1] = 0                     # Save 2 has a save, but the list says unused
+        (self.folder / "Virtual Families 20.ldw").write_bytes(bytes(raw))
+        info = cs.read_slots(self.folder)[1]
+        self.assertTrue(info.used)
+        self.assertIsNone(info.problem)                # it can be copied from
+        self.assertIsNotNone(cs.target_problem(self.folder, 2))   # and is not offered as empty
+        result = cs.copy_slot(self.folder, 2, 5, "From Two", processes=NoGame(), now=WHEN)
+        self.assertEqual(result.target, 5)
+
+    def test_the_empty_prompt_uses_the_shared_words(self):
+        text = cs.confirmation_text(self.folder, 1, b"Lorsieab2", 4, "The Copies", WHEN)
+        self.assertEqual(text, f"Save 4 is empty. It will get a copy of Lorsieab2 (Save 1), named The Copies. The whole "
+                               f"save folder ({self.folder}) is backed up first. Copy it?")
+
+
+class ReplaceTests(Base):
+    """The owner, 2026-11-01: "able to overwrite existing slots (with a confirmation prompt of course)"."""
+
+    def setUp(self):
+        super().setUp()
+        self.old_previous = self.write(222, fixture("one_generation_slot3.ldw.gz"))
+        self.put(f"{DATA}/Children/Virtual Families 222.ldw.dat", kids_sidecar(self.old_previous.read_bytes()))
+        self.put(f"{DATA}/Children/Virtual Families 22.ldw.unreadable-1.dat", b"set aside by the DLL")
+        self.put(f"{PATCHER}/Save 2/Data/Family Tree/Virtual Families 2 Family Tree - Save 2.tree", b"{}")
+
+    def test_the_replace_prompt_uses_the_shared_words(self):
+        old = rf.shown(rf.save_name(self.other.read_bytes()))
+        text = cs.confirmation_text(self.folder, 1, b"Lorsieab2", 2, "The Copies", WHEN)
+        self.assertEqual(text, f"Save 2 holds the {old} family. It will be replaced by a copy of Lorsieab2 (Save 1), "
+                               f"named The Copies. The whole save folder ({self.folder}) is backed up first, and "
+                               f"{old}'s files are kept in Backups\\Replaced by copy 2026-10-31 12-00-00 - Save 2 - "
+                               f"{old}. Replace it?")
+
+    def test_a_used_slot_is_replaced_and_its_files_kept(self):
+        old = rf.shown(rf.save_name(self.other.read_bytes()))
+        before = self.snapshot()
+        result = self.copy("The Copies", target=2, replace=True)
+        self.assertTrue(result.replaced)
+        aside = self.folder / "Backups" / f"Replaced by copy 2026-10-31 12-00-00 - Save 2 - {old}"
+        self.assertEqual(result.aside_folder, aside)
+        after = self.snapshot()
+        mine = [p for p in before if sb.file_slot(p) == 2 or p.name.startswith("Virtual Families 22.ldw.unreadable")]
+        self.assertGreaterEqual(len(mine), 7)
+        for relative in mine:
+            self.assertEqual((aside / relative).read_bytes(), before[relative], relative)     # kept, never deleted
+        # The backup holds the old family too.
+        backup = result.backup.backup_folder
+        kept = result.backup.unpaused_bytes.get(Path("Virtual Families 22.ldw"),     # (the backup's copy is Paused)
+                                                (backup / "Virtual Families 22.ldw").read_bytes())
+        self.assertEqual(kept, before[Path("Virtual Families 22.ldw")])
+        # The slot is now the copy, with nothing of the old family attached.
+        copy = (self.folder / "Virtual Families 22.ldw").read_bytes()
+        self.assertTrue(cs.same_but_name(before[Path("Virtual Families 21.ldw")], copy, "The Copies"))
+        for kind in ("Children", "Outfits"):
+            side = (self.folder / DATA / kind / "Virtual Families 22.ldw.dat").read_bytes()
+            self.assertEqual(cs.read_sidecar(kind, side), cs.Sidecar(cs.fnv1a64(copy), len(copy)))
+        self.assertFalse((self.folder / DATA / "Children" / "Virtual Families 22.ldw.unreadable-1.dat").exists())
+        logs = self.folder / PATCHER / "Save 2" / "Logs" / "Family History"
+        self.assertEqual(sorted(p.name for p in logs.iterdir()), ["Family History 1.txt", "Family History 2.txt"])
+        self.assertTrue((logs / "Family History 1.txt").read_bytes().startswith(b"Family: Lorsieab2 (Save 2)"))
+        settings = r.parse_settings((self.folder / "Virtual Families 20.ldw").read_bytes())
+        self.assertEqual((settings.player_names[1], settings.slot_in_use[1]), ("The Copies", True))
+        # No other slot changed.
+        for relative, data in before.items():
+            owner = sb.file_slot(relative)
+            if owner in (1, 3, 4, 5):
+                self.assertEqual(after.get(relative), data, relative)
+
+    def test_a_failed_replace_puts_the_old_family_back(self):
+        before, folders = self.snapshot(), self.folders()
+        with mock.patch.object(rf, "_write_atomically", side_effect=OSError("locked")), \
+                self.assertRaisesRegex(cs.CopyError, "put back"):
+            self.copy("The Copies", target=2, replace=True)
+        self.assertEqual(self.snapshot(), before)
+        self.assertEqual(self.folders(), folders)
+        self.assertEqual([p.name for p in (self.folder / "Backups").iterdir()],
+                         ["Backup 2026-10-31 12-00-00 (before copy)"])
 
 
 class SidecarCaseTests(Base):

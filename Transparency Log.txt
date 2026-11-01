@@ -305,8 +305,9 @@ Changelog
   copied save's hash and size, so its DLL uses it for the copy; the log's first
   lines say the new save number, and a Family Renamed record notes the name.
   It asks first (No is the default), refuses while the game runs and never
-  writes a slot in use; a deleted family's files in the empty slot are renamed
-  "(set aside before copy <date>)", never deleted. The save folder is backed up
+  replaces a family only after a warning naming it (a slot with no save is
+  empty, whatever the player list says); the target's own files are moved into
+  "Backups\Replaced by copy <date> - Save <N> - <name>", never deleted. The save folder is backed up
   first as "Backup <date> (before copy)". Every file goes through a temporary
   file and is read back; any failure puts the folder back as it was. No other
   slot is touched. Code: vf2_copy_slot.py. No live test.

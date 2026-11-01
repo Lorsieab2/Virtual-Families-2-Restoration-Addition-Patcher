@@ -128,9 +128,10 @@ actions, as before. **Tools** holds:
   re-keyed to the copied save's FNV-1a hash and size (one for another save is copied unchanged, a damaged one is
   not copied), the log's `Family: <name> (Save <N>)` lines say the new save number and a `Family Renamed` record
   notes the name, and `.tree` files get the new slot and name. It asks first (No is the default; Return and
-  Escape answer No), refuses while the game runs and never writes a slot in use (a save file there, or the
-  settings' in-use flag); a deleted family's leftovers in the empty slot are renamed
-  `(set aside before copy <date>)`, never deleted. It backs up first as `Backup <date> (before copy)`, writes
+  Escape answer No) and refuses while the game runs. A slot with no save file is empty, whatever the settings'
+  player list says (the game rebuilds that list from the saves at every start); a slot that holds another family
+  is replaced only after a warning naming it. The target's own files (a replaced family's, or a deleted family's
+  leftovers) are moved into `Backups\Replaced by copy <date> - Save <N> - <name>`, never deleted. It backs up first as `Backup <date> (before copy)`, writes
   every file through a temporary file, reads everything back and puts the folder back as it was if anything fails.
   No other slot is touched. No live test.- **Rename Family...** changes the name a family slot is shown under. Virtual Families 2 has no family
   surname: the slot is shown under the player name typed when it was started (main menu `Player:`, Change

@@ -17,6 +17,7 @@ import contextlib
 import json
 import subprocess
 import tkinter as tk
+from datetime import datetime
 from pathlib import Path
 from tkinter import messagebox, ttk
 
@@ -705,11 +706,13 @@ class ToolsTabMixin:
         ttk.Label(
             frame,
             text=(
-                "Copies a family into an empty save slot of the same save folder, under a new name, with everything the "
+                "Copies a family into another save slot of the same save folder, under a new name, with everything the "
                 "patcher keeps for it: the game's previous save, Up to 28 Children, the outfit pictures, the Family "
                 "History log and the Family Tree Maker's tree file. The game must be closed. The save folder is backed "
-                "up first, into <save folder>\\Backups\\Backup <date and time> (before copy). A slot in use is never "
-                "written."
+                "up first, into <save folder>\\Backups\\Backup <date and time> (before copy). A slot with no save is "
+                "empty, whatever the game's player list says. A slot that holds a family is replaced only after you "
+                "answer Yes to a warning that names it; its files are moved into <save folder>\\Backups\\Replaced by "
+                "copy <date and time> - Save <N> - <name>, never deleted."
             ),
             wraplength=560, justify="left",
         ).grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, 10))
@@ -718,7 +721,7 @@ class ToolsTabMixin:
         name_var = tk.StringVar()
         counter_var = tk.StringVar()
         problem_var = tk.StringVar()
-        state: dict = {"slots": [], "empty": []}
+        state: dict = {"slots": [], "targets": []}
 
         ttk.Label(frame, text="Save folder:").grid(row=1, column=0, sticky="w")
         folder_box = ttk.Combobox(frame, textvariable=folder_var, values=[folder.name for folder in folders],
@@ -727,7 +730,7 @@ class ToolsTabMixin:
         ttk.Label(frame, text="Family to copy:").grid(row=2, column=0, sticky="nw", pady=(4, 0))
         slot_list = tk.Listbox(frame, height=5, width=60, exportselection=False)
         slot_list.grid(row=2, column=1, columnspan=2, sticky="we", pady=(4, 2))
-        ttk.Label(frame, text="Into empty slot:").grid(row=3, column=0, sticky="w", pady=(8, 0))
+        ttk.Label(frame, text="Into slot:").grid(row=3, column=0, sticky="w", pady=(8, 0))
         target_box = ttk.Combobox(frame, textvariable=target_var, state="readonly", width=30)
         target_box.grid(row=3, column=1, sticky="w", pady=(8, 0))
         ttk.Label(frame, text="New name:").grid(row=4, column=0, sticky="w", pady=(8, 0))
@@ -753,7 +756,7 @@ class ToolsTabMixin:
 
         def chosen_target() -> int | None:
             index = target_box.current()
-            return state["empty"][index] if 0 <= index < len(state["empty"]) else None
+            return state["targets"][index] if 0 <= index < len(state["targets"]) else None
 
         def check(*_args) -> None:
             name = name_var.get()
@@ -768,10 +771,10 @@ class ToolsTabMixin:
                 problem = "Choose a family."
             elif info.problem:
                 problem = info.problem
-            elif not state["empty"]:
-                problem = "This save folder has no empty slot: all five are in use."
             elif chosen_target() is None:
-                problem = "Choose an empty slot."
+                problem = "Choose a slot to copy into."
+            elif chosen_target() == info.slot:
+                problem = "Choose a slot other than the family's own."
             elif name:
                 problem = vf2_rename_family.name_problem(name)
             problem_var.set(problem or "")
@@ -779,7 +782,7 @@ class ToolsTabMixin:
 
         def load_slots(*_args) -> None:
             slot_list.delete(0, "end")
-            state["slots"], state["empty"] = [], []
+            state["slots"], state["targets"] = [], []
             where = folder()
             if where is not None:
                 state["slots"] = vf2_copy_slot.read_slots(where)
@@ -788,11 +791,17 @@ class ToolsTabMixin:
                 first = next((n for n, info in enumerate(state["slots"]) if not info.problem), None)
                 if first is not None:
                     slot_list.selection_set(first)
-                state["empty"] = [info.slot for info in state["slots"]
-                                  if vf2_copy_slot.target_problem(where, info.slot) is None]
-            target_box.configure(values=[f"Save {slot}" for slot in state["empty"]])
-            if state["empty"]:
-                target_box.current(0)
+                # Every slot: an empty one (no save, whatever the player list says) or, after a warning, a family's.
+                state["targets"] = [info.slot for info in state["slots"]
+                                    if vf2_copy_slot.target_problem(where, info.slot, replace=True) is None]
+            labels = [f"Save {info.slot} (empty)" if not info.used else
+                      f"Save {info.slot}: {info.label.split(': ', 1)[-1]} (replace)"
+                      for slot in state["targets"] for info in state["slots"] if info.slot == slot]
+            target_box.configure(values=labels)
+            empty = [k for k, slot in enumerate(state["targets"])
+                     if vf2_copy_slot.slot_is_empty(where, slot)] if where is not None else []
+            if state["targets"]:
+                target_box.current(empty[0] if empty else 0)
             else:
                 target_var.set("")
             check()
@@ -805,13 +814,15 @@ class ToolsTabMixin:
             if info is None or where is None or target is None or problem_var.get():
                 return
             new_name = name_var.get()
+            when = datetime.now()
+            replace = not vf2_copy_slot.slot_is_empty(where, target)
             if not self._confirm_copy(dialog, vf2_copy_slot.confirmation_text(where, info.slot, info.name, target,
-                                                                              new_name)):
+                                                                              new_name, when)):
                 return
             try:
                 result = self._run_with_wait(
                     "Copying the family…\n\nThe save folder is backed up first.",
-                    lambda: vf2_copy_slot.copy_slot(where, info.slot, target, new_name),
+                    lambda: vf2_copy_slot.copy_slot(where, info.slot, target, new_name, now=when, replace=replace),
                 )
             except (vf2_copy_slot.CopyError, vf2_save_backup.BackupError, OSError) as exc:
                 self.status_var.set("Copy Player Slot: nothing was copied.")
@@ -823,9 +834,8 @@ class ToolsTabMixin:
             lines = [f"\"{result.old_name}\" (Save {result.source}) is copied to Save {result.target} as "
                      f"\"{result.new_name}\" ({where.name}).",
                      f"{len(result.files)} file(s) written and read back; the settings file lists the new family."]
-            if result.set_aside:
-                lines.append("Set aside (a deleted family's files in that slot): "
-                             + ", ".join(aside.name for _old, aside in result.set_aside))
+            if result.aside_folder is not None:
+                lines.append(f"The files that were in Save {result.target} are kept in {result.aside_folder}.")
             for path, why in result.skipped:
                 lines.append(f"Not copied: {path.name} ({why}).")
             lines += result.notes
