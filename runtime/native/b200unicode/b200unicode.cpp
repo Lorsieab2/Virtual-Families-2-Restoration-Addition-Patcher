@@ -1096,6 +1096,7 @@ static int __fastcall UniDrawJustified(void *self, void *, const char *text, int
 // text is the stored name itself: GetText never cuts it (UniGetText). Any key that changes the text takes the box off
 // the list (UniHandleKey); SetText puts it back.
 static const unsigned kSetIn = 64;
+static const int kNameGetSize = 0x13;   // GetText(buf, 13h): theVillagerScene, CAdoptionScene, CDatingScene
 static unsigned SetIn[kSetIn];
 
 static bool IsSetIn(unsigned impl) {
@@ -1172,7 +1173,9 @@ static void __fastcall UniGetText(void *ctl, void *, char *dst, int size) {
     static unsigned cps[1300];
     static unsigned char cut[1300];
     unsigned n = ut::Length((const unsigned char *)src);
-    if (n > (unsigned)size - 1 && IsSetIn(impl)) { ++B200Unicode_Status.keptNames; return; }
+    // only the family member name boxes' GetText(buf, 13h): their callers skip an empty text. (The Family Tree note's
+    // GetText(record + 86h, 50h) writes straight into the record: there an empty text would erase the note.)
+    if (size == kNameGetSize && n > (unsigned)size - 1 && IsSetIn(impl)) { ++B200Unicode_Status.keptNames; return; }
     unsigned room = (unsigned)size - 1 < sizeof(cut) ? (unsigned)size - 1 : sizeof(cut);
     unsigned k = ut::Fit((const unsigned char *)src, n, room, cut, cps, 1290);     // cut also holds failed tries
     for (unsigned i = 0; i < k; ++i) dst[i] = (char)cut[i];
