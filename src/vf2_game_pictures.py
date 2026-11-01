@@ -1,89 +1,67 @@
-"""The Picture Maker's "All game pictures": every picture Virtual Families 2 has, drawn as the game draws it.
+"""The Picture Maker's "Every picture" catalogue: every picture in Virtual Families 2's Images folder (and the
+patcher's own), each file whole and cut into every cell the game cuts it into, and the pictures the game
+assembles from several draws (meters and bars, buttons in their states, dialogs, the house, weather and night,
+fonts), each drawn as the game draws it. Read from the chosen game folder at run time; no game art ships with
+the patcher, and nothing is written but the PNGs the player saves.
 
-What there is (src/vf2_game_pictures.json, made by scripts/build_vf2_image_table.py from the B200 desktop objects):
+Where the rules come from (the B200 desktop objects, work/desktop_obj_files, which keep the game's symbols):
 
-* theGraphicsManager's image table, 633 entries: every sprite, sheet, icon, button, panel, background and
-  animation the game draws through it. Each entry is a whole picture, a strip (one row of cells) or a grid
-  (columns x rows cells, one file or several side by side), cut exactly as ldwImageGrid's constructors and
-  GetCellRect cut it: a cell is the total width / columns by the total height / rows (C division), a column or row
-  past the last is the last; a grid over several files finds its file from the cell (the game's own quirks kept:
-  the total width is the last row of files', the total height the sum of each row's last file). Every cell is
-  offered: animation frames, furniture turned each way, button states, the people's sheets.
-* The other files of the Images folder: named in the code (the house map tiles CWorldMap loads by
-  "MapX%dY%d.jpg", the fonts, the splash screen) or named nowhere: unused, said so with the reason.
-* Files the table names that a game folder does not have: listed as missing (the game cannot draw them).
-* Assembled bars: the game's three percent meters drawn whole, at any level (meters below). Only
-  theContinuousVariableMeter is used (the Details screen's five bars and the loading bar); theVariableMeter and
-  theSlicedVariableMeter are never called: unused, drawn by their own code all the same.
-* The patcher's pictures: any file of the chosen game folder that a clean install does not have, or has with
-  other bytes (the patcher's furniture, outfits, ornaments, map images), marked "(patcher)".
+* theGraphicsManager's image table (ImageList, src/vf2_game_pictures.json, made by
+  scripts/build_vf2_image_table.py): 633 entries, 0x30 bytes each. theGraphicsManagerImpl::GetImage /
+  GetImageStrip / GetImageGrid make from an entry an ldwImageGrid of columns x rows cells (rows > 0; one file, or
+  the files <file><x><y><file2> side by side), an ldwImageStrip of one row (rows 0, columns > 0) or a whole
+  ldwImage. ldwImageGrid::GetCellRect gives each cell (`entry_cells`); tests/test_game_pictures.py runs both in
+  Unicorn for every entry.
+* A cell drawn at 100% with no fade is the cell's own pixels (ldwGameWindowImpl::BlitRectWithAlpha; checked in
+  tests/test_picture_maker.py). PNGs are read as the game's libpng reads them; JPEGs by vf2_jpeg, byte for byte
+  as the game's own libjpeg-9.dll decodes them for SDL2_image (tests/test_jpeg_decoder.py).
 
-A cell is drawn at its own size, which is how the game blits it (ldwGameWindowImpl::BlitRectWithAlpha at 100% is
-the cell itself; checked in tests/test_picture_maker.py). PNGs are read byte for byte as the game reads them; a
-JPEG (or GIF) is decoded by Windows (GDI+), not the game's libjpeg, so its pixels are "not checked against the
-game". Nothing is written but the PNGs the player saves; the game folder is only read.
+Each catalogue entry is an `Art`: the layers (`Draw`, `Fill`) in the order the game draws them, whether the game
+ever shows it (`why` names the code that does, or says why nothing does), and how it was checked against the game
+(`checked`; empty when it was not, which the window shows as "Not checked against the game"). The assembled
+pictures come from the vf2_art_*.py modules (`_sources`).
 """
 from __future__ import annotations
 
 import hashlib
 import json
 import os
-import re
+import struct
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Callable
 
 import vf2_picture_image as pi
 
 DATA_FILE = Path(__file__).resolve().parent / "vf2_game_pictures.json"
-NOT_CHECKED = "not checked against the game"
-UNUSED, PATCHER, MISSING = "unused", "patcher", "missing"
-NOT_PICTURES = (".db", ".jbf", ".css", ".txt", ".ini", ".dat", ".fmap", ".ogg", ".wav", ".swf")
+TREE_PICTURES = Path(__file__).resolve().parent / "family_tree_backgrounds"
+IMAGES_DIR = "Images"
+CHECK = "Not checked against the game"
+PATCHER_CATEGORY = "Patcher's own pictures"
 
-CATEGORIES = (
-    "People", "Pets", "Furniture", "Upgrades", "Rooms and the house", "Weather and nature",
-    "Effects and animations", "Work and food props", "Store and tray icons", "Collectibles and collections",
-    "Goals and trophies", "Buttons and controls", "Dialogs and panels", "Meters and bars", "Meters assembled",
-    "Screens and backgrounds", "Fonts", "Cursors", "Other", "The patcher's pictures",
-)
-
-_RULES = (
-    ("People", r"^(female_|male_|bigheads|highrez_bodies|peep_shadow|carrying\.png)"),
-    ("Pets", r"^(pet_|petbowls)"),
-    ("Furniture", r"^furniture/"),
-    ("Upgrades", r"^(upgrades/|old_computer)"),
-    ("Collectibles and collections", r"^(collection|fossil|pterodactyl|collectables_small)"),
-    ("Goals and trophies", r"^(achievement|awards_)"),
-    ("Meters and bars", r"^(vd_progressbar|vd_line|vd_fade|loadscenebarbg|loadcolor|statusbarslice)"),
-    ("Store and tray icons", r"(_icon\.png$|^inventoryitems|^home_grid|^menustore|^meunstore|^coins|^dollar|"
-                             r"^onsale|^locked|^scrollingstoreitembox|^getmorecoins|^storagecube|^decormodetab|"
-                             r"^upgrademebutton|^brokerupgrade)"),
-    ("Buttons and controls", r"(^btn_|button|^menubtn|^fbtn_|^vd_btn|^radio|^checkbox|^checkmark|^arrow|^empty1|"
-                             r"^touchtoselect|^inisible|^invisible|^slider|^wideslider|^verticalslider|"
-                             r"^focus_circle)"),
-    ("Dialogs and panels", r"(dlg|^maintooltray|^main_no-comm|^money_console|^familytree_|^statusbar)"),
-    ("Rooms and the house", r"^(damage_|foundation_|bathroom2foundation|closed_door|closes_door|curtain|mapx|"
-                            r"house\.jpg|hill\.jpg|puddles|kitchengarbage|fridgestates|hole|gopher|rosepetals|"
-                            r"sockpile|map_fog)"),
-    ("Weather and nature", r"^(snowflake|hailstone|leaf\d|raindrops|sunbeam|bird|dragonflies|butterfly|"
-                           r"hummingbird|rainbow|lightsourcemask|ripple|waves|algae|reeffish|beestrip)"),
-    ("Work and food props", r"^(foodwork|workwork|workdocs|chopgreens|breads|cans|meal|bbqmeat|antpuzzle|"
-                            r"cinnamonbowl|greenlight|redlight|airpurifier)"),
-    ("Effects and animations", r"(strip|_anim|anim|sparkle|^dust|^bubble|^foam|^spray|^footprints|^smoke|^roach|"
-                               r"^candle|^petal|malfunction|^ball_shadow)"),
-    ("Fonts", r"^segoe"),
-    ("Cursors", r"^hand"),
-    ("Screens and backgrounds", r"(\.jpg$|^main_bg|logo|^vd_bg|^splash|^vf2_boxshot)"),
+# The top-level categories, in the order the window lists them ("/" makes a sub-category); the same as the
+# Virtual Families 1 patcher's Every picture tab.
+CATEGORY_ORDER = (
+    "Meters and bars",
+    "Buttons and controls",
+    "Dialogs and panels",
+    "Icons and cursors",
+    "Fonts",
+    "House and yard",
+    "Furniture and objects",
+    "Food and cooking",
+    "Weather, day and night",
+    "Effects and animations",
+    "Animals and insects",
+    "People",
+    "Store",
+    "Collectibles and collections",
+    "Screens and backgrounds",
+    PATCHER_CATEGORY,
 )
 
 
-def category_of(file: str) -> str:
-    name = file.replace("\\", "/").lower()
-    for category, rule in _RULES:
-        if re.search(rule, name):
-            return category
-    return "Other"
-
-
+# ------------------------------------------------------------------ the image table
 _DATA: dict | None = None
 
 
@@ -122,99 +100,55 @@ class Entry:
             return self.cols * self.rows
         return self.cols or 1
 
+    @property
+    def name(self) -> str:
+        return f"{self.file}{self.file2 or ''}" if self.across * self.down > 1 else self.file
+
+
+_TABLE: list | None = None
+_BY_ID: dict | None = None
+
 
 def table() -> list[Entry]:
-    return [Entry(e["id"], e["file"], e["file2"], e["cols"], e["rows"], e["across"], e["down"])
-            for e in data()["table"] if e["file"] and e["file"] != "No Graphic"]
+    """The image table's entries in its order ("No Graphic" left out); made once."""
+    global _TABLE
+    if _TABLE is None:
+        _TABLE = [Entry(e["id"], e["file"], e["file2"], e["cols"], e["rows"], e["across"], e["down"])
+                  for e in data()["table"] if e["file"] and e["file"] != "No Graphic"]
+    return list(_TABLE)
 
 
-# ------------------------------------------------------------------ reading pictures
+def entry_by_id(image: int) -> Entry:
+    """The entry GetImageEntry finds for an id: the first in the table's order."""
+    global _BY_ID
+    if _BY_ID is None:
+        _BY_ID = {}
+        for entry in table():
+            _BY_ID.setdefault(entry.id, entry)
+    return _BY_ID[image]
 
 
-def load_picture(path: Path) -> pi.Image:
-    """A PNG as the game reads it (its bytes); anything else (JPEG, GIF) through Windows' GDI+."""
-    path = Path(path)
-    if path.suffix.lower() == ".png":
-        return pi.load_png(path)
-    image = pi._gdiplus_decode(path)
-    if image is None:
-        raise pi.PictureError(f"{path.name} can be read only on Windows (GDI+).")
-    return image
-
-
-class Folder:
-    """A game folder's Images, each file read once."""
-
-    def __init__(self, game_folder) -> None:
-        self.folder = Path(game_folder) if game_folder else None
-        self._pictures: dict = {}
-        self._sizes: dict = {}
-        self._index: dict | None = None
-
-    @property
-    def images(self) -> Path | None:
-        return self.folder / "Images" if self.folder is not None else None
-
-    def index(self) -> dict:
-        """Every file under Images: lower-case relative path -> real relative path (Windows does not care about
-        case; the table and the folder sometimes differ)."""
-        if self._index is None:
-            self._index = {}
-            if self.images is not None and self.images.is_dir():
-                for root, _dirs, files in os.walk(self.images):
-                    for name in files:
-                        rel = os.path.relpath(os.path.join(root, name), self.images).replace(os.sep, "/")
-                        self._index[rel.lower()] = rel
-        return self._index
-
-    def has(self, rel: str) -> bool:
-        return rel.replace("\\", "/").lower() in self.index()
-
-    def path(self, rel: str) -> Path:
-        real = self.index().get(rel.replace("\\", "/").lower())
-        if real is None:
-            raise pi.PictureError(f"Images/{rel} is not in {self.folder}.")
-        return self.images / real
-
-    def picture(self, rel: str) -> pi.Image:
-        key = rel.replace("\\", "/").lower()
-        if key not in self._pictures:
-            self._pictures[key] = load_picture(self.path(rel))
-        return self._pictures[key]
-
-    def size(self, rel: str) -> tuple[int, int]:
-        """A picture's width and height without decoding it (the PNG header; else the picture)."""
-        key = rel.replace("\\", "/").lower()
-        if key not in self._sizes:
-            path = self.path(rel)
-            head = path.read_bytes()[:24]
-            if head[:8] == pi.PNG_MAGIC:
-                self._sizes[key] = (int.from_bytes(head[16:20], "big"), int.from_bytes(head[20:24], "big"))
-            else:
-                p = self.picture(rel)
-                self._sizes[key] = (p.width, p.height)
-        return self._sizes[key]
-
-
-def entry_cells(folder: Folder, entry: Entry) -> list[tuple[str, tuple]]:
+def entry_cells(files: "GameFiles", entry: Entry) -> list[tuple[str, tuple]]:
     """Every cell of an entry in the game's order (cell i is column i % columns, row i // columns): its file and
-    rectangle (left, top, right, bottom), as ldwImageGrid's constructors and GetCellRect make them."""
+    rectangle (left, top, right, bottom), as ldwImageGrid's constructors and GetCellRect make them (the game's own
+    quirks kept: over several files the total width is the last row of files', the total height the sum of each
+    row's last file)."""
     if entry.kind == "image":
-        w, h = folder.size(entry.file)
+        w, h = files.size(entry.file)
         return [(entry.file, (0, 0, w, h))]
     cols, rows = entry.cols, max(1, entry.rows)
     if entry.kind == "grid" and entry.across * entry.down > 1:
-        files = entry.files
+        names = entry.files
         total_w = total_h = 0
         for y in range(entry.down):
             row_w, last_h = 0, 0
             for x in range(entry.across):
-                w, h = folder.size(files[y * entry.across + x])
+                w, h = files.size(names[y * entry.across + x])
                 row_w += w
                 last_h = h
-            total_w = row_w                                  # the constructor keeps the last row's width
-            total_h += last_h                                # and adds each row's last file's height
-        first_w, first_h = folder.size(files[0])
+            total_w = row_w
+            total_h += last_h
+        first_w, first_h = files.size(names[0])
         cw, ch = total_w // cols, total_h // rows
         per_x, per_y = first_w // cw, first_h // ch
         out = []
@@ -226,172 +160,316 @@ def entry_cells(folder: Folder, entry: Entry) -> list[tuple[str, tuple]]:
             c, r = col % per_x, row % per_y
             c = c if c < cols else cols - 1
             r = r if r < rows else rows - 1
-            out.append((files[index], (c * cw, r * ch, c * cw + cw, r * ch + ch)))
+            out.append((names[index], (c * cw, r * ch, c * cw + cw, r * ch + ch)))
         return out
-    w, h = folder.size(entry.file)
+    w, h = files.size(entry.file)
     cw, ch = w // cols, h // rows
     return [(entry.file, ((i % cols) * cw, (i // cols) * ch, (i % cols) * cw + cw, (i // cols) * ch + ch))
             for i in range(cols * rows)]
 
 
-def cut(folder: Folder, rel: str, rect: tuple) -> pi.Image:
-    left, top, right, bottom = rect
-    return folder.picture(rel).sub(left, top, right - left, bottom - top)
+def cell_of(files: "GameFiles", image: int, cell: int = 0) -> tuple[str, tuple]:
+    """(file, rectangle) of one cell of an image id (cell 0 of a whole picture is the whole file)."""
+    cache = files.__dict__.setdefault("_cells", {})
+    cells = cache.get(image)
+    if cells is None:
+        cells = cache[image] = entry_cells(files, entry_by_id(image))
+    return cells[min(max(cell, 0), len(cells) - 1)]
 
 
-# ------------------------------------------------------------------ the meters, assembled
+# ------------------------------------------------------------------ the pieces of a picture
+@dataclass(frozen=True)
+class Draw:
+    """One draw the game makes: the rectangle `rect` (left, top, right, bottom; (0, 0, -1, -1) is the whole
+    picture, see `resolve`) of the picture `file` at (x, y). `percent` below 100 is the game's scaled blit
+    (vf2_picture_image.game_scaled_cell); `alpha` below 1 fades it (every pixel's alpha times `alpha`, as
+    BlitRectWithAlpha's opacity); `tint` (r, g, b, 0-255) a coloured copy (a font's colour); `make(files)` instead
+    gives the pixels a module computes (a night fill, a haze). `file` names a picture in the game's Images folder,
+    "root:<name>" a file beside the exe, or "patcher:<path>" one of the patcher's own."""
+    file: str
+    rect: tuple = (0, 0, -1, -1)
+    x: int = 0
+    y: int = 0
+    percent: int = 100
+    alpha: float = 1.0
+    tint: tuple | None = None
+    make: Callable | None = field(default=None, compare=False)
 
 
 @dataclass(frozen=True)
-class Draw:
-    """One call a meter makes: the whole picture `image` (a table id) at (x, y), a clipping rectangle, or a
-    filled rectangle in a colour (r, g, b, a: 0-1)."""
-    kind: str                       # "draw", "clip", "unclip", "fill"
-    image: int = 0
-    x: int = 0
-    y: int = 0
-    rect: tuple = ()
-    colour: tuple = ()
+class Fill:
+    """A solid rectangle the game fills (x, y, width, height) with an RGBA colour (0-255 each)."""
+    x: int
+    y: int
+    w: int
+    h: int
+    rgba: tuple
 
 
-# theContinuousVariableMeter::DrawPercentMeter(colour, level): the bars the game uses.
-CONTINUOUS = {8: (617, 323), 9: (617, 188), 10: (617, 272), 11: (617, 374), 12: (617, 427), 13: (375, 500)}
-CONTINUOUS_USE = {8: "Details screen bar 1", 9: "Details screen bar 2 (red; its level counts to 3,000)",
-                  10: "Details screen bar 3", 11: "Details screen bar 4", 12: "Details screen bar 5",
-                  13: "the loading screen's bar"}
-SLICED_Y = {3: 223, 4: 265, 5: 308, 6: 351, 7: 392, 8: 272, 9: 165, 10: 232, 11: 312, 12: 351}
-VARIABLE_FILL = {0: (0.9, 0.5, 0.5, 0.9), 1: (0.5, 0.9, 0.5, 0.9), 2: (0.5, 0.5, 0.9, 0.9)}
+@dataclass(frozen=True)
+class Art:
+    """One picture in the catalogue. `layers` are Draw / Fill in the order the game draws them.
+    `used`: the game shows it (`why` names the code that does), or not (`why` says why it never does).
+    `checked`: how it was checked against the game; empty when it was not."""
+    key: str
+    category: str
+    label: str
+    layers: tuple
+    used: bool
+    why: str
+    checked: str = ""
+    patcher: bool = False
+
+    @property
+    def title(self) -> str:
+        tags = []
+        if not self.used:
+            tags.append("(unused)")
+        if self.patcher:
+            tags.append("(patcher)")
+        return " ".join([self.label, *tags])
+
+    def note(self) -> str:
+        words = [self.why, self.checked if self.checked else f"{CHECK}."]
+        return " ".join(w for w in words if w)
 
 
-def _f32(v: float) -> float:
-    return pi.f32(v)
+def whole(name: str, x: int = 0, y: int = 0) -> Draw:
+    """A draw of a whole picture (its size is filled in when it is drawn: see `resolve`)."""
+    return Draw(name, (0, 0, -1, -1), x, y)
 
 
-def continuous_meter(colour: int, level: int, offset: int = 0) -> list[Draw]:
-    """theContinuousVariableMeter::DrawPercentMeter: colour 9 counts to 3,000 (level * 30 / 900, as the game's
-    division), the others to 100; the bar (VD_progressbar, red for colour 9) clipped to level * 290 / 100 pixels,
-    its end line (VD_line) 3 pixels before the clip's edge, the fade at the far end, then the clipping reset."""
-    if colour not in CONTINUOUS:
-        return []
-    if colour == 9:
-        level = min(level, 3000) // 30
+def cell(files: "GameFiles", image: int, index: int = 0, x: int = 0, y: int = 0, **kw) -> Draw:
+    """A draw of one cell of an image-table picture, as theGraphicsManager::DrawCell / ldwGameWindow::Draw
+    (ldwImageGrid, cell) draw it."""
+    name, rect = cell_of(files, image, index)
+    return Draw(name, rect, x, y, **kw)
+
+
+# ------------------------------------------------------------------ reading the pictures
+def png_size(data_: bytes) -> tuple[int, int]:
+    if not data_.startswith(pi.PNG_MAGIC):
+        raise pi.PictureError("not a PNG file")
+    return struct.unpack(">II", data_[16:24])
+
+
+def jpeg_size(data_: bytes) -> tuple[int, int]:
+    at = 2
+    while at + 4 <= len(data_):
+        if data_[at] != 0xFF:
+            at += 1
+            continue
+        marker = data_[at + 1]
+        if marker in (0xD8, 0x01) or 0xD0 <= marker <= 0xD7 or marker == 0xFF:
+            at += 1 if marker == 0xFF else 2
+            continue
+        length = struct.unpack(">H", data_[at + 2:at + 4])[0]
+        if 0xC0 <= marker <= 0xCF and marker not in (0xC4, 0xC8, 0xCC):
+            h, w = struct.unpack(">HH", data_[at + 5:at + 9])
+            return w, h
+        at += 2 + length
+    raise pi.PictureError("not a JPEG file")
+
+
+def decode(path: Path, data_: bytes | None = None) -> pi.Image:
+    """A picture file's pixels as straight RGBA, as the game's loader (SDL2_image) gives them."""
+    path = Path(path)
+    head = data_[:8] if data_ is not None else path.read_bytes()[:8]
+    if head.startswith(pi.PNG_MAGIC):
+        return pi.load_png(path)
+    raw = data_ if data_ is not None else path.read_bytes()
+    if raw[:2] == b"\xff\xd8":
+        import vf2_jpeg
+        return vf2_jpeg.decode(raw)
+    if raw[:6] in (b"GIF87a", b"GIF89a"):
+        import vf2_small_formats
+        return vf2_small_formats.decode_gif(raw)
+    if raw[:2] == b"BM":
+        import vf2_small_formats
+        return vf2_small_formats.decode_bmp(raw)
+    raise pi.PictureError(f"{path.name} is not a picture the Picture Maker can read")
+
+
+class GameFiles:
+    """The pictures of one game folder, found as Windows finds them (ignoring case), decoded once."""
+
+    def __init__(self, folder) -> None:
+        self.folder = Path(folder) if folder else None
+        if self.folder is not None and self.folder.name.lower() == IMAGES_DIR.lower():
+            self.folder = self.folder.parent
+        self._names: dict[str, Path] | None = None
+        self._cache: dict[str, pi.Image] = {}
+        self._sizes: dict[str, tuple[int, int]] = {}
+
+    @property
+    def images(self) -> Path | None:
+        return self.folder / IMAGES_DIR if self.folder is not None else None
+
+    def problem(self) -> str:
+        if self.folder is None:
+            return "Choose your Virtual Families 2 game folder."
+        if not (self.folder / IMAGES_DIR).is_dir():
+            return f"{self.folder} has no Images folder: choose the folder Virtual Families 2 is installed in."
+        return ""
+
+    def names(self) -> dict[str, Path]:
+        """lower-case path relative to Images ('furniture/hammockstd.png') -> the file."""
+        if self._names is None:
+            found: dict[str, Path] = {}
+            root = self.images
+            if root is not None and root.is_dir():
+                for dirpath, _dirs, names in os.walk(root):
+                    for f in names:
+                        path = Path(dirpath) / f
+                        found[path.relative_to(root).as_posix().lower()] = path
+            self._names = found
+        return self._names
+
+    def relative(self, lower: str) -> str:
+        """The real spelling of a file under Images."""
+        path = self.names()[lower]
+        return path.relative_to(self.images).as_posix()
+
+    def path(self, name: str) -> Path | None:
+        if name.startswith("patcher:"):
+            path = Path(name[len("patcher:"):])
+            return path if path.is_file() else None
+        if name.startswith("root:"):
+            path = self.folder / name[len("root:"):] if self.folder else None
+            return path if path is not None and path.is_file() else None
+        return self.names().get(name.replace("\\", "/").lower())
+
+    def has(self, name: str) -> bool:
+        return self.path(name) is not None
+
+    def data(self, name: str) -> bytes:
+        path = self.path(name)
+        if path is None:
+            raise pi.PictureError(f"The game folder has no {name}.")
+        return path.read_bytes()
+
+    def size(self, name: str) -> tuple[int, int]:
+        key = name.lower()
+        if key not in self._sizes:
+            if key in self._cache:
+                image = self._cache[key]
+                self._sizes[key] = (image.width, image.height)
+            else:
+                path = self.path(name)
+                if path is None:
+                    raise pi.PictureError(f"The game folder has no {name}.")
+                with open(path, "rb") as fh:
+                    head = fh.read(64 * 1024)
+                if head.startswith(pi.PNG_MAGIC):
+                    self._sizes[key] = png_size(head)
+                elif head[:2] == b"\xff\xd8":
+                    try:
+                        self._sizes[key] = jpeg_size(head)
+                    except pi.PictureError:
+                        self._sizes[key] = jpeg_size(path.read_bytes())
+                else:
+                    image = self.image(name)
+                    self._sizes[key] = (image.width, image.height)
+        return self._sizes[key]
+
+    def image(self, name: str) -> pi.Image:
+        key = name.lower()
+        if key not in self._cache:
+            path = self.path(name)
+            if path is None:
+                raise pi.PictureError(f"The game folder has no {name}.")
+            self._cache[key] = decode(path)
+        return self._cache[key]
+
+    def forget(self) -> None:
+        """Let go of the decoded pictures (Save all frees them as it goes)."""
+        self._cache.clear()
+
+
+# ------------------------------------------------------------------ drawing
+def faded(image: pi.Image, alpha: float) -> pi.Image:
+    """Every pixel's alpha times `alpha` (a float, as the game's fade): (int)(a * alpha)."""
+    if alpha >= 1.0:
+        return image
+    out = image.copy()
+    k = pi.f32(alpha)
+    d = out.data
+    for i in range(3, len(d), 4):
+        if d[i]:
+            d[i] = int(pi.f32(d[i] * k))
+    return out
+
+
+def tinted(image: pi.Image, rgb: tuple) -> pi.Image:
+    """A coloured copy: every pixel's colour times the tint (c * t / 255), its alpha kept."""
+    out = image.copy()
+    d = out.data
+    r, g, b = rgb[:3]
+    for i in range(0, len(d), 4):
+        d[i] = d[i] * r // 255
+        d[i + 1] = d[i + 1] * g // 255
+        d[i + 2] = d[i + 2] * b // 255
+    return out
+
+
+def layer_image(files: GameFiles, layer) -> pi.Image:
+    if isinstance(layer, Fill):
+        image = pi.Image(max(0, layer.w), max(0, layer.h))
+        image.data[:] = bytes(layer.rgba) * (image.width * image.height)
+        return image
+    if layer.make is not None:
+        return layer.make(files)
+    sheet = files.image(layer.file)
+    left, top, right, bottom = layer.rect
+    if layer.percent < 100:
+        image = pi.game_scaled_cell(sheet, (left, top, right, bottom), layer.percent)
     else:
-        level = min(level, 100)
-    level = max(0, level)
-    width = level * 0x122 // 100
-    x, y = CONTINUOUS[colour]
-    x += offset
-    bar, line = (269, 273) if colour == 9 else (268, 272)
-    return [Draw("clip", rect=(x, y, x + width, y + 33)), Draw("draw", bar, x, y),
-            Draw("draw", line, x + width - 3, y), Draw("draw", 271, x + 271, y), Draw("unclip")]
+        image = sheet.sub(left, top, right - left, bottom - top)
+    if layer.tint is not None and tuple(layer.tint[:3]) != (255, 255, 255):
+        image = tinted(image, layer.tint)
+    return faded(image, layer.alpha)
 
 
-def sliced_meter(colour: int, level: int) -> list[Draw]:
-    """theSlicedVariableMeter::DrawPercentMeter (never called by the game): colour 9 counts to 1,000, the others
-    to 100; StatusBarSliceB every 2 pixels from x 473, level * 290 / 200 of them."""
-    level = min(level, 1000) // 10 if colour == 9 else min(level, 100)
-    level = max(0, level)
-    if colour not in SLICED_Y:
-        return []
-    return [Draw("draw", 361, 0x1D9 + 2 * k, SLICED_Y[colour]) for k in range(level * 0x122 // 200)]
-
-
-def variable_meter(colour: int, x: int, y: int, level: int) -> list[Draw]:
-    """theVariableMeter::DrawPercentMeter (never called by the game): level 1-100; colours 0-2 a filled rectangle
-    (x + 7, y + 5) to (x + 7 + level * 151 / 100, y + 28); colour 3 LoadColor every 8 pixels, level * 2 / 5 of
-    them."""
-    level = max(1, min(level, 100))
-    if colour in VARIABLE_FILL:
-        return [Draw("fill", rect=(x + 7, y + 5, x + 7 + level * 151 // 100, y + 28), colour=VARIABLE_FILL[colour])]
-    if colour == 3:
-        return [Draw("draw", 363, x + 8 * k, y) for k in range(level * 320 // 800)]
-    return []
-
-
-def clip_draw(x: int, y: int, w: int, h: int, clip: tuple | None):
-    """ldwGameWindowImpl::ClipRect: (None when nothing is drawn) the part of a w x h picture at (x, y) inside the
-    clipping rectangle [left, right) x [top, bottom), as (source left, source top, x, y, width, height)."""
-    if clip is None:
-        return 0, 0, x, y, w, h
-    left, top, right, bottom = clip
-    if x >= right or y >= bottom or x + w < left or y + h < top:
-        return None
-    sx = sy = 0
-    if x < left:
-        sx, w, x = left - x, w - (left - x), left
-    if x + w > right:
-        w = right - x
-    if y < top:
-        sy, h, y = top - y, h - (top - y), top
-    if y + h > bottom:
-        h = bottom - y
-    return sx, sy, x, y, w, h
-
-
-def render_draws(folder: Folder, draws: list[Draw]) -> pi.Image:
-    """The meter's calls drawn in order on a clear canvas just big enough (the screen around it left out)."""
-    by_id = {e.id: e for e in table()}
-    pieces, clip = [], None
-    for d in draws:
-        if d.kind == "clip":
-            clip = d.rect
-        elif d.kind == "unclip":
-            clip = None
-        elif d.kind == "draw":
-            picture = folder.picture(by_id[d.image].file)
-            part = clip_draw(d.x, d.y, picture.width, picture.height, clip)
-            if part is not None and part[4] > 0 and part[5] > 0:
-                sx, sy, x, y, w, h = part
-                pieces.append((picture.sub(sx, sy, w, h), x, y))
-        elif d.kind == "fill":
-            left, top, right, bottom = d.rect
-            if clip is not None:
-                left, top = max(left, clip[0]), max(top, clip[1])
-                right, bottom = min(right, clip[2]), min(bottom, clip[3])
-            if right > left and bottom > top:
-                r, g, b = (int(_f32(c * 255.0)) for c in d.colour[:3])
-                alpha = int(_f32(_f32(d.colour[3] * 255.0) + 0.5))
-                block = pi.Image(right - left, bottom - top)
-                block.data[:] = bytes((r, g, b, alpha)) * ((right - left) * (bottom - top))
-                pieces.append((block, left, top))
+def render(files: GameFiles, art: Art) -> pi.Image:
+    """The picture as the game draws it, on a clear canvas as big as all its draws."""
+    pieces = []
+    for layer in art.layers:
+        image = layer_image(files, layer)
+        pieces.append((image, layer.x, layer.y))
+    pieces = [p for p in pieces if p[0].width and p[0].height]
     if not pieces:
         return pi.Image(1, 1)
-    left = min(x for _p, x, _y in pieces)
-    top = min(y for _p, _x, y in pieces)
-    right = max(x + p.width for p, x, _y in pieces)
-    bottom = max(y + p.height for p, _x, y in pieces)
+    left = min(x for _i, x, _y in pieces)
+    top = min(y for _i, _x, y in pieces)
+    right = max(x + i.width for i, x, _y in pieces)
+    bottom = max(y + i.height for i, _x, y in pieces)
     canvas = pi.Image(right - left, bottom - top)
-    for piece, x, y in pieces:
-        canvas.draw(piece, x - left, y - top)
+    for image, x, y in pieces:
+        canvas.draw(image, x - left, y - top)
     return canvas
 
 
-# ------------------------------------------------------------------ the catalogue
+def resolve(files: GameFiles, art: Art) -> Art:
+    """`art` with every whole-picture draw given the picture's size."""
+    layers, changed = [], False
+    for layer in art.layers:
+        if isinstance(layer, Draw) and layer.make is None and tuple(layer.rect) == (0, 0, -1, -1):
+            w, h = files.size(layer.file)
+            layer = Draw(layer.file, (0, 0, w, h), layer.x, layer.y, layer.percent, layer.alpha, layer.tint)
+            changed = True
+        layers.append(layer)
+    if not changed:
+        return art
+    return Art(art.key, art.category, art.label, tuple(layers), art.used, art.why, art.checked, art.patcher)
 
 
-@dataclass
-class Picture:
-    """One thing the player can pick: a table entry, a file, or an assembled meter. `frames` names each cell or
-    level; `status` is "" (the game's, in use), UNUSED, PATCHER or MISSING; `notes` say what is not checked."""
-    key: str
-    name: str
-    category: str
-    kind: str
-    frames: list = field(default_factory=list)
-    entry: Entry | None = None
-    file: str | None = None
-    meter: tuple | None = None                  # ("continuous" | "sliced" | "variable", colour)
-    status: str = ""
-    reason: str = ""
-    notes: list = field(default_factory=list)
-
-    @property
-    def label(self) -> str:
-        return self.name + (f" ({self.status})" if self.status else "")
+def draw(files: GameFiles, art: Art) -> pi.Image:
+    return render(files, resolve(files, art))
 
 
+# ------------------------------------------------------------------ the patcher's pictures
 def _is_picture(rel: str) -> bool:
-    return not rel.lower().endswith(NOT_PICTURES)
+    return rel.lower().endswith((".png", ".jpg", ".jpeg", ".gif", ".bmp"))
 
 
 def _sha256(path: Path) -> str:
@@ -402,174 +480,86 @@ def _sha256(path: Path) -> str:
     return h.hexdigest()
 
 
-def patcher_files(folder: Folder) -> dict:
-    """Images files that are not the clean game's: new ones and changed ones (relative path -> "new"/"changed").
-    A file the clean game has with the same size is hashed; a different size is a change."""
+def patcher_files(files: GameFiles) -> dict:
+    """Images files that are not the clean game's: new ones and changed ones (real relative path -> "new" /
+    "changed"). A file the clean game has with the same size is hashed; a different size is a change."""
     stock = {k.lower(): v for k, v in data()["stock"].items()}
     out = {}
-    for low, rel in folder.index().items():
+    for low, path in files.names().items():
+        rel = files.relative(low)
         if not _is_picture(rel):
             continue
         known = stock.get(low)
         if known is None:
             out[rel] = "new"
-            continue
-        path = folder.images / rel
-        if path.stat().st_size != known[0] or _sha256(path) != known[1]:
+        elif path.stat().st_size != known[0] or _sha256(path) != known[1]:
             out[rel] = "changed"
     return out
 
 
-def _frame_names(entry: Entry) -> list[str]:
-    if entry.kind == "image":
-        return ["The whole picture"]
-    if entry.kind == "strip":
-        return [f"Cell {k + 1} of {entry.cols}" for k in range(entry.cols)]
-    return [f"Cell {k + 1}: column {k % entry.cols + 1}, row {k // entry.cols + 1}" for k in range(entry.cells)]
+# ------------------------------------------------------------------ the catalogue
+@dataclass
+class Catalogue:
+    arts: list = field(default_factory=list)
+    problems: list = field(default_factory=list)       # parts that could not be listed, in words
+
+    def categories(self) -> list[str]:
+        seen: list[str] = []
+        for art in self.arts:
+            if art.category not in seen:
+                seen.append(art.category)
+        return seen
+
+    def find(self, text: str) -> list[Art]:
+        words = [w for w in str(text or "").casefold().split() if w]
+        if not words:
+            return list(self.arts)
+        out = []
+        for art in self.arts:
+            hay = " ".join((art.category, art.title, art.key, art.why)).casefold()
+            if all(w in hay for w in words):
+                out.append(art)
+        return out
+
+    def by_key(self, key: str) -> Art | None:
+        for art in self.arts:
+            if art.key == key:
+                return art
+        return None
 
 
-def _jpeg_note(files) -> list[str]:
-    if any(not f.lower().endswith(".png") for f in files):
-        return [f"A JPEG or GIF is decoded by Windows, not the game's own decoder: its pixels are {NOT_CHECKED}."]
-    return []
+SOURCE_MODULES = ("vf2_art_sheets", "vf2_art_meters", "vf2_art_ui", "vf2_art_house", "vf2_art_misc", "vf2_art_screens",
+                  "vf2_art_fonts")
 
 
-METER_LEVELS = list(range(0, 101, 5))
-
-
-def catalogue(game_folder) -> list[Picture]:
-    """Everything the game folder's Images has and the game draws, in category order (name order within)."""
-    folder = game_folder if isinstance(game_folder, Folder) else Folder(game_folder)
-    changed = patcher_files(folder) if folder.images is not None and folder.images.is_dir() else {}
-    out: list[Picture] = []
-    seen_files: set = set()
-    seen_keys: set = set()
-    for entry in table():
-        files = entry.files
-        key = f"image:{entry.id}:{entry.file}"
-        twice = key in seen_keys
-        seen_keys.add(key)
-        seen_files |= {f.lower() for f in files}
-        missing = [f for f in files if not folder.has(f)]
-        kind = {"grid": f"grid of {entry.cols} x {entry.rows}", "strip": f"strip of {entry.cols}",
-                "image": "whole picture"}[entry.kind]
-        name = f"{entry.file}{entry.file2 or ''} (image {entry.id}, {kind})"
-        if twice:
-            key, name = key + ":again", name + ", listed again in the table"
-        pic = Picture(key, name, category_of(entry.file), "table", _frame_names(entry), entry=entry,
-                      notes=_jpeg_note(files))
-        if missing:
-            pic.status, pic.reason = MISSING, (f"The game's image table names {', '.join(missing)}, which this game "
-                                               "folder does not have: the game cannot draw it.")
-            pic.frames = []
-        elif any(f in changed for f in (folder.index().get(x.lower(), x) for x in files)):
-            pic.status = PATCHER
-            pic.reason = "The patcher's picture: this game folder's file is not the original game's."
-        out.append(pic)
-    in_code, unused = data()["named_in_code"], {u.lower() for u in data()["unused"]}
-    for low, rel in sorted(folder.index().items()):
-        if low in seen_files or not _is_picture(rel):
+def _sources():
+    """The catalogue's parts, in the order they are listed (each a module with `arts(files) -> list[Art]`)."""
+    out = []
+    for name in SOURCE_MODULES:
+        try:
+            out.append(__import__(name))
+        except ImportError:
             continue
-        pic = Picture(f"file:{rel}", rel, category_of(rel), "file", ["The whole picture"], file=rel,
-                      notes=_jpeg_note([rel]))
-        known = next((v for k, v in in_code.items() if k.lower() == low), None)
-        if rel in changed:
-            pic.status = PATCHER
-            pic.reason = ("The patcher's picture: not in the original game." if changed[rel] == "new" else
-                          "The patcher's picture: this game folder's file is not the original game's.")
-            if changed[rel] == "new":
-                pic.category = "The patcher's pictures"
-        elif known is not None:
-            pic.reason = f"Loaded by the game's code by name ({', '.join(known)}), not through the image table."
-            pic.notes.append(f"Drawn as the whole file: how its code draws it is {NOT_CHECKED}.")
-        elif low in unused:
-            pic.status = UNUSED
-            pic.reason = ("Unused: nothing in the game's code names this file (not in the image table, not in any "
-                          "string of the code).")
-        else:
-            pic.notes.append(f"Not in the original game's file list: {NOT_CHECKED}.")
-        out.append(pic)
-    for colour in sorted(CONTINUOUS):
-        frames = [f"Level {v}" for v in (range(0, 3001, 150) if colour == 9 else METER_LEVELS)]
-        out.append(Picture(f"meter:continuous:{colour}", f"Bar: {CONTINUOUS_USE[colour]}", "Meters assembled",
-                           "meter", frames, meter=("continuous", colour),
-                           reason="theContinuousVariableMeter, as the game draws it."))
-    for colour in sorted(SLICED_Y):
-        frames = [f"Level {v}" for v in (range(0, 1001, 50) if colour == 9 else METER_LEVELS)]
-        out.append(Picture(f"meter:sliced:{colour}", f"Sliced meter, colour {colour}", "Meters assembled", "meter",
-                           frames, meter=("sliced", colour), status=UNUSED,
-                           reason="Unused: theSlicedVariableMeter is never called by the game; drawn by its own "
-                                  "code all the same."))
-    for colour in (0, 1, 2, 3):
-        pic = Picture(f"meter:variable:{colour}", f"Percent meter, colour {colour}", "Meters assembled", "meter",
-                      [f"Level {v}" for v in range(5, 101, 5)], meter=("variable", colour), status=UNUSED,
-                      reason="Unused: theVariableMeter is never called by the game; drawn by its own code all the "
-                             "same.")
-        if colour in VARIABLE_FILL:
-            pic.notes.append("Its colour is drawn at 90% over a clear background; the game blends it over the "
-                             f"screen ({NOT_CHECKED}).")
-        out.append(pic)
-    order = {c: n for n, c in enumerate(CATEGORIES)}
-    out.sort(key=lambda p: (order.get(p.category, len(order)), p.kind == "meter", p.name.lower()))
     return out
 
 
-def frame_level(picture: Picture, frame: int) -> int:
-    return int(picture.frames[frame].split()[-1].replace(",", ""))
-
-
-def render(folder: Folder, picture: Picture, frame: int = 0) -> pi.Image:
-    """One frame of a picture, as the game draws it."""
-    if picture.status == MISSING:
-        raise pi.PictureError(picture.reason)
-    if picture.kind == "table":
-        rel, rect = entry_cells(folder, picture.entry)[frame]
-        return cut(folder, rel, rect)
-    if picture.kind == "file":
-        return folder.picture(picture.file).copy()
-    which, colour = picture.meter
-    level = frame_level(picture, frame)
-    if which == "continuous":
-        draws = continuous_meter(colour, level)
-    elif which == "sliced":
-        draws = sliced_meter(colour, level)
-    else:
-        draws = variable_meter(colour, 100, 200, level)
-    return render_draws(folder, draws)
-
-
-def search(pictures: list[Picture], text: str) -> list[Picture]:
-    """The pictures whose name, category, status or reason has every word of `text` (any case)."""
-    words = text.lower().split()
-    if not words:
-        return list(pictures)
-    return [p for p in pictures
-            if all(w in f"{p.label} {p.category} {p.reason} {p.key}".lower() for w in words)]
-
-
-def safe(text: str) -> str:
-    return pi.safe_file_name(text.replace("/", " - "))
-
-
-def save_all(folder: Folder, pictures: list[Picture], target: Path, options: dict) -> tuple[int, list]:
-    """Every frame of every picture as a PNG, in a folder per category (and one per picture with several
-    frames). Returns (saved, failed)."""
-    target = Path(target)
-    saved, failed = 0, []
-    for picture in pictures:
-        if picture.status == MISSING:
+def catalogue(files: GameFiles) -> Catalogue:
+    cat = Catalogue()
+    if files.problem():
+        cat.problems.append(files.problem())
+        return cat
+    seen = set()
+    for source in _sources():
+        try:
+            arts = source.arts(files)
+        except Exception as exc:                   # a part that cannot be listed is said, never raised
+            cat.problems.append(f"{getattr(source, 'TITLE', source.__name__)}: {exc}")
             continue
-        where = target / safe(picture.category)
-        many = len(picture.frames) > 1
-        if many:
-            where = where / safe(picture.label)
-        where.mkdir(parents=True, exist_ok=True)
-        for frame, frame_name in enumerate(picture.frames):
-            stem = safe(frame_name if many else picture.label)
-            try:
-                image = render(folder, picture, frame)
-                pi.save_png(image, pi.unique_path(where, stem), **options)
-                saved += 1
-            except (OSError, pi.PictureError, ValueError) as exc:
-                failed.append(f"{picture.label}, {frame_name}: {exc}")
-    return saved, failed
+        for art in arts:
+            if art.key in seen:
+                raise ValueError(f"two pictures have the key {art.key}")
+            seen.add(art.key)
+            cat.arts.append(art)
+    order = {c: k for k, c in enumerate(CATEGORY_ORDER)}
+    cat.arts.sort(key=lambda a: order.get(a.category.split("/")[0], len(order)))
+    return cat
