@@ -13,6 +13,12 @@ whole pictures with a reference composited independently (Pillow) from the game'
 
 With a patched game (the folder of VF2_B200_CORE_EXE), the patcher's expansion outfits are checked pixel for
 pixel against the patcher's own frames.
+
+Carried items: every cell of carrying.png and collectables_small.png is offered and named, with whether the game
+carries it (src/vf2_carried_items.json must be what tests/vf2_carry_scan.py reads from every PlanToCarry call in
+the objects, and the patcher's own carries what its generator plans); DrawVillager with DrawCarriedItems is run
+for every carried value, several frames, body positions, ages and sexes, and must draw exactly what the Picture
+Maker plans; whole pictures with carried items are compared pixel for pixel with an independent composite.
 """
 from __future__ import annotations
 
@@ -157,6 +163,93 @@ def test_layer_order():
     assert [layer.what for layer in pp.event_plan(mum)] == ["shadow", "body", "head"]
     assert [layer.what for layer in pp.tree_plan(mum)] == ["body", "head"]
     assert [layer.what for layer in pp.house_plan(pp.Person(pp.FEMALE, 3, 10, 400, babies=1), 9, 5)][-1:] == ["baby"]
+
+
+# ====================================================================== carried items (always)
+def test_every_carried_picture_is_offered_and_named():
+    items = pp.carried_items()
+    assert len(items) == 13 * 7 + 6 * 16 == 187
+    assert len({it.key for it in items}) == 187 and all(it.name and it.reason for it in items)
+    assert [it.cell for it in items if it.sheet == pp.CARRYING] == list(range(91))
+    assert [it.cell for it in items if it.sheet == pp.COLLECTABLES] == list(range(96))
+    by = {it.key: it for it in items}
+    used = [it for it in items if it.status == pp.USED]
+    assert len(used) == 74 + 77                   # 74 household items, 60 collectibles and 17 pieces of mess
+    # unused in the game: no action carries them (the soda bottle only the patcher's patio drinks)
+    assert [it.key for it in items if it.status == pp.UNUSED] == [
+        "carrying:0", "carrying:33", "carrying:45", "carrying:50", "collectable:91"]
+    assert "patcher's added actions carry it" in by["carrying:33"].reason
+    assert "no action in the game's code carries value 45" in by["carrying:45"].reason
+    # never shown: the baby as a carried value, the empty cells, the cobwebs, the ornaments in the original game
+    never = [it.key for it in items if it.status == pp.NEVER]
+    assert never == (["carrying:3"] + [f"carrying:{c}" for c in range(79, 91)] + ["collectable:50", "collectable:51"]
+                     + [f"collectable:{c}" for c in range(79, 91)] + [f"collectable:{c}" for c in range(92, 96)])
+    assert "skips value 3" in by["carrying:3"].reason
+    assert "Position not from the game" in by["carrying:80"].reason and not by["carrying:80"].from_game
+    assert [it.key for it in items if not it.from_game] == [f"carrying:{c}" for c in range(79, 91)]
+    assert "nothing in the game's code makes a cobweb" in by["collectable:50"].reason
+    assert pm.NOT_CHECKED in by["collectable:85"].reason                 # the patcher's ornament spawning
+    assert by["collectable:0"].name == "Insect 1 (common)" and by["collectable:35"].name == "Raptor fossil 12 (rare)"
+    assert by["collectable:36"].name == "Sock 1" and "picking up a sock" in by["collectable:36"].reason
+    assert by["carrying:11"].name == "Wrench" and "fixing the kitchen sink" in by["carrying:11"].reason
+    assert all(it.label.endswith(f"({it.status})") for it in items if it.status != pp.USED)
+    assert all(name in pp.ACTION_WORDS for v in pp.carried_data()["values"].values() for name in v)
+    fields = {f.key: f for f in pm.custom_fields(patched=False)}
+    assert [c.key for c in fields["carrying"].options] == [None] + [it.key for it in items]
+    assert any("unused in the game" in c.label for c in fields["carrying"].options)
+    assert [c.key for c in fields["position"].options] == [None] + list(range(pp.POSITIONS))
+
+
+def test_carried_items_are_drawn_where_the_game_puts_them():
+    fish, cap = pp.carried_item("carrying:8"), pp.carried_item("collectable:67")
+    adult = pp.Person(pp.FEMALE, 3, 10, 400)
+    plan = pp.house_plan(adult, 46, 5, carried=fish, at=(500, 300))
+    held = plan[-1]
+    assert (held.what, held.image, held.col, held.row, held.percent) == ("carried", 478, 8, 0, 100)
+    assert (held.x, held.y) == (500 + 7 - 10, 300 + 33 - 10)       # the carry place, 10 left and 10 up
+    cap_layer = pp.house_plan(adult, 46, 5, carried=cap, at=(500, 300))[-1]
+    assert (cap_layer.image, cap_layer.col, cap_layer.row, cap_layer.x, cap_layer.y) == (493, 1, 11, 507, 333)
+    for position, drop in ((2, 10), (9, 10), (17, 10), (18, 10), (23, 20), (7, 0), (0, 0), (16, 0)):
+        assert pp.house_plan(adult, 46, 5, carried=fish, position=position, at=(500, 300))[-1].y == 323 + drop
+    child = pp.house_plan(pp.Person(pp.MALE, 3, 10, 100), 46, 5, carried=fish, at=(500, 300))[-1]
+    assert child.percent == 100 and (child.x, child.y) == (500 + 4 - 10, 300 + 21 - 10)   # place scaled, item not
+    mum = pp.Person(pp.FEMALE, 3, 10, 400, babies=2)
+    assert [layer.what for layer in pp.house_plan(mum, 9, 5, carried=fish)] == [
+        "shadow", "body", "head", "baby", "baby", "carried"]
+    assert [layer.what for layer in pp.house_plan(mum, 1, 5, carried=fish)] == [
+        "shadow", "baby", "baby", "carried", "body", "head"]                    # facing NE: behind her
+    assert pp.positions_for_frame(48) == [2, 7] and pp.positions_for_frame(55) == [23]
+    assert pp.default_position(47) == 17 and pp.default_position(33) == 0 and pp.positions_for_frame(10) == [0]
+    plan = pm.plan_for(adult, pm.HOUSE, frame=55, carrying="carrying:8")
+    assert plan[-1].y == pp.house_plan(adult, 55, pm.DEFAULT_TURN, carried=fish, position=23)[-1].y
+    assert pm.plan_for(adult, pm.DETAILS, carrying="carrying:8") == pm.plan_for(adult, pm.DETAILS)
+    assert any("only in the house" in n for n in pm.notes(pm.EVENT, adult, False, carrying="carrying:8"))
+    assert any("Wrench" in n for n in pm.notes(pm.HOUSE, adult, False, carrying="carrying:11"))
+    assert "carrying Fish" in pm.custom_name({"view": pm.HOUSE, "carrying": "carrying:8"})
+
+
+def test_the_patchers_own_carries_are_its_generators():
+    """PATCHER_CARRIES is every PlanToCarry the patcher's generated furniture code makes."""
+    source = (ROOT / "work" / "patch_mobile_furniture_pack.py").read_text(encoding="utf-8")
+    import re
+    enum = {m.group(1): int(m.group(2), 16) for m in re.finditer(r"(eCarrying\w+) = 0x([0-9A-Fa-f]+)", source)}
+    found = set()
+    for m in re.finditer(r"PlanToCarry\(\s*([^;]*?)\);", source):
+        arg = m.group(1).strip()
+        if arg in enum:
+            found.add(enum[arg])
+        elif (r := re.fullmatch(r"static_cast<ECarrying>\(0x([0-9A-Fa-f]+)\)", arg)):
+            found.add(int(r.group(1), 16))
+        elif (r := re.fullmatch(r"static_cast<ECarrying>\(\s*ldwGameState::GetRandom\((\d+)\) \+ 0x([0-9A-Fa-f]+)\)",
+                                arg)):
+            found |= set(range(int(r.group(2), 16), int(r.group(2), 16) + int(r.group(1))))
+        else:
+            assert arg in ("carrying", "ECarrying"), arg                      # the chaise helper's argument
+    for m in re.finditer(r"VF2PlanLinkedChaiseAction\([^;]*?,\s*(eCarrying\w+|static_cast<ECarrying>\(0\))", source):
+        if m.group(1) in enum:
+            found.add(enum[m.group(1)])
+    found |= {enum[name] for name in ("eCarryingBook", "eCarryingStudyBook")}   # the lounger's own roll
+    assert found == set(pp.PATCHER_CARRIES)
 
 
 # ====================================================================== the look: patched and original (always)
@@ -457,6 +550,100 @@ def test_tool_tray_outfit_draws_are_the_games(rig, art):
 
 
 @needs_code
+def test_the_carried_items_file_is_the_games_code():
+    pytest.importorskip("capstone")
+    sys.path.insert(0, str(ROOT / "scripts"))
+    import build_vf2_carried_items as builder
+    import vf2_carry_scan as scan
+    assert builder.render(builder.build(OBJ_DIR)) == pp.CARRIED_FILE.read_text(encoding="utf-8")
+    found = scan.scan(OBJ_DIR)
+    assert found["unresolved"] == []
+    carried = {v for v in found["values"] if v >= 0}
+    assert sorted(set(range(79)) - carried) == [0, 3, 33, 45, 50]          # never in anyone's hands
+    assert {"PickCollectable", "PickupSock", "PullingWeeds", "ThrowAwayWrapper", "CleanDirtSmudge"} <= \
+        set(found["pickup"])
+
+
+@needs_code
+def test_body_positions_are_the_games(rig):
+    assert rig.body_positions() == pp.body_positions()
+    assert len(pp.body_positions()) == pp.POSITIONS
+
+
+@needs_code
+def test_carried_item_draws_are_the_games(rig):
+    """DrawVillager with DrawCarriedItems for every value a carried item can have (0-174): what the game draws must
+    be what the Picture Maker plans, for several frames (both sides), body positions, ages and both sexes. Value 3
+    draws nothing as a carried item (the game's baby comes only from Babies on the way)."""
+    cases = ((46, 16, 400, 0), (1, 0, 100, 1), (48, 2, 900, 2), (48, 7, 600, 0), (55, 23, 30, 3), (20, 0, 279, 1),
+             (47, 17, 1300, 0), (49, 18, 0, 2), (54, 9, 500, 0), (36, 3, 57, 1))
+    checked = 0
+    for item in pp.carried_items():
+        if item.value is None:
+            continue
+        for k, (frame, position, age, babies) in enumerate(cases):
+            sex = (item.cell + k) % 2
+            babies = babies if sex == pp.FEMALE else 0
+            at = (480 + k, 300 + item.cell % 7)
+            game = [_canon_draw(d) for d in rig.house(sex, 7, 20, age, frame, 5, pp.facing(frame) & 0xFFFFFFFF,
+                                                       babies, at, carrying=item.value, position=position)]
+            plan = pp.house_plan(pp.Person(sex, 7, 20, age, babies), frame, 5, at=at,
+                                 carried=None if item.value == 3 else item, position=position)
+            assert [_canon_layer(layer) for layer in plan] == game, (item.key, frame, position, age)
+            checked += 1
+    assert checked == (91 - 12 + 96) * len(cases)
+    # carrying.png cells 79-90 are out of the carry draw's reach: values 79-90 draw the collectibles sheet
+    for value in range(79, 91):
+        draws = rig.house(0, 7, 20, 400, 46, 5, pp.facing(46), 0, (500, 300), carrying=value)
+        assert draws[-1][:2] == ("scene_cell", 493) and draws[-1][4] == value - 79
+
+
+@needs_code
+def test_carried_items_pixel_exact_against_an_independent_composite(rig, art):
+    """Whole house pictures with carried items (both sheets, babies too, every body-position height) against
+    Pillow compositing the game's own sheets where the game's own code draws them."""
+    Image = pytest.importorskip("PIL.Image")
+
+    def cell(image, col, row):
+        name, cols, rows, across, _down = pp.IMAGES[image]
+        if across > 1:
+            name = f"{name}{col // (cols // across)}0.png"
+            col %= cols // across
+            cols //= across
+        sheet = Image.open(GAME_DIR / "Images" / name).convert("RGBA")
+        cw, ch = sheet.width // cols, sheet.height // rows
+        return sheet.crop((col * cw, row * ch, col * cw + cw, row * ch + ch))
+
+    compared = 0
+    for sex, age, frame, position, babies, key in ((1, 400, 46, 16, 2, "carrying:8"), (0, 400, 55, 23, 0, "collectable:67"),
+                                                   (1, 500, 47, 17, 1, "carrying:64"), (0, 400, 1, 0, 0, "collectable:40"),
+                                                   (1, 300, 48, 2, 3, "carrying:33"), (0, 400, 50, 21, 0, "collectable:91")):
+        item = pp.carried_item(key)
+        draws = rig.house(sex, 7, 20, age, frame, 5, pp.facing(frame), babies, (0, 0), carrying=item.value,
+                          position=position)
+        draws = [d for d in draws if d[0] != "scene_image"]                       # the shadow: scaled below
+        pieces = []
+        for d in draws:
+            c = _canon_draw(d)
+            assert c[-1] == 100
+            pieces.append((cell(c[1], c[4], c[5]), c[2], c[3]))
+        left = min(x for _p, x, _y in pieces)
+        top = min(y for _p, _x, y in pieces)
+        right = max(x + p.width for p, x, _y in pieces)
+        bottom = max(y + p.height for p, _x, y in pieces)
+        want = Image.new("RGBA", (right - left, bottom - top), (0, 0, 0, 0))
+        for piece, x, y in pieces:
+            layer = Image.new("RGBA", want.size, (0, 0, 0, 0))
+            layer.paste(piece, (x - left, y - top))
+            want = Image.alpha_composite(want, layer)
+        got = pp.render(art, pp.house_plan(pp.Person(sex, 7, 20, age, babies), frame, 5, shadow=False,
+                                           carried=item, position=position))
+        assert (got.width, got.height) == want.size and bytes(got.data) == want.tobytes(), key
+        compared += 1
+    assert compared == 6
+
+
+@needs_code
 def test_every_scaled_pixel_is_the_games(rig, art):
     """game_scaled_cell against BlitRectWithAlpha itself, blended onto an opaque screen as the game blends."""
     cases = [((577, 9, 10), (50, 57, 64, 70, 76, 83, 89, 99)), ((580, 5, 3), (80, 84, 87, 93, 99)),
@@ -589,7 +776,8 @@ def test_the_tools_tab_opens_one_picture_maker(tk_root, tmp_path, monkeypatch):
     maker = app.picture_maker()
     assert maker.window.title() == "Picture Maker" and "picture_maker" in app.help_keys
     assert app.picture_maker() is maker                                     # one at a time
-    assert [maker.notebook.tab(t, "text") for t in maker.notebook.tabs()] == ["From my save", "Make your own"]
+    assert [maker.notebook.tab(t, "text") for t in maker.notebook.tabs()] == ["From my save", "Make your own",
+                                                                             "All game pictures"]
     assert maker.window.resizable() == (True, True)
     maker.close()
 
@@ -612,6 +800,22 @@ def test_the_window_draws_and_saves(tk_root, tmp_path):
     maker.save_controls["view"].current(1)
     maker._show_saved()
     assert maker.shown["save"] == pm.render_item(maker.art, elsa, pm.DETAILS, big_turn=1)
+    maker.save_controls["view"].current(0)
+    carrying = maker.save_controls["carrying"]
+    assert len(carrying.cget("values")) == 188 and carrying.get() == "Nothing"
+    carrying.current(1 + 8)                                            # the fish
+    maker._show_saved()
+    assert maker.shown["save"] == pm.render_item(maker.art, elsa, pm.HOUSE, carrying="carrying:8")
+    assert maker.shown["save"] != pm.render_item(maker.art, elsa, pm.HOUSE)
+    assert "Carrying: Fish" in maker.save_preview["info"].cget("text")
+    assert "carrying Fish" in maker.picture_name("save")
+    maker.save_controls["position"].current(1 + 23)
+    maker._show_saved()
+    assert maker.shown["save"] == pm.render_item(maker.art, elsa, pm.HOUSE, carrying="carrying:8", position=23)
+    carrying.current(0)
+    maker.save_controls["position"].current(0)
+    maker.save_controls["view"].current(1)
+    maker._show_saved()
     maker.size_var.set("2x")
     out = maker.save_png("save", str(tmp_path / "elsa.png"))
     picture = pi.decode_png(out.read_bytes())
@@ -624,6 +828,12 @@ def test_the_window_draws_and_saves(tk_root, tmp_path):
     maker._show_custom()
     assert maker.shown["custom"] == pm.render_custom(maker.art, maker.custom_spec())
     assert len(maker.custom_boxes["body"]["box"].cget("values")) == 50          # no patcher outfits in this game
+    unused = [c.key for c in pm.carrying_choices()].index("carrying:45")
+    maker.custom_boxes["carrying"]["box"].current(unused)                       # an unused one: offered and drawn
+    maker._show_custom()
+    assert maker.custom_spec()["carrying"] == "carrying:45"
+    assert maker.shown["custom"] == pm.render_custom(maker.art, maker.custom_spec())
+    assert "Unused in the game" in maker.custom_preview["info"].cget("text")
     maker.close()
 
 

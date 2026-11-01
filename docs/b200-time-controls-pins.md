@@ -89,6 +89,24 @@ unicorn (`tests/b200_time_emu.py`, `tests/b200_time_scenarios.py`), at the link 
 The emulator test build leaves out `ISOLATION_AWARE_ENABLED` (Microsoft's activation-context wrappers around the
 user32 calls); the shipped build has it, exactly as REDUX's.
 
+### The Time Warp's price (owner decision 2026-11-01)
+
+The Time Warp button costs what the store's own Time Warp costs; it was free up to B205. Five more pins (38 in
+all): `calc_price_head` (CalcPrice 0x48ACB0: `mov ecx, 0x6852C0; push ebx; call GetPrice 0x46B9F0`, giving the
+inventory manager and GetPrice), `purchase_spend` (HandlePurchaseItem 0x48C0A4: the store pays with
+`push 0; push (float)-price; mov ecx, 0x68658C; call 0x4B85E0`, giving CMoney and the money call),
+`money_spend_wrapper` (0x4B85E0, ret 8), `money_adjust_head` (CMoney::Adjust 0x4818B0: the float is added to the
+double at [this]) and `store_time_warp_case` (HandleUpgrade 0x48C79D, the case the jump table gives item 0x112).
+The generator also proves, on the core, that HandleUpgrade's table sends 0x112 to that case and that the itemInfo
+row of 0x112 is priced 2,000. The DLL holds the item id (0x112) and no price: at the click it calls GetPrice on
+the inventory manager, refuses with a message box (changing nothing) while the CMoney balance is below it, else
+asks, queues the warp and pays through the store's money call (negated price, false). Nothing is paid when nobody
+is queued. Free when the running executable's own `.vf2free` section (1 byte, set to 1 by the patcher's Free and
+Guaranteed Cheats) holds 1. All 32 B200 and 32 B205 matrix executables resolve every pin. Scenarios
+`scenario_warp_costs_the_store_price`, `scenario_warp_refused_when_short` and `scenario_warp_free_with_the_cheat`
+run the real GetPrice, money call and CMoney::Adjust; the free case runs on a copy of the executable with a real
+`.vf2free` section added (`add_section`).
+
 ## 7. Built, and not covered
 
 Built (no live test of any of it):

@@ -958,6 +958,50 @@ R Refreshes the Store and All 36 Flea Market goods (final B204 rebuild; not live
   must carry the new executable code (both bytes, the loader line and the two
   gated hooks) and ship vf2refresh_b200.dll.
 
+R always redraws the Flea Market (after B205; not live tested)
+--------------------------------------------------------------
+
+- Owner rule 2026-11-01: "R needs to work regardless of if everything
+  already shows or not if the patch is on." R always redraws; with All 36 on
+  you won't see a change in the Flea Market list. This replaces the earlier
+  rule above (R did nothing on the Flea Market while .vf2flea was 1).
+- Why it is safe now: since PR #457, while .vf2flea is 1 the GetNumAvailable
+  head hook answers 1 for all 36 goods whatever count is saved, so the
+  game's pick setting each pooled good's count to 1 (and a purchase then to
+  0) sells nothing out. With .vf2flea 0 later the counts are the stock ones
+  for the latest pick.
+- The change (vf2refresh_b200.dll only; no executable change): on category
+  0Fh, whatever the .vf2flea byte, the DLL sets the next-pick time
+  InventoryManager+4A0h to 0, calls CInventoryManager::
+  MaybeUpdateRotatingItems() itself (the .vf2flea hooks answer
+  GetCategoryItemCount before the stock case 0Fh could run it), puts the old
+  value back if the real clock is 0 (no pick could be due), then calls the
+  store's own SetStoreCategory(0Fh) to list the page again. A 4th DLL pin,
+  the whole MaybeUpdateRotatingItems (330 bytes, relocated fields and call
+  displacements wildcarded), gives its address; it was already proved for
+  the tests and now resolves in the DLL too. An executable without the
+  .vf2flea byte (built before the setting and before the always-in-stock
+  rule; it has no .vf2rfsh loader) still gets the game's own key handler on
+  the Flea Market. The Clothing and Hairstyles page is unchanged: R always
+  forces MaybeUpdateOutfits(true), with .vf2flea 0 or 1.
+- Emulated (the real DLL and the real B200 / B205 game code under unicorn,
+  at the link address and relocated): with All 36 on, R runs the game's
+  shuffle over the 36 goods (GetRandom(36) 36 times), the page is listed
+  again with all 36, only the Flea Market's rows, count, clock and the
+  goods' counts change; then every one of the 36 still reads as in stock
+  and draws no sold-out mark, each is bought twice through the executable's
+  own HandlePurchaseItem (one save per purchase, every count ends at 0 and
+  never below, the game's own TakeOne takes each bought good out of the
+  pick's 5 rows so the pick's count ends at 0, and nothing else in the
+  inventory is written but the Rockhound Certificate's owned byte),
+  each is still in stock afterwards, and a second R shuffles the 33 goods
+  that are not bought one-offs; byte 1 then 0 shows R's pick as the stock
+  page's 5; with All 36 off R still picks 5 new goods; the Clothing page R
+  draws the six outfits with the byte 0 and 1. New source mutations (the old
+  All-36 skip, the direct pick call removed, the relist removed, the clock
+  not cleared, the clothing draw skipped with All 36 on) are each caught.
+- Not live tested.
+
 B153 default-off native debugger input milestone
 -------------------------------------------------
 
@@ -3351,6 +3395,115 @@ Picture Maker (Tools tab, B205)
   Tree's frame round a portrait; the house is shown at its normal zoom.
 
 
+Picture Maker: carried items (after B205)
+-----------------------------------------
+
+- What it is: a "Carrying" choice in both tabs (with a "Body position"
+  choice), in the house only, as the game draws carried items only there.
+  All 187 carried-item pictures are offered: carrying.png (13 x 7 cells of
+  56 x 56) and collectables_small.png (6 x 16 cells of 40 x 40). Python only
+  (src/vf2_people_pictures.py, src/vf2_picture_maker.py,
+  src/vf2_carried_items.json, scripts/build_vf2_carried_items.py); no
+  executable or DLL changes.
+- How the game draws them (B200 desktop objects):
+  CVillagerManager::DrawCarriedItems(villager, place), called from
+  DrawVillager before the body when GetDirection is 0, 3 or 4 (NE, NW, N),
+  else after the head, never on water. The place is the villager's place
+  minus (int)(zoom * -7) and (int)(zoom * -33), each times CVillager::Scale;
+  body position (CVillager+1BB98h) 2, 9, 17 or 18 moves it 10 down, 23 moves
+  it 20 down. An expecting mother's babies (cell 3) come first. Then the
+  carried value (CVillager+1BB9Ch): -1 and 3 draw nothing; below 79, cell
+  <value> of carrying.png (CVillagerManager+24h, image 478) at the place
+  minus 10, 10; 79 or more, cell <value - 79> of collectables_small.png
+  (+28h, image 493) at the place. CSceneManager::Draw, alpha 1.0: never
+  scaled. The body position comes from CAnimManager::GetAnimFrame's 24-entry
+  table (CVillager::StartWaiting); the Picture Maker takes the first position
+  that waits in the chosen frame (else 0) or the one the player picks.
+- Which values the game carries: only CVillager::SetCarrying writes the
+  value (ForceCarrying has no caller); every item comes from a
+  CVillagerPlans::PlanToCarry step. tests/vf2_carry_scan.py reads all 301
+  PlanToCarry calls in the objects (constants, registers, GetRandom ranges,
+  flag choices, cmov pairs, CBehavior::RandomFoodCarryable's 19 values,
+  jump-table branches) with nothing left unresolved; the pickup actions carry
+  what lies on the floor. carrying.png values never carried: 0 (empty
+  basket), 33 (soda bottle; only the patcher's patio drinks carry it), 45
+  (paint can), 50 (TV remote); value 3 (the baby) is set only by the AI for
+  an expecting mother and skipped by the carry draw. carrying.png cells 79-90
+  are empty and unreachable. collectables_small.png: the 60 collectibles
+  (0x4F-0x72, 0x86-0x9D) and the socks, wrappers, weeds and dirt smudges are
+  carried by their pickup actions; the cobwebs (0x81, 0x82) are never made
+  (CCollectableItem's spawners make only 0x73-0x80 and 0x83-0x85; the spawn
+  areas are the five collections); the Holiday ornaments (0x9E-0xA9) only
+  with the patcher's Holiday Ornaments; cell 91 (a leaf) is never made;
+  cells 92-95 are empty. The patcher's own added actions carry 13-19, 33, 44,
+  49, 54 and 64 (work/patch_mobile_furniture_pack.py, checked by a test).
+- Evidence: tests/test_picture_maker.py runs DrawVillager with
+  DrawCarriedItems under unicorn for every value 0-174 in 10 cases (frames on
+  both sides, body positions 0, 2, 3, 7, 9, 16, 17, 18, 23, ages 0-1,300,
+  both sexes, with and without babies): 1,750 draws, all equal the Picture
+  Maker's; values 79-90 draw the collectibles sheet; six whole pictures equal
+  a Pillow composite of the game's sheets pixel for pixel; the carried-items
+  file equals a fresh scan; the body-position table equals GetAnimFrame's.
+- Not checked against the game: the patcher's ornament spawning (the
+  ornaments' carried draw is the game's own), and anything in a running game.
+  Position not from the game: carrying.png cells 79-90, drawn where
+  carrying.png items go. The game was never run.
+
+
+Picture Maker: All game pictures (after B205)
+---------------------------------------------
+
+- What it is: a third tab in the Picture Maker with every picture the game
+  has, by category, with a search box, one frame at a time or "Save all
+  shown" (every frame, a folder per category). Python only
+  (src/vf2_game_pictures.py, src/vf2_game_pictures.json,
+  scripts/build_vf2_image_table.py); no executable or DLL changes; the
+  pictures are read from the chosen game folder, none is in the repository.
+- The image table: theGraphicsManager.obj's ImageList, 633 entries of 0x30
+  bytes (+0 id, +4 file, +8 columns, +0Ch rows, +10h the file name's second
+  part, +14h files across, +18h files down); one is "No Graphic" and id 85
+  (Furniture/PirateShipStd.png) is listed twice. theGraphicsManagerImpl::
+  GetImage makes a grid when rows > 0 (one file, or files <file><x><y><file2>
+  side by side through ldwImageGrid(file, file2, across, down, columns,
+  rows)), a strip when only columns > 0, else a whole picture. ldwImageGrid
+  cuts cells of total width / columns by total height / rows (C division;
+  over several files the total width is the last row's and the total height
+  the sum of each row's last file's), and GetCellRect clamps a column or row
+  to the last. 628 entries' files are in the game: 11,922 cells. Four files
+  the table names are not in the game (LightSourceMask180x8, 200x10, 300x10,
+  small_logo.png): listed as missing.
+- The other Images files (data/vf2/clean-base-game-assets.json): the 16 map
+  tiles (CWorldMap, "MapX%dY%d.jpg"), the four Segoe fonts, SPLASH_BG.jpg and
+  mainToolTray.png are named in the code's strings; main_BG.png, VD_BG_2.png,
+  MenuBtnCurrency2.png, DRM/logo1.gif and DRM/virtualfamilies_drm.jpg are
+  named nowhere: unused. Thumbs.db, pspbrwse.jbf and stylesheet.css are not
+  pictures.
+- The bars: theContinuousVariableMeter::DrawPercentMeter(colour, level) is
+  called by theVillagerScene (colours 8-12, the Details screen; colour 9's
+  level counts to 3,000) and theLoadingScene (13): clipping to
+  level * 290 / 100 pixels, VD_progressbar (red for 9), VD_line 3 pixels
+  before the edge, VD_fade-02 at +271, then ResetClipping. theSlicedVariable
+  Meter (StatusBarSliceB every 2 pixels) and theVariableMeter (a FillRect or
+  LoadColor every 8 pixels) are never called: unused, drawn by their code.
+- The patcher's pictures: every Images file of the chosen folder that the
+  clean install lacks, or has with another size or SHA-256.
+- Evidence: tests/test_game_pictures.py rebuilds the data file from the
+  objects; runs GetImage and GetCellRect under unicorn
+  (tests/vf2_pictures_emu.py, with only the picture loading as seams) for
+  all 628 entries and compares every cell's file and rectangle; runs the
+  three DrawPercentMeter for colours 0-15 (0-5 for theVariableMeter) at
+  levels -5 to 105 and up to 3,200 and compares every call; runs
+  ldwGameWindowImpl::ClipRect on 3,000 random rectangles; compares five bars
+  with a Pillow composite of the emulated calls pixel for pixel; draws every
+  frame of every picture.
+- Not checked against the game: JPEG and GIF pixels (decoded by Windows'
+  GDI+, not the game's libjpeg); how the code draws the files it loads by
+  name (shown whole); the unused theVariableMeter's colour (drawn at 90% on a
+  clear background; the game blends over the screen). Not assembled: whole
+  screens and dialogs, rooms and the house with furniture placed, pets in
+  motion, weather over the house, day and night (their pieces are offered).
+
+
 Startup crash: LDW server reply (Fix Vanilla Game Bugs, after B204)
 --------------------------------------------------------------------
 
@@ -3455,3 +3608,37 @@ Server error text overflows a reply handler's buffer (Fix Vanilla Game Bugs, B20
   import) is modelled by its documented options. With VF2_SERVER_REPLY_EXE
   each linked executable must hold six stubs, each reached by exactly one
   call. Static and emulated evidence only; the game was never run.
+
+Time Warp costs the store's price (Time Controls, after B205)
+-------------------------------------------------------------
+
+- Owner decision 2026-11-01: the Time Controls window's "Time Warp: +3 years"
+  button costs the same as the store's own Time Warp (Special Upgrades item
+  0x112, $2,000). Pause, Resume and the speeds are unchanged; Time Controls
+  stays on by default.
+- runtime/native/b200time/b200time_time.inc TimeWarpClicked: the price is
+  read at the click from CInventoryManager::GetPrice for item 0x112 on the
+  inventory manager, the call the store's CalcPrice makes; the DLL holds no
+  price and no game address (five new pins in runtime/b200_time_sites.py:
+  CalcPrice's GetPrice call, HandlePurchaseItem's payment, the store's money
+  wrapper, CMoney::Adjust and HandleUpgrade's Time Warp case; the generator
+  proves the HandleUpgrade jump table sends 0x112 to the Time Warp case and
+  that its itemInfo row is priced 2,000). A balance (CMoney's double) below
+  the price: a message box says so and nothing changes. Otherwise the player
+  is asked; on Yes everyone at home and alive is queued as before and the
+  price is paid through the store's money call (negated price, false), as
+  HandlePurchaseItem pays. Nothing is paid when nobody at home can age.
+- Free and Guaranteed Cheats: the DLL looks for a section named ".vf2free" in
+  the running executable's own section table (GetModuleHandle(NULL)); with a
+  size of 1 or more and its byte 1 the warp is free. No section (every build
+  up to B205) or any other byte: charged.
+- Evidence: tests/b200_time_scenarios.py, under unicorn on the B200 and B205
+  core executables at the link address and relocated, with the real GetPrice,
+  money wrapper and CMoney::Adjust: Yes pays exactly the store price and the
+  villagers age 3 years; a changed store row price is followed; exactly
+  enough leaves $0; short of money nothing changes (money, the queue and
+  every villager byte); a copy of the executable with a .vf2free section
+  holding 1 is free, holding 0 or 2 is charged. Source mutations
+  (tests/test_b200_time_controls.py) must each fail a scenario. All 32 B200
+  and 32 B205 matrix executables resolve every pin. Not tested in a running
+  game.

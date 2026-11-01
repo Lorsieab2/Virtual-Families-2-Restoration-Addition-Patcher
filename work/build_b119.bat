@@ -10,7 +10,11 @@ if "%VF2_BUILD_OUT%"=="" set "VF2_BUILD_OUT=outputs\VF2-Mobile-Furniture-With-Is
 if "%VF2_OUTPUT_EXE%"=="" set "VF2_OUTPUT_EXE=Virtual Families 2 - Additive Mobile Furniture Pack.exe"
 if not exist "%VF2_BUILD_OUT%" mkdir "%VF2_BUILD_OUT%"
 
-set "LINK_RSP=%TEMP%\vf2_link_b119_no_out.rsp"
+rem The response file lives in this checkout's own object folder, never in a
+rem shared %TEMP% path: the parallel matrix builds one variant per worktree at
+rem the same time, and with one fixed %TEMP% file two parts linking at once
+rem collided (B205 part m1 failed with link exit 255).
+set "LINK_RSP=work\patched_mobile_furniture_pack_objs\vf2_link_b119_no_out.rsp"
 set "MOBILE_RENOVATION_OBJ=work\patched_mobile_furniture_pack_objs\vf2_mobile_renovations.obj"
 findstr /B /V /C:"/OUT:" work\vf2_link_b27_arcade_behavior_restore.rsp | findstr /V /L /C:"%MOBILE_RENOVATION_OBJ%" > "%LINK_RSP%"
 if errorlevel 1 exit /b %errorlevel%

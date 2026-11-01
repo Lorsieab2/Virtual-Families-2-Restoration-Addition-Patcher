@@ -90,12 +90,23 @@ The variant matrix is the long step, and one checkout can build one variant at a
 built by hand:
 
 ```powershell
-git worktree add --detach C:\vf2w\bNNN-m1 <commit>     # and m2, m3; copy work\vanilla_runtime_payload and
-                                                       # the seed folders the release config names into each
+git worktree add --detach C:\vf2w\bNNN-m1 <commit>     # ... through m8; copy work\vanilla_runtime_payload,
+                                                       # desktop_obj_files, desktop_runtime_dlls and
+                                                       # generated_import_libs into each
 powershell -File work\build_matrix_parallel.ps1 -Python <python.exe> `
     -MatrixConfig data\vf2\build-matrix-toggles.json -ReleaseConfig data\vf2\build-matrix-release-bNNN.json `
-    -Worktrees C:\vf2w\bNNN-m1,C:\vf2w\bNNN-m2,C:\vf2w\bNNN-m3 -CollectInto C:\vf2w\bNNN-release
+    -Worktrees C:\vf2w\bNNN-m1,...,C:\vf2w\bNNN-m8 -SeedsFrom C:\vf2w\bNNN-release -CollectInto C:\vf2w\bNNN-release
 ```
+
+Any number of parts from 1 to 32 works (`work\matrix_parts.ps1`). Measured on 1 November 2026 (one
+final_all_enabled build, seeded): the generator ran 161 s on 0.83 of a core, the compile and link about a minute
+on one core, and the whole part peaked at about 300 MB, so 8 parts (4 variants each) use about a third of a
+24-core machine and under 3 GB. `-SeedsFrom` copies each part the seed folders of its own variants from the
+checkout the previous matrix was collected into, under a temporary name until the copy is complete; a seed
+already in a worktree is checked against it and never replaced. Parts share no scratch file:
+`work\build_b119.bat` writes its link response file in the checkout's own
+`work\patched_mobile_furniture_pack_objs` (it once used one `%TEMP%` file, and B205's m1 failed with link exit
+255 when two parts linked at once).
 
 It checks every worktree is at this checkout's commit with no tracked changes, deals the variants out in
 matrix order (variant i to part i mod N), runs the unchanged `work\build_matrix.ps1` in each worktree at once

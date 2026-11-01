@@ -97,7 +97,7 @@
       "guide": [
         "A cheat: in the store, press R (or Shift+R) to pick the store's random items again, the game's own way.",
         "On the Clothing and Hairstyles page R picks the six outfits again. Hairstyles stay, and outfits you already bought keep their looks.",
-        "On the Flea Market page R picks 5 new goods, but only while All 36 Flea Market goods is unticked; with it ticked every good is already there, so R does nothing.",
+        "On the Flea Market page R always picks 5 new goods. R always redraws; with All 36 Flea Market goods on you won't see a change in the Flea Market list (all 36 stay listed and in stock).",
         "R does nothing on any other page, outside the store, or while a box is open. It never changes On Sale.",
         "It is on by default. Unticking it and rebuilding turns it off."
       ]
@@ -237,12 +237,13 @@
       "section": "Tools",
       "title": "Picture Maker",
       "guide": [
-        "Draws your family members exactly as the game draws them and saves them as PNG pictures with a clear background.",
-        "From my save: choose the save folder and the family. Everyone at home can be shown in the house (any body frame and head turn), on the Details screen, on an event screen or in the Family Tree.",
-        "Family members who left home or died, and earlier generations, are drawn in the Family Tree, as the game does. The outfits in the tool tray are listed too.",
-        "Make your own: pick the sex, age, head (hairstyle), outfit and how it is drawn. Children are drawn smaller and heads turn old at 45, as in the game.",
-        "Pick the game folder: the pictures come from it. A patched game shows the patcher's expansion outfits; Patched look off shows the original game's.",
-        "Save PNG: at the game's size, 2x or 4x (crisp), or your own size (smooth). Your saves and game folders are only read."
+        "Draws the game's pictures exactly as the game draws them, saved as PNGs with a clear background.",
+        "From my save: pick the save folder and family. Everyone at home can be drawn in the house, on the Details screen, an event screen or the Family Tree; others in the Family Tree.",
+        "Make your own: pick the sex, age, head, outfit and how it is drawn. Children are smaller and heads turn old at 45, as in the game.",
+        "Carrying (in the house): any item a family member can hold, even ones the game never shows (marked).",
+        "All game pictures: every sprite, frame, button, bar and background, the unused ones and the patcher's too. Search, then Save all shown (a folder per category).",
+        "Pick the game folder: the pictures come from it. Patched look off shows the original game's outfits.",
+        "Save PNG: game size, 2x or 4x (crisp), or your own size (smooth). Saves and game folders are only read."
       ]
     },
     "how_to_use": {

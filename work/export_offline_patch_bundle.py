@@ -51,6 +51,9 @@ GUI_TOOL_FILES = (
     "vf2_picture_maker.py",
     "vf2_people_pictures.py",
     "vf2_people_links.json",
+    "vf2_carried_items.json",
+    "vf2_game_pictures.py",
+    "vf2_game_pictures.json",
     "vf2_picture_image.py",
 ) + tuple(f"family_tree_backgrounds/{name}" for name in (
     "blue-board-on-wood.png",
@@ -531,7 +534,7 @@ SETTINGS = [
     {
         "id": "time_controls",
         "label": "Time Controls",
-        "description": "Adds a Time Controls button to the Settings screen, left of Done. It opens a window to pause and resume the game, choose Slow, Normal or Fast (the game's own speeds) or the extra 5x and 10x, and fast-forward everyone at home by three years with Time Warp (birthdays, leaving home and old age all still happen normally). The chosen speed is never saved: a saved village always comes back at normal speed, so a village saved at 10x does not age years while the game is closed. Installs a small companion DLL in the Virtual Families 2 Patcher Files folder next to the game; unticking the setting removes it and the game is the unmodified B201 again.",
+        "description": "Adds a Time Controls button to the Settings screen, left of Done. It opens a window to pause and resume the game, choose Slow, Normal or Fast (the game's own speeds) or the extra 5x and 10x, and fast-forward everyone at home by three years with Time Warp (birthdays, leaving home and old age all still happen normally). Time Warp costs the same as the store's own Time Warp ($2,000, read from the game's store when you click it); a family that cannot afford it is told so and nothing changes. With Free and Guaranteed Cheats ticked it is free. The chosen speed is never saved: a saved village always comes back at normal speed, so a village saved at 10x does not age years while the game is closed. Installs a small companion DLL in the Virtual Families 2 Patcher Files folder next to the game; unticking the setting removes it and the game is the unmodified B201 again.",
         "default": True,
         "category": "optional",
     },
@@ -625,7 +628,7 @@ SETTINGS = [
     {
         "id": "r_refreshes_store",
         "label": "R Refreshes the Store",
-        "description": "Cheat: in the store, press R (or Shift+R) to pick the store's random items again, the game's own way, with the game's own odds. On the Clothing and Hairstyles page R picks the six Discount, Department and Designer outfits again (hairstyles are not picked at random, so they stay); outfits you already bought keep their own looks. On the Flea Market page R picks 5 new goods, but only while All 36 Flea Market goods is unticked: with it ticked every good is already listed, so R does nothing there. R does nothing on any other page or outside the store, never touches On Sale, and does nothing while a box (the buy box, the bank, a message) is open. Installs a small companion DLL in the Virtual Families 2 Patcher Files folder next to the game; unticking the setting removes it and the game is unmodified again.",
+        "description": "Cheat: in the store, press R (or Shift+R) to pick the store's random items again, the game's own way, with the game's own odds. On the Clothing and Hairstyles page R picks the six Discount, Department and Designer outfits again (hairstyles are not picked at random, so they stay); outfits you already bought keep their own looks. On the Flea Market page R always picks 5 new goods: R always redraws; with All 36 Flea Market goods on you won't see a change in the Flea Market list. R does nothing on any other page or outside the store, never touches On Sale, and does nothing while a box (the buy box, the bank, a message) is open. Installs a small companion DLL in the Virtual Families 2 Patcher Files folder next to the game; unticking the setting removes it and the game is unmodified again.",
         "default": True,
         "category": "optional",
     },

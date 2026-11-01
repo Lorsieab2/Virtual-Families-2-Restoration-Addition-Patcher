@@ -283,11 +283,13 @@ Changelog
   calls the game's own forced outfit pick, CInventoryManager::
   MaybeUpdateOutfits(true): the six stock outfits are picked again with the
   game's odds and the next timed pick is 4 game hours later. Hairstyles and
-  outfits already bought are not touched. On the Flea Market page R makes the
-  game's own pick (MaybeUpdateRotatingItems) happen now, only while All 36
-  Flea Market goods is unticked; with it ticked R does nothing there, because
-  the game's pick would set each good's stock to 1 and 33 goods that never run
-  out would sell out for good. R does nothing on any other page, outside the
+  outfits already bought are not touched. On the Flea Market page R always
+  makes the game's own pick (MaybeUpdateRotatingItems) happen now (owner,
+  2026-11-01). R always redraws; with All 36 Flea Market goods on you won't
+  see a change in the Flea Market list: all 36 stay listed and every one reads
+  as in stock whatever count the pick set, so nothing sells out (before
+  2026-11-01 R did nothing there while All 36 was on). R does nothing on any
+  other page, outside the
   store, or while a store box is open. Installs vf2refresh_b200.dll in the
   Virtual Families 2 Patcher Files folder only while the setting is on; it
   replaces one pointer (the store screen's key handler, found through the
@@ -322,6 +324,32 @@ Changelog
   saves. Checked against the game's own drawing code run under emulation and
   pixel for pixel against the game's sheets; never tested in a running game.
 
+- Picture Maker, carried items (after B205): in both tabs a family member in
+  the house can carry any of the 187 carried-item pictures the game has (the
+  91 cells of carrying.png and the 96 of collectables_small.png): 151 the game
+  carries, 5 unused in the game and 31 never shown (the baby as a carried
+  value, the cobwebs, the Holiday ornaments in the original game, 16 empty
+  cells), each named and marked with the reason. Drawn as the game's
+  CVillagerManager::DrawCarriedItems draws them, for the chosen frame, body
+  position and age; the empty carrying.png cells no carried value can reach
+  are placed where carrying.png items go (position not from the game). A save
+  does not keep what anyone carries. Python only; nothing is written but the
+  PNGs the player saves. Checked against the game's own code under emulation
+  and pixel for pixel; never tested in a running game.
+
+- Picture Maker, All game pictures (after B205): a third tab with every
+  picture the game has, by category and searchable: all 632 entries of the
+  game's image table cut into every cell as the game cuts them (11,922
+  cells), every other Images file (the unused ones marked "(unused)", the
+  table's files the game lacks marked "(missing)"), the game's bars assembled
+  at any level (and two meters the game never calls, marked "(unused)"), and
+  in a patched game every picture of the patcher's, marked "(patcher)". Save
+  all shown writes every frame in a folder per category. The pictures are read
+  from the game folder; no game art ships. Python only; nothing is written but
+  the PNGs the player saves. Checked against the game's own code under
+  emulation; JPEG pixels and the files the code loads by name are not checked
+  against the game. Never tested in a running game.
+
 - Fix Vanilla Game Bugs, startup crash (after B204; owner-approved 31 October
   2026): at every start the game asks LDW's server to log in
   (ldwsoftware.com/game_backend/login.php; later message.php and poll.php).
@@ -346,6 +374,19 @@ Changelog
   today. A small stub beside each handler, behind the .vf2bugs byte; nothing
   is written to disk. Checked under emulation; never tested in a running
   game.
+
+- Time Controls, Time Warp price (after B205; owner decision 1 November
+  2026): the Time Warp button (+3 years) in the Time Controls window now costs
+  the same as the store's own Time Warp. The Time Controls DLL asks the game
+  for the store's price of its Time Warp item when you click it (the same
+  function the store uses, so it is $2,000 unless the store's price changes)
+  and pays it the way a store purchase pays. A family with less money is told
+  so and nothing changes: no money, no ageing. Nothing is paid when nobody at
+  home can age. With Free and Guaranteed Cheats ticked (the executable's own
+  1-byte .vf2free section holds 1) it stays free; an executable without that
+  section, as every build up to B205, charges. Pause and the speeds are
+  unchanged. The DLL still holds no game address; checked under emulation
+  with the game's own price and money code; never tested in a running game.
 
 Have fun! -Lorsieab2 :)
 

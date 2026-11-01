@@ -11,13 +11,27 @@
 #       -Worktrees C:\vf2w\bNNN-m1,C:\vf2w\bNNN-m2,C:\vf2w\bNNN-m3 [-CollectInto C:\vf2w\bNNN-release]
 #
 # Every worktree must be at the same commit as this checkout with no tracked changes, and must already
-# hold the gitignored build inputs (work\vanilla_runtime_payload, and the seed folders the release config
-# names under outputs\). Variants are dealt out in matrix order, variant i to part (i mod N), so the split
-# is the same every run. Part k writes outputs\<prefix>-summary-m<k>.json and outputs\<prefix>-logs-m<k>,
-# the names the B202 parts used. Nothing about what is built changes: each part runs build_matrix.ps1 with
-# a matrix file that holds only its own variants, and the toggles of every variant are copied unchanged.
+# hold the gitignored build inputs (work\vanilla_runtime_payload, work\desktop_obj_files,
+# work\desktop_runtime_dlls, work\generated_import_libs). Variants are dealt out in matrix order, variant i
+# to part (i mod N), so part sizes differ by at most one and the split is the same every run
+# (work\matrix_parts.ps1). Any N from 1 to the number of variants works. Measured on 1 November 2026, one
+# part uses about one core and peaks near 300 MB, so 8 parts (4 variants each) fit easily on 24 cores.
+# Part k writes outputs\<prefix>-summary-m<k>.json and outputs\<prefix>-logs-m<k>, the names the B202
+# parts used. Nothing about what is built changes: each part runs build_matrix.ps1 with a matrix file that
+# holds only its own variants, and the toggles of every variant are copied unchanged.
 #
-# -PlanOnly checks the worktrees, writes the part matrix files and prints the split, and builds nothing.
+# Seeds: a relative seed path in the release config ("outputs/VF2-B205-matrix-core") is read from the
+# worktree of the part that builds that variant, so each part needs the seeds of its own variants. Before
+# anything is built every part's seeds are checked; -SeedsFrom <checkout> (the checkout the previous matrix
+# was collected into) copies the ones a part lacks from there. A seed already in a worktree is checked
+# against -SeedsFrom and never replaced. Without -SeedsFrom a missing seed stops the run before it starts.
+#
+# Parts never share a scratch file: the generator writes only inside its own worktree, and
+# work\build_b119.bat writes its link response file inside the worktree too (it once used one fixed
+# %TEMP% file for every part, and two parts linking at once failed with link exit 255).
+#
+# -PlanOnly checks the worktrees and seeds, writes the part matrix files and prints the split, and builds
+# nothing; with -SeedsFrom it also copies the missing seeds, so the build itself starts at once.
 # -CollectOnly builds nothing and only collects parts an earlier run built (use it with -CollectInto);
 # work\release_parallel.ps1 uses it so the matrix folders reach the release checkout only after its early
 # test run has finished (tests there glob outputs\ for matrix folders and manifests).
@@ -29,11 +43,13 @@ param(
     [Parameter(Mandatory = $true)] [string]$ReleaseConfig,
     [Parameter(Mandatory = $true)] [string[]]$Worktrees,
     [string]$CollectInto,
+    [string]$SeedsFrom,
     [switch]$PlanOnly,
     [switch]$CollectOnly
 )
 
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "matrix_parts.ps1")
 # powershell -File passes a comma list as one string.
 $Worktrees = @($Worktrees | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 $root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
@@ -49,7 +65,10 @@ $release = Get-Content -LiteralPath $releasePath -Raw | ConvertFrom-Json
 $prefix = $release.output_prefix
 $variants = @($matrix.variants)
 $parts = $Worktrees.Count
-if ($parts -lt 1) { throw "Name at least one worktree." }
+$split = Split-MatrixVariants -Variants $variants -Parts $parts
+if ($SeedsFrom) { $SeedsFrom = (Resolve-Path -LiteralPath $SeedsFrom).Path }
+$distinctWorktrees = @($Worktrees | ForEach-Object { [IO.Path]::GetFullPath($_).TrimEnd('\').ToLowerInvariant() } | Select-Object -Unique)
+if ($distinctWorktrees.Count -ne $parts) { throw "A worktree is named twice; each part needs its own." }
 
 foreach ($wt in $Worktrees) {
     $wtHead = (& git -C $wt rev-parse HEAD).Trim()
@@ -65,6 +84,17 @@ foreach ($wt in $Worktrees) {
     }
 }
 
+# Every part's seeds are in place before any part starts, so a missing seed fails in seconds, not after
+# other parts have spent minutes building.
+if (-not $CollectOnly) {
+    for ($k = 0; $k -lt $parts; $k++) {
+        $seeds = @(Get-PartSeeds -Release $release -Variants $split[$k])
+        $lines = @(Sync-PartSeeds -Worktree $Worktrees[$k] -Seeds $seeds -SeedsFrom $SeedsFrom -CheckOnly:($PlanOnly -and -not $SeedsFrom))
+        $copied = @($lines | Where-Object { $_ -match ': copied from ' }).Count
+        Write-Host "m$($k + 1): $($seeds.Count) seeds ready in $($Worktrees[$k]) ($copied copied)"
+    }
+}
+
 # The link step needs Windows' find.exe ahead of any Unix find (README, Development), and every part
 # inherits this process's environment.
 $env:PATH = 'C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem'
@@ -73,7 +103,7 @@ $partDir = Join-Path ([IO.Path]::GetTempPath()) ("vf2-matrix-parts-" + [Guid]::N
 New-Item -ItemType Directory -Path $partDir | Out-Null
 $jobs = @()
 for ($k = 0; $k -lt $parts; $k++) {
-    $mine = @(for ($i = $k; $i -lt $variants.Count; $i += $parts) { $variants[$i] })
+    $mine = @($split[$k])
     $copy = $matrix | ConvertTo-Json -Depth 20 | ConvertFrom-Json
     $copy.variants = $mine
     $partFile = Join-Path $partDir "matrix-m$($k + 1).json"
