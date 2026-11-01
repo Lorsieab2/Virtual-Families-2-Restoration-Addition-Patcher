@@ -13,7 +13,7 @@ from unittest import mock
 ELLIPSIS = chr(0x2026)
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "work"))
+sys.path.insert(0, str(ROOT / "src"))
 import offline_vf2_patcher as patcher
 import offline_vf2_patcher_gui as gui
 
@@ -1397,7 +1397,7 @@ class UpdatesLinkTests(unittest.TestCase):
 
     # The copy this suite exercises. tests/ runs against src/, work/ against
     # its own, which is the copy the exporter actually ships.
-    GUI = ROOT / "work" / "offline_vf2_patcher_gui.py"
+    GUI = ROOT / "src" / "offline_vf2_patcher_gui.py"
 
     def test_link_is_present_and_styled_as_a_link(self):
         source = self.GUI.read_text(encoding="utf-8")
@@ -1425,7 +1425,7 @@ class UpdatesLinkTests(unittest.TestCase):
         # The exporter ships work/; a fix applied only to src/ never reaches
         # anyone's download.
         # Built with joinpath rather than the / operator on a "work" literal:
-        # the sync rule that generates the tests/ copy rewrites ROOT / "work"
+        # the sync rule that generates the tests/ copy rewrites ROOT / "src"
         # to ROOT / "src", which would make this compare src against itself and
         # never detect the drift it exists to catch.
         shipped = ROOT.joinpath("work", "offline_vf2_patcher_gui.py")
@@ -1692,6 +1692,39 @@ class PresetButtonAndSelectionWindowTests(unittest.TestCase):
         # Opening it again raises the same window.
         self.app.open_patch_selection_settings()
         self.assertIs(self.app._patch_selection_dialog, dialog)
+
+    def test_the_selection_window_refuses_both_unicode_settings(self):
+        """Tick These with Render Unicode with In-Game Fonts and Use Unicode Font both chosen is refused and
+        changes nothing; with one of them it ticks that one and unticks the other."""
+        self.app.select_default_settings()
+        self.root.update()
+        before = self.ticked()
+        self.assertIn("render_unicode_in_game_fonts", before)
+        self.assertNotIn("use_unicode_font", before)
+        self.app.quiet_selection = True
+        self.app.open_patch_selection_settings()
+        self.root.update()
+        by_id = {setting_id: var for setting_id, _label, var, _box in self.app._patch_selection_choices}
+        by_id["use_unicode_font"].set(True)
+        by_id["render_unicode_in_game_fonts"].set(True)
+        by_id["cheat_upgrades"].set(True)
+        self.app._patch_selection_apply(True)
+        self.root.update()
+        self.assertIn("cannot both be on", self.app.last_selection_problem)
+        self.assertEqual(self.ticked(), before)                    # nothing half done
+        by_id["render_unicode_in_game_fonts"].set(False)
+        self.app._patch_selection_apply(True)
+        self.root.update()
+        self.assertEqual(self.app.last_selection_problem, "")
+        self.assertIn("use_unicode_font", self.ticked())
+        self.assertIn("cheat_upgrades", self.ticked())
+        self.assertNotIn("render_unicode_in_game_fonts", self.ticked())
+        # unticking both at once is fine
+        by_id["render_unicode_in_game_fonts"].set(True)
+        self.app._patch_selection_apply(False)
+        self.root.update()
+        self.assertFalse({"use_unicode_font", "render_unicode_in_game_fonts"} & self.ticked())
+        self.app._patch_selection_dialog.destroy()
 
     def test_patch_name_search_matches_every_word(self):
         self.assertTrue(gui.patch_name_matches("Free and Guaranteed Cheats", "guaranteed free"))

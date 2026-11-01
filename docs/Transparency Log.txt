@@ -3706,6 +3706,10 @@ Unicode text: Render Unicode with In-Game Fonts, Use Unicode Font, Game Font Tex
   missing; the game itself shows and accepts them; one text rule for every
   reader; two exclusive settings, Render Unicode with In-Game Fonts (default
   on) and Use Unicode Font (overrides in-game fonts) (default off).
+- The exclusion (2026-11-01, as VF1 v1.7): ticking one unticks the other;
+  Patch Selection Settings refuses Tick These with both chosen and changes
+  nothing; the command line refuses --enable of both (resolve_exclusions).
+  tests/test_offline_vf2_patcher_gui.py and tests/test_unicode_settings.py.
 - The fonts (B200 desktop objects, the constructors run under emulation):
   Segoe24, Segoe24Bold, Segoe32Bold, Segoe36Bold are the only fonts; each is a
   white sheet (Images\<name>.png, 16 alpha levels) and a glyph table built by
