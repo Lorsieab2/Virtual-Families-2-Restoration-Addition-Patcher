@@ -105,6 +105,9 @@ foreach ($bat in @("build_b200time.bat", "build_b200kids.bat", "build_b200histor
     & cmd.exe /d /c "`"$(Join-Path $root "runtime\native\$bat")`"" > (Join-Path $runDir "$bat.log") 2>&1
     if ($LASTEXITCODE -ne 0) { throw "$bat failed; see $runDir\$bat.log" }
 }
+# Copy and Paste in Text Boxes: the Unicode text source built a second time (vf2clip_b200.dll)
+& cmd.exe /d /c "`"$(Join-Path $root "runtime\native\build_b200unicode.bat")`" clip" > (Join-Path $runDir "build_b200clip.log") 2>&1
+if ($LASTEXITCODE -ne 0) { throw "build_b200unicode.bat clip failed; see $runDir\build_b200clip.log" }
 Get-ChildItem (Join-Path $root "runtime\build") -Filter "*.dll" |
     ForEach-Object { "{0}  {1}" -f (Get-FileHash $_.FullName -Algorithm SHA256).Hash, $_.Name } |
     Tee-Object -FilePath (Join-Path $runDir "dlls.txt")

@@ -57,7 +57,7 @@ def test_the_dll_source_names_every_site_and_writes_nothing_else():
     for site, _pin, _how in S.SITES:
         assert f"UNI_SITE_{site}" in header
     # the only writes: the plan's entry jumps, the two vtable slots and the import slot
-    assert src.count("PlanJump(plan,") == 7 and src.count("PlanSlot(plan,") == 3
+    assert src.count("PlanJump(plan,") == 7 and src.count("PlanSlot(plan,") == 4      # + the clip build's slot
     assert not re.search(r"\b0x4[0-9A-Fa-f]{5}\b", src)                # no game address (the image is relocated)
     assert 'L"vf2unicodefont.ini"' in src and 'L"vf2unicode.ini"' in src
 
@@ -657,8 +657,16 @@ def test_a_typed_name_is_never_wider_than_the_widest_stock_name(draw_world, name
     font, _s = fonts[name]
     widest = max(f.glyphs[f.charmap[b]][3] - f.glyphs[f.charmap[b]][1] for b in range(0x20, 0x7F))
     cap = 18 * (widest + f.kerning) - f.kerning
-    w.s, w.h = w.sites(), w.hooks()
-    w.game_seams(w.s)
+    if not hasattr(w, "real_gdi"):
+        w.s, w.h = w.sites(), w.hooks()
+        w.game_seams(w.s)                                  # once: two seams on one address would both run
+        # a character no glyph file has is drawn by Windows: the DLL's GDI calls on this machine's real GDI
+        from test_unicode_font import RealGdi, _kernel_seams
+        import vf2_glyph_render as R
+        if not R.available():
+            pytest.skip("needs Windows' GDI")
+        w.real_gdi = RealGdi(w.e, {})
+        _kernel_seams(w.e)
     ctl, buf = _box(w, 18)
     w.e.w32(ctl + 0x3C, font_obj)
     typed = ""

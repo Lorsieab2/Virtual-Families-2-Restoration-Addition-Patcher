@@ -91,7 +91,16 @@ https://github.com/Lorsieab2/Virtual-Families-2-Restoration-Addition-Patcher/
      wide as before, so screens still fit.
    Names with only Western European letters are saved exactly as before, so
    the original game shows them too; other names show as odd letters in the
-   original game, never a crash.
+   original game, never a crash. A name is never wider than the widest name
+   the original game allows, and looking at a family member never shortens
+   their name.
+
+   Copy and Paste in Text Boxes (on by default): while you type in one of the
+   game's text boxes, Ctrl+V or Shift+Insert pastes, Ctrl+C or Ctrl+Insert
+   copies the whole text, Ctrl+X cuts it. Line breaks and tabs become spaces
+   and a paste stops at the box's limit. With both text settings above off,
+   only the letters the original game can store are pasted. The keys do
+   nothing anywhere else.
 
    Fix Vanilla Game Bugs (on by default) also stops a crash of the original
    game: at every start the game asks LDW's server to log in (login.php), and

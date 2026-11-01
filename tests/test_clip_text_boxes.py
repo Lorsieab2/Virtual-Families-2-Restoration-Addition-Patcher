@@ -296,3 +296,67 @@ def test_with_unicode_on_the_limit_and_one_past_it(unicode, limit):
     unicode.clipboard = "a" * (limit - len(unicode.text()) + 1)
     unicode.press(ord("v"), CTRL)
     assert len(unicode.text()) == limit and unicode.guard()
+
+
+# ---------------------------------------------------------------------------------------------- the build and bundle
+def test_the_generated_loader_loads_the_clip_dll_by_its_own_byte():
+    gen = (ROOT / "work" / "patch_mobile_furniture_pack.py").read_text(encoding="utf-8")
+    for needle in ('#pragma section(".vf2clip", read, write)', "volatile unsigned char gVF2Clip = 0;",
+                   'if (gVF2Clip == 1) VF2LoadUnicodeDll("__VF2_CLIP_RELATIVE_PATH__");',
+                   '"__VF2_CLIP_RELATIVE_PATH__",', 'CLIP_DLL_NAME = "vf2clip_b200.dll"', "patch_clip_manifest(manifest)"):
+        assert needle in gen, needle
+    # before the Unicode text DLL, and not an "else": it loads with either Unicode setting or neither
+    assert gen.index('if (gVF2Clip == 1)') < gen.index('if (gVF2UnicodeText == 1)')
+    start = gen.index("def patch_clip_manifest(manifest):")
+    body = gen[start:gen.index("\ndef ", start + 10)]
+    ns = {"TIME_CONTROLS_PATCHER_FOLDER": "Virtual Families 2 Patcher Files"}
+    for line in gen.splitlines():
+        if line.startswith(("CLIP_", "UNICODE_TEXT_STARTUP")):
+            exec(line, ns)
+    exec(body, ns)
+    manifest = {"TimeControls": {}}
+    ns["patch_clip_manifest"](manifest)
+    c = manifest["ClipBoard"]
+    assert c["offline_patcher_setting"] == "copy_paste_text_boxes" and c["default"] is True
+    assert c["runtime_flag"]["source_section"] == ".vf2clip" and c["companion_dll"] == "vf2clip_b200.dll"
+    assert c["companion_ini"] == "vf2clip.ini" and c["label"] == "Copy and Paste in Text Boxes"
+
+
+def _exporter():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("vf2_exporter_clip", ROOT / "work" / "export_offline_patch_bundle.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_the_setting_row_and_its_files(clip_dll, tmp_path):
+    ex = _exporter()
+    rows = {r["id"]: r for r in ex.SETTINGS}
+    row = rows["copy_paste_text_boxes"]
+    assert row["label"] == "Copy and Paste in Text Boxes" and row["default"] is True and "excludes" not in row
+    for key in ("Ctrl+V", "Shift+Insert", "Ctrl+C", "Ctrl+Insert", "Ctrl+X", "Windows-1252", "do nothing anywhere else"):
+        assert key in row["description"], key
+    assert ex.RUNTIME_FLAG_SECTION_BY_SETTING["copy_paste_text_boxes"] == ".vf2clip"
+    contract = {"ClipBoard": {"offline_patcher_setting": "copy_paste_text_boxes", "companion_dll": "vf2clip_b200.dll",
+                              "companion_ini": "vf2clip.ini", "runtime_flag": {"source_section": ".vf2clip"}}}
+    records = ex.clip_asset_patches(tmp_path, clip_dll[0], contract)
+    folder = "Virtual Families 2 Patcher Files"
+    assert sorted(r["file_path"] for r in records) == [f"{folder}/vf2clip.ini", f"{folder}/vf2clip_b200.dll"]
+    assert all(r["requires"] == ["core_executable", "copy_paste_text_boxes"] and r["remove_when_disabled"]
+               for r in records)
+    assert (tmp_path / "payload" / "ClipBoard" / "vf2clip.ini").read_bytes() == b"[Patches]\r\nMode=3\r\n"
+    with pytest.raises(ValueError, match="--clip-dll"):
+        ex.clip_asset_patches(tmp_path, None, contract)
+    with pytest.raises(ValueError, match="shipped clip build"):
+        ex.clip_asset_patches(tmp_path, _renamed(clip_dll[1], tmp_path), contract)
+    assert ex.clip_asset_patches(tmp_path, None, {}) == []
+
+
+def _renamed(test_dll: Path, tmp: Path) -> Path:
+    """The harness build under the shipped name (the exporter must refuse it)."""
+    d = tmp / "harness"
+    d.mkdir(exist_ok=True)
+    out = d / "vf2clip_b200.dll"
+    out.write_bytes(test_dll.read_bytes())
+    return out

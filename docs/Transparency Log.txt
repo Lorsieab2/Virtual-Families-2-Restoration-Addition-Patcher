@@ -3773,6 +3773,45 @@ Unicode text: Render Unicode with In-Game Fonts, Use Unicode Font, Game Font Tex
   alpha and GetWidth equal the preview in all four fonts for Segoe UI, Comic
   Sans MS and Arial loaded from a file; the fitted sizes are within a step of
   the game's widths; the tool's files, window and the refresh.
+- VF1 live-test bugs checked in VF2 (2026-11-01):
+  * Characters beyond U+FFFF: the game's SDL2.dll is 2.0.3; its WIN_WindowProc
+    ignores WM_CHAR and WM_UNICHAR and makes text from WM_KEYDOWN with
+    ToUnicode, one UTF-16 unit per key event, each written as if it were a
+    character. tests/sdl_surrogate_probe.c (opt-in, its own window, real
+    SendInput(KEYEVENTF_UNICODE)) shows U+1F44D arriving as two
+    SDL_TEXTINPUT events ED A0 BD and ED B1 8D (U+12000: ED A0 88, ED B0 80);
+    BMP characters arrive whole. The DLL typed each half as three odd letters.
+    Fixed: the poll hook joins a high half with the low half that follows (in
+    the same text or the next), and drops a half without its partner.
+  * Names cut by a smaller box: every object that calls
+    ldwTextControl::SetCanEdit was read. theVillagerScene (the family member
+    screen): Activate SetText(villager+6A64h, char[25]); HandleMessage (Done)
+    and UpdateSelection: GetText(buf, 13h) then CFamilyTree::ChangeName and
+    strncpy(villager+6A64h, buf, 19h) unless empty - a 19-24 byte name is cut
+    to 18 just by viewing it (the stock code too: emulated). Also
+    ldwTextControlImpl::SetText raises the box's limit to the text's length.
+    Fixed: the DLL hooks SetText (5 bytes, a trampoline) to mark a set-in text;
+    any text-changing key unmarks it; GetText(buf, 13h) of a marked text that
+    does not fit gives an empty text, which those callers (and CAdoptionScene /
+    CDatingScene's accept) skip. theChangePlayerDlg / theCreateNickNameDlg:
+    char[20] read with 14h; CFamilyTreeInfoDlg: the note read with 50h into
+    the record: always fit. theAlignVillagerScene is the developers' tool.
+    tests/test_name_boxes.py runs the game's own Activate, HandleMessage,
+    UpdateSelection and SetText under unicorn.
+  * Wide scripts: Cuneiform signs are up to 79 px in Segoe24 (W is 16).
+    The DLL now refuses a typed character (or plain letter) that would draw
+    the name wider than the box's limit times the font's widest plain letter.
+- Copy and Paste in Text Boxes (owner request 2026-11-01; copy_paste_text_boxes,
+  .vf2clip, default on, on in Owner's Defaults): vf2clip_b200.dll is
+  b200unicode.cpp built with B200UNICODE_CLIP (runtime/native/b200unicode/
+  b200clip.inc); its plan is the SDL_PollEvent import slot only (chained like
+  the Unicode DLL's). Focus: the first ldwTextControlImpl (vtable by RTTI)
+  that is editing in ldwEventManager's handler list, before a node that stops
+  the keys. With a Unicode setting on (vf2unicode*_b200.dll loaded and
+  installed) each clipboard cluster goes through ldwEventManager::HandleKey
+  as typing does, and a cluster taken in part is taken back whole; with both
+  off Windows-1252 bytes go straight into the box to its limit (the stock
+  HandleKey takes no byte above 7Fh). tests/test_clip_text_boxes.py.
 - Live check needed: type accented, Turkish and other letters, a dead-key accent, an Alt code, an IME
   word and an emoji into a family member's name and a player name; see them in
   the house, the Details screen, the Family Tree, a Random Event and the store;

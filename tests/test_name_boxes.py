@@ -125,6 +125,9 @@ class SceneWorld:
         st, targets = _locate(exe_path, "ldwTextControl", "?SetText@ldwTextControlImpl@@QAEXPBD@Z")
         for sym, at in targets.items():
             self._seam(sym, at)
+        s = w.sites()
+        e.seam_live(s["EVENTS_GET"], lambda em: (self.gs, 0))         # the text box's "changed" message: nothing
+        e.seam_live(s["POST_MESSAGE"], lambda em: (0, 8))
         # the family member screen: +8Ch the member shown, +130h its name box, +E4h the Done button, +8.. the list
         self.scene = e.alloc(0x200)
         e.w32(self.scene + 0xE4, DONE_ID)

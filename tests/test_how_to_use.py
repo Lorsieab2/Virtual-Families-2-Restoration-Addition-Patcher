@@ -54,7 +54,7 @@ class GuideContentTests(unittest.TestCase):
     def test_the_family_history_setting_is_covered(self):
         self.assertIn("family_history", guides.keys())
         self.assertEqual(guides.setting_keys(), ["family_history", "expanded_flea_market", "r_refreshes_store",
-                                                "fix_vanilla_game_bugs"])
+                                                "copy_paste_text_boxes", "fix_vanilla_game_bugs"])
         text = guides.guide("family_history").text
         self.assertNotIn("Experimental", text)        # a normal row, on by default (owner, 2026-10-26)
         for needle in ("on by default", "Family History", "remarriage", "divorce", "Twins and triplets",

@@ -120,6 +120,7 @@ FINAL_PLAYTEST_DEFAULT_ON_SETTINGS = frozenset({
     "r_refreshes_store",
     "expanded_flea_market",
     "render_unicode_in_game_fonts",
+    "copy_paste_text_boxes",
 })
 # up_to_28_children is Experimental: the final playtest profile leaves it off too, like Enable All.
 # Empty by design. The owner's standing instruction is that a playtest ships
@@ -369,6 +370,7 @@ SOURCE_BACKED_OPTIONAL_SETTINGS = {
     "all_outfits_hairstyles",
     "render_unicode_in_game_fonts",
     "use_unicode_font",
+    "copy_paste_text_boxes",
 }
 EXECUTABLE_OVERLAY_OPTIONAL_SETTINGS = {
     "island_events",
@@ -658,6 +660,13 @@ SETTINGS = [
         "default": False,
         "category": "optional",
         "excludes": ["render_unicode_in_game_fonts"],
+    },
+    {
+        "id": "copy_paste_text_boxes",
+        "label": "Copy and Paste in Text Boxes",
+        "description": "While you type in one of the game's text boxes (a name, the Family Tree note): Ctrl+V or Shift+Insert pastes, Ctrl+C or Ctrl+Insert copies the box's whole text, Ctrl+X cuts it. Line breaks and tabs in pasted text become spaces, other control characters are left out, and a paste stops at the box's own limit, never inside a character. With either Unicode text setting on, any character can be pasted; with both off, only the letters the original game can store (Windows-1252). The keys do nothing anywhere else and never reach the game as letters. Works with or without the Unicode text settings. Installs a small companion DLL in the Virtual Families 2 Patcher Files folder next to the game; unticking the setting removes it and the game is unmodified again.",
+        "default": True,
+        "category": "optional",
     },
     {
         "id": "invisible_upgrades_graphics",
@@ -1170,6 +1179,7 @@ RUNTIME_FLAG_SECTION_BY_SETTING = {
     "r_refreshes_store": ".vf2rfsh",
     "render_unicode_in_game_fonts": ".vf2utxt",
     "use_unicode_font": ".vf2ufnt",
+    "copy_paste_text_boxes": ".vf2clip",
     "expanded_flea_market": ".vf2flea",
     "free_guaranteed_cheats": ".vf2free",
     "all_outfits_hairstyles": ".vf2clth",
@@ -1638,11 +1648,13 @@ def unicode_text_post_asset_patches(
     output_exe_name: str,
     build_manifest_data: dict[str, Any],
 ) -> list[dict[str, Any]]:
-    """The two dormant Unicode text bytes (.vf2utxt, .vf2ufnt), each set by its own setting."""
+    """The dormant Unicode text bytes (.vf2utxt, .vf2ufnt) and Copy and Paste in Text Boxes' (.vf2clip), each set
+    by its own setting."""
     records: list[dict[str, Any]] = []
     for key, setting_id, label in (
         ("UnicodeText", "render_unicode_in_game_fonts", "Render Unicode with In-Game Fonts"),
         ("UnicodeFont", "use_unicode_font", "Use Unicode Font (overrides in-game fonts)"),
+        ("ClipBoard", "copy_paste_text_boxes", "Copy and Paste in Text Boxes"),
     ):
         contract = build_manifest_data.get(key)
         if not isinstance(contract, dict):
@@ -1763,6 +1775,60 @@ def unicode_text_asset_patches(
         stage("UnicodeFont", UNICODE_FONT_INI_NAME, UNICODE_FONT_INI_TEXT.encode("ascii"), UNICODE_FONT_INI_NAME,
               setting, "Use Unicode Font switch (Mode=2, Face=Segoe UI) read by the companion DLL. Disabling the "
               "setting removes only this exact file.")
+    return records
+
+
+CLIP_DLL_NAME = "vf2clip_b200.dll"
+CLIP_INI_NAME = "vf2clip.ini"
+CLIP_INI_TEXT = "[Patches]\r\nMode=3\r\n"
+
+
+def clip_asset_patches(
+    bundle_dir: Path,
+    dll_path: Path | None,
+    build_manifest_data: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Copy and Paste in Text Boxes: vf2clip_b200.dll (runtime\\native\\build_b200unicode.bat clip) and its ini
+    (Mode=3), loaded by the executable's dormant .vf2clip loader. A build without the loader has no ClipBoard
+    contract and gets no records."""
+    contract = build_manifest_data.get("ClipBoard")
+    if not isinstance(contract, dict):
+        return []
+    if dll_path is None:
+        raise ValueError(
+            "This build has the Copy and Paste in Text Boxes loader; pass --clip-dll with the built "
+            f"{CLIP_DLL_NAME} (runtime\\native\\build_b200unicode.bat clip) or the setting would do nothing."
+        )
+    if not dll_path.is_file() or dll_path.name != CLIP_DLL_NAME:
+        raise ValueError(f"--clip-dll must be an existing {CLIP_DLL_NAME}: {dll_path}")
+    if contract.get("companion_dll") != CLIP_DLL_NAME or contract.get("companion_ini") != CLIP_INI_NAME:
+        raise ValueError("Build manifest's ClipBoard contract names another companion file.")
+    require_vf2_pe32_x86(dll_path, label="Copy and Paste DLL")
+    data = dll_path.read_bytes()
+    if b"B200Unicode_Startup" not in data or b"B200Clip_Status" not in data or b"B200Unicode_TestPlan" in data:
+        raise ValueError("The Copy and Paste DLL must be the shipped clip build (exports B200Clip_Status, no test "
+                         "entry points).")
+    records: list[dict[str, Any]] = []
+    for name, payload, note in (
+        (CLIP_DLL_NAME, data, "Copy and Paste in Text Boxes companion DLL, loaded by the executable's dormant .vf2clip "
+                              "loader. Disabling the setting removes only this exact file."),
+        (CLIP_INI_NAME, CLIP_INI_TEXT.encode("ascii"), "Copy and Paste in Text Boxes switch (Mode=3) read by the "
+                                                        "companion DLL. Disabling the setting removes only this exact file."),
+    ):
+        path = bundle_dir / "payload" / "ClipBoard" / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(payload)
+        records.append({
+            "file_path": f"{TIME_CONTROLS_PATCHER_FOLDER}/{name}",
+            "source_path": relative_posix(path.relative_to(bundle_dir)),
+            "source_sha256": sha256_file(path),
+            "source_size": path.stat().st_size,
+            "overwrite_existing": True,
+            "allow_missing_target": True,
+            "remove_when_disabled": True,
+            "requires": ["core_executable", "copy_paste_text_boxes"],
+            "note": note,
+        })
     return records
 
 
@@ -5425,6 +5491,11 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
             Path(args.unicode_text_dll).resolve() if getattr(args, "unicode_text_dll", None) else None,
             build_manifest_data,
         ))
+        asset_patches.extend(clip_asset_patches(
+            bundle_dir,
+            Path(args.clip_dll).resolve() if getattr(args, "clip_dll", None) else None,
+            build_manifest_data,
+        ))
     # Invisible Workspace Upgrades is emitted AFTER the misc/optional visual
     # records on purpose. Records that share a target with distinct requires
     # are a layered override and the patcher applies them in manifest order,
@@ -5998,6 +6069,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--mobile-sound-assets-dir", help="Folder containing all 67 pinned mobile behavior sound .ogg files to place behind the mobile_sound_assets setting.")
     parser.add_argument("--invisible-upgrades-dir", help="Folder containing invisible upgrade .png files to place in payload/OptionalVisualMods/Invisible Upgrades and target to Images/Upgrades.")
     parser.add_argument("--original-upgrades-dir", help="Folder containing original upgrade .png files to bundle as restore/reference sources for Invisible Upgrades.")
+    parser.add_argument("--clip-dll", help="The built vf2clip_b200.dll (runtime\\native\\build_b200unicode.bat clip) to ship behind the copy_paste_text_boxes setting. Required when the build has its loader.")
     parser.add_argument("--unicode-text-dll", help="The built vf2unicode_b200.dll (runtime\\native\\build_b200unicode.bat) to ship behind the render_unicode_in_game_fonts and use_unicode_font settings. Required when the build has the Unicode text loaders.")
     parser.add_argument("--store-refresh-dll", help="The built vf2refresh_b200.dll (runtime\\native\\build_b200refresh.bat) to ship behind the r_refreshes_store setting. Required when the build has the R Refreshes the Store loader.")
     parser.add_argument("--outfit-pictures-dll", help="The built vf2outfits_b200.dll (runtime\\native\\build_b200outfits.bat) to ship behind the fix_vanilla_game_bugs setting. Required when the build has the Outfit Pictures loader.")

@@ -325,6 +325,7 @@ The GUI reads its checkboxes from the shipped manifest, so the exact list follow
 the release you downloaded. The next bundle offers 45 settings (B206): B205's 41 plus **Free and
 Guaranteed Cheats**, **All outfits and hairstyles always for sale** (both off by default), **Render Unicode
 with In-Game Fonts** and **Use Unicode Font (overrides in-game fonts)** (only one of the two can be on).
+The bundle after it (B207) adds **Copy and Paste in Text Boxes** (on by default): 47 defined - 2 + 1 = 46.
 
 That number is not simply the count of settings the patcher defines, which is
 46. The settings list drops any optional setting that has no packaged source
@@ -511,6 +512,30 @@ release bundle, like almost everything else)
     executable, draws the same glyphs at the same places with the same pixels as the patcher; with Use Unicode
     Font (real GDI under emulation, `tests/test_unicode_font.py`) the same for Segoe UI, Comic Sans MS and Arial
     loaded from a font file, in all four fonts.
+  - **characters beyond U+FFFF typed the Windows way** (an emoji or Cuneiform from an input method, the touch
+    keyboard or `SendInput(KEYEVENTF_UNICODE)`): the game's SDL2.dll (2.0.3) makes text from each WM_KEYDOWN one
+    UTF-16 unit at a time and sends the two halves as two text events (`ED A0..AF xx`, `ED B0..BF xx`); the DLL
+    joins them into the one character and never types a half (`tests/sdl_surrogate_probe.c` shows the real
+    SDL2.dll's events; `tests/test_b200_unicode_dll.py`).
+  - **viewing never shortens a name**: the family member screen shows a member's name (char[25], up to 24 bytes)
+    in an 18-byte box and on Done or choosing another member copies `GetText(buf, 13h)` (18 bytes) over the name, so
+    the stock game would cut a longer name just by showing it. The DLL hooks `ldwTextControlImpl::SetText`; a text
+    the game set and the player has not changed that does not fit is never cut (GetText gives an empty text, which
+    those callers skip). Every screen with an editable box was checked (`tests/test_name_boxes.py`: the game's own
+    screen code under emulation; player names, char[20], and the Family Tree note always fit).
+  - **wide scripts fit**: a typed name is never wider than the widest name the stock game allows in that box (its
+    limit in the font's widest plain letter); a wider character (a Cuneiform sign is up to five W wide) is refused.
+- **Copy and Paste in Text Boxes** (`.vf2clip`, Optional, **on by default**; new after B206, needs the B207
+  executables) - while you type in one of the game's text boxes: **Ctrl+V** or **Shift+Insert** pastes the
+  clipboard at the end of the text, **Ctrl+C** or **Ctrl+Insert** copies the box's whole text, **Ctrl+X** cuts it.
+  Line breaks and tabs in pasted text become a space each; other control characters and lone surrogates are left
+  out; a paste stops at the box's own limit at whole characters. With either Unicode text setting on any character
+  is pasted (each through the box's own HandleKey, so the stored form and the width cap apply); with both off only
+  Windows-1252 characters, one byte each. The keys do nothing anywhere else and never reach the game as letters.
+  The companion DLL `vf2clip_b200.dll` is the Unicode text source built with `B200UNICODE_CLIP`
+  (`build_b200unicode.bat clip`): it replaces only the SDL_PollEvent import slot. Evidence: `tests/test_clip_text_boxes.py`
+  (the DLL with the game's own event manager and text box code under emulation, at the limit and one past it with
+  guard bytes). Not live tested.
 - **R Refreshes the Store** (`.vf2rfsh`, an Optional patch and a cheat, **on by default**; new in the final
   B204 rebuild) - in the store, press **R** (or Shift+R) to pick the store's random items again, the
   game's own way and with the game's own odds:
