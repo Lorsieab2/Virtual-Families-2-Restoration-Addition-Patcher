@@ -473,7 +473,8 @@ release bundle, like almost everything else)
   save's counts are kept and count again the moment the setting is unticked.
 - **Render Unicode with In-Game Fonts** (`.vf2utxt`, Optional, **on by default**; new after B205, needs the
   B206 executables) and **Use Unicode Font (overrides in-game fonts)** (`.vf2ufnt`, Optional, **off by default**).
-  The two cannot be on together: ticking one unticks the other in the GUI, the command line refuses both, and the
+  The two cannot be on together: ticking one unticks the other in the GUI, Patch Selection Settings refuses Tick
+  These with both chosen, the command line refuses `--enable` of both, and the
   bundle's settings say so (`"excludes"`). Both install the companion DLL `vf2unicode_b200.dll` (the second under
   the name `vf2unicodefont_b200.dll`, so each setting removes only its own files):
   - **what the game can show**: every Unicode character (U+0000..U+10FFFF, beyond U+FFFF too): accents,

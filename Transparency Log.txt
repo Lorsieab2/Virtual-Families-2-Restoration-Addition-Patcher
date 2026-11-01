@@ -298,7 +298,8 @@ Changelog
 
 - Render Unicode with In-Game Fonts (after B205; Optional, on by default) and
   Use Unicode Font (overrides in-game fonts) (Optional, off by default): only
-  one can be on. Install vf2unicode_b200.dll (or the same DLL as
+  one can be on (ticking one unticks the other; Patch Selection Settings and
+  the command line refuse both at once). Install vf2unicode_b200.dll (or the same DLL as
   vf2unicodefont_b200.dll), its ini, and for the first setting the
   patcher-made letters in "Unicode Text" (new pictures made from the game's own
   font pictures; the game's pictures are never changed), in the Virtual
