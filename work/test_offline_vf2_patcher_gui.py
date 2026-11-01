@@ -1606,7 +1606,7 @@ class PresetButtonAndSelectionWindowTests(unittest.TestCase):
         self.app.select_default_settings()
         self.root.update()
         expected = self.ids - self.CHEATS - {"up_to_28_children", "invisible_furniture_transparent_graphics",
-                                             "no_ai_icons"}
+                                             "no_ai_icons", "use_unicode_font"}
         self.assertEqual(self.ticked(), expected)
         # No AI Icons only reskins Cheat Upgrades rows: it waits for Cheat Upgrades and comes back with it.
         self.app.setting_vars["cheat_upgrades"].set(True)
@@ -1621,18 +1621,22 @@ class PresetButtonAndSelectionWindowTests(unittest.TestCase):
         self.app.clear_all_settings()
         self.app.select_owners_default_settings()
         self.root.update()
-        self.assertEqual(self.ticked(), self.ids - {"up_to_28_children"})
+        # of the two exclusive text settings: Use Unicode Font on, Render Unicode with In-Game Fonts off
+        owners = self.ids - {"up_to_28_children", "render_unicode_in_game_fonts"}
+        self.assertEqual(self.ticked(), owners)
         for setting_id in self.CHEATS | {"no_ai_icons", "invisible_furniture_visible_graphics",
-                                         "invisible_furniture_transparent_graphics", "time_controls"}:
+                                         "invisible_furniture_transparent_graphics", "time_controls",
+                                         "use_unicode_font"}:
             self.assertIn(setting_id, self.ticked())
-        self.assertEqual(gui.owners_default_selection(self.app.settings), self.ids - {"up_to_28_children"})
+        self.assertEqual(gui.owners_default_selection(self.app.settings), owners)
 
     def test_select_all_leaves_experimental_off_and_deselect_all_clears(self):
         self.app.select_all_settings()
         self.root.update()
         experimental = {row["id"] for row in self.rows if row.get("category") == "experimental"}
         self.assertEqual(experimental, {"up_to_28_children"})
-        self.assertEqual(self.ticked(), self.ids - experimental)
+        # of the two exclusive text settings Select All keeps the default one
+        self.assertEqual(self.ticked(), self.ids - experimental - {"use_unicode_font"})
         self.app.clear_all_settings()
         self.root.update()
         self.assertEqual(self.ticked(), set())

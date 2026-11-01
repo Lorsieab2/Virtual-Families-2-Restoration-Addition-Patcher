@@ -99,6 +99,11 @@ def main() -> int:
     parser.add_argument("--outfit-pictures-dll",
                         default=str(ROOT / "runtime" / "build" / "vf2outfits_b200.dll"),
                         help="Built vf2outfits_b200.dll shipped behind the fix_vanilla_game_bugs setting")
+    # Unicode text: one DLL for both exclusive settings (the exporter ships it under two names) and the
+    # patcher-made letters, made at export from work/vanilla_runtime_payload/Images (build_b200unicode.bat).
+    parser.add_argument("--unicode-text-dll",
+                        default=str(ROOT / "runtime" / "build" / "vf2unicode_b200.dll"),
+                        help="Built vf2unicode_b200.dll shipped behind render_unicode_in_game_fonts / use_unicode_font")
     args = parser.parse_args()
 
     outputs = ROOT / "outputs"
@@ -172,7 +177,8 @@ def main() -> int:
                         ("--up-to-28-children-dll", args.up_to_28_children_dll),
                         ("--family-history-dll", args.family_history_dll),
                         ("--store-refresh-dll", args.store_refresh_dll),
-                        ("--outfit-pictures-dll", args.outfit_pictures_dll)):
+                        ("--outfit-pictures-dll", args.outfit_pictures_dll),
+                        ("--unicode-text-dll", args.unicode_text_dll)):
         if flag not in flags:
             print(f"exporter has no {flag}; the companion DLL would be absent", file=sys.stderr)
             return 1

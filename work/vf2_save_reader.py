@@ -16,6 +16,8 @@ import struct
 from dataclasses import dataclass
 from pathlib import Path
 
+import vf2_game_text as game_text
+
 # --- the file: ldwGameState::Save / Load ----------------------------------------------------------
 
 MAGIC = b"ldwg"
@@ -71,7 +73,9 @@ def gs_to_file(gs_offset: int) -> int:
 
 
 def _cstr(raw: bytes) -> str:
-    return raw.split(b"\0", 1)[0].decode("cp1252", "replace")
+    """A text field's text: the patcher's one rule (vf2_game_text.decode: UTF-8 when the bytes are UTF-8, else one
+    character per byte)."""
+    return game_text.decode(raw)
 
 
 def _i32(b: bytes, off: int) -> int:

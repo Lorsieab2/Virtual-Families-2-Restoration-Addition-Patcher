@@ -6,6 +6,8 @@ B206 offers 43 settings, which is B205's 41 plus two new ones. 37 of the 43 are 
 
 **B206 saves to its own folder**, `Documents\LDW\Virtual Families 2 - Modded B206`, because Virtual Families 2 names its save folder after the executable. See "Keeping your B205 families" below.
 
+Not in B206: the Unicode text settings (#474, merged after `2ff4152`) ship in B207.
+
 ## Choosing patches (#472)
 
 - **Four preset buttons, as in the Virtual Villagers patcher**, each with its own **?**:
