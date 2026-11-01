@@ -224,6 +224,25 @@ class CopyTests(Base):
         self.assertEqual(r.read_family_save(self.folder / "Virtual Families 24.ldw").nickname, "Smiths Two")
         self.assertEqual([s.label for s in rf.read_slots(self.folder)][3], "Save 4: Smiths Two")
 
+    def test_the_settings_agree_with_the_games_own_rebuild_at_start(self):
+        """theGameState::Load() loads each slot's save at every start: one that loads gives the slot its player name
+        and a set flag, one that does not clears the flag. After the copy the settings already say that for the
+        copied slot, and the copy changed no other slot's entry."""
+        before = r.parse_settings((self.folder / "Virtual Families 20.ldw").read_bytes())
+        self.copy("Smiths Two")
+        settings = r.parse_settings((self.folder / "Virtual Families 20.ldw").read_bytes())
+        copied = r.read_family_save(self.folder / "Virtual Families 24.ldw")
+        self.assertTrue(settings.slot_in_use[3])
+        self.assertEqual(settings.player_names[3], copied.nickname)
+        for k in (0, 1, 2, 4):
+            self.assertEqual((settings.player_names[k], settings.slot_in_use[k]),
+                             (before.player_names[k], before.slot_in_use[k]))
+        # The only per-slot fields of the 0x90-byte block: the five entries at +0x10 and the five flags at +0x79.
+        per_slot = {rf.MENU_FIRST + rf.MENU_FIELD * k + i for k in range(5) for i in range(rf.MENU_FIELD)}
+        per_slot |= {cs.FLAG_FIRST + k for k in range(5)}
+        base = r.HEADER_SIZE
+        self.assertEqual(per_slot, set(range(base + 0x10, base + 0x10 + 5 * 0x15)) | set(range(base + 0x79, base + 0x7E)))
+
     def test_the_same_name_is_allowed_and_adds_no_rename_record(self):
         self.copy("Lorsieab2")
         logs = self.folder / PATCHER / "Save 4" / "Logs" / "Family History"

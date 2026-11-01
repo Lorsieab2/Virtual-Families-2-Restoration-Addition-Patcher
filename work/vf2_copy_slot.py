@@ -31,7 +31,12 @@ The copy, and how each file stays valid for the copied, renamed save
       Rename Family does). The copies are read back with vf2_save_reader and must parse exactly as the originals,
       but for the name.
     * The settings file gets the target's slot-menu entry (the new name) and its in-use flag, as the game's own
-      new-player box writes them; nothing else in it changes.
+      new-player box writes them; nothing else in it changes. These are its only per-slot fields (docs/vf2-save-
+      format.md section 7 lists every field), and they are what the game itself rebuilds at every start:
+      theGameState::Load() loads each slot's save and gives one that loads its player name and a set flag.
+    * Nothing of a slot lives outside the save folder: the game keeps nothing per slot in the registry (its only
+      registry calls are ATL's COM registrar) or elsewhere, and the patcher's DLLs keep nothing per slot beside the
+      game (their .ini and .log files there are shared).
     * Children and Outfits sidecars hold the FNV-1a 64 hash and the size of the save file they were written with
       (+24 and +32) and an FNV-1a 64 of every byte before the last 8. Each one is checked as its DLL reads it; one
       that describes the source's save N (or N+20) is re-keyed to the hash and size of that save's copy, with its
