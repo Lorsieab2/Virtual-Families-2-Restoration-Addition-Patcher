@@ -102,6 +102,27 @@ VILLAGER_HEALTH_OFFSET = 0x6B00
 INCREMENT_AGE = 0x4C4080                # CVillagerBio::IncrementAge(int) thiscall, ret 4
 TIMEFLOW_INCREMENT_AGE_CALL = 0x4C4DEF  # call IncrementAge inside AllVillagersTimeflowUpkeep
 
+# The Time Warp's price (owner decision 2026-11-01): the button costs what the store's own Time Warp costs.
+# The DLL reads the price from the game at the moment of the click: CInventoryManager::GetPrice (thiscall,
+# one int, ret 4) on the inventory manager, for the store item TIME_WARP_ITEM, exactly as the store's
+# CalcPrice does. It spends it the way the store's purchase does: the money wrapper (thiscall on CMoney,
+# float amount, bool, ret 8) with the negated price and false. The balance is CMoney's double at +0.
+TIME_WARP_ITEM = 0x112                  # Special Upgrades: Time Warp (HandleUpgrade case: start time -3,660 x s)
+INVENTORY_MANAGER = 0x6852C0            # the CInventoryManager static (CalcPrice: mov ecx, it; call GetPrice)
+GET_PRICE = 0x46B9F0                    # CInventoryManager::GetPrice(int item) thiscall, ret 4
+MONEY = 0x68658C                        # the CMoney static; +0 is the balance, a double
+MONEY_SPEND = 0x4B85E0                  # the store's money call: CMoney::Adjust(float, bool) + the money goals
+MONEY_ADJUST = 0x4818B0                 # CMoney::Adjust(float amount, bool) thiscall: [this] += amount
+CALC_PRICE = 0x48ACB0                   # CScrollingStoreScene::CalcPrice(int item, bool *) thiscall, ret 8
+# Core-only evidence that TIME_WARP_ITEM is the Time Warp and what the store charges for it (never given
+# to the DLL: it reads the price live).
+ITEM_INFO_TABLE = 0x56FE70              # 24h-byte rows: id, owned flag, uses, price, lock, ...
+STORE_TIME_WARP_PRICE = 2000
+HANDLE_UPGRADE_INDEX = 0x48CBC0         # HandleUpgrade: byte index per item - E1h, then the jump table
+HANDLE_UPGRADE_TABLE = 0x48CB70
+FIRST_UPGRADE_ITEM = 0xE1
+TIME_WARP_CASE = 0x48C79D               # HandleUpgrade's Time Warp case
+
 GAME_STATE_VTABLE = 0x4FC554
 GAME_STATE_SLOT_LOAD = 0x4FC588         # vtable slot 13: Load(int slot)
 GAME_STATE_SLOT_SAVE = 0x4FC58C         # vtable slot 14: Save(int slot)
@@ -358,6 +379,36 @@ PINS = [
         "context",
         "theGameState::Save(slot != 0) end: writes 25B18h bytes from this+8, which include the speed field, then ret 4.",
     ),
+    Pin(
+        "calc_price_head", 0x48ACB0,
+        "558BEC538B5D0856578BF1B9C052680053E82A0DFEFF83BED400000003",
+        "context",
+        "CScrollingStoreScene::CalcPrice(int item, bool *) head: ebx = the item; mov ecx, the inventory manager (0x6852C0); push ebx; call CInventoryManager::GetPrice (0x46B9F0, thiscall, the caller does not clean: ret 4). The store's every price starts here, so the Time Warp button asks the same function about the same item.",
+    ),
+    Pin(
+        "purchase_spend", 0x48C0A4,
+        "6A00518BCEE802ECFFFF8BF88BCFF7D96A0051660F6EC1B98C6568000F5BC0F30F110424E813C50200",
+        "context",
+        "HandlePurchaseItem: price = CalcPrice(item, 0); then push 0 (bool), push (float)-price, mov ecx, the CMoney static (0x68658C), call the money wrapper (0x4B85E0). This is how a store purchase pays; the Time Warp button pays the same way.",
+    ),
+    Pin(
+        "money_spend_wrapper", 0x4B85E0,
+        "FF742408F30F1044240851F30F110424E8BB92FCFFE8A6E7FFFFC20800",
+        "context",
+        "The money wrapper: pushes the bool and the float again and calls CMoney::Adjust (0x4818B0) with the same this, then the money goals check (0x4B6DA0); ret 8 (thiscall: float amount, bool).",
+    ),
+    Pin(
+        "money_adjust_head", 0x4818B0,
+        "558BECF30F1045080F5AC0568BF1F20F5806F20F1106",
+        "context",
+        "CMoney::Adjust(float amount, bool) head: the float argument is widened and added to the double at [this] (the balance) and stored back.",
+    ),
+    Pin(
+        "store_time_warp_case", 0x48C79D,
+        "8BB7185B0200B98C656800E8D355FFFFF20F10058C6568008D8619FCFFFFF20F5805F87F4F0081FEE70300008BCF0F4EC669C0B4F1FFFFF20F1145E850E8918DFEFF",
+        "context",
+        "HandleUpgrade's case for item 112h, the store's Time Warp: interest is paid on CMoney (0x68658C), the balance is read as a double from the same address, and the start time moves back 3,660 x the speed value (imul -0E4Ch).",
+    ),
 ]
 
 # --------------------------------------------------------------------------
@@ -376,6 +427,7 @@ ADDRESS_CONSTANTS = (
     "BUTTON_CTOR", "BUTTON_SET_TEXT", "SCENE_ADD_CONTROL", "GAME_TIME", "SET_SPEED",
     "GAME_STATE_INSTANCE_PTR", "VILLAGER_MANAGER", "INCREMENT_AGE", "TIMEFLOW_INCREMENT_AGE_CALL",
     "GAME_STATE_SLOT_LOAD", "GAME_STATE_SLOT_SAVE", "GAME_STATE_LOAD", "GAME_STATE_SAVE",
+    "INVENTORY_MANAGER", "GET_PRICE", "MONEY", "MONEY_SPEND",
 )
 
 
@@ -406,4 +458,12 @@ SLOT_ADJACENT = ("GAME_STATE_SLOT_LOAD", "GAME_STATE_SLOT_SAVE")
 
 # Core-variant addresses used only to prove RTTI chains; never emitted to the DLL.
 CORE_ONLY_CONSTANTS = ("IMAGE_BASE", "OPTIONS_DIALOG_VTABLE", "GAME_STATE_VTABLE",
-                       *TEST_ADDRESS_CONSTANTS, "TEST_ADDRESS_CONSTANTS")
+                       *TEST_ADDRESS_CONSTANTS, "TEST_ADDRESS_CONSTANTS",
+                       "MONEY_ADJUST", "CALC_PRICE", "ITEM_INFO_TABLE", "STORE_TIME_WARP_PRICE",
+                       "HANDLE_UPGRADE_INDEX", "HANDLE_UPGRADE_TABLE", "FIRST_UPGRADE_ITEM", "TIME_WARP_CASE")
+
+# The Free and Guaranteed Cheats contract (every executable from the build after B205): a writable 1-byte
+# section of this name, 0 as built, set to 1 by the patcher when the setting is ticked. The DLL finds it in
+# the running executable's own section table; no section (every build up to B205), or any byte but 1, means
+# the Time Warp is charged.
+FREE_CHEATS_SECTION = ".vf2free"
