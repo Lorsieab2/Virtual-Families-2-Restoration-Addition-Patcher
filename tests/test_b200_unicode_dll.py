@@ -58,7 +58,7 @@ def test_the_dll_source_names_every_site_and_writes_nothing_else():
         assert f"UNI_SITE_{site}" in header
     # the only writes: the plan's entry jumps, the two vtable slots and the import slot
     assert src.count("PlanJump(plan,") == 6 and src.count("PlanSlot(plan,") == 3
-    assert "0x400000" not in src and "0x4" + "F" not in src.replace("0x4F", "")  # no game address
+    assert not re.search(r"\b0x4[0-9A-Fa-f]{5}\b", src)                # no game address (the image is relocated)
     assert 'L"vf2unicodefont.ini"' in src and 'L"vf2unicode.ini"' in src
 
 
