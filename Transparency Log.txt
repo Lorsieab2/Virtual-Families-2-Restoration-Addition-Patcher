@@ -337,6 +337,19 @@ Changelog
   PNGs the player saves. Checked against the game's own code under emulation
   and pixel for pixel; never tested in a running game.
 
+- Picture Maker, All game pictures (after B205): a third tab with every
+  picture the game has, by category and searchable: all 632 entries of the
+  game's image table cut into every cell as the game cuts them (11,922
+  cells), every other Images file (the unused ones marked "(unused)", the
+  table's files the game lacks marked "(missing)"), the game's bars assembled
+  at any level (and two meters the game never calls, marked "(unused)"), and
+  in a patched game every picture of the patcher's, marked "(patcher)". Save
+  all shown writes every frame in a folder per category. The pictures are read
+  from the game folder; no game art ships. Python only; nothing is written but
+  the PNGs the player saves. Checked against the game's own code under
+  emulation; JPEG pixels and the files the code loads by name are not checked
+  against the game. Never tested in a running game.
+
 - Fix Vanilla Game Bugs, startup crash (after B204; owner-approved 31 October
   2026): at every start the game asks LDW's server to log in
   (ldwsoftware.com/game_backend/login.php; later message.php and poll.php).

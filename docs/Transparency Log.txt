@@ -3450,6 +3450,60 @@ Picture Maker: carried items (after B205)
   carrying.png items go. The game was never run.
 
 
+Picture Maker: All game pictures (after B205)
+---------------------------------------------
+
+- What it is: a third tab in the Picture Maker with every picture the game
+  has, by category, with a search box, one frame at a time or "Save all
+  shown" (every frame, a folder per category). Python only
+  (src/vf2_game_pictures.py, src/vf2_game_pictures.json,
+  scripts/build_vf2_image_table.py); no executable or DLL changes; the
+  pictures are read from the chosen game folder, none is in the repository.
+- The image table: theGraphicsManager.obj's ImageList, 633 entries of 0x30
+  bytes (+0 id, +4 file, +8 columns, +0Ch rows, +10h the file name's second
+  part, +14h files across, +18h files down); one is "No Graphic" and id 85
+  (Furniture/PirateShipStd.png) is listed twice. theGraphicsManagerImpl::
+  GetImage makes a grid when rows > 0 (one file, or files <file><x><y><file2>
+  side by side through ldwImageGrid(file, file2, across, down, columns,
+  rows)), a strip when only columns > 0, else a whole picture. ldwImageGrid
+  cuts cells of total width / columns by total height / rows (C division;
+  over several files the total width is the last row's and the total height
+  the sum of each row's last file's), and GetCellRect clamps a column or row
+  to the last. 628 entries' files are in the game: 11,922 cells. Four files
+  the table names are not in the game (LightSourceMask180x8, 200x10, 300x10,
+  small_logo.png): listed as missing.
+- The other Images files (data/vf2/clean-base-game-assets.json): the 16 map
+  tiles (CWorldMap, "MapX%dY%d.jpg"), the four Segoe fonts, SPLASH_BG.jpg and
+  mainToolTray.png are named in the code's strings; main_BG.png, VD_BG_2.png,
+  MenuBtnCurrency2.png, DRM/logo1.gif and DRM/virtualfamilies_drm.jpg are
+  named nowhere: unused. Thumbs.db, pspbrwse.jbf and stylesheet.css are not
+  pictures.
+- The bars: theContinuousVariableMeter::DrawPercentMeter(colour, level) is
+  called by theVillagerScene (colours 8-12, the Details screen; colour 9's
+  level counts to 3,000) and theLoadingScene (13): clipping to
+  level * 290 / 100 pixels, VD_progressbar (red for 9), VD_line 3 pixels
+  before the edge, VD_fade-02 at +271, then ResetClipping. theSlicedVariable
+  Meter (StatusBarSliceB every 2 pixels) and theVariableMeter (a FillRect or
+  LoadColor every 8 pixels) are never called: unused, drawn by their code.
+- The patcher's pictures: every Images file of the chosen folder that the
+  clean install lacks, or has with another size or SHA-256.
+- Evidence: tests/test_game_pictures.py rebuilds the data file from the
+  objects; runs GetImage and GetCellRect under unicorn
+  (tests/vf2_pictures_emu.py, with only the picture loading as seams) for
+  all 628 entries and compares every cell's file and rectangle; runs the
+  three DrawPercentMeter for colours 0-15 (0-5 for theVariableMeter) at
+  levels -5 to 105 and up to 3,200 and compares every call; runs
+  ldwGameWindowImpl::ClipRect on 3,000 random rectangles; compares five bars
+  with a Pillow composite of the emulated calls pixel for pixel; draws every
+  frame of every picture.
+- Not checked against the game: JPEG and GIF pixels (decoded by Windows'
+  GDI+, not the game's libjpeg); how the code draws the files it loads by
+  name (shown whole); the unused theVariableMeter's colour (drawn at 90% on a
+  clear background; the game blends over the screen). Not assembled: whole
+  screens and dialogs, rooms and the house with furniture placed, pets in
+  motion, weather over the house, day and night (their pieces are offered).
+
+
 Startup crash: LDW server reply (Fix Vanilla Game Bugs, after B204)
 --------------------------------------------------------------------
 
