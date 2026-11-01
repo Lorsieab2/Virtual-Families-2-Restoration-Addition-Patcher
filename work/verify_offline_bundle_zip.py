@@ -89,6 +89,8 @@ REQUIRED_RUNNERS = {
     "vf2_people_pictures.py",
     "vf2_people_links.json",
     "vf2_carried_items.json",
+    "vf2_game_pictures.py",
+    "vf2_game_pictures.json",
     "vf2_picture_image.py",
     "family_tree_backgrounds/blue-board-on-wood.png",
     "family_tree_backgrounds/blue-island.png",
