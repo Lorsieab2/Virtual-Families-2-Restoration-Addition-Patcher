@@ -322,5 +322,19 @@ Changelog
   saves. Checked against the game's own drawing code run under emulation and
   pixel for pixel against the game's sheets; never tested in a running game.
 
+- Fix Vanilla Game Bugs, startup crash (after B204; owner-approved 31 October
+  2026): at every start the game asks LDW's server to log in
+  (ldwsoftware.com/game_backend/login.php; later message.php and poll.php).
+  Its one reply reader read up to 2,048 bytes into a 2,048-byte buffer and then
+  wrote an end marker one past the last byte read. The server now answers with
+  the PHP script's own source (about 3 KB), so the marker landed past the
+  buffer and the game closed itself (0xC0000409) about 20 seconds in. Now it
+  reads at most 2,047 bytes, and a reply that filled the buffer or begins with
+  "<" (a script or web page, not the server's JSON or text) is treated as no
+  reply, as when the server does not answer. Two small stubs in the patched
+  executable's reply reader, behind the .vf2bugs byte; no file is written and
+  nothing is sent that the game did not already send. Checked under emulation;
+  never tested in a running game.
+
 Have fun! -Lorsieab2 :)
 

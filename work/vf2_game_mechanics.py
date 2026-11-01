@@ -480,11 +480,42 @@ def _hidden_lines() -> list[Fact]:
         _f(g, "The code is sent to LDW's server (ldwsoftware.com/game_backend/promocode.php, game VF2); no code is "
               "kept in the game. A reply of coins adds that many dollars (\"N coins have been added to your "
               "balance.\"); a brokerage reply adds 2 points of interest per point (0.02 each), though its message says "
-              "N%; \"invalid\" says the code is not valid; no reply says there was a problem. Whether LDW's server "
-              "still answers has not been traced (it was not contacted).", C,
+              "N%; \"invalid\" says the code is not valid; no reply says there was a problem. LDW's server no longer "
+              "runs its scripts (see LDW's server at startup below), so in practice there is no real reply. (This "
+              "page said earlier that whether it still answers had not been traced; it now has been, from the "
+              "owner's crash dumps.)", C,
            "HandleRedeemCredit -> CPromoCode::Submit(\"promocode.php?code=%s&game=%s\", \"VF2\") -> CWebClient "
            "(ldwsoftware.com, /game_backend/) -> PromoCodeCallback: \"coins\" -> CMoney::Adjust(value); "
            "\"brokerage\" -> CMoney+8 += 0.02 x value; \"invalid\"", sub=True),
+        _f(g, "LDW's server at startup: at every start the game asks ldwsoftware.com/game_backend/login.php to log "
+              "in (and later message.php for news and poll.php for polls), without showing anything. A real answer "
+              "is JSON: a login stores a session id; messages go to the news; polls to the polls. Every answer is "
+              "read by one reader, once, into room for 2,048 bytes.", C,
+           "theGame 0x4982C6 -> CLogIn::Begin 0x4816C0 (\"login.php?id=%s&platform=%s&game=%s\") -> CWebClient::Request "
+           "-> WebClientCallback (B204 0x4D46D0; retail 0x4C3360), status 100: InternetReadFile(h, buf[0x800], "
+           "0x800, &n); buf[n] = 0 -> the handler (CLogIn::Callback 0x481740, CRetrieveMessage, CPoll, CVote, "
+           "CPromoCode, CMicroTransaction), each of which treats NULL as no reply and parses JSON (CJSON::Parse "
+           "accepts only '{' first)"),
+        _f(g, WITH_PATCHER + "the reader takes at most 2,047 bytes, so it never writes past its room, and an "
+              "answer that filled the room (cut short) or begins with \"<\" (a script or web page, not the server's "
+              "answer) is treated as no answer, as when the server does not reply: nothing is logged in, shown or "
+              "changed. A short real answer is handled exactly as before (part of Fix Vanilla Game Bugs).", C,
+           "patch_server_reply_guard: WebClientCallback +0x20 push 800h -> 7FFh; +0x51 the reply -> NULL when "
+           "n == 7FFh or its first non-blank byte is '<'; both behind .vf2bugs; emulated in "
+           "tests/test_server_reply_guard.py (3,125-byte PHP reply: no fast-fail, NULL; short JSON: unchanged)",
+           sub=True),
+        _f(g, UNPATCHED + "an answer of 2,048 bytes or more fills the room and the reader writes its end marker one "
+              "byte past it, and the game closes itself (error 0xC0000409, no message).", C,
+           "stock exe sha256 1582d9e8: push 800h at 0x4C3388, mov byte [esp+eax+4],0 at 0x4C33A4 overwrites the "
+           "/GS cookie at esp+804h -> __security_check_cookie 0x4C3BCE fast-fails; rebuilt executables: "
+           "cmp eax,800h; jae ___report_rangecheckfailure (int 29h, code 8)", sub=True),
+        _f(g, "The code against live, both written: the code alone only says a long answer would crash it. Live, "
+              "LDW's server now answers every one of these requests with the PHP script's own source text "
+              "(about 3 KB), so the unpatched game closes itself about 20 seconds of real time after it starts, "
+              "whenever that "
+              "answer arrives (the owner's crash dumps hold it in the reader's room, 2,048 bytes read).", C,
+           "the owner's dumps \"VF2 Copy Test.exe.*.dmp\" (2026-10-31): the read buffer starts \"<?php\", n = 0x800, "
+           "0xC0000409 on a WinINet thread; the server was not contacted for this page", sub=True),
         _f(g, "The store scenes handle no hidden keys. The store menu, the furniture and accessory tabs, the Flea "
               "Market, On Sale, the Special Upgrades, the Services, the renovations, the career upgrades, the pets "
               "and the outfits are all pages of one store screen, and its only key is Esc (back to the house). No "

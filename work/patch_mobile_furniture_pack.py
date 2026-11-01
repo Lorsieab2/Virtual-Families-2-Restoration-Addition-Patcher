@@ -25951,12 +25951,154 @@ def patch_title_menu_refresh_on_activate(manifest):
     }
 
 
+# 4. A startup crash (owner-approved 2026-10-31: "Yes, fix it everywhere it
+#    exists"). At every start the game asks LDW's server for
+#    login.php (CLogIn::Begin), and later message.php and poll.php, through
+#    the one WinINet status callback WebClientCallback. On status 100
+#    (request complete) it reads once, InternetReadFile(h, buf, 0x800, &n),
+#    into a 0x800-byte stack buffer and then writes buf[n] = 0. A reply of
+#    2,048 bytes or more fills the buffer and the terminator lands one past
+#    it: the stock executable (callback 0x4C3360) overwrites the /GS cookie,
+#    the rebuilt one (callback 0x4D46D0) trips the compiler's range check;
+#    both end the game with 0xC0000409 on a WinINet thread. LDW's server now
+#    answers every request with the PHP script's own source (about 3 KB,
+#    text/plain), so the game dies about 20 seconds in whenever the reply
+#    arrives. Fixed: (a) the read asks for 0x7FF bytes, so n <= 0x7FF and
+#    the terminator always fits; (b) a reply that is not backend output -- one
+#    that filled the buffer (cut short), or whose first non-blank character
+#    is '<' (a script or web page; the backend answers JSON or plain text) --
+#    is handed on as no reply (NULL), which every handler already treats as
+#    the server not answering, exactly as when InternetReadFile fails.
+WEB_CALLBACK_FUNCTION = "?WebClientCallback@@YGXPAXKK0K@Z"
+WEB_CALLBACK_SIZE = 0x7C
+WEB_READ_LENGTH_OFFSET = 0x20      # push 800h (InternetReadFile's length)
+WEB_READ_RESUME_OFFSET = 0x25
+WEB_READ_STOCK_LENGTH = 0x800
+WEB_READ_FIXED_LENGTH = 0x7FF
+WEB_READ_STUB_SIZE = 0x1D
+WEB_REPLY_PUSH_OFFSET = 0x51       # lea eax,[ebp-804h]; push eax (the reply for Callback)
+WEB_REPLY_RESUME_OFFSET = 0x5C     # mov ecx, WebClientPlatform; call Callback
+WEB_REPLY_STUB_SIZE = 0x41
+
+
+def patch_server_reply_guard(manifest):
+    obj_path = PATCHED / "WebClientPlatform.obj"
+    obj = CoffObject(obj_path)
+    sec = _check_function_layout(
+        obj, WEB_CALLBACK_FUNCTION, WEB_CALLBACK_SIZE,
+        {
+            # sub esp,808h; the cookie; dwInternetStatus == 100
+            0x03: bytes.fromhex("81EC08080000"),
+            0x13: bytes.fromhex("837D1064" "754D"),
+            # InternetReadFile(hRequest, ebp-804h, 800h, ebp-808h)
+            0x19: bytes.fromhex("8D85F8F7FFFF" "50" "6800080000" "8D85FCF7FFFF" "50"),
+            0x2C: bytes.fromhex("FF3500000000" "FF1500000000" "85C0" "741E"),
+            # n = [ebp-808h]; n >= 800h -> range-check failure; buf[n] = 0
+            0x3C: bytes.fromhex("8B85F8F7FFFF" "3D00080000" "732D" "C68405FCF7FFFF00"),
+            # Callback(buf) or, when the read failed, Callback(NULL)
+            0x51: bytes.fromhex("8D85FCF7FFFF" "50" "EB02" "6A00"),
+            0x5C: bytes.fromhex("B900000000" "E800000000"),
+        },
+        {
+            0x0A: ("___security_cookie", IMAGE_REL_I386_DIR32),
+            0x2E: ("?WebClient_hRequestHandle@@3PAXA", IMAGE_REL_I386_DIR32),
+            0x34: ("__imp__InternetReadFile@16", IMAGE_REL_I386_DIR32),
+            0x5D: ("?WebClientPlatform@@3VCWebClientPlatform@@A", IMAGE_REL_I386_DIR32),
+            0x62: ("?Callback@CWebClientPlatform@@QAEXPBD@Z", IMAGE_REL_I386_REL32),
+        },
+    )
+    # Every reply handler's own no-reply path, the one the guard hands a bad
+    # reply to: each tests the reply for NULL before anything else.
+    handlers = {
+        "LogIn.obj": ("?Callback@CLogIn@@CAXPBD@Z", 0x13, "8B4508" "56" "57" "85C0" "0F8497000000"),
+        "RetrieveMessage.obj": ("?Callback@CRetrieveMessage@@CAXPBD@Z", 0x13, "8B4508" "53" "85C0" "0F8402010000"),
+        "Poll.obj": ("?Callback@CPoll@@CAXPBD@Z", 0x13, "8B4508" "53" "85C0" "0F8407020000"),
+        "Vote.obj": ("?Callback@CVote@@CAXPBD@Z", 0x13, "8B4508" "56" "33F6" "57" "85C0" "744E"),
+        "PromoCode.obj": ("?Callback@CPromoCode@@CAXPBD@Z", 0x15, "8B7D08" "85FF" "0F84F2000000"),
+        "MicroTransaction.obj": ("?Callback@CMicroTransaction@@CAXPBD@Z", 0x13, "8B4508" "56" "85C0" "745E"),
+    }
+    for obj_name, (handler, at, expected) in handlers.items():
+        handler_obj = CoffObject(SRC_OBJS / obj_name)
+        handler_sec = handler_obj.section(handler_obj.symbol(handler).section)
+        handler_code = bytes(handler_obj.buf[handler_sec.raw_ptr : handler_sec.raw_ptr + handler_sec.raw_size])
+        if handler_code[at : at + len(expected) // 2] != bytes.fromhex(expected):
+            raise RuntimeError(f"{handler} no-reply test +{at:#x} drifted")
+
+    read_off = sec.raw_size
+    stub = bytearray()
+    stub += b"\x80\x3D\0\0\0\0\x00"                                   # +00 cmp byte [flag],0
+    stub += b"\x75\x0A"                                               # +07 jne +13 (fix on)
+    stub += b"\x68" + struct.pack("<I", WEB_READ_STOCK_LENGTH)        # +09 push 800h (stock)
+    stub += b"\xE9" + struct.pack("<i", WEB_READ_RESUME_OFFSET - (read_off + 0x0E + 5))  # +0E jmp back
+    stub += b"\x68" + struct.pack("<I", WEB_READ_FIXED_LENGTH)        # +13 push 7FFh
+    stub += b"\xE9" + struct.pack("<i", WEB_READ_RESUME_OFFSET - (read_off + 0x18 + 5))  # +18 jmp back
+    assert len(stub) == WEB_READ_STUB_SIZE
+    _install_detour(
+        obj, sec.index, WEB_READ_LENGTH_OFFSET, 5, read_off, stub,
+        ((0x02, VANILLA_BUGS_FLAG_SYMBOL, IMAGE_REL_I386_DIR32),),
+    )
+
+    sec = obj.section(sec.index)
+    reply_off = sec.raw_size
+    stub = bytearray()
+    stub += b"\x8D\x85\xFC\xF7\xFF\xFF"                               # +00 lea eax,[ebp-804h] (the reply)
+    stub += b"\x80\x3D\0\0\0\0\x00"                                   # +06 cmp byte [flag],0
+    stub += b"\x74\x2C"                                               # +0D je +3B (fix off: stock)
+    stub += b"\x81\xBD\xF8\xF7\xFF\xFF" + struct.pack("<I", WEB_READ_FIXED_LENGTH)  # +0F cmp [ebp-808h],7FFh
+    stub += b"\x73\x1E"                                               # +19 jae +39: filled, cut short
+    stub += b"\x8B\xD0"                                               # +1B mov edx,eax
+    stub += b"\x8A\x0A"                                               # +1D mov cl,[edx]
+    stub += b"\x42"                                                   # +1F inc edx
+    stub += b"\x80\xF9\x20" b"\x74\xF8"                               # +20 space -> +1D
+    stub += b"\x80\xF9\x09" b"\x74\xF3"                               # +25 tab -> +1D
+    stub += b"\x80\xF9\x0A" b"\x74\xEE"                               # +2A LF -> +1D
+    stub += b"\x80\xF9\x0D" b"\x74\xE9"                               # +2F CR -> +1D
+    stub += b"\x80\xF9\x3C"                                           # +34 cmp cl,'<'
+    stub += b"\x75\x02"                                               # +37 jne +3B: pass it on
+    stub += b"\x33\xC0"                                               # +39 xor eax,eax (no reply)
+    stub += b"\x50"                                                   # +3B push eax
+    stub += b"\xE9" + struct.pack("<i", WEB_REPLY_RESUME_OFFSET - (reply_off + 0x3C + 5))  # +3C jmp back
+    assert len(stub) == WEB_REPLY_STUB_SIZE
+    _install_detour(
+        obj, sec.index, WEB_REPLY_PUSH_OFFSET, 7, reply_off, stub,
+        ((0x08, VANILLA_BUGS_FLAG_SYMBOL, IMAGE_REL_I386_DIR32),),
+    )
+    obj.write(obj_path)
+    manifest["ServerReplyGuard"] = {
+        "status": "installed",
+        "offline_patcher_setting": VANILLA_BUGS_SETTING,
+        "function": WEB_CALLBACK_FUNCTION,
+        "read_length": {
+            "branch": hex(WEB_READ_LENGTH_OFFSET),
+            "stub_offset": hex(read_off),
+            "rule": "InternetReadFile reads at most 0x7FF bytes into the 0x800-byte buffer, so buf[n] = 0 fits",
+        },
+        "reply_check": {
+            "branch": hex(WEB_REPLY_PUSH_OFFSET),
+            "stub_offset": hex(reply_off),
+            "rule": (
+                "a reply that filled the buffer (n == 0x7FF, cut short) or whose first character "
+                "after spaces, tabs, CR and LF is '<' (a script or page, not backend output) is "
+                "passed on as NULL, the handlers' own no-reply path"
+            ),
+            "handlers": sorted(handler for handler, _at, _expected in handlers.values()),
+        },
+        "flag_off": "the stock read of 0x800 bytes and the reply passed on unchecked",
+        "stock_defect": (
+            "a reply of 2,048 bytes or more fills the buffer and buf[0x800] = 0 is written past it: "
+            "0xC0000409 (stock: the /GS cookie at 0x4C3360; rebuilt: the range check); LDW's server "
+            "now answers with its PHP source (about 3 KB), so the game dies about 20 seconds after it starts"
+        ),
+    }
+
+
 def patch_fix_vanilla_game_bugs(manifest):
     """Every stock-game menu fix, behind the one .vf2bugs byte."""
     patch_title_menu_start_over_confirms(manifest)
     patch_options_pause_yes_idempotent(manifest)
     patch_title_menu_stale_hotspot(manifest)
     patch_title_menu_refresh_on_activate(manifest)
+    patch_server_reply_guard(manifest)
     manifest["FixVanillaGameBugs"] = {
         "status": "dormant native hooks installed in every executable",
         "offline_patcher_setting": VANILLA_BUGS_SETTING,
@@ -25975,6 +26117,7 @@ def patch_fix_vanilla_game_bugs(manifest):
             "SettingsPauseYesIdempotent",
             "TitleMenuStaleHotspot",
             "TitleMenuRefresh",
+            "ServerReplyGuard",
         ],
         "flag_off": "every site runs the stock instructions it displaced",
     }

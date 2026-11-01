@@ -3349,3 +3349,69 @@ Picture Maker (Tools tab, B205)
   outfit (taken from the patcher's generated vf2_villager_body_frames.cpp,
   not run), and a tray picture of a Holiday outfit. Not drawn: the Family
   Tree's frame round a portrait; the house is shown at its normal zoom.
+
+
+Startup crash: LDW server reply (Fix Vanilla Game Bugs, after B204)
+--------------------------------------------------------------------
+
+- Stock bug, in the retail executable (sha256 1582d9e8, callback 0x4C3360,
+  push 800h at 0x4C3388) and every rebuilt one (B204: callback 0x4D46D0, push
+  800h at 0x4D46F0): at every start CLogIn::Begin (0x4982C6 -> 0x4816C0)
+  requests ldwsoftware.com/game_backend/login.php?id=..&game=vf2.., reply
+  handler CLogIn::Callback (0x481740); CRetrieveMessage (message.php), CPoll
+  (poll.php), CVote, CPromoCode and CMicroTransaction use the same path. The
+  one WinINet status callback ("LDW WebClient", WebClientCallback), on status
+  100 (request complete), calls InternetReadFile(h, buf, 0x800, &n) once into a
+  0x800-byte stack buffer and writes buf[n] = 0. When n == 0x800 that byte is
+  one past the buffer: in the retail game it lands on the /GS cookie and
+  __security_check_cookie fast-fails; in the rebuilt executables the
+  compiler's range check (cmp eax,800h; jae ___report_rangecheckfailure)
+  fires int 29h with ecx = 8. Both are 0xC0000409 on a WinINet thread.
+- Live: LDW's server now answers every such request with the PHP script's
+  own source (about 3 KB, text/plain). The owner's crash dumps
+  ("VF2 Copy Test.exe.*.dmp") hold that reply in the read buffer, 0x800 bytes
+  read, and the 0xC0000409 at the callback. Whether a run crashes depends on
+  when the reply arrives, about 20 seconds in. The code alone does not show
+  this: in the code, a reply is whatever the server sends; the crash needs the
+  server's present long answer.
+- What the handlers do with a reply (B200 desktop objects): each tests it for
+  NULL first (its "No response" path), then CJSON::Parse, which accepts only a
+  reply whose first token after spaces, tabs, CR and LF is '{'. Login: a
+  session_id -> Credentials.SetJSON, the session id copied, Credentials.Save,
+  logged in; every path, logged in or not, ends with Credentials+0x4C = 1.
+  Messages: each message's text goes to the news callback and
+  markmessage.php is requested for its id. Polls: open/closed polls go to the
+  poll callbacks. Vote: the vote callback gets NULL when the reply parsed, a
+  message when there was none or it did not parse. PromoCode: coins/brokerage from JSON; a non-JSON reply
+  that contains "invalid" says the code is not valid, otherwise "there was a
+  problem". MicroTransaction: printf only. The PHP source fails CJSON::Parse
+  (first character '<'), so in the unpatched game it already did nothing
+  except, for promocode.php, a strstr for "invalid" in the script's text.
+- Fix (owner-approved 2026-10-31, part of Fix Vanilla Game Bugs, on by
+  default): patch_server_reply_guard in work/patch_mobile_furniture_pack.py,
+  two detours appended to WebClientCallback's own section in
+  WebClientPlatform.obj, each first testing the .vf2bugs byte: (a) +0x20, the
+  push 800h becomes push 7FFh, so n <= 0x7FF and buf[n] = 0 always fits; (b)
+  +0x51, the reply is handed to CWebClientPlatform::Callback as NULL when the
+  read filled the buffer (n == 0x7FF: cut short) or its first character after
+  spaces, tabs, CR and LF is '<' (a script or web page). Every handler then
+  takes its own no-reply path, the one InternetReadFile failing already takes.
+  Any other reply, JSON or text, is handed on byte for byte as before. A
+  genuine reply of exactly 2,047 bytes or more would also be treated as cut
+  short; the backend's answers are far shorter. With the byte 0 both sites run
+  the stock instructions. Installed in every executable of the matrix (the
+  generator's main calls it unconditionally); it needs a matrix rebuild, and
+  the B204 executables already published do not have it.
+- Not changed, noted: each handler sprintf's the server's "error" string into
+  a 0x104-byte stack buffer; a JSON reply with an "error" longer than about
+  220 characters would overflow it. The server sends no such reply today.
+- Evidence: tests/test_server_reply_guard.py runs the patched callback from
+  the object under unicorn (every relocation resolved): a 3,125-byte PHP reply
+  is read as 0x7FF bytes, never fast-fails and reaches the handler as NULL;
+  short real-looking replies (JSON, "invalid", empty) reach it unchanged and
+  identical to the stock object's; with the byte 0 the patched and the stock
+  object both fast-fail with code 8. The retail executable fast-fails on the
+  cookie. With VF2_SERVER_REPLY_EXE (a path or a glob) the linked callback of
+  each executable is run the same way, its byte found from the code and
+  checked to be in .vf2bugs. Static and emulated evidence only; the game was
+  never run and the server was not contacted.
