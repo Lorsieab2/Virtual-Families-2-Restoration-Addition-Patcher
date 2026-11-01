@@ -277,14 +277,30 @@ Not saved: the life-event queue (gs+0x25CE8, 20 x 0x3C) and the email queue lie 
 | Off | Field | Evidence |
 |---|---|---|
 | 0x00 i32 | current slot (1..5; 0 none) | `LoadCurrentGame`, `theChangePlayerDlg` |
-| 0x04 i32, 0x08 u8, 0x0C i32 | UNCONFIRMED | `InitGameInfo` initialises |
+| 0x04 i32 | the slot before the last switch | `theChangePlayerDlg::HandleMessage` (copies 0x00 here before a switch, and in one branch copies it back); `InitGameInfo` 0 |
+| 0x08 u8 | set to 1 by `InitGameInfo`; when set, 0x8C gets the same time as 0x88 | `InitGameInfo` |
+| 0x0C i32 | 0; nothing reads it | `InitGameInfo` only |
 | 0x09 u8 | full screen | `InitGameInfo` (FullScreen / ForceFullScreen), `Load(0)` (ForceWindowed) |
 | 0x10 | player names, 5 x char[0x15] for slots 1..5 | `theChangePlayerDlg`, `theCreateNickNameDlg` |
 | 0x79..0x7D u8 | slot 1..5 in use | `LoadCurrentGame`; delete player clears it |
 | 0x80 i32 | 1001 | `InitGameInfo` |
-| 0x84 u8 | UNCONFIRMED (`LoadCurrentGame` sets 1 when no slot loads) | |
+| 0x84 u8 | "no slot could be loaded" | `LoadCurrentGame` clears it, sets 1 when no slot loads |
 | 0x88 u32 | `_time64` low dword at `InitGameInfo` | |
-| 0x8C u32 | UNCONFIRMED | |
+| 0x8C u32 | the same time when 0x08 is set, else 0 | `InitGameInfo` |
+
+**Per slot: only the names and the in-use flags (VERIFIED, every reference to gs+0x25B20..0x25BAF in the desktop
+objects; audited for Copy Player Slot, 2026-10-31).** Every other field above is the game's own. And the game
+rebuilds both at every start: `theGameState::Load()` loads slot 0, then each `Virtual Families 2<N>.ldw` for
+N = 1..5 in turn; a save that loads gives its player name (gs+0x25ABC) to the slot's entry and sets its flag, one
+that does not gives the entry `NEW PLAYER` (0xA34) and clears the flag. So the settings file only has to agree
+with the saves until the next start; Copy Player Slot and Rename Family write exactly what that rebuild gives.
+
+**Nothing of a slot lives outside the save folder (VERIFIED, imports and strings of every desktop object).** The
+registry functions are only in `FlashPlayer.obj` (its statically linked ATL registrar, COM registration). The
+other files the game opens are `ldw.ini` (beside the exe, read only), `ldwLog.txt` and `wc.dat` (save folder,
+shared: the engine log and `CCredentials`, the LDW WebClient login), and its data files (`anims.dat`, `cmap.dat`,
+`lsmap.dat`, `wpts.dat`, `petanimpts.dat`, `sm.xml`). Achievements (CAchievement), the daily email and the
+collection are in each slot's save (section 3).
 
 ## 8. Status of a villager, from the saved bytes
 

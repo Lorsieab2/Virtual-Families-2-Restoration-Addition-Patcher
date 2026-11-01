@@ -351,14 +351,29 @@ class ToolsTabTests(unittest.TestCase):
     def test_copy_player_slot_is_on_the_tools_tab_with_a_guide(self):
         self.assertIn("copy_player_slot", self.app.help_keys)
 
-    def test_the_copy_dialog_offers_families_and_empty_slots(self):
+    def _pick_target(self, dialog, label: str) -> None:
+        values = list(dialog._vf2_target_box.cget("values"))
+        dialog._vf2_target_box.current(values.index(label))
+        dialog._vf2_target_box.event_generate("<<ComboboxSelected>>")
+        dialog.update()
+
+    def test_the_copy_dialog_offers_families_and_every_other_slot(self):
         self._real_saves()
         dialog = self.app.copy_player_slot()
         try:
             self.assertEqual(dialog._vf2_slot_list.get(0), "Save 1: Lorsieab2")
             self.assertEqual(dialog._vf2_slot_list.curselection(), (0,))
-            # The real settings mark slots 1-3 in use; slot 5 holds a file: only Save 4 is empty.
-            self.assertEqual(list(dialog._vf2_target_box.cget("values")), ["Save 4"])
+            # The real settings mark slots 1-3 in use, but only slot 1 has a save: 2, 3 and 4 are empty (the game
+            # sees "Virtual Families 2<N>.ldw" as its players); slot 5 holds a file, offered only to be replaced.
+            self.assertEqual(list(dialog._vf2_target_box.cget("values")),
+                             ["Save 1: Lorsieab2 (replace)", "Save 2 (empty)", "Save 3 (empty)", "Save 4 (empty)",
+                              "Save 5: (a save the game cannot load) (replace)"])
+            self.assertEqual(dialog._vf2_target_var.get(), "Save 2 (empty)")
+            self._pick_target(dialog, "Save 1: Lorsieab2 (replace)")
+            dialog._vf2_name_var.set("The Copies")
+            self.assertIn("other than the family's own", dialog._vf2_problem_var.get())
+            self._pick_target(dialog, "Save 4 (empty)")
+            dialog._vf2_name_var.set("")
             self.assertEqual(str(dialog._vf2_copy_button.cget("state")), "disabled")
             dialog._vf2_name_var.set("NEW PLAYER")
             self.assertIn("empty slot", dialog._vf2_problem_var.get())
@@ -373,6 +388,7 @@ class ToolsTabTests(unittest.TestCase):
         self._real_saves()
         before = self._snapshot()
         dialog = self.app.copy_player_slot()
+        self._pick_target(dialog, "Save 4 (empty)")
         dialog._vf2_name_var.set("The Copies")
         asked = []
 
@@ -387,10 +403,41 @@ class ToolsTabTests(unittest.TestCase):
         self.assertFalse((self.folder / "Backups").exists())
         dialog.destroy()
 
+    def test_replacing_a_family_warns_and_no_changes_nothing_yes_replaces(self):
+        import gzip
+        import vf2_save_reader as reader
+        self._real_saves()
+        fixtures = ROOT / "tests" / "fixtures" / "vf2_saves"
+        (self.folder / "Virtual Families 22.ldw").write_bytes(
+            gzip.decompress((fixtures / "pending_birth_slot1.ldw.gz").read_bytes()))
+        old = reader.read_family_save(self.folder / "Virtual Families 22.ldw").nickname
+        before = self._snapshot()
+        dialog = self.app.copy_player_slot()
+        self._pick_target(dialog, f"Save 2: {old} (replace)")
+        dialog._vf2_name_var.set("The Copies")
+        asked = []
+        with mock.patch.object(self.app, "_confirm_copy", lambda parent, text: asked.append(text) or False):
+            dialog._vf2_start()
+        self.assertEqual(len(asked), 1)
+        self.assertTrue(asked[0].startswith(f"Save 2 holds the {old} family. It will be replaced by a copy of "
+                                            "Lorsieab2 (Save 1), named The Copies. The whole save folder ("))
+        self.assertTrue(asked[0].endswith(". Replace it?"))
+        self.assertEqual(self._snapshot(), before)                   # No: nothing changed, not even a backup
+        self.assertFalse((self.folder / "Backups").exists())
+        with mock.patch.object(self.app, "_confirm_copy", return_value=True):
+            dialog._vf2_start()
+        self.assertEqual(reader.read_family_save(self.folder / "Virtual Families 22.ldw").nickname, "The Copies")
+        kept = [p for p in (self.folder / "Backups").iterdir() if p.name.startswith("Replaced by copy ")]
+        self.assertEqual(len(kept), 1)
+        self.assertTrue(kept[0].name.endswith(f" - Save 2 - {old}"))
+        self.assertEqual((kept[0] / "Virtual Families 22.ldw").read_bytes(), before[Path("Virtual Families 22.ldw")])
+        self.assertEqual((self.folder / "Virtual Families 21.ldw").read_bytes(), before[Path("Virtual Families 21.ldw")])
+        dialog.destroy()
+
     def test_the_prompt_names_everything_and_its_default_is_no(self):
         import vf2_copy_slot as cs
         text = cs.confirmation_text(self.folder, 1, b"Lorsieab2", 4, "The Copies")
-        for part in ('"Lorsieab2" (Save 1)', "Save 4", '"The Copies"', FOLDER, "backed up first", "(before copy)"):
+        for part in ("Lorsieab2 (Save 1)", "Save 4", "named The Copies", str(self.folder), "backed up first"):
             self.assertIn(part, text)
         import tkinter as tk
         parent = self.app.root
@@ -433,6 +480,7 @@ class ToolsTabTests(unittest.TestCase):
         import vf2_save_reader as reader
         self._real_saves()
         dialog = self.app.copy_player_slot()
+        self._pick_target(dialog, "Save 4 (empty)")
         dialog._vf2_name_var.set("The Copies")
         with mock.patch.object(self.app, "_confirm_copy", return_value=True):
             dialog._vf2_start()

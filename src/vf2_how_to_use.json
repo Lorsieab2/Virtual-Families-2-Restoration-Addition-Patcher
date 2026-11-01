@@ -181,10 +181,11 @@
       "section": "Tools",
       "title": "Copy Player Slot",
       "guide": [
-        "Copies a family into an empty save slot of the same save folder, under a new name, so you can play on in two ways.",
-        "Quit the game first, from its own menu. Click Copy Player Slot..., pick the family, the empty slot and the new name (up to 19 characters), then Copy and Yes.",
+        "Copies a family into another save slot of the same save folder, under a new name, so you can play on in two ways.",
+        "Quit the game first, from its own menu. Click Copy Player Slot..., pick the family, the slot to copy into and the new name (up to 19 characters), then Copy and Yes.",
+        "A slot with no save is empty, whatever the game's player list shows. A slot with another family is replaced only after a warning that names it.",
         "Everything kept for the family goes too: the game's previous save, Up to 28 Children, outfit pictures, the Family History log and the Family Tree Maker's tree file.",
-        "A slot in use is never written. Your saves are backed up first, as \"Backup <date> (before copy)\", so Restore Saves can undo it."
+        "Your saves are backed up first (Backups\\Backup <date> (before copy)), and a replaced family's files are kept in Backups\\Replaced by copy <date> - Save <N> - <name>."
       ]
     },
     "rename_family": {
