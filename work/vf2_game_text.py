@@ -539,11 +539,23 @@ def wrap(font: GameFont, raw: bytes, max_width: int, max_bytes: int = 0x3FF) -> 
     guard = 0
     while rest and guard < 10000:
         guard += 1
+        rest = rest.lstrip(b" ")                # a line never starts with a space (the stock function skips them)
+        if not rest:
+            break
         line, used, double = next_justified_line(font, rest, max_bytes, max_width, False)
-        if used <= 0 and not line:
-            # the stock function cannot place a word wider than the box: show it on its own line
-            cut = units(rest)[0].size
-            line, used = rest[:cut], cut
+        if not line and rest[:1] != b"\n":
+            # a word wider than the box: the stock function gives an empty line and skips letters (the game would
+            # lose them); the tool breaks the word instead, as many whole characters as fit (at least one)
+            line, width = b"", 0
+            for u in units(rest):
+                if u.text in (" ", "\n"):
+                    break
+                w = font.glyph(u).width + font.kerning
+                if line and width + w - font.kerning > max_width:
+                    break
+                line += u.raw
+                width += w
+            used, double = len(line), False
         lines.append(line)
         if double:
             lines.append(b"")

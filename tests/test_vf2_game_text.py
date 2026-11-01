@@ -177,3 +177,13 @@ def test_the_unpatched_game_draws_utf8_names_without_leaving_its_font(rig):
                 assert rect in rects
             assert rig.width(name, raw) >= 0
             rig.next_line(name, raw, 200, 100, True)
+
+
+def test_the_tools_wrap_never_drops_a_letter():
+    """A word wider than the wrap width is broken at characters, never shortened (Codex, PR #474)."""
+    for name in T.FONT_NAMES:
+        f = T.load_font(name)
+        for text, width in ((b"Hello world", 30), (b"supercalifragilistic", 25), ("日本語のなまえです".encode(), 20),
+                            (b"a b c", 1), (b"x", 0)):
+            lines = T.wrap(f, text, width)
+            assert b"".join(lines) == text.replace(b" ", b"")
