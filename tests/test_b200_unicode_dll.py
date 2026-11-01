@@ -176,7 +176,7 @@ class World:
         out = e.alloc(4 * 12)
         e.call(e.dll_export("B200Unicode_TestHooks"), (out,))
         keys = ("draw_string", "draw_chars", "get_width", "next_line", "get_text", "draw_justified", "char_rect",
-                "handle_key", "poll", "set_text")
+                "handle_key", "poll", "set_text", "clip_poll")
         return {k: e.r32(out + 4 * i) for i, k in enumerate(keys)}
 
     def game_seams(self, sites):
@@ -642,3 +642,36 @@ def test_the_games_drawstring_draws_what_the_patcher_draws(draw_world, name):
             # the same alpha everywhere; colour only where the pixel shows (a clear pixel's colour is unseen)
             assert a[3::4] == b[3::4], (text, x)
         assert w.width(name, raw) == T.get_width(font, raw), text
+
+
+WIDE = "\U0001242B"                      # CUNEIFORM NUMERIC SIGN NINE SHAR2: about five W wide
+
+
+@pytest.mark.parametrize("name", ["Segoe24", "Segoe32Bold"])
+def test_a_typed_name_is_never_wider_than_the_widest_stock_name(draw_world, name):
+    """Wide scripts: in an 18-byte family member box a character that would draw the name wider than 18 of the
+    font's widest plain letter is refused (typed, and a plain letter after wide ones too); the name always fits the
+    places the game draws names."""
+    w, fonts = draw_world
+    font_obj, f, _sheet = w.font(name)
+    font, _s = fonts[name]
+    widest = max(f.glyphs[f.charmap[b]][3] - f.glyphs[f.charmap[b]][1] for b in range(0x20, 0x7F))
+    cap = 18 * (widest + f.kerning) - f.kerning
+    w.s, w.h = w.sites(), w.hooks()
+    w.game_seams(w.s)
+    ctl, buf = _box(w, 18)
+    w.e.w32(ctl + 0x3C, font_obj)
+    typed = ""
+    for _ in range(4):
+        w.e.call(w.h["handle_key"], (5, ord(WIDE) | S.KEY_MARK, 0), ecx=ctl, edx=0)
+        if T.get_width(font, T.encode(typed + WIDE)) <= cap:
+            typed += WIDE
+        assert w.e.read(buf, 19).split(b"\0")[0] == T.encode(typed)
+    assert typed.count(WIDE) < 4 and T.get_width(font, T.encode(typed)) <= cap    # 4 would fit the 18 bytes
+    assert w.e.read(buf + 19, 16) == b"\xAB" * 16
+    # a plain letter that would pass the cap is refused before the stock code sees it
+    start = typed + "W" * ((cap - T.get_width(font, T.encode(typed))) // (widest + f.kerning))
+    w.e.write(buf, T.encode(start) + b"\0")
+    assert len(T.encode(start)) < 18
+    w.e.call(w.h["handle_key"], (5, 0, ord("W")), ecx=ctl, edx=0)
+    assert w.e.read(buf, 19).split(b"\0")[0] == T.encode(start)

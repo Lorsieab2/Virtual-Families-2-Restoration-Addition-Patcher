@@ -144,9 +144,9 @@ static void Changed(unsigned box) {
 static unsigned ClipCps[1300], ClipAdd[1300];
 static char ClipBefore[1300];
 
-// Each whole character (grapheme cluster) of the clipboard goes to the box the way typing does: through
-// ldwEventManager::HandleKey, so the box's own rules apply (its byte limit, a number-only box, and with a Unicode
-// text setting on the stored form and the name-width cap of the Unicode text DLL's HandleKey). A character the box
+// With a Unicode text setting on, each whole character (grapheme cluster) of the clipboard goes to the box the way
+// typing does: through ldwEventManager::HandleKey, so the box's own rules apply (its byte limit, a number-only box, the
+// stored form and the name-width cap of the Unicode text DLL's HandleKey). A character the box
 // takes only part of is taken back whole (the text as it was before it); the paste stops at the first character that
 // does not fit, and skips one the box refuses for another reason (a letter in a number-only box).
 static void ClipPaste(unsigned box) {
@@ -155,10 +155,29 @@ static void ClipPaste(unsigned box) {
     unsigned add = ClipboardText(ClipAdd, 1200, dropped);
     bool unicode = UnicodeOn();
     B200Clip_Status.unicode = unicode ? 1u : 0u;
+    if (!unicode) {
+        // both Unicode settings off: Windows-1252 bytes straight into the box (the stock HandleKey takes no byte
+        // above 7Fh), to its byte limit; the rest are dropped
+        char *buf = *(char **)(box + 0x30);
+        unsigned max = (unsigned)*(int *)(box + 0x28), at = ut::Length((const unsigned char *)buf), pasted = 0;
+        bool number = *(unsigned char *)(box + 0x2D) != 0;
+        for (unsigned i = 0; i < add; ++i) {
+            int b = Cp1252Byte(ClipAdd[i]);
+            if (b < 0 || (number && (b < '0' || b > '9'))) { ++dropped; continue; }
+            if (at >= max) { dropped += add - i; break; }
+            buf[at++] = (char)b;
+            ++pasted;
+        }
+        buf[at] = 0;
+        B200Clip_Status.pasted += pasted;
+        B200Clip_Status.dropped += dropped;
+        if (pasted) Changed(box);
+        return;
+    }
     void *events = ((EventsGetFn)SITE(EVENTS_GET))();
     unsigned pasted = 0, start = 0;
     while (start < add) {
-        unsigned end = unicode ? ut::ClusterEnd(ClipAdd, add, start) : start + 1;
+        unsigned end = ut::ClusterEnd(ClipAdd, add, start);
         char *buf = *(char **)(box + 0x30);
         unsigned before = ut::Length((const unsigned char *)buf);
         if (before >= sizeof(ClipBefore)) break;
@@ -166,14 +185,8 @@ static void ClipPaste(unsigned box) {
         bool skip = false;
         for (unsigned i = start; i < end && !skip; ++i) {
             unsigned cp = ClipAdd[i];
-            if (unicode) {
-                if (cp < 0x80) ((EventsHandleKeyFn)SITE(EVENTS_HANDLE_KEY))(events, UNI_KEY_TYPE_CHARACTER, 0, (int)cp);
-                else ((EventsHandleKeyFn)SITE(EVENTS_HANDLE_KEY))(events, UNI_KEY_TYPE_CHARACTER, (int)(cp | UNI_KEY_MARK), 0);
-            } else {
-                int b = Cp1252Byte(cp);
-                if (b < 0) { skip = true; break; }                        // not a Windows-1252 character: dropped
-                ((EventsHandleKeyFn)SITE(EVENTS_HANDLE_KEY))(events, UNI_KEY_TYPE_CHARACTER, 0, (int)(signed char)b);
-            }
+            if (cp < 0x80) ((EventsHandleKeyFn)SITE(EVENTS_HANDLE_KEY))(events, UNI_KEY_TYPE_CHARACTER, 0, (int)cp);
+            else ((EventsHandleKeyFn)SITE(EVENTS_HANDLE_KEY))(events, UNI_KEY_TYPE_CHARACTER, (int)(cp | UNI_KEY_MARK), 0);
         }
         buf = *(char **)(box + 0x30);
         // taken whole? the text is the one before plus exactly this character
@@ -182,7 +195,6 @@ static void ClipPaste(unsigned box) {
         if (whole) {
             unsigned n0 = ut::Decode((const unsigned char *)ClipBefore, before, ClipCps, 1290);
             unsigned n1 = ut::Decode((const unsigned char *)buf, now, ClipCps + 640, 640);
-            if (!unicode) { n0 = before; n1 = now; }
             whole = n1 == n0 + (end - start);
         }
         if (!whole) {
