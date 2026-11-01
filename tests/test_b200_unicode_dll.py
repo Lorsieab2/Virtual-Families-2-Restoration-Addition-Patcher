@@ -29,9 +29,9 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 RUNTIME = ROOT / "runtime"
 sys.path.insert(0, str(ROOT / "src"))
-sys.path.insert(0, str(ROOT / "tests"))
-sys.path.insert(0, str(RUNTIME))
-sys.path.insert(0, str(RUNTIME / "tools"))
+sys.path.append(str(ROOT / "tests"))
+sys.path.append(str(RUNTIME))
+sys.path.append(str(RUNTIME / "tools"))
 
 import b200_unicode_sites as S  # noqa: E402
 import vf2_game_text as T  # noqa: E402

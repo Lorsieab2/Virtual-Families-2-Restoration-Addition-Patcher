@@ -24,7 +24,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
-sys.path.insert(0, str(ROOT / "runtime" / "tools"))
+sys.path.append(str(ROOT / "runtime" / "tools"))
 
 import vf2_game_text as T  # noqa: E402
 import vf2_unicode_tables as TABLES  # noqa: E402
