@@ -61,8 +61,54 @@
       "title": "Choosing patches",
       "guide": [
         "Tick the patches you want. Main Patches are the core fixes, Optional Patches add extra content, and Experimental patches are unfinished (shown in red, and off unless you tick them).",
-        "Defaults ticks the recommended set. Enable All ticks everything except Experimental. Disable All clears every tick.",
+        "The four buttons above the list pick a whole set at once; each has its own \"?\". Enable All Main Patches and Enable all Optional Content tick one section.",
         "Some patches need another one. Ticking one ticks what it needs, and unticking a needed patch unticks what depends on it."
+      ]
+    },
+    "select_all": {
+      "section": "Patching",
+      "title": "Select All Patches",
+      "guide": [
+        "Ticks every patch except the Experimental ones (shown in red), which you tick yourself.",
+        "That includes the cheats: Cheat Upgrades, Free and Guaranteed Cheats, All 36 Flea Market goods and All outfits and hairstyles always for sale.",
+        "Then click Dry Run and Enable/Disable Patches to build it."
+      ]
+    },
+    "default_patches": {
+      "section": "Patching",
+      "title": "Default Patches",
+      "guide": [
+        "Ticks the recommended set, the same as a first start: every content patch and fix is on.",
+        "The cheats are off: Cheat Upgrades, Free and Guaranteed Cheats, All 36 Flea Market goods and All outfits and hairstyles always for sale. So are the Experimental patches.",
+        "Swap Invisible Furniture Graphics with Transparent Graphics is off too: place the invisible furniture first, then tick it.",
+        "No AI Icons stays waiting: it changes Cheat Upgrades icons, so it comes back on when you tick Cheat Upgrades."
+      ]
+    },
+    "owners_defaults": {
+      "section": "Patching",
+      "title": "Owner's Defaults",
+      "guide": [
+        "Ticks the set the patcher's owner plays with: every patch except Up to 28 Children (Experimental).",
+        "That includes every cheat, and both invisible-furniture patches: the transparent graphics replace the visible ones, so the invisible furniture really is invisible.",
+        "Then click Dry Run and Enable/Disable Patches to build it."
+      ]
+    },
+    "deselect_all": {
+      "section": "Patching",
+      "title": "Deselect All Patches",
+      "guide": [
+        "Clears every tick, so you can tick just the patches you want.",
+        "With nothing ticked, Enable/Disable Patches on a modded folder puts the game back to vanilla."
+      ]
+    },
+    "patch_selection_settings": {
+      "section": "Patching",
+      "title": "Patch Selection Settings",
+      "guide": [
+        "Opens a window listing every patch with a search box, to tick or untick several at once.",
+        "Type part of a name to find it, tick the patches you want in the window, then press Tick These or Untick These.",
+        "A patch that needs another one turns it on too, and unticking a patch unticks the patches that need it, just as in the main list.",
+        "Nothing is built until you click Enable/Disable Patches."
       ]
     },
     "family_history": {
@@ -85,7 +131,7 @@
       "setting": true,
       "guide": [
         "The store's Flea Market lists all 36 of its goods at all times, as every earlier patched build did.",
-        "It is on by default. Untick it and rebuild for the original game's Flea Market: 5 goods, picked at random and picked again 6 hours of real time later.",
+        "It is off by default (it is a cheat). Unticked, the Flea Market is the original game's: 5 goods, picked at random and picked again 6 hours of real time later. Owner's Defaults ticks it.",
         "While it is ticked all 36 goods are always in stock, even one that sold out while it was unticked.",
         "The Towelette, the Anti-spam Software and the Rockhound Certificate can be bought again too: the first two go to the tray again, the certificate stays owned, and an owned one keeps its checkmark."
       ]
@@ -96,7 +142,7 @@
       "setting": true,
       "guide": [
         "A cheat: in the store, press R (or Shift+R) to pick the store's random items again, the game's own way.",
-        "On the Clothing and Hairstyles page R picks the six outfits again. Hairstyles stay, and outfits you already bought keep their looks.",
+        "On the Clothing and Hairstyles page R picks the six outfits and the 6 rotating extra rows again (with All outfits and hairstyles on, Hairstyles stay); outfits already bought keep their looks.",
         "On the Flea Market page R always picks 5 new goods. R always redraws; with All 36 Flea Market goods on you won't see a change in the Flea Market list (all 36 stay listed and in stock).",
         "R does nothing on any other page, outside the store, or while a box is open. It never changes On Sale.",
         "It is on by default. Unticking it and rebuilding turns it off."

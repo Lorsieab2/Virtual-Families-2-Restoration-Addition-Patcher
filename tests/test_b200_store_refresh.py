@@ -120,9 +120,13 @@ def test_the_expansion_hooks_fall_through_unless_the_byte_is_1():
     gen = _gen_text()
     for fn in ("VF2GetExpandedFleaMarketCount", "VF2GetExpandedFleaMarketItem"):
         body = gen[gen.index(f'extern "C" int __cdecl {fn}('):]
-        body = body[:body.index("}}\n")]
+        body = body[:body.index("\n}}\n")]
         assert body.index("if (category != kVF2FleaMarketCategory) return -1;") < \
             body.index("if (gVF2ExpandedFleaMarket != 1) return -1;"), fn
+        # The Special Upgrades and Clothing pages are answered first, each behind its own byte.
+        assert body.index("if (category == kVF2SpecialUpgradesCategory) {{") < \
+            body.index("if (category != kVF2FleaMarketCategory) return -1;"), fn
+        assert "if (gVF2AllOutfitsForSale == 1) return -1;" in body, fn
 
 
 def test_all_36_goods_are_always_in_stock_and_owned_one_offs_keep_their_mark():
@@ -168,7 +172,7 @@ def test_the_generator_manifest_contracts(monkeypatch):
     P.patch_expanded_flea_market_manifest(manifest)
     f = manifest["ExpandedFleaMarket"]
     assert f["runtime_flag"]["source_section"] == ".vf2flea" and f["runtime_flag"]["default"] == "00"
-    assert f["runtime_flag"]["enabled"] == "01" and f["default"] is True and f["category"] == "optional"
+    assert f["runtime_flag"]["enabled"] == "01" and f["default"] is False and f["category"] == "optional"
     with pytest.raises(RuntimeError):
         P.patch_expanded_flea_market_manifest({"InventoryManager": {}})
 
@@ -179,7 +183,7 @@ def test_exporter_settings():
     rows = {s["id"]: s for s in X.SETTINGS}
     r, f = rows["r_refreshes_store"], rows["expanded_flea_market"]
     assert r["default"] is True and r["category"] == "optional" and r["label"] == "R Refreshes the Store"
-    assert f["default"] is True and f["category"] == "optional" and f["label"] == "All 36 Flea Market goods"
+    assert f["default"] is False and f["category"] == "optional" and f["label"] == "All 36 Flea Market goods"
     for needle in ("press R", "Shift+R", "Clothing and Hairstyles", "hairstyles", "already bought",
                    "Flea Market", "All 36 Flea Market goods", "On Sale", "outside the store", "box",
                    "Virtual Families 2 Patcher Files"):

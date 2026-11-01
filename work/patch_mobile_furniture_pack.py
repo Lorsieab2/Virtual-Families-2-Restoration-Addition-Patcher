@@ -495,7 +495,7 @@ STORE_REFRESH_FLAG_SYMBOL = "_gVF2StoreRefresh"
 STORE_REFRESH_DLL_NAME = "vf2refresh_b200.dll"
 STORE_REFRESH_INI_NAME = "vf2refresh.ini"
 STORE_REFRESH_STARTUP = "B200Refresh_Startup"
-# "All 36 Flea Market goods" (after B204, on by default): one dormant byte gating the Flea Market expansion
+# "All 36 Flea Market goods" (after B204; off by default since the owner's 2026-11-01 cheat rule): one dormant byte gating the Flea Market expansion
 # (VF2GetExpandedFleaMarketCount / Item). 1 lists all 36 goods at all times, as every build before it did;
 # 0 returns -1 from both hooks, so GetCategoryItemCount / GetCategoryItem run their stock bodies: 5 goods,
 # picked by MaybeUpdateRotatingItems every 6 real hours. The R Refreshes the Store DLL reads the byte too.
@@ -12958,21 +12958,29 @@ def patch_house_renovations(manifest):
         raise RuntimeError("Could not find House Renovations sort-count push")
     obj.buf[sort_push : sort_push + 2] = b"\x6A" + bytes([new_count])
 
-    bounds = obj.buf.find(b"\x83\xFE\x09", item_start, item_start + item_sec.raw_size)
-    if bounds < 0:
-        raise RuntimeError("Could not find House Renovations item bounds")
+    # The House Renovations bound is "cmp esi,9; ja short". Match the short ja too: in an executable
+    # without Cheat Upgrades the Special Upgrades page has exactly 10 rows, so patch_visible_special_upgrades
+    # has already written "cmp esi,9" at +0x1D -- followed by a NEAR ja. Matching the bare compare patched
+    # that site instead (the Special Upgrades page then read 30 rows, 20 past gServicesList) and left this
+    # page at 10 of its 30 rows, in every non-Cheat-Upgrades executable up to B205.
+    bounds_pattern = b"\x83\xFE\x09\x77"
+    bounds = obj.buf.find(bounds_pattern, item_start, item_start + item_sec.raw_size)
+    if bounds < 0 or obj.buf.find(bounds_pattern, bounds + 1, item_start + item_sec.raw_size) >= 0:
+        raise RuntimeError("Could not find exactly one House Renovations item bounds")
     obj.buf[bounds : bounds + 3] = b"\x83\xFE" + bytes([new_count - 1])
 
     count_sym = obj.symbol(GET_CATEGORY_ITEM_COUNT)
     count_sec = obj.section(count_sym.section)
     count_start = count_sec.raw_ptr + count_sym.value
-    count_return = obj.buf.find(
-        b"\xB8\x0A\x00\x00\x00\x5E\x5D\xC2\x04\x00",
-        count_start,
-        count_start + count_sec.raw_size,
-    )
-    if count_return < 0:
-        raise RuntimeError("Could not find House Renovations category count return")
+    # The House Renovations case follows another case's "pop esi; pop ebp; ret 4". The Special Upgrades
+    # case does not (it follows the jump table), and without Cheat Upgrades it too returns 10 by now (see
+    # the bounds above), so the bare "mov eax,10; pop; pop; ret 4" matched it first.
+    count_pattern = b"\x5E\x5D\xC2\x04\x00\xB8\x0A\x00\x00\x00\x5E\x5D\xC2\x04\x00"
+    count_end = count_start + count_sec.raw_size
+    count_return = obj.buf.find(count_pattern, count_start, count_end)
+    if count_return < 0 or obj.buf.find(count_pattern, count_return + 1, count_end) >= 0:
+        raise RuntimeError("Could not find exactly one House Renovations category count return")
+    count_return += 5
     obj.buf[count_return : count_return + 5] = b"\xB8" + struct.pack("<I", new_count)
 
     obj.write(PATCHED / "InventoryManager.obj")
@@ -26561,7 +26569,7 @@ def patch_expanded_flea_market_manifest(manifest):
         "status": "the Flea Market expansion is gated by a runtime byte in every executable",
         "offline_patcher_setting": EXPANDED_FLEA_MARKET_SETTING,
         "category": "optional",
-        "default": True,
+        "default": False,
         "hook": "VF2GetExpandedFleaMarketCount / VF2GetExpandedFleaMarketItem return -1 unless the byte is 1",
         "runtime_flag": {
             "symbol": EXPANDED_FLEA_MARKET_FLAG_SYMBOL,

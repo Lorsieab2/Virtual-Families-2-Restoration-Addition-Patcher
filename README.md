@@ -388,9 +388,26 @@ verified against the shipped `manifest.json`.
 
 ### Optional patches
 
-Release bundles are exported with the all-enabled release profile, so **nearly
-all of these arrive on** when you pick **Defaults** in the GUI — including
-**Cheat Upgrades**. Of B205's 41 settings (as in the final B204 rebuild), 39 arrive enabled and two arrive
+**Choosing a set.** Above the list are the Virtual Villagers patcher's four buttons, each with a **?**:
+**Select All Patches** (everything but Experimental), **Default Patches** (the defaults below), **Owner's
+Defaults** (everything except Up to 28 Children: every cheat and both invisible-furniture settings, the
+transparent swap overriding the visible graphics) and **Deselect All Patches**. **Patch Selection
+Settings...** opens a window with a search box and one tick box per patch; **Tick These** / **Untick These**
+apply the chosen patches, ticking what each needs (or unticking what needs it) as a click does.
+
+**Cheats are off by default** (owner, 2026-11-01: "anything that sets prices to 0 is DEFAULT OFF";
+"Anything that makes villagers succeed in skills 100%, no failing, is DEFAULT off"; "Keep off by default: All
+items show in flea market/outfits/hairstyles"): **Cheat Upgrades**, **Free and Guaranteed Cheats**, **All 36
+Flea Market goods** and **All outfits and hairstyles always for sale**. Every content setting and every paid
+upgrade stays on. Next build: 43 settings, 37 on by default; the six off are those four, **Swap Invisible
+Furniture Graphics with Transparent Graphics** (place the furniture first) and the Experimental **Up to 28
+Children**. **No AI Icons** keeps its default, but it only reskins Cheat Upgrades rows, so it takes effect
+(and the GUI ticks it) when Cheat Upgrades is ticked.
+**Fixed with it:** in every B205-and-earlier executable built without Cheat Upgrades but with Mobile
+Renovations, the store's House Renovations page listed only 10 of its 30 rows and Special Upgrades listed 30
+rows where it has 10 (20 read past the end of the list). Both pages are right in the next build.
+
+B205's 41 settings (as in the final B204 rebuild): 39 arrived enabled and two arrived
 off (**Swap Invisible Furniture Graphics with Transparent Graphics**, and the
 Experimental **Up to 28 Children**). (The first B204 bundles: 39 settings, 37 on. B204 as first published: 36 on, with the Family History log off.) (B202 and B203: 38 settings, 36 on.) (B198 through B200: 36 settings, 35 on;
 B201: 37 settings, 36 on; superseded.) The
@@ -409,7 +426,9 @@ rebuild the modded folder without it.
 - **Add mobile-exclusive Random Events** (on) - all 25 authenticated mobile-exclusive Random Event records with their text and choice/result dialogs. Also restores the PC game's unused Virtual Scouts event as a random event: "OK" makes everyone celebrate and gives each villager +5 happiness; "What rats?" costs 100 food. The Power Failure event's "Take a chance" now has a 1 in 4 chance that "The food was not ok.", giving each villager a 15% chance of an upset stomach.
 - **Add mobile room renovations** (on) - 15 verified mobile renovation images (5 Bathroom 1, 3 kitchen, 5 office, 2 workshop) at their exact room-map positions, plus their store icons and the five shower-curtain variants. Bathroom 2's own art is not here: it is AI-generated and ships under **2nd Bathroom Mobile-Style Renovations** instead, so that a player who declines the AI art still gets every genuine mobile renovation.
 - **2nd Bathroom Mobile-Style Renovations (AI-Generated Art Warning)** (on) - AI-generated Bathroom 2 art, hand-edited, based on the Bathroom 1 mobile renovations. Labeled with an art warning in the GUI. **Requires Add mobile room renovations**: the Bathroom 2 renovations exist only in that executable, so the art is not installed while it is off.
-- **Cheat Upgrades** (on) - the cheat-only executable overlay, adding 43 Special Upgrade rows. See [Cheat Upgrades in detail](#cheat-upgrades-in-detail).
+- **Cheat Upgrades** (**off by default** from the next build) - the cheat-only executable overlay, adding 43 Special Upgrade rows. Three of them (Force Successful Pregnancy, Anti-Spam Software Ownership, Rockhound Certificate Ownership) are listed only with **Free and Guaranteed Cheats** ticked too. See [Cheat Upgrades in detail](#cheat-upgrades-in-detail).
+- **Free and Guaranteed Cheats** (`.vf2free`, **off by default**; new after B205) - unlocks exactly: the **Force Successful Pregnancy** row (the next try for a baby always passes its pregnancy roll), the **Anti-Spam Software Ownership** row ($0) and the **Rockhound Certificate Ownership** row ($0), all three on the Special Upgrades page of a Cheat Upgrades executable; and a **free Time Warp** in Time Controls. Unticked, those three rows are not listed and every other row is listed in the same order (the same store-page hooks as All 36 Flea Market goods answer the page; nothing in a save changes, so a Force Successful Pregnancy bought earlier stays armed). Emulated on branch builds (`tests/test_store_page_gates_exe.py`); **not live tested**.
+- **All outfits and hairstyles always for sale** (`.vf2clth`, **off by default**; new after B205) - ticked, the Clothing and Hairstyles page lists every outfit and all 100 hairstyles (214 rows), as every earlier build did. Unticked, it is the original six rotating outfits (which already cover every base body) plus 6 rows drawn from the 100 hairstyles and 8 holiday outfits, keyed to the game's own outfit pick time, so they change when the six outfits do (every 4 game hours, a new family, or R). Items already bought keep working; nothing is saved. Emulated on branch builds; **not live tested**.
 
 **Experimental rule changes** (each gated by its own one-byte runtime flag, which stays
 zero until you enable the setting -- note the SETTINGS themselves ship enabled in the
@@ -419,8 +438,8 @@ release bundle, like almost everything else)
 - **Allow Same-Sex Marriage** (no settings row; see [What's included](#whats-included)) - flips only the spawned candidate's gender field when the in-game **Enable Same-Sex Marriage** Special Upgrade is on; same-sex spouses keep native private romantic time and never become pregnant. **Corrected 2026-09-29:** listed here before as a `.vf2same` one-byte runtime flag. It is not one -- its state is a byte saved with the game, turned on and off by the Cheat Upgrades row.
 - **Older Villager Mortality Curve** (`.vf2mort`) - replaces only the annual old-age death roll with a calibrated curve that accelerates past effective age 110. Active food groups still subtract 0-4 effective years. No hard maximum age.
 - **Store Scroll Bar** (`.vf2scrl`) (on) - adds a scroll bar to the store.
-- **All 36 Flea Market goods** (`.vf2flea`, an Optional patch, **on by default**; new in the final B204
-  rebuild) - the store's Flea Market lists all 36 of its goods at all times, as every patched build before
+- **All 36 Flea Market goods** (`.vf2flea`, an Optional patch; on by default in B204-B205, **off by
+  default** from the next build; new in the final B204 rebuild) - the store's Flea Market lists all 36 of its goods at all times, as every patched build before
   it did. This used to be
   built in; it is now one byte in the patched executable read by the two Flea Market hooks
   (`VF2GetExpandedFleaMarketCount` / `VF2GetExpandedFleaMarketItem`). Unticked, both hooks step aside and the
@@ -444,11 +463,12 @@ release bundle, like almost everything else)
   - on the **Clothing and Hairstyles** page, the six stock outfits (Discount, Department and Designer, male
     and female) are picked again with the game's own forced pick, `CInventoryManager::MaybeUpdateOutfits(true)`,
     the one the game makes for a new family; the next timed pick moves to 4 hours of game time later, as after
-    any pick. Hairstyles are never picked at random, so they stay. An outfit already bought keeps its own
+    any pick. With **All outfits and hairstyles always for sale** unticked the 6 rotating hairstyle and
+    holiday rows change with it; ticked, every hairstyle is listed, so they stay. An outfit already bought keeps its own
     look: the store copies the pick into the purchase, and R changes only the store's rows;
   - on the **Flea Market** page, always: the game's own pick (`MaybeUpdateRotatingItems`) happens now,
     5 new goods with the game's own stock rules, and the next one 6 hours of real time later. R always
-    redraws; with **All 36 Flea Market goods** ticked (the default) you won't see a change in the Flea Market
+    redraws; with **All 36 Flea Market goods** ticked you won't see a change in the Flea Market
     list: all 36 stay listed, and every one of them reads as in stock whatever count the pick left (the
     pick sets each good's stock to 1, a purchase to 0), so nothing sells out. Untick it later and the stock
     page shows the latest pick's 5 goods with their stock counts;
@@ -534,11 +554,11 @@ release bundle, like almost everything else)
 - **Add optional song mods** - optional music replacements.
 - **No AI Icons** - requires Cheat Upgrades; swaps the late Special Upgrade icons for non-AI artwork.
 
-**Almost everything in the release bundle is on by default.** Of B205's 41
-settings, **39 arrive enabled** when you pick **Defaults** in the GUI, and
-exactly two arrive off: **Swap Invisible Furniture Graphics with Transparent
-Graphics**, and **Up to 28 Children**, which is Experimental and which
-**Enable All** leaves off too. The `(on)` marks below are therefore not an exhaustive index --
+**Almost everything in the release bundle is on by default.** From the next
+build, 37 of 43 settings arrive enabled when you pick **Default Patches**; the
+six off are the four cheats above, **Swap Invisible Furniture Graphics with
+Transparent Graphics**, and **Up to 28 Children**, which is Experimental and
+which **Select All Patches** leaves off too (B205: 39 of 41 on). The `(on)` marks below are therefore not an exhaustive index --
 they were added to entries where the default has surprised people, and an
 entry without one is not thereby off. The shipped `manifest.json` is the
 authority, and the GUI shows each setting's real initial state. Unticking a

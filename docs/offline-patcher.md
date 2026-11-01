@@ -587,8 +587,15 @@ correct when written and are superseded, not mistaken in their own time -- the
 historical B121/B133/B150/B156 build notes further down deliberately keep their
 original wording for the same reason.
 
-The single exception is `invisible_furniture_transparent_graphics`, which is
-still off and says so below.
+The exceptions: `invisible_furniture_transparent_graphics` (place the
+furniture first), the Experimental `up_to_28_children`, and, under the owner's
+cheat rule of 2026-11-01 ("anything that sets prices to 0 is DEFAULT OFF";
+"Anything that makes villagers succeed in skills 100%, no failing, is DEFAULT
+off"; "Keep off by default: All items show in flea market/outfits/hairstyles"),
+`cheat_upgrades`, `free_guaranteed_cheats`, `expanded_flea_market` and
+`all_outfits_hairstyles`. Each says so below. Every content and paid setting
+stays on. The patcher's Owner's Defaults button ticks every setting except
+`up_to_28_children`; Default Patches ticks this table's defaults.
 
 `TheDocumentedDefaultsMatchTheSettingsTable` in
 work/test_export_offline_patch_bundle.py pins this list against the SETTINGS
@@ -654,6 +661,31 @@ as:
   custom-made artwork. The bundled current Cheat Upgrades icon is recorded as
   the restore source, so disabling the setting restores the current icon set;
   disabling Cheat Upgrades still removes its late icon payloads.
+- `cheat_upgrades` - **Cheat Upgrades**. Default off (a cheat). The
+  executable overlay with the Special Upgrades cheat rows. Three of its rows
+  (Force Successful Pregnancy, Anti-Spam Software Ownership, Rockhound
+  Certificate Ownership) are listed only while `free_guaranteed_cheats` is
+  ticked too. Mobile Renovations, the 2nd Bathroom renovations and the
+  holiday content do not need it; No AI Icons does (it reskins these rows), and
+  the patcher ticks No AI Icons again when Cheat Upgrades is ticked.
+- `free_guaranteed_cheats` - **Free and Guaranteed Cheats**. Default off. A
+  one-byte runtime flag (`.vf2free`, 00 by default, 01 when ticked) in every
+  executable. It unlocks exactly: the Force Successful Pregnancy row (NO-FAIL),
+  the $0 Anti-Spam Software Ownership and Rockhound Certificate Ownership rows
+  (FREE), all three on the Special Upgrades page of a Cheat Upgrades
+  executable; and a free Time Warp in Time Controls (otherwise it costs the
+  store's Time Warp price). Unticked, the three rows are not listed and every
+  other row is listed in the same order; nothing in a save changes.
+- `expanded_flea_market` - **All 36 Flea Market goods**. Default off since
+  2026-11-01 (the `.vf2flea` byte). Unticked, the Flea Market is the stock 5
+  rotating goods.
+- `all_outfits_hairstyles` - **All outfits and hairstyles always for sale**.
+  Default off. A one-byte runtime flag (`.vf2clth`). Ticked, the Clothing and
+  Hairstyles page lists all 214 rows, as every earlier build did. Unticked, it
+  lists the stock six rotating outfits plus 6 rows drawn from the 100
+  hairstyles and 8 holiday outfits, keyed to the stock outfit pick time
+  (`InventoryManager+470h`), so they change when the six outfits do (every 4
+  game hours, a new family, or R). Nothing is saved.
 - `ai_generated_bathroom2_renovations` - **2nd Bathroom Mobile-Style
   Renovations (AI-Generated Art Warning)** and dependent on
   `mobile_renovations`: the Bathroom 2 rows and renderer exist only in the

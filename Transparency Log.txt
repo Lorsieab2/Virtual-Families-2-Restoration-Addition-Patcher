@@ -388,5 +388,32 @@ Changelog
   unchanged. The DLL still holds no game address; checked under emulation
   with the game's own price and money code; never tested in a running game.
 
+- Cheats off by default, two new settings and the preset buttons (after
+  B205; owner decisions 1 November 2026): Cheat Upgrades, the new Free and
+  Guaranteed Cheats, All 36 Flea Market goods and the new All outfits and
+  hairstyles always for sale now default OFF. Every content setting and paid
+  upgrade stays on. Free and Guaranteed Cheats (1-byte .vf2free section)
+  unlocks exactly the Force Successful Pregnancy row and the $0 Anti-Spam
+  Software Ownership and Rockhound Certificate Ownership rows on the Special
+  Upgrades page (Cheat Upgrades executables), and a free Time Warp; unticked,
+  those three rows are not listed and every other row is listed in the same
+  order. All outfits and hairstyles always for sale (1-byte .vf2clth section):
+  ticked, the Clothing and Hairstyles page lists all 214 rows as before;
+  unticked, the original six rotating outfits plus 6 rows drawn from the
+  hairstyles and holiday outfits, keyed to the game's own outfit pick time.
+  Both bytes are read by the store page hooks the Flea Market already used;
+  nothing is written to a save. The patcher's buttons are now Select All
+  Patches, Default Patches, Owner's Defaults (everything except Up to 28
+  Children) and Deselect All Patches, each with a ?, plus a Patch Selection
+  Settings window (search, Tick These, Untick These). No AI Icons keeps its
+  default but takes effect only with Cheat Upgrades, and the GUI ticks it
+  again when Cheat Upgrades is ticked. Also fixed: in executables built
+  without Cheat Upgrades but with Mobile Renovations (B205 and earlier), the
+  House Renovations page listed 10 of its 30 rows and the Special Upgrades
+  page 30 rows where it has 10 (20 read past the end of its list): the
+  renovation count patch had matched the Special Upgrades page's bytes. All
+  checked under emulation on executables built from this change; never
+  tested in a running game.
+
 Have fun! -Lorsieab2 :)
 
