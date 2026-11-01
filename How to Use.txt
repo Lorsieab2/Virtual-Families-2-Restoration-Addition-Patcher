@@ -40,7 +40,8 @@ https://github.com/Lorsieab2/Virtual-Families-2-Restoration-Addition-Patcher/
    - R Refreshes the Store (a cheat): in the store, press R on the Clothing
      and Hairstyles page to pick the six outfits again (hairstyles stay;
      outfits you already bought keep their looks). On the Flea Market page R
-     picks 5 new goods, but only while All 36 Flea Market goods is unticked.
+     always picks 5 new goods; with All 36 Flea Market goods on you won't see
+     a change in the Flea Market list (all 36 stay listed and in stock).
      R does nothing anywhere else, and nothing while a box is open.
 
    Time Controls (on by default) adds a Time Controls button to the game's

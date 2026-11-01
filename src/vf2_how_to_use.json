@@ -97,7 +97,7 @@
       "guide": [
         "A cheat: in the store, press R (or Shift+R) to pick the store's random items again, the game's own way.",
         "On the Clothing and Hairstyles page R picks the six outfits again. Hairstyles stay, and outfits you already bought keep their looks.",
-        "On the Flea Market page R picks 5 new goods, but only while All 36 Flea Market goods is unticked; with it ticked every good is already there, so R does nothing.",
+        "On the Flea Market page R always picks 5 new goods. R always redraws; with All 36 Flea Market goods on you won't see a change in the Flea Market list (all 36 stay listed and in stock).",
         "R does nothing on any other page, outside the store, or while a box is open. It never changes On Sale.",
         "It is on by default. Unticking it and rebuilding turns it off."
       ]

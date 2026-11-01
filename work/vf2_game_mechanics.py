@@ -638,7 +638,8 @@ def _hidden_lines() -> list[Fact]:
         _f(g, f"R (a patcher key, option \"{OPTION_REFRESH}\", a cheat, on by default; after B204): in the store, "
               "R or Shift+R picks the store's random items again, the game's own way. On the Clothing and "
               "Hairstyles page: the 6 stock outfits (see Clothing and Hairstyles). On the Flea Market page: 5 new "
-              "goods, only while \"All 36 Flea Market goods\" is off (see the store). Nothing on any other page "
+              "goods, always; with \"All 36 Flea Market goods\" on you won't see a change in the list (see the "
+              "store). Nothing on any other page "
               "or screen, never On Sale, and nothing while a box (the buy box, the bank, a message, Redeem "
               "Credit) is open: each store box takes the keys first. The store has no text box, so typing never "
               "triggers it. Every other key, Esc included, is the game's own.", E,
@@ -2361,13 +2362,14 @@ def _store_lines() -> list[Fact]:
            "(HaveUpgrade); each emulated in a branch build, 4 repeat purchases each "
            "(tests/test_b200_store_refresh.py)"))
     add(_f(STORE, f"Patcher option \"{OPTION_REFRESH}\" (a cheat, on by default), on the Flea Market page: "
-                  f"with \"{OPTION_FLEA}\" off, R or Shift+R makes the unpatched game's own pick happen now: 5 "
-                  "goods shuffled the game's way, each set to one in stock, and the next pick 6 hours of real time "
-                  f"later. With \"{OPTION_FLEA}\" on, R does nothing there: every good is listed, and the "
-                  "game's pick would set each good's stock to 1, so the 33 unlimited goods would sell out for good.", E,
-           "vf2refresh_b200.dll: next-pick time InventoryManager+4A0h = 0, then the store's own "
-           "SetStoreCategory(0Fh) -> GetCategoryItemCount -> MaybeUpdateRotatingItems (the old time is put back "
-           "if the real clock is 0); emulated in a branch build, .vf2flea 0 and 1 (tests/test_b200_store_refresh.py)"))
+                  "R or Shift+R always makes the unpatched game's own pick happen now: 5 goods shuffled the "
+                  "game's way, each set to one in stock, and the next pick 6 hours of real time later. "
+                  f"R always redraws; with \"{OPTION_FLEA}\" on you won't see a change in the Flea Market list: "
+                  "all 36 stay listed, and every one still reads as in stock whatever count the pick set.", E,
+           "vf2refresh_b200.dll: next-pick time InventoryManager+4A0h = 0, then MaybeUpdateRotatingItems called "
+           "directly (the old time is put back if the real clock is 0), then the store's own "
+           "SetStoreCategory(0Fh); the .vf2flea byte only decides the listing (36, or the pick's 5); emulated "
+           "with .vf2flea 0 and 1, including 2 purchases of each of the 36 after R (tests/test_b200_store_refresh.py)"))
     add(_f(STORE, "On Sale: 3 furniture items, changed every game day (24 hours of game time, 24 real hours at Normal speed; the clock "
                   "stops while paused), at half price. Buying one takes it off the list.", C,
            "spec 16: MaybeUpdateSaleItems 0x46C000; CalcPrice category 3; HandlePurchaseItem TakeOne"))

@@ -369,21 +369,46 @@ def scenario_the_odds_reach_every_outfit(w):
     assert hi[0][0] == 31 and hi[0][3] == 31 and hi[1][1] == 43 and hi[1][4] == 43 and hi[2][2] == 49
 
 
-def scenario_all_36_flea_market_goods_are_left_alone(w):
-    """R on the Flea Market page while all 36 goods are listed (the .vf2flea byte 1, or an executable without
-    it): nothing is drawn or written, and the game's own handler gets the key."""
-    if w.flea_va is not None:
-        w.set_flea(1)
+def _flea_allowed(pool):
+    """The inventory bytes the game's own Flea Market pick may write: its 5 rows, their count, its clock, and
+    the stock counts of the 36 goods."""
+    allowed = {f + k for f in FLEA_ROWS + [S.FLEA_COUNT_FIELD, FLEA_NEXT] for k in range(4)}
+    return allowed | {4 * g + k for g in pool for k in range(4)}
+
+
+def scenario_flea_market_r_with_all_36_listed(w):
+    """Owner, 2026-11-01: "R needs to work regardless of if everything already shows or not if the patch is
+    on." R on the Flea Market page while all 36 goods are listed (the .vf2flea byte 1): the game's own pick
+    runs now (its shuffle over the 36), the page is listed again and still lists all 36. An executable without
+    the byte (built before the setting: no always-in-stock rule, no loader for this DLL) is left to the game's
+    own handler."""
+    if w.flea_va is None:
+        w.page(FLEA)
+        w.clear()
+        before = w.inventory_bytes()
+        assert w.key(TYPE_CHAR, ord("r")) == 0
+        assert w.randoms == [] and w.inventory_bytes() == before and w.titles == []
+        st = w.status()
+        assert st["passed"] == 1 and st["fleaRedraws"] == 0 and st["fleaFlag"] == 0
+        return
+    w.set_flea(1)
+    pool = goods(w.exe_path)
     w.page(FLEA)
     assert w.item_count() == 36, "the patched Flea Market lists all 36 goods"
+    assert w.randoms == [], "listing all 36 does not pick"
     w.clear()
     before = w.inventory_bytes()
-    assert w.key(TYPE_CHAR, ord("r")) == 0
-    assert w.randoms == [] and w.inventory_bytes() == before and w.messages == [] and w.titles == []
-    assert w.item_count() == 36
+    assert w.key(TYPE_CHAR, ord("r")) == 1, "R on the Flea Market is handled with all 36 listed"
+    assert w.randoms == [36] * 36, "the game's own shuffle over the 36 goods"
+    rows = w.flea_rows()
+    assert all(g in pool for g in rows) and len(set(rows)) == 5
+    assert w.e.r32(w.inventory + S.FLEA_COUNT_FIELD) == 5
+    assert w.e.r32(w.inventory + FLEA_NEXT) == w.real_seconds + S.FLEA_REPICK_DELAY
+    assert w.titles and w.item_count() == 36, "the page is listed again, still all 36"
+    changed = _changed(before, w.inventory_bytes())
+    assert changed and changed <= _flea_allowed(pool), f"wrote outside the Flea Market: {sorted(changed)}"
     st = w.status()
-    assert st["passed"] == 1 and st["redraws"] == 0 and st["fleaRedraws"] == 0
-    assert st["fleaFlag"] == (1 if w.flea_va is not None else 0)
+    assert st["fleaRedraws"] == 1 and st["passed"] == 0 and st["redraws"] == 0 and st["fleaFlag"] == 1
 
 
 def scenario_other_pages_are_left_alone(w):
@@ -444,7 +469,7 @@ def scenario_only_the_store_slot_is_written(w):
 
 
 ALL = [scenario_r_redraws_the_clothing_page, scenario_shift_r_is_the_same, scenario_every_press_draws_again,
-       scenario_the_odds_reach_every_outfit, scenario_all_36_flea_market_goods_are_left_alone,
+       scenario_the_odds_reach_every_outfit, scenario_flea_market_r_with_all_36_listed,
        scenario_other_pages_are_left_alone, scenario_other_keys_are_the_games, scenario_a_box_open_stops_r,
        scenario_only_the_store_slot_is_written]
 
@@ -473,10 +498,8 @@ def scenario_stock_flea_market_r_picks_five_new_goods(w):
     assert w.e.r32(w.inventory + S.FLEA_COUNT_FIELD) == 5 and w.item_count() == 5
     assert w.e.r32(w.inventory + FLEA_NEXT) == w.real_seconds + S.FLEA_REPICK_DELAY
     assert w.titles, "the store listed the page again (its own SetStoreCategory)"
-    allowed = {f + k for f in FLEA_ROWS + [S.FLEA_COUNT_FIELD, FLEA_NEXT] for k in range(4)}
-    allowed |= {4 * g + k for g in pool for k in range(4)}          # the stock counts the pick itself sets
     changed = _changed(before, w.inventory_bytes())
-    assert changed <= allowed, f"wrote outside the Flea Market: {sorted(changed)}"
+    assert changed <= _flea_allowed(pool), f"wrote outside the Flea Market: {sorted(changed)}"
     for f in OUTFITS + [NEXT]:
         assert w.e.read(w.inventory + f, 4) == before[f:f + 4], "the outfits were touched"
     st = w.status()
@@ -510,17 +533,23 @@ def scenario_stock_flea_market_clock_at_zero_changes_nothing(w):
 
 
 def scenario_stock_flea_market_clothing_r_is_unchanged(w):
-    """The byte changes only the Flea Market: R on the clothing page draws the outfits the same way."""
-    w.set_flea(0)
-    w.page(CLOTHING)
-    w.clear()
-    before = w.inventory_bytes()
-    assert w.key(TYPE_CHAR, ord("r")) == 1 and w.randoms == [0x20, 0x20, 0x0C, 0x0C, 0x06, 0x06]
-    _only_outfits_changed(w, before)
+    """The byte changes only the Flea Market: R on the clothing page forces the outfit draw the same way with
+    the byte 0 or 1 (the outfits' own clock not due either time)."""
+    for byte in (0, 1, 0):
+        w.set_flea(byte)
+        w.set_outfits([1, 33, 45, 2, 34, 46], GAME_SECONDS + 9000)
+        w.page(CLOTHING)
+        w.clear()
+        before = w.inventory_bytes()
+        assert w.key(TYPE_CHAR, ord("r")) == 1 and w.randoms == [0x20, 0x20, 0x0C, 0x0C, 0x06, 0x06], byte
+        assert w.e.r32(w.inventory + NEXT) == GAME_SECONDS + S.OUTFIT_REPICK_DELAY
+        _only_outfits_changed(w, before)
+    assert w.status()["redraws"] == 3 and w.status()["fleaRedraws"] == 0
 
 
 def scenario_byte_one_lists_all_36_again(w):
-    """The same executable with the byte back at 1: all 36 goods, and R does nothing on the Flea Market."""
+    """The same executable with the byte back at 1: all 36 goods, and R still makes the game's own pick (the
+    page keeps listing all 36); back at 0, the stock page lists that pick's 5 goods."""
     w.set_flea(0)
     w.page(FLEA)
     assert w.item_count() == 5
@@ -528,8 +557,62 @@ def scenario_byte_one_lists_all_36_again(w):
     w.clear()
     w.page(FLEA)
     assert w.item_count() == 36 and w.randoms == []
-    before = w.inventory_bytes()
-    assert w.key(TYPE_CHAR, ord("r")) == 0 and w.inventory_bytes() == before and w.randoms == []
+    w.real_seconds += 60
+    first = w.flea_rows()
+    w.script = [5, 17, 2, 30, 11, 8, 1, 23, 0, 14]
+    assert w.key(TYPE_CHAR, ord("r")) == 1 and w.randoms == [36] * 36 and w.item_count() == 36
+    picked = w.flea_rows()
+    assert picked != first
+    w.set_flea(0)
+    w.clear()
+    w.page(FLEA)
+    assert w.item_count() == 5 and w.flea_rows() == picked and w.randoms == [], "the stock page shows R's pick"
+
+
+def scenario_all_36_r_then_every_good_stays_buyable(w):
+    """All 36 on: R runs the game's own pick (it sets each pooled good's count to 1); then every one of the 36
+    goods still reads as in stock and draws no sold-out mark, each is bought twice through the executable's
+    own HandlePurchaseItem (each purchase saves once, the counts never go below 0, nothing is written outside
+    the goods' counts, the pick's rows and count (the game's own TakeOne takes a bought good out of the pick)
+    and the Rockhound Certificate's owned byte), every good is still in stock after its
+    purchases and after another R, and the page still lists all 36."""
+    pool = goods(w.exe_path)
+    w.set_flea(1)
+    saves, hints = _purchase_seams(w)
+    w.page(FLEA)
+    w.real_seconds += 60
+    assert w.key(TYPE_CHAR, ord("r")) == 1 and w.randoms == [36] * 36, "R did not pick with all 36 on"
+    for g in pool:
+        assert _available(w, g) == 1, f"{g:#x} is not in stock after R"
+        if g not in ONE_OFF_GOODS:
+            assert not _draws_checkmark(w, g), f"{g:#x} draws a mark after R"
+    inv0 = w.inventory_bytes()
+    tray0 = _tray(w)
+    for round_ in range(2):
+        for g in pool:
+            n = len(saves)
+            _purchase(w, g)
+            assert len(saves) == n + 1, (hex(g), round_, "a purchase saves once")
+            assert _available(w, g) == 1, (hex(g), round_, "sold out after a purchase with all 36 on")
+            w.e.write(w.s("TOOL_TRAY"), tray0)    # empty the tray again: every purchase reaches the tray path
+    inv = w.inventory_bytes()
+    changed = _changed(inv0, inv)
+    # the game's own TakeOne: a count above 0 goes down by 1 and that good leaves the pick's 5 rows (the rows
+    # close up, +49Ch goes down by 1); a count of 0 is left alone; the Rockhound Certificate's owned byte is set
+    allowed = {4 * g + k for g in pool if g < 0xE1 for k in range(4)} | {ROCKHOUND + OWNED_BYTE}
+    allowed |= {f + k for f in FLEA_ROWS + [S.FLEA_COUNT_FIELD] for k in range(4)}
+    assert changed <= allowed, f"the purchases wrote elsewhere in the inventory: {sorted(set(changed) - allowed)}"
+    for g in pool:
+        if g < 0xE1:
+            assert w.e.rs32(w.inventory + 4 * g) == 0, (hex(g), "a count went below 0 or was raised")
+    assert w.e.rs32(w.inventory + S.FLEA_COUNT_FIELD) == 0, "every picked good was bought: none left in the pick"
+    w.real_seconds += 60
+    w.clear()
+    # the game's own pick leaves out a bought one-off (the 3 are bought now): its shuffle is over the other 33
+    assert w.key(TYPE_CHAR, ord("r")) == 1 and w.randoms == [33] * 33, w.randoms
+    assert not set(w.flea_rows()) & set(ONE_OFF_GOODS)
+    assert all(_available(w, g) == 1 for g in pool) and w.item_count() == 36
+    assert w.status()["fleaRedraws"] == 2
 
 
 def _available(w, item):
@@ -599,6 +682,25 @@ def _tray(w):
     return w.e.read(w.s("TOOL_TRAY"), 0x200)
 
 
+def _purchase_seams(w):
+    """Seams for the executable's own HandlePurchaseItem: SaveCurrentGame recorded, the tray's hint text
+    recorded, the tray's 14 places. Returns (saves, hints)."""
+    saves = []
+    w.e.seam_live(w.s("SAVE_CURRENT_GAME"), lambda emu: (saves.append(1) or 1, 0))
+    # CToolTray::AddItem ends in UpdateHintText(place) (the tray's hint text, a screen control the emulator has
+    # not built): a recorded seam. AddItem's own bytes are checked first, so the seam is that call's target.
+    add = w.s("TOOL_TRAY_ADD_ITEM")
+    assert w.e.read(add, 0x29) == bytes.fromhex("558BEC568BF1E8") + w.e.read(add + 7, 4) + bytes.fromhex(
+        "8BC883F9FF750732C05E5DC20800") + bytes.fromhex("8B45088904CE8B450C8944CE04518BCE"), "AddItem is not the stock one"
+    hint_call = add + 0x29
+    assert w.e.read(hint_call, 1) == b"\xE8"
+    hint = (hint_call + 5 + struct.unpack("<i", w.e.read(hint_call + 1, 4))[0]) & 0xFFFFFFFF
+    hints = []
+    w.e.seam_live(hint, lambda emu: (hints.append(emu.arg(0)) or 0, 4))
+    w.e.w32(w.s("TOOL_TRAY") + 0x74, 14)            # the tray's place count (CToolTray +74h; 0 before the game sets it)
+    return saves, hints
+
+
 def _tray_items(w):
     """(item, uses) of every tray place the purchases filled, read where CToolTray keeps them."""
     raw = _tray(w)
@@ -612,22 +714,10 @@ def scenario_buying_each_one_off_again_and_again_corrupts_nothing(w):
     Certificate's owned byte is 1 and stays 1, no stock count goes below 0, and nothing else in the inventory
     changes."""
     gs = w.game_state
-    saves = []
-    w.e.seam_live(w.s("SAVE_CURRENT_GAME"), lambda emu: (saves.append(1) or 1, 0))
     w.set_flea(1)
     for g in (TOWELETTE, ANTI_SPAM, ROCKHOUND):
         w.e.w32(w.inventory + 4 * g, 1) if g < 0xE1 else None
-    # CToolTray::AddItem ends in UpdateHintText(place) (the tray's hint text, a screen control the emulator has
-    # not built): a recorded seam. AddItem's own bytes are checked first, so the seam is that call's target.
-    add = w.s("TOOL_TRAY_ADD_ITEM")
-    assert w.e.read(add, 0x29) == bytes.fromhex("558BEC568BF1E8") + w.e.read(add + 7, 4) + bytes.fromhex(
-        "8BC883F9FF750732C05E5DC20800") + bytes.fromhex("8B45088904CE8B450C8944CE04518BCE"), "AddItem is not the stock one"
-    hint_call = add + 0x29
-    assert w.e.read(hint_call, 1) == b"\xE8"
-    hint = (hint_call + 5 + struct.unpack("<i", w.e.read(hint_call + 1, 4))[0]) & 0xFFFFFFFF
-    hints = []
-    w.e.seam_live(hint, lambda emu: (hints.append(emu.arg(0)) or 0, 4))
-    w.e.w32(w.s("TOOL_TRAY") + 0x74, 14)            # the tray's place count (CToolTray +74h; 0 before the game sets it)
+    saves, hints = _purchase_seams(w)
     inv0 = w.inventory_bytes()
     tray0 = _tray_items(w)
     for round_ in range(4):
@@ -682,7 +772,8 @@ FLEA_STOCK = [scenario_a_good_sold_out_under_stock_is_in_stock_with_all_36,
               scenario_other_store_counts_are_untouched_by_all_36,
               scenario_stock_flea_market_r_picks_five_new_goods, scenario_stock_flea_market_counts_are_the_games,
               scenario_stock_flea_market_clock_at_zero_changes_nothing,
-              scenario_stock_flea_market_clothing_r_is_unchanged, scenario_byte_one_lists_all_36_again]
+              scenario_stock_flea_market_clothing_r_is_unchanged, scenario_byte_one_lists_all_36_again,
+              scenario_all_36_r_then_every_good_stays_buyable]
 
 
 # ====================================================================== startup (nothing installed first)

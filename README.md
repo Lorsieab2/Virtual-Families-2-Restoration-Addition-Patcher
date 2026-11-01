@@ -446,11 +446,12 @@ release bundle, like almost everything else)
     the one the game makes for a new family; the next timed pick moves to 4 hours of game time later, as after
     any pick. Hairstyles are never picked at random, so they stay. An outfit already bought keeps its own
     look: the store copies the pick into the purchase, and R changes only the store's rows;
-  - on the **Flea Market** page, only while **All 36 Flea Market goods** is unticked: the game's own pick
-    (`MaybeUpdateRotatingItems`) happens now, 5 new goods with the game's own stock rules, and the next one
-    6 hours of real time later. With All 36 Flea Market goods ticked (the default) R does nothing there:
-    every good is already listed, and the game's pick would set each good's stock to 1, so 33 goods that
-    never run out would sell out for good after one purchase each;
+  - on the **Flea Market** page, always: the game's own pick (`MaybeUpdateRotatingItems`) happens now,
+    5 new goods with the game's own stock rules, and the next one 6 hours of real time later. R always
+    redraws; with **All 36 Flea Market goods** ticked (the default) you won't see a change in the Flea Market
+    list: all 36 stay listed, and every one of them reads as in stock whatever count the pick left (the
+    pick sets each good's stock to 1, a purchase to 0), so nothing sells out. Untick it later and the stock
+    page shows the latest pick's 5 goods with their stock counts;
   - nowhere else: not on any other store page, not On Sale, not outside the store, and not while a box
     (the buy box, the bank, a message, Redeem Credit) is open, because every store box takes the keys
     first. The store screen has no text box, so typing never triggers it.

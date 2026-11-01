@@ -283,11 +283,13 @@ Changelog
   calls the game's own forced outfit pick, CInventoryManager::
   MaybeUpdateOutfits(true): the six stock outfits are picked again with the
   game's odds and the next timed pick is 4 game hours later. Hairstyles and
-  outfits already bought are not touched. On the Flea Market page R makes the
-  game's own pick (MaybeUpdateRotatingItems) happen now, only while All 36
-  Flea Market goods is unticked; with it ticked R does nothing there, because
-  the game's pick would set each good's stock to 1 and 33 goods that never run
-  out would sell out for good. R does nothing on any other page, outside the
+  outfits already bought are not touched. On the Flea Market page R always
+  makes the game's own pick (MaybeUpdateRotatingItems) happen now (owner,
+  2026-11-01). R always redraws; with All 36 Flea Market goods on you won't
+  see a change in the Flea Market list: all 36 stay listed and every one reads
+  as in stock whatever count the pick set, so nothing sells out (before
+  2026-11-01 R did nothing there while All 36 was on). R does nothing on any
+  other page, outside the
   store, or while a store box is open. Installs vf2refresh_b200.dll in the
   Virtual Families 2 Patcher Files folder only while the setting is on; it
   replaces one pointer (the store screen's key handler, found through the

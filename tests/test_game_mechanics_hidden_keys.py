@@ -91,7 +91,7 @@ def test_the_patcher_adds_one_key():
     r = _line("R (a patcher key")
     assert r.sub and r.label == gm.VERIFIED_E
     for needle in (gm.OPTION_REFRESH, "on by default", "Shift+R", "Clothing and Hairstyles", "Flea Market",
-                   "only while \"All 36 Flea Market goods\" is off", "never On Sale", "while a box",
+                   "goods, always; with \"All 36 Flea Market goods\" on you won't see a change", "never On Sale", "while a box",
                    "Esc included, is the game's own"):
         assert needle in r.text, needle
     for needle in ("vtable slot 2", "RTTI", "HandleKey(5, char, 0)", "SetModal"):
@@ -106,7 +106,8 @@ def test_the_r_key_lines_in_the_store_and_the_clothing_tab():
     assert "Discount 0 to 31, Department 32 to 43, Designer 44 to 49" in clothing[0].text
     assert "hairstyles are not picked at random" in clothing[0].text and "MaybeUpdateOutfits(true)" in clothing[0].evidence
     store = [f for f in FACTS if f.group == gm.STORE and f.text.startswith(f"Patcher option \"{gm.OPTION_REFRESH}\"")]
-    assert len(store) == 1 and "R does nothing there" in store[0].text and "+4A0h = 0" in store[0].evidence
+    assert len(store) == 1 and "R always redraws" in store[0].text and "+4A0h = 0" in store[0].evidence
+    assert "MaybeUpdateRotatingItems called directly" in store[0].evidence and "does nothing there" not in store[0].text
     flea = [f for f in FACTS if f.group == gm.STORE and f.text.startswith(f"Patcher option \"{gm.OPTION_FLEA}\"")]
     assert len(flea) == 1 and "all 36 goods are always in stock" in flea[0].text
     for needle in ("Towelette", "Anti-spam Software", "Rockhound Certificate", "go to the tray again",
