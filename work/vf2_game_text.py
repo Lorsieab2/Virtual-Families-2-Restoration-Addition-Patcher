@@ -213,7 +213,8 @@ def units(raw: bytes) -> list[Unit]:
 @dataclass
 class Glyph:
     width: int                       # the cell width (stock: right - left of the source rectangle)
-    kind: str                        # "game", "patcher" (patcher-made), "runtime" (Windows font), "box"
+    kind: str                        # "game", "patcher" (patcher-made), "runtime" (Windows font), "box",
+    #                                  "windows" (Use Unicode Font: the chosen face, else the chain)
     rect: tuple | None = None        # game glyphs: (left, top, right, bottom) on the game's sheet
     alpha: bytes | None = None       # other glyphs: width * line_height alpha bytes
     source: str = ""                 # how a patcher-made / runtime glyph was made
@@ -232,6 +233,9 @@ class GameFont:
     extra: dict = field(default_factory=dict)      # cluster -> Glyph (patcher-made), filled by the glyph maker
     runtime: dict = field(default_factory=dict)    # cluster -> Glyph (Windows font), made on first use
     maker: object = None                           # cluster -> patcher-made Glyph or None (vf2_glyph_maker)
+    # Use Unicode Font (overrides in-game fonts): (face, fitted px, baseline row) - every character, the game's own
+    # too, drawn by Windows in that face (then the chain); None = the game's letters (with_unicode_font)
+    override: tuple | None = None
 
     def stock_rect(self, byte: int) -> tuple:
         """ldwFontImpl::GetCharSourceRect for one byte (a byte the font lacks gives entry 0, '!')."""
@@ -249,6 +253,11 @@ class GameFont:
 
     def glyph(self, unit: Unit) -> Glyph:
         text = unit.text
+        if self.override is not None:
+            # the DLL's Mode 2: never the sheet, never a patcher-made letter
+            if text not in self.runtime:
+                self.runtime[text] = runtime_glyph(self, text)
+            return self.runtime[text]
         if len(unit.raw) == 1 and (ord(text) < 0x80 or self.has_stock(ord(text))):
             # one stored byte the stock code would draw from the sheet (ASCII, or a Latin-1 letter the font has)
             l, t, r, b = self.stock_rect(unit.raw[0])
@@ -308,19 +317,67 @@ def runtime_glyph(font: GameFont, text: str) -> Glyph:
         return missing_box(font)
     cps = [ord(c) for c in text]
     base = next((c for c in cps if not _is_extend(c) or len(cps) == 1), cps[0])
-    face = R.font_for(base)
-    if face is None:
-        return missing_box(font)
     g = font.gdi
     h = font.line_height
-    adv, grey, w, ox = R.render(text, face, g["px"], g["weight"], h, g["top"])
+    if font.override is not None:
+        chosen, px, row = font.override
+        face = R.font_for(base, (chosen,) + R.FALLBACK_CHAIN)
+        if face is None:
+            return missing_box(font)
+        adv, grey, w, ox = R.render(text, face, px, g["weight"], h, row, True)
+    else:
+        face = R.font_for(base)
+        if face is None:
+            return missing_box(font)
+        adv, grey, w, ox = R.render(text, face, g["px"], g["weight"], h, g["top"])
     adv = max(0, min(adv, w - ox))
     lut = g["alpha"]
     a = bytearray(adv * h)
     for y in range(h):
         row = grey[y * w + ox: y * w + ox + adv]
         a[y * adv: (y + 1) * adv] = bytes(lut[v] for v in row)
-    return Glyph(adv, "runtime", None, bytes(a), face)
+    return Glyph(adv, "windows" if font.override is not None else "runtime", None, bytes(a), face)
+
+
+# ====================================================================== Use Unicode Font
+
+FIT_REFERENCE = "The quick brown fox jumps over the lazy dog 0123456789"
+DEFAULT_UNICODE_FACE = "Segoe UI"
+
+
+def fit_unicode_font(font: GameFont, face: str) -> int:
+    """Use Unicode Font's pixel size for `font` in `face` (the DLL's FitOverride, the same arithmetic, as VF1's
+    fit_unicode_font): the size at which FIT_REFERENCE is as wide in `face` as the game font draws it, kept within
+    60% to 130% of the game font's fitted Segoe UI size; that size when `face` is not installed."""
+    import vf2_glyph_render as R
+    px = font.gdi["px"]
+    game = 0
+    for ch in FIT_REFERENCE:
+        l, _t, r, _b = font.stock_rect(ord(ch))
+        game += r - l
+    width = R.extent(face, px, font.gdi["weight"], FIT_REFERENCE) if R.available() else 0
+    if width <= 0 or game <= 0:
+        return px
+    em = (px * game * 2 + width) // (2 * width)
+    return max(px * 6 // 10, min(px * 13 // 10, em))
+
+
+def unicode_baseline(font: GameFont) -> int:
+    """The game font's baseline row in its line: where its fitted Segoe UI's baseline falls (the top offset plus
+    Segoe UI's ascent). Use Unicode Font sets every face's baseline there."""
+    import vf2_glyph_render as R
+    g = font.gdi
+    return g["top"] + R.ascent(DEFAULT_UNICODE_FACE, g["px"], g["weight"])
+
+
+def with_unicode_font(font: GameFont, face: str = DEFAULT_UNICODE_FACE) -> GameFont:
+    """`font` as Use Unicode Font (overrides in-game fonts) draws it: every character, the game's own too, drawn by
+    Windows in `face` (then the fallback chain) at the size fit_unicode_font gives, on the game font's baseline,
+    with its weight, line height and alpha levels."""
+    import dataclasses
+    face = (face or "").strip() or DEFAULT_UNICODE_FACE
+    return dataclasses.replace(font, extra={}, runtime={}, maker=None,
+                               override=(face, fit_unicode_font(font, face), unicode_baseline(font)))
 
 
 # ====================================================================== the stock functions, per character
@@ -598,4 +655,5 @@ def render(font: GameFont, sheet, raw: bytes, rgb=(255, 255, 255), *, max_width:
 def glyph_label(glyph: Glyph) -> str:
     """How the patcher shows where a glyph comes from."""
     return {"game": "(game font)", "patcher": "(patcher-made)", "runtime": f"(patcher-made from {glyph.source})",
+            "windows": f"(drawn by Windows: {glyph.source})",
             "box": "(missing: box)"}[glyph.kind]

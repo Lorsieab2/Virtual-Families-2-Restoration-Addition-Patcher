@@ -1,6 +1,6 @@
 """The Tools tab: Back Up Saves, Restore Saves, Copy Player Slot, Rename Family, Game Speed, Game Mechanics, the Family Tree Maker
 (vf2_family_tree_window, its family read by vf2_genealogy), the Picture Maker (vf2_picture_maker), Game Font Text
-(vf2_text_tool) and the guide.
+(vf2_text_tool), Unicode Font (vf2_unicode_font) and the guide.
 
 A mixin for VF2PatcherGUI (offline_vf2_patcher_gui.py), kept in its own file so the window's patching code
 stays as it was.  It needs from the window: ``root``, ``status_var``, ``notebook``, ``_run_with_wait`` and the
@@ -148,6 +148,8 @@ class ToolsTabMixin:
         self._help_button(family, "picture_maker").pack(side="left", padx=(3, 0))
         self._link(family, "Game Font Text...", self.game_font_text).pack(side="left", padx=(18, 0))
         self._help_button(family, "game_font_text").pack(side="left", padx=(3, 0))
+        self._link(family, "Unicode Font...", self.unicode_font).pack(side="left", padx=(18, 0))
+        self._help_button(family, "unicode_font").pack(side="left", padx=(3, 0))
 
         guide = ttk.LabelFrame(tab, text="How to Use", padding=10)
         guide.pack(fill="x", pady=(10, 0))
@@ -223,6 +225,22 @@ class ToolsTabMixin:
         import vf2_family_tree_window as tree_window
         import vf2_text_tool
         return vf2_text_tool.open_text_tool(self, tree_window._guess_game_folder(self))
+
+    # -- Unicode Font -------------------------------------------------------
+
+    def unicode_font(self):
+        """The font Use Unicode Font draws the game's text with (vf2_unicode_font), written into the modded
+        folder's "Virtual Families 2 Patcher Files\\Unicode Font\\Unicode Font.ini". One at a time."""
+        import vf2_unicode_font
+        folders = []
+        for name in ("output_dir_var", "game_dir_var"):
+            var = getattr(self, name, None)
+            with contextlib.suppress(Exception):
+                text = var.get().strip() if var is not None else ""
+                if text and text not in folders:
+                    folders.append(text)
+        return vf2_unicode_font.open_window(self, game_folders=[Path(f) for f in folders], hold=self._hold,
+                                            show_help=lambda: self._show_how_to_use("unicode_font"))
 
     # -- How to Use ---------------------------------------------------------
 

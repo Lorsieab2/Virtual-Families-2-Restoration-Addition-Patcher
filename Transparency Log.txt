@@ -312,11 +312,21 @@ Changelog
   own fonts and gives the fonts' pictures room for them in memory. Saves keep
   names in their own fields: Latin-1 text one byte per letter as before,
   anything else UTF-8. Needs executables built with the .vf2utxt / .vf2ufnt
-  loader bytes (B206).
+  loader bytes (B206). With Use Unicode Font every character is drawn by
+  Windows in the chosen font (Unicode Font on the Tools tab, Segoe UI if none),
+  sized so a reference line is as wide as the game font's, on its baseline; a
+  chosen font file is loaded for the game only (never installed in Windows).
 
 - Game Font Text (Tools tab, after B205): writes text in the game's four fonts
   and saves a PNG. It reads the game's font pictures from the game folder and
   writes only the PNG you save.
+
+- Unicode Font (Tools tab, after B205): picks Use Unicode Font's font. It
+  writes only "Virtual Families 2 Patcher Files\Unicode Font\Unicode Font.ini"
+  in the modded folder you choose and, for a font file, a copy of that file in
+  the same folder; it never installs a font in Windows and never touches the
+  game's files or saves. Patching the same modded folder again keeps that
+  folder (everything else in the modded folder is rebuilt as before).
 
 - One text rule (after B205): every patcher tool that reads or writes a save
   name or a Family History log line uses src/vf2_game_text.py (UTF-8 when the

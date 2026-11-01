@@ -285,13 +285,17 @@ def _ignorable(cp: int) -> bool:
     return cp in IGNORABLE or 0xFE00 <= cp <= 0xFE0F or 0xE0000 <= cp <= 0xE0FFF
 
 
+TA_BASELINE = 24
+
+
 @lru_cache(maxsize=4096)
-def render(text: str, face: str, px: int, weight: int, cell_height: int, top: int) -> tuple:
+def render(text: str, face: str, px: int, weight: int, cell_height: int, top: int, baseline: bool = False) -> tuple:
     """`text` (one character: a cluster) drawn with `face` at pixel height px, glyph by glyph by glyph number
     (ExtTextOutW with ETO_GLYPH_INDEX, so characters beyond U+FFFF draw too): each code point the face has is
     drawn at the pen and moves it by its advance (GetCharABCWidthsI: a + b + c); joiners, variation selectors and
     tags draw nothing; a code point the face lacks is left out. The canvas is 10 x px wide (the pen starts
-    at x = px) and cell_height tall, the text's top at `top`.
+    at x = px) and cell_height tall, the text's top at `top` (baseline: the text's baseline at `top`, TA_BASELINE,
+    so any face sits on the same line: Use Unicode Font).
 
     Returns (advance, grey bytes of width x cell_height, width, the pen's start x). The DLL does the same calls."""
     width = 10 * max(1, int(px))
@@ -300,6 +304,8 @@ def render(text: str, face: str, px: int, weight: int, cell_height: int, top: in
     glyphs = [g for g in glyphs if g]
     c = _Canvas(width, cell_height, face, px, weight)
     try:
+        if baseline:
+            c.gdi.SetTextAlign(c.dc, TA_BASELINE)
         ctypes.memset(c.bits, 0, width * cell_height * 4)
         pen = int(px)
         for g in glyphs:
@@ -314,3 +320,87 @@ def render(text: str, face: str, px: int, weight: int, cell_height: int, top: in
         c.close()
     # white text on black with grey anti-aliasing: the three channels are equal; the green one is the grey
     return pen - int(px), bytes(raw[1::4]), width, int(px)
+
+
+# ---------------------------------------------------------------------- Use Unicode Font
+
+@lru_cache(maxsize=256)
+def extent(face: str, px: int, weight: int, text: str) -> int:
+    """How wide GDI draws `text` in `face` at pixel height px (GetTextExtentPoint32W); 0 when Windows has no font
+    of that name (it would give another). The DLL measures the same way."""
+    if not available():
+        return 0
+    c = _Canvas(4, 4, face, px, weight)
+    try:
+        if c.face().lower() != face.lower():
+            return 0
+        return c.extent(text)
+    finally:
+        c.close()
+
+
+@lru_cache(maxsize=64)
+def ascent(face: str, px: int, weight: int) -> int:
+    """The font's ascent in pixels at pixel height px (GetTextMetricsW tmAscent)."""
+    c = _Canvas(4, 4, face, px, weight)
+    try:
+        return int(c.metrics().tmAscent)
+    finally:
+        c.close()
+
+
+_private: set[str] = set()
+
+
+def add_private_font(path) -> bool:
+    """A .ttf / .otf / .ttc file made usable by this process only (AddFontResourceExW, FR_PRIVATE), as the DLL does
+    in the game; never installed in Windows. The caches that answer "is this font here" start again."""
+    if not available():
+        return False
+    key = str(path)
+    if key in _private:
+        return True
+    gdi = ctypes.WinDLL("gdi32", use_last_error=True)
+    gdi.AddFontResourceExW.argtypes = [ctypes.c_wchar_p, ctypes.c_uint32, ctypes.c_void_p]
+    if gdi.AddFontResourceExW(key, 0x10, None) > 0:
+        _private.add(key)
+        for cached in (cmap, render, extent, ascent):
+            cached.cache_clear()
+        return True
+    return False
+
+
+def font_file_family(data: bytes) -> str | None:
+    """The name Windows knows a TrueType or OpenType font file's family by (name ID 1, Windows English first), or
+    None. A collection (.ttc) gives its first font's."""
+    try:
+        base = 0
+        if data[:4] == b"ttcf":
+            base = struct.unpack_from(">I", data, 12)[0]
+        count = struct.unpack_from(">H", data, base + 4)[0]
+        name_at = None
+        for i in range(count):
+            tag, _sum, offset, _length = struct.unpack_from(">4sIII", data, base + 12 + 16 * i)
+            if tag == b"name":
+                name_at = offset
+        if name_at is None:
+            return None
+        _fmt, n, strings = struct.unpack_from(">HHH", data, name_at)
+        found: dict[tuple, str] = {}
+        for i in range(n):
+            platform, _encoding, language, name_id, length, offset = struct.unpack_from(">6H", data, name_at + 6 + 12 * i)
+            if name_id != 1:
+                continue
+            raw = data[name_at + strings + offset:name_at + strings + offset + length]
+            if platform in (0, 3):
+                text = raw.decode("utf-16-be", errors="replace")
+            elif platform == 1:
+                text = raw.decode("mac_roman", errors="replace")
+            else:
+                continue
+            found[(platform == 3 and language == 0x409, platform == 3, -i)] = text
+        if not found:
+            return None
+        return found[max(found)].strip("\0 ") or None
+    except (struct.error, IndexError):
+        return None
