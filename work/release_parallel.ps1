@@ -2,7 +2,11 @@
 #
 #   powershell -File work\release_parallel.ps1 -Python <python.exe> -ReleaseConfig data\vf2\build-matrix-release-bNNN.json `
 #       -Worktrees C:\vf2w\bNNN-m1,C:\vf2w\bNNN-m2,C:\vf2w\bNNN-m3 -Vcvars32 <vcvars32.bat> `
-#       -B200CoreExe <B200 core exe> -B201CoreExe <B201 core exe> [-Workers 12] [-SkipMatrix]
+#       -B200CoreExe <B200 core exe> -B201CoreExe <B201 core exe> [-Workers 12] [-SkipMatrix] [-SeedsFrom <checkout>]
+#
+# -Worktrees takes any number of parts (8 since B206: C:\vf2w\b202-m1 ... b202-m8). -SeedsFrom is passed to
+# work\build_matrix_parallel.ps1: each part gets the previous matrix's seed folders for its own variants from
+# that checkout before it starts.
 #
 # Run it from the release worktree (the checkout the bundle is exported from). What runs, and why in this order:
 #
@@ -33,6 +37,7 @@ param(
     [string]$B201CoreExe,
     [string]$MatrixConfig = "data\vf2\build-matrix-toggles.json",
     [int]$Workers = 12,
+    [string]$SeedsFrom,
     [switch]$SkipMatrix
 )
 
@@ -57,6 +62,7 @@ if (-not $SkipMatrix) {
     $matrixArgs = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "`"$(Join-Path $root 'work\build_matrix_parallel.ps1')`"",
                     "-Python", "`"$Python`"", "-MatrixConfig", "`"$MatrixConfig`"", "-ReleaseConfig", "`"$ReleaseConfig`"",
                     "-Worktrees", "`"$($Worktrees -join ',')`"")
+    if ($SeedsFrom) { $matrixArgs += @("-SeedsFrom", "`"$SeedsFrom`"") }
     $matrix = Start-Process $ps -ArgumentList $matrixArgs -WorkingDirectory $root -PassThru -NoNewWindow `
         -RedirectStandardOutput (Join-Path $runDir "matrix.log") -RedirectStandardError (Join-Path $runDir "matrix.err.log")
     $null = $matrix.Handle      # keeps the handle open, or ExitCode is empty after the process exits
