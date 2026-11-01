@@ -218,10 +218,14 @@ class Slots(unittest.TestCase):
                      "Virtual Families 226.ldw", "Virtual Families 220.ldw", "Virtual Families 245.ldw",
                      "Virtual Families 26.ldw", "Virtual Families 2 1.ldw", "Virtual Families 21.ldw.bak",
                      "Virtual Families 21.ldw.dat", "Virtual Families 2 Patcher Data/Virtual Families 21.ldw.dat",
-                     "Virtual Families 2 Patcher Data/Children/Virtual Families 221.ldw.dat",
                      "Virtual Families 2 Patcher Data/Children/Virtual Families 21 - Copy.ldw.dat",
+                     "Virtual Families 2 Patcher Data/Children/Virtual Families 226.ldw.dat",
+                     "Virtual Families 2 Patcher Data/Other/Virtual Families 21.ldw.dat",
                      "sub/Virtual Families 21.ldw"):
             self.assertIsNone(slot(name), name)
+        # The previous save's sidecars (the DLLs rotate them with it) are its slot's, in both sidecar folders.
+        self.assertEqual(slot("Virtual Families 2 Patcher Data/Children/Virtual Families 221.ldw.dat"), 1)
+        self.assertEqual(slot("Virtual Families 2 Patcher Data/Outfits/Virtual Families 225.ldw.dat"), 5)
 
     def test_shared_files_belong_to_no_family(self):
         self.assertEqual(sb.file_slot(Path("wc.dat")), "shared")

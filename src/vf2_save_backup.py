@@ -30,7 +30,14 @@ Game speed Paused in the backup
     the game's own Pause sets it (vf2_game_speed), so a restored backup never
     catches up on the real time since it was made. The live saves are never
     changed. A copy already Paused, at another speed or unreadable is kept
-    byte for byte; the previous saves <N+20> are not touched.
+    byte for byte; the previous saves <N+20> are not touched. The pause
+    changes the copy's bytes, and each Children and Outfits file names the
+    hash and size of the save it was written with (b200kids / b200outfits
+    take it as their save's only when the loaded save still has them), so
+    each of the slot's Children and Outfits files in the backup (N, N+20)
+    that described the save before the pause is re-keyed to the paused copy,
+    exactly as Copy Player Slot re-keys a copy's; one that described another
+    save, or is damaged, is kept byte for byte.
 
 Restore
     A backup is restored (the whole save folder, or one family's save slot) only
@@ -85,6 +92,8 @@ _BACKUP_NAME = re.compile(
 # restore touches it.
 _SAVE_NAME = re.compile(r"^Virtual Families 2(0|[1-9]\d*)\.ldw$", re.I)
 _SIDECAR_NAME = re.compile(r"^Virtual Families 2(0|[1-9]\d*)\.ldw\.dat$", re.I)
+SIDECAR_FOLDERS = ("children", "outfits")      # b200kids / b200outfits SidecarPath, under the Patcher Data folder
+PATCHER_FOLDER = "Virtual Families 2 Patcher"   # its "Save <N>" folders: each slot's logs and Family Tree files
 SHARED_FILES = ("wc.dat",)      # beside ldwLog.txt, shared by every family
 
 
@@ -241,8 +250,10 @@ class BackupResult:
     resume_problems: list[str] = field(default_factory=list)
     paused_slots: list[str] = field(default_factory=list)   # slot saves whose copy was set to Paused
     # ... and each one's bytes as they were (the original's), so a failed restore puts them back
-    # exactly: pausing changes the game clock too, which no speed write could undo.
+    # exactly: pausing changes the game clock too, which no speed write could undo. The Children and
+    # Outfits files re-keyed to a paused copy are in it too, as they were.
     unpaused_bytes: dict[Path, bytes] = field(default_factory=dict)
+    rematched_sidecars: list[Path] = field(default_factory=list)   # re-keyed to a paused copy
     # Slot saves whose copy was not set to Paused (another speed, or not a save Game Speed can read): kept as they were.
     not_paused: list[tuple[str, str]] = field(default_factory=list)
 
@@ -385,6 +396,7 @@ def copy_save_folder(save_folder: Path, now: datetime | None = None, suffix: str
             result.files.append(copied)
         # Every file is copied and verified; now the copy of each family save is set to Paused (the live
         # save folder is never written).
+        paused_saves: list[tuple[Path, bytes, bytes]] = []
         for copied in result.files:
             if not is_slot_save(copied.relative):
                 continue
@@ -402,6 +414,8 @@ def copy_save_folder(save_folder: Path, now: datetime | None = None, suffix: str
             result.unpaused_bytes[copied.relative] = original
             if copied.times is not None:
                 _keep_times(staging / copied.relative, copied.times)   # the pause rewrote it
+            paused_saves.append((copied.relative, original, paused))
+        _rekey_sidecars(staging, result, paused_saves)
         result.backup_folder = _finish_backup(staging, when, suffix)
     except (OSError, BackupError) as exc:
         where = _set_aside(staging, INCOMPLETE)
@@ -426,6 +440,30 @@ def copy_save_folder(save_folder: Path, now: datetime | None = None, suffix: str
 # can read is left byte for byte as it is. The previous saves "Virtual Families 2<N+20>.ldw" are left
 # as they are too: VV pauses only a slot's own save, never the game's older copies, and the game never
 # loads an N+20 file (vf2_game_speed).
+
+
+def _rekey_sidecars(staging: Path, result: BackupResult, paused_saves: list[tuple[Path, bytes, bytes]]) -> None:
+    """Each Children and Outfits file in the backup that described a save before its pause, re-keyed to the
+    paused copy (vf2_copy_slot.sidecar_rekeys), read back and checked."""
+    import vf2_copy_slot as copy_slot       # imported here: vf2_copy_slot imports this module
+
+    by_path = {copied.relative: copied for copied in result.files}
+    for relative, original, paused in paused_saves:
+        match = _SAVE_NAME.match(relative.name)
+        if match is None:
+            continue
+        for path, kind, old, new in copy_slot.sidecar_rekeys(staging, int(match.group(1)), [(original, paused)]):
+            sidecar = path.relative_to(staging)
+            _write_save(path, new, old)
+            if not copy_slot.sidecar_describes(kind, path.read_bytes(), paused):
+                raise BackupError(f"The backup's {path.name} did not match the paused copy of {relative.name}.")
+            result.unpaused_bytes[sidecar] = old
+            result.rematched_sidecars.append(sidecar)
+            copied = by_path.get(sidecar)
+            if copied is not None:
+                copied.size, copied.sha256 = _hash_file(path)
+                if copied.times is not None:
+                    _keep_times(path, copied.times)
 
 
 class NotPaused(BackupError):
@@ -735,9 +773,11 @@ def file_slot(relative: Path) -> int | str | None:
     """The family slot (1-5) a file belongs to; "engine log", "settings" or "shared" for shared files; else None.
 
     A slot file is exactly "Virtual Families 2<N>.ldw" at the top of the save folder (N + 20 is the
-    previous save of slot N, for slots 1-5 only); the patcher's sidecar is that name + ".dat" in
-    "<Patcher Data>\\Children".  Slot 0 ("settings"), ldwLog.txt ("engine log") and wc.dat ("shared") belong
-    to no family, and every other name is unknown (None): only a whole-folder restore touches those.
+    previous save of slot N, for slots 1-5 only); the patcher's sidecars are that name + ".dat" in
+    "<Patcher Data>\\Children" and "<Patcher Data>\\Outfits" (N + 20's are slot N's too); and everything in
+    "Virtual Families 2 Patcher\\Save <N>" (the Family History log, the Family Tree files) is slot N's.  Slot 0
+    ("settings"), ldwLog.txt ("engine log") and wc.dat ("shared") belong to no family, and every other name is
+    unknown (None): only a whole-folder restore touches those.
     """
     parts = relative.parts
     if len(parts) == 1 and relative.name.casefold() == ENGINE_LOG.casefold():
@@ -747,11 +787,14 @@ def file_slot(relative: Path) -> int | str | None:
     match = None
     if len(parts) == 1:
         match = _SAVE_NAME.match(relative.name)
-    elif len(parts) == 3 and parts[0].casefold() == DATA_FOLDER.casefold() and parts[1].casefold() == "children":
+    elif len(parts) == 3 and parts[0].casefold() == DATA_FOLDER.casefold() and parts[1].casefold() in SIDECAR_FOLDERS:
         match = _SIDECAR_NAME.match(relative.name)
+    elif len(parts) >= 3 and parts[0].casefold() == PATCHER_FOLDER.casefold():
+        folder = re.fullmatch(r"Save ([1-5])", parts[1], re.I)
+        return int(folder.group(1)) if folder else None
     if match:
         number = int(match.group(1))
-        if 21 <= number <= 25 and len(parts) == 1:      # the game keeps the previous save of slot N at N + 20
+        if 21 <= number <= 25:      # the game keeps the previous save of slot N (and its sidecars) at N + 20
             number -= 20
         if 1 <= number <= 5:
             return number
@@ -827,8 +870,9 @@ def plan_restore(save_folder: Path, backup: Path, slot: int | None = None) -> Re
 
     Whole folder: the save folder becomes the backup; every file in it is restored and every other file
     (outside Backups, and except the engine's ldwLog.txt, which is no part of a save) is removed.
-    One slot: only that family's files (its save, the "- Copy" and its sidecars) are touched; files that
-    belong to another slot, or to none, are left exactly as they are.
+    One slot: only that family's files (its save and previous save, their Children and Outfits files, and its
+    "Virtual Families 2 Patcher\\Save <N>" folder) are touched; files that belong to another slot, or to none,
+    are left exactly as they are.
     """
     _require_backup_of(save_folder, backup)
     in_backup = set(files_to_back_up(backup))

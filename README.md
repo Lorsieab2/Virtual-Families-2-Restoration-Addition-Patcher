@@ -107,9 +107,14 @@ actions, as before. **Tools** holds:
   `... INCOMPLETE` and never offered. Game speed is set to Paused in the backup's family saves
   (`Virtual Families 2<1-5>.ldw`; the copies only, your own saves are unchanged), so a restored backup opens
   paused and never catches up on the time since it was made. Only a family at Normal is paused; a save at
-  another speed, one that cannot be read, and the previous saves `<N+20>` are copied exactly as they are.
+  another speed, one that cannot be read, and the previous saves `<N+20>` are copied exactly as they are. A
+  backup's Children and Outfits files that matched a family save are re-keyed to its paused copy (as Copy Player
+  Slot re-keys a copy's), so a restored backup keeps every extra child, those who left home or died included,
+  and its outfit pictures; one that did not match is copied exactly as it is.
 - **Restore Saves...** lists the backups, newest first, and restores the whole save folder or one family slot
-  (its save, the `- Copy`, the previous save at slot + 20 and its sidecar). It refuses while the game runs,
+  (its save, the previous save at slot + 20, their Children and Outfits files, and its
+  `Virtual Families 2 Patcher\Save <N>` folder with the Family History log and Family Tree files, so they all
+  go back together; no other slot's file is touched). It refuses while the game runs,
   shows exactly which files will be replaced, added and removed, restores only after the player says yes, and
   first backs up the current saves as `Backup <date> (before restore)`, so a restore can be undone. It rolls
   back if a file fails. **Delete Backup...** removes one backup.
@@ -134,8 +139,11 @@ actions, as before. **Tools** holds:
   rule is the game's own: at most 19 characters (the box takes 20 keys but the game keeps 19), never empty or
   only spaces, never `NEW PLAYER` (the game's text for an empty slot); only printable ASCII is accepted, since
   whether other keys reach the box is UNCONFIRMED. It refuses while the game runs, backs up first as
-  `Backup <date> (before rename)`, reads every file back and puts everything back if one fails. It writes no
-  log and no data file. Evidence with exe addresses: `docs/vf2-save-format.md` section 11. Code:
+  `Backup <date> (before rename)`, reads every file back and puts everything back if one fails. The slot's
+  Children and Outfits files that matched the renamed saves are re-keyed to them (as Copy Player Slot re-keys a
+  copy's), so the game keeps every extra child (7 to 28) and the outfit pictures on the next load; one that did
+  not match is left as it is. A family with a Family History log gets one `Family Renamed` record in its newest
+  file (old name, new name). Evidence with exe addresses: `docs/vf2-save-format.md` section 11. Code:
   `src/vf2_rename_family.py`; tests: `tests/test_rename_family.py`.
 - **Game Speed...** shows each family's saved speed (Paused, Normal, or any other value raw) and sets it to
   **Paused** or **Normal** in a closed game's save, writing what the game's own Pause / Unpause write (traced in
@@ -147,7 +155,9 @@ actions, as before. **Tools** holds:
   unpause that would have removed a dead body meanwhile, and a Pause the stock and the patched game would work
   out differently (more than 2^24 s since the last speed change; the patched build rounds to a float). It backs
   up first as `Backup <date> (before speed change)`, writes only the slot save, reads it back, checks no other
-  byte changed and puts it back on failure; no log, no data file. Slow and Fast are not offered: the game sets
+  byte changed and puts it back on failure; no log. The slot's Children and Outfits files that matched the save
+  are re-keyed to it (as Copy Player Slot does), so the game keeps every extra child and the outfit pictures;
+  one that did not match is left as it is. Slow and Fast are not offered: the game sets
   no speed but 10 and the +999 pause. Code: `src/vf2_game_speed.py`; tests: `tests/test_game_speed.py`.
 - **Game Mechanics...** (the Game section) opens a read-only window of how Virtual Families 2 works underneath,
   laid out as the Virtual Villagers patcher's: a link to each group at the top (time and ageing, needs and upkeep,

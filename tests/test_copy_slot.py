@@ -258,6 +258,10 @@ class CopyTests(Base):
             if relative.name.endswith(".ldw") and r.classify_save_file(relative.name) and relative.parts == (relative.name,) \
                     and sb.is_slot_save(relative):
                 continue                                   # the backup's family saves are set to Paused
+            if relative in result.backup.rematched_sidecars:
+                # ... and a sidecar that matched such a save is re-keyed to its paused copy (as it was, kept aside)
+                self.assertEqual(result.backup.unpaused_bytes[relative], data, relative)
+                continue
             self.assertEqual((backups[0].path / relative).read_bytes(), data, relative)
 
     def test_every_file_goes_through_a_temporary_file(self):
