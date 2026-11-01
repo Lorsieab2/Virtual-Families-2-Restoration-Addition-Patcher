@@ -689,5 +689,46 @@ class QuarantineTests(unittest.TestCase):
             tmp.cleanup()
 
 
+
+class ShippedDefaultsMatchTheTableTests(unittest.TestCase):
+    """B206's first export shipped Cheat Upgrades and All 36 Flea Market goods ON while the SETTINGS table
+    had them OFF (the release profile forced them). The gate now compares the shipped defaults with the
+    table, and quarantines a bundle that differs."""
+
+    def _archive(self, root: Path, overrides: dict) -> Path:
+        import json
+        import zipfile
+        import export_offline_patch_bundle as exporter
+        rows = [{"id": row["id"], "label": row["label"], "default": overrides.get(row["id"], row["default"])}
+                for row in exporter.SETTINGS]
+        rows.append({"id": "core_assets", "label": "Core", "default": True})   # not in the table: not compared
+        path = root / "VF2-B999-Release.zip"
+        with zipfile.ZipFile(path, "w") as bundle:
+            bundle.writestr("VF2-B999-Release/Virtual Families 2 Fun Patcher Files/manifest.json",
+                            json.dumps({"settings": rows}))
+        return path
+
+    def test_the_tables_defaults_pass(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertIsNone(gate.defaults_differ_from_the_table(self._archive(Path(tmp), {})))
+
+    def test_a_cheat_shipped_on_is_named(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            message = gate.defaults_differ_from_the_table(
+                self._archive(Path(tmp), {"cheat_upgrades": True, "expanded_flea_market": True}))
+        self.assertIn("cheat_upgrades ships ON, the table says OFF", message)
+        self.assertIn("expanded_flea_market ships ON, the table says OFF", message)
+
+    def test_a_content_setting_shipped_off_is_named(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            message = gate.defaults_differ_from_the_table(self._archive(Path(tmp), {"mobile_renovations": False}))
+        self.assertIn("mobile_renovations ships OFF, the table says ON", message)
+
+    def test_the_gate_runs_the_check_before_it_passes(self):
+        source = Path(gate.__file__).read_text(encoding="utf-8")
+        body = source[source.index("def main()"):]
+        self.assertLess(body.index("defaults_differ_from_the_table(archive)"), body.rindex("RELEASE GATE PASSED"))
+
+
 if __name__ == "__main__":
     unittest.main()

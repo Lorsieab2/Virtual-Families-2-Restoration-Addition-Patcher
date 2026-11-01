@@ -174,6 +174,19 @@ class EveryPatchDefaultsOn(unittest.TestCase):
         return (set(self.SEQUENCING_EXCEPTIONS) | set(self.CHEAT_EXCEPTIONS) | self.experimental_ids()
                 | set(self.EXCLUSIVE_ALTERNATIVES))
 
+    def test_the_release_profile_ships_the_tables_defaults(self):
+        """Every release bundle is exported with the final playtest profile. B206's first export shipped
+        Cheat Upgrades and All 36 Flea Market goods ON because the profile listed them while the table had
+        them OFF. The profile may only turn on what the table already turns on."""
+        table = {row["id"]: row["default"] for row in exporter.SETTINGS}
+        forced_on = sorted(sid for sid in exporter.FINAL_PLAYTEST_DEFAULT_ON_SETTINGS if not table[sid])
+        self.assertEqual(forced_on, [])
+        rows = [dict(row) for row in exporter.SETTINGS]
+        shipped = exporter.apply_final_playtest_defaults(rows, set(table))
+        self.assertEqual({row["id"]: row["default"] for row in shipped}, table)
+        for sid in self.CHEAT_EXCEPTIONS:
+            self.assertNotIn(sid, exporter.FINAL_PLAYTEST_DEFAULT_ON_SETTINGS)
+
     def test_the_cheat_settings_default_off_and_their_neighbours_on(self):
         rows = {row["id"]: row for row in exporter.SETTINGS}
         for sid in sorted(self.CHEAT_EXCEPTIONS):
