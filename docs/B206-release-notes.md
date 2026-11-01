@@ -1,6 +1,6 @@
 # VF2 B206 release notes
 
-**The patcher bundle.** Built from `main` at `2ff4152` (PR #472; the release config was merged after it as #473), seeded from the B205 matrix, in 8 parallel parts. B206 is a new version, not an in-place update of B205. It carries everything B205 had, plus the changes below.
+**The patcher bundle.** Built from `main` at `2ff4152` (PR #472; the release config was merged after it as #473), seeded from the B205 matrix, in 8 parallel parts. The executables are built from `2ff4152`; the bundle is exported from `3b7e51e` on `release/b206-defaults` (off `ff119eb`), the release-profile defaults fix: the first export shipped Cheat Upgrades and All 36 Flea Market goods ON, and the release gate now compares every shipped default with the settings table. B206 is a new version, not an in-place update of B205. It carries everything B205 had, plus the changes below.
 
 B206 offers 43 settings, which is B205's 41 plus two new ones. 37 of the 43 are on by default. All 32 executables are rebuilt, because every one of them gains two new setting bytes and the House Renovations fix.
 
