@@ -133,7 +133,8 @@ actions, as before. **Tools** holds:
   is replaced only after a warning naming it. The target's own files (a replaced family's, or a deleted family's
   leftovers) are moved into `Backups\Replaced by copy <date> - Save <N> - <name>`, never deleted. It backs up first as `Backup <date> (before copy)`, writes
   every file through a temporary file, reads everything back and puts the folder back as it was if anything fails.
-  No other slot is touched. No live test.- **Rename Family...** changes the name a family slot is shown under. Virtual Families 2 has no family
+  No other slot is touched. No live test.
+- **Rename Family...** changes the name a family slot is shown under. Virtual Families 2 has no family
   surname: the slot is shown under the player name typed when it was started (main menu `Player:`, Change
   Player, the daily email). The tool writes that name (gs+0x25ABC) in the slot's save, its entry in the slot
   menu (`Virtual Families 20.ldw`) and the previous save at slot + 20 when it still holds the old name. The
@@ -263,8 +264,9 @@ checked against `manifest.json`, the release notes and the owner's confirmed
 play reports; superseded claims are marked rather than deleted.*
 
 The GUI reads its checkboxes from the shipped manifest, so the exact list follows
-the release you downloaded. The next B204 bundle offers 41 settings: the 39 of the
-first B204 bundles plus **All 36 Flea Market goods** and **R Refreshes the Store** (both on by default).
+the release you downloaded. The B205 bundle offers 41 settings, the same 41 as the final B204
+rebuild: the 39 of the first B204 bundles plus **All 36 Flea Market goods** and **R Refreshes the Store**
+(both on by default). B205's two website fixes are part of Fix Vanilla Game Bugs, not new settings.
 
 That number is not simply the count of settings the patcher defines, which is
 42. The settings list drops any optional setting that has no packaged source
@@ -341,7 +343,7 @@ verified against the shipped `manifest.json`.
 
 Release bundles are exported with the all-enabled release profile, so **nearly
 all of these arrive on** when you pick **Defaults** in the GUI — including
-**Cheat Upgrades**. Of the final B204 rebuild's 41 settings, 39 arrive enabled and two arrive
+**Cheat Upgrades**. Of B205's 41 settings (as in the final B204 rebuild), 39 arrive enabled and two arrive
 off (**Swap Invisible Furniture Graphics with Transparent Graphics**, and the
 Experimental **Up to 28 Children**). (The first B204 bundles: 39 settings, 37 on. B204 as first published: 36 on, with the Family History log off.) (B202 and B203: 38 settings, 36 on.) (B198 through B200: 36 settings, 35 on;
 B201: 37 settings, 36 on; superseded.) The
@@ -473,8 +475,8 @@ release bundle, like almost everything else)
 - **Add optional song mods** - optional music replacements.
 - **No AI Icons** - requires Cheat Upgrades; swaps the late Special Upgrade icons for non-AI artwork.
 
-**Almost everything in the release bundle is on by default.** Of B204's 39
-settings, **37 arrive enabled** when you pick **Defaults** in the GUI, and
+**Almost everything in the release bundle is on by default.** Of B205's 41
+settings, **39 arrive enabled** when you pick **Defaults** in the GUI, and
 exactly two arrive off: **Swap Invisible Furniture Graphics with Transparent
 Graphics**, and **Up to 28 Children**, which is Experimental and which
 **Enable All** leaves off too. The `(on)` marks below are therefore not an exhaustive index --
