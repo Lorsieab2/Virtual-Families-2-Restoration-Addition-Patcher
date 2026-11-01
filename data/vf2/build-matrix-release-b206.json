@@ -44,5 +44,10 @@
     "island_events_cheat_upgrades_behavior_patches_mobile_renovations": "outputs/VF2-B205-matrix-island_events_cheat_upgrades_behavior_patches_mobile_renovations",
     "island_events_holiday_ornaments_behavior_patches_mobile_renovations": "outputs/VF2-B205-matrix-island_events_holiday_ornaments_behavior_patches_mobile_renovations",
     "island_events_cheat_upgrades_holiday_ornaments_mobile_renovations": "outputs/VF2-B205-matrix-island_events_cheat_upgrades_holiday_ornaments_mobile_renovations"
+  },
+  "bundle_exported_from": {
+    "revision": "3b7e51e",
+    "branch": "release/b206-defaults (off ff119eb, without #474)",
+    "reason": "bundle exported from 3b7e51e: release-profile defaults fix (Cheat Upgrades and All 36 Flea Market goods had shipped ON). The 32 executables are the ones built from 2ff4152; the exporter, gate and tests changed, nothing in the executables."
   }
 }

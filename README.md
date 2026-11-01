@@ -311,7 +311,7 @@ checked against `manifest.json`, the release notes and the owner's confirmed
 play reports; superseded claims are marked rather than deleted.*
 
 The GUI reads its checkboxes from the shipped manifest, so the exact list follows
-the release you downloaded. The next bundle offers 43 settings: B205's 41 plus two new ones.
+the release you downloaded. The B206 bundle offers 43 settings: B205's 41 plus two new ones.
 
 That number is not simply the count of settings the patcher defines, which is
 44. The settings list drops any optional setting that has no packaged source
@@ -320,7 +320,7 @@ one setting of its own, `core_assets`, which copies the support files and
 generated assets that are not tied to a single feature. So 44 defined, less 2
 without packaged assets, plus 1 generated, is the 43 the GUI shows. (B205 and
 the final B204 rebuild: 42 - 2 + 1 = 41, the 39 of the first B204 bundles plus **All 36 Flea Market
-goods** and **R Refreshes the Store**; the next bundle adds **Free and Guaranteed Cheats** and **All
+goods** and **R Refreshes the Store**; B206 adds **Free and Guaranteed Cheats** and **All
 outfits and hairstyles always for sale**, both off by default. B205's two website fixes are part of Fix
 Vanilla Game Bugs, not new settings. The first
 B204 bundles: 40 - 2 + 1 = 39. Before
@@ -401,13 +401,13 @@ apply the chosen patches, ticking what each needs (or unticking what needs it) a
 "Anything that makes villagers succeed in skills 100%, no failing, is DEFAULT off"; "Keep off by default: All
 items show in flea market/outfits/hairstyles"): **Cheat Upgrades**, **Free and Guaranteed Cheats**, **All 36
 Flea Market goods** and **All outfits and hairstyles always for sale**. Every content setting and every paid
-upgrade stays on. Next build: 43 settings, 37 on by default; the six off are those four, **Swap Invisible
+upgrade stays on. B206: 43 settings, 37 on by default; the six off are those four, **Swap Invisible
 Furniture Graphics with Transparent Graphics** (place the furniture first) and the Experimental **Up to 28
 Children**. **No AI Icons** keeps its default, but it only reskins Cheat Upgrades rows, so it takes effect
 (and the GUI ticks it) when Cheat Upgrades is ticked.
 **Fixed with it:** in every B205-and-earlier executable built without Cheat Upgrades but with Mobile
 Renovations, the store's House Renovations page listed only 10 of its 30 rows and Special Upgrades listed 30
-rows where it has 10 (20 read past the end of the list). Both pages are right in the next build.
+rows where it has 10 (20 read past the end of the list). Both pages are right in B206.
 
 B205's 41 settings (as in the final B204 rebuild): 39 arrived enabled and two arrived
 off (**Swap Invisible Furniture Graphics with Transparent Graphics**, and the
@@ -428,9 +428,9 @@ rebuild the modded folder without it.
 - **Add mobile-exclusive Random Events** (on) - all 25 authenticated mobile-exclusive Random Event records with their text and choice/result dialogs. Also restores the PC game's unused Virtual Scouts event as a random event: "OK" makes everyone celebrate and gives each villager +5 happiness; "What rats?" costs 100 food. The Power Failure event's "Take a chance" now has a 1 in 4 chance that "The food was not ok.", giving each villager a 15% chance of an upset stomach.
 - **Add mobile room renovations** (on) - 15 verified mobile renovation images (5 Bathroom 1, 3 kitchen, 5 office, 2 workshop) at their exact room-map positions, plus their store icons and the five shower-curtain variants. Bathroom 2's own art is not here: it is AI-generated and ships under **2nd Bathroom Mobile-Style Renovations** instead, so that a player who declines the AI art still gets every genuine mobile renovation.
 - **2nd Bathroom Mobile-Style Renovations (AI-Generated Art Warning)** (on) - AI-generated Bathroom 2 art, hand-edited, based on the Bathroom 1 mobile renovations. Labeled with an art warning in the GUI. **Requires Add mobile room renovations**: the Bathroom 2 renovations exist only in that executable, so the art is not installed while it is off.
-- **Cheat Upgrades** (**off by default** from the next build) - the cheat-only executable overlay, adding 43 Special Upgrade rows. Three of them (Force Successful Pregnancy, Anti-Spam Software Ownership, Rockhound Certificate Ownership) are listed only with **Free and Guaranteed Cheats** ticked too. See [Cheat Upgrades in detail](#cheat-upgrades-in-detail).
-- **Free and Guaranteed Cheats** (`.vf2free`, **off by default**; new after B205) - unlocks exactly: the **Force Successful Pregnancy** row (the next try for a baby always passes its pregnancy roll), the **Anti-Spam Software Ownership** row ($0) and the **Rockhound Certificate Ownership** row ($0), all three on the Special Upgrades page of a Cheat Upgrades executable; and a **free Time Warp** in Time Controls. Unticked, those three rows are not listed and every other row is listed in the same order (the same store-page hooks as All 36 Flea Market goods answer the page; nothing in a save changes, so a Force Successful Pregnancy bought earlier stays armed). Emulated on branch builds (`tests/test_store_page_gates_exe.py`); **not live tested**.
-- **All outfits and hairstyles always for sale** (`.vf2clth`, **off by default**; new after B205) - ticked, the Clothing and Hairstyles page lists every outfit and all 100 hairstyles (214 rows), as every earlier build did. Unticked, it is the original six rotating outfits (which already cover every base body) plus 6 rows drawn from the 100 hairstyles and 8 holiday outfits, keyed to the game's own outfit pick time, so they change when the six outfits do (every 4 game hours, a new family, or R). Items already bought keep working; nothing is saved. Emulated on branch builds; **not live tested**.
+- **Cheat Upgrades** (**off by default** since B206) - the cheat-only executable overlay, adding 43 Special Upgrade rows. Three of them (Force Successful Pregnancy, Anti-Spam Software Ownership, Rockhound Certificate Ownership) are listed only with **Free and Guaranteed Cheats** ticked too. See [Cheat Upgrades in detail](#cheat-upgrades-in-detail).
+- **Free and Guaranteed Cheats** (`.vf2free`, **off by default**; new in B206) - unlocks exactly: the **Force Successful Pregnancy** row (the next try for a baby always passes its pregnancy roll), the **Anti-Spam Software Ownership** row ($0) and the **Rockhound Certificate Ownership** row ($0), all three on the Special Upgrades page of a Cheat Upgrades executable; and a **free Time Warp** in Time Controls. Unticked, those three rows are not listed and every other row is listed in the same order (the same store-page hooks as All 36 Flea Market goods answer the page; nothing in a save changes, so a Force Successful Pregnancy bought earlier stays armed). Emulated on branch builds (`tests/test_store_page_gates_exe.py`); **not live tested**.
+- **All outfits and hairstyles always for sale** (`.vf2clth`, **off by default**; new in B206) - ticked, the Clothing and Hairstyles page lists every outfit and all 100 hairstyles (214 rows), as every earlier build did. Unticked, it is the original six rotating outfits (which already cover every base body) plus 6 rows drawn from the 100 hairstyles and 8 holiday outfits, keyed to the game's own outfit pick time, so they change when the six outfits do (every 4 game hours, a new family, or R). Items already bought keep working; nothing is saved. Emulated on branch builds; **not live tested**.
 
 **Experimental rule changes** (each gated by its own one-byte runtime flag, which stays
 zero until you enable the setting -- note the SETTINGS themselves ship enabled in the
@@ -441,7 +441,7 @@ release bundle, like almost everything else)
 - **Older Villager Mortality Curve** (`.vf2mort`) - replaces only the annual old-age death roll with a calibrated curve that accelerates past effective age 110. Active food groups still subtract 0-4 effective years. No hard maximum age.
 - **Store Scroll Bar** (`.vf2scrl`) (on) - adds a scroll bar to the store.
 - **All 36 Flea Market goods** (`.vf2flea`, an Optional patch; on by default in B204-B205, **off by
-  default** from the next build; new in the final B204 rebuild) - the store's Flea Market lists all 36 of its goods at all times, as every patched build before
+  default** since B206; new in the final B204 rebuild) - the store's Flea Market lists all 36 of its goods at all times, as every patched build before
   it did. This used to be
   built in; it is now one byte in the patched executable read by the two Flea Market hooks
   (`VF2GetExpandedFleaMarketCount` / `VF2GetExpandedFleaMarketItem`). Unticked, both hooks step aside and the
@@ -556,8 +556,8 @@ release bundle, like almost everything else)
 - **Add optional song mods** - optional music replacements.
 - **No AI Icons** - requires Cheat Upgrades; swaps the late Special Upgrade icons for non-AI artwork.
 
-**Almost everything in the release bundle is on by default.** From the next
-build, 37 of 43 settings arrive enabled when you pick **Default Patches**; the
+**Almost everything in the release bundle is on by default.** Of B206's 43
+settings, 37 arrive enabled when you pick **Default Patches**; the
 six off are the four cheats above, **Swap Invisible Furniture Graphics with
 Transparent Graphics**, and **Up to 28 Children**, which is Experimental and
 which **Select All Patches** leaves off too (B205: 39 of 41 on). The `(on)` marks below are therefore not an exhaustive index --
