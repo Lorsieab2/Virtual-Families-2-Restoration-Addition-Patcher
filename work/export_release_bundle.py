@@ -73,6 +73,8 @@ def main() -> int:
     parser.add_argument("--asset-mode", default="additive", choices=["additive", "all", "full"],
                         help="additive (default) ships every addition; full also "
                              "redistributes the untouched base game")
+    parser.add_argument("--time-controls-dll",
+                        help="Built vf2time_b200.dll shipped behind the time_controls setting")
     args = parser.parse_args()
 
     outputs = ROOT / "outputs"
@@ -139,6 +141,8 @@ def main() -> int:
         "--name", args.release,
         "--force",
     ]
+    if args.time_controls_dll:
+        argv += ["--time-controls-dll", str(Path(args.time_controls_dll).resolve())]
     unwired = []
     for v in variants:
         if v in ("core", "final_all_enabled"):
