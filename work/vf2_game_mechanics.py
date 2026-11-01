@@ -516,6 +516,18 @@ def _hidden_lines() -> list[Fact]:
               "answer arrives (the owner's crash dumps hold it in the reader's room, 2,048 bytes read).", C,
            "the owner's dumps \"VF2 Copy Test.exe.*.dmp\" (2026-10-31): the read buffer starts \"<?php\", n = 0x800, "
            "0xC0000409 on a WinINet thread; the server was not contacted for this page", sub=True),
+        _f(g, WITH_PATCHER + "when a real answer carries an error, its error text is cut to fit the 256 "
+              "characters the game keeps for its \"Server error\" note, so a long one cannot crash the game; a "
+              "short one gives exactly the note it gave before (part of Fix Vanilla Game Bugs).", C,
+           "patch_server_error_text_bounded: the \"Server error: %s\" sprintf of CLogIn, CRetrieveMessage, CPoll, "
+           "CVote, CPromoCode and CMicroTransaction ::Callback -> a stub: __stdio_common_vsprintf(options | 2, "
+           "buf, 0x100, ...) behind .vf2bugs; run in tests/test_server_error_text.py (1,000-character error: inside "
+           "the buffer; short: the stock text)", sub=True),
+        _f(g, UNPATCHED + "an error text longer than about 220 characters runs past those 256 characters and the "
+              "game closes itself (error 0xC0000409, no message). LDW's server sends no such answer today.", C,
+           "stock exe sha256 1582d9e8: e.g. CPoll 0x4C2BF4 and CPromoCode 0x4C2E55 call sprintf 0x4C3C07 with "
+           "\"[...] (Callback) Server error: %s\\n\" into the 0x100 bytes below the /GS cookie of a sub esp,104h "
+           "frame (CPoll 0x4C2BA0: cookie at [esp+100h])", sub=True),
         _f(g, "The store scenes handle no hidden keys. The store menu, the furniture and accessory tabs, the Flea "
               "Market, On Sale, the Special Upgrades, the Services, the renovations, the career upgrades, the pets "
               "and the outfits are all pages of one store screen, and its only key is Esc (back to the house). No "

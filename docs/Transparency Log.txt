@@ -3405,6 +3405,8 @@ Startup crash: LDW server reply (Fix Vanilla Game Bugs, after B204)
 - Not changed, noted: each handler sprintf's the server's "error" string into
   a 0x104-byte stack buffer; a JSON reply with an "error" longer than about
   220 characters would overflow it. The server sends no such reply today.
+  [Superseded: fixed afterwards, see "Server error text" below. The usable
+  buffer is 0x100 bytes; the frame's last dword is the /GS cookie.]
 - Evidence: tests/test_server_reply_guard.py runs the patched callback from
   the object under unicorn (every relocation resolved): a 3,125-byte PHP reply
   is read as 0x7FF bytes, never fast-fails and reaches the handler as NULL;
@@ -3415,3 +3417,41 @@ Startup crash: LDW server reply (Fix Vanilla Game Bugs, after B204)
   each executable is run the same way, its byte found from the code and
   checked to be in .vf2bugs. Static and emulated evidence only; the game was
   never run and the server was not contacted.
+
+
+Server error text overflows a reply handler's buffer (Fix Vanilla Game Bugs, B205)
+-----------------------------------------------------------------------------------
+
+- Stock bug, in the retail executable and every rebuilt one: when the
+  server's JSON reply carries an "error" string, each of the six reply
+  handlers (CLogIn, CRetrieveMessage, CPoll, CVote, CPromoCode and
+  CMicroTransaction ::Callback) formats "[<Name>] (Callback) Server error:
+  %s\n" with it into a stack buffer through an unbounded sprintf. The frame
+  is sub esp,104h with the /GS cookie in its last dword, so the buffer holds
+  0x100 bytes; an error text longer than about 220 characters runs over the
+  cookie and the game ends with 0xC0000409 (retail: e.g. CPoll 0x4C2BF4 and
+  CPromoCode 0x4C2E55 call sprintf 0x4C3C07). LDW's server sends no such
+  reply today (it answers with its scripts' source, which the reply guard
+  above already ignores); this closes the path for any future answer.
+- Fix (owner-approved 2026-10-31 for B205, part of Fix Vanilla Game Bugs):
+  patch_server_error_text_bounded in work/patch_mobile_furniture_pack.py. In
+  each handler's object the one _sprintf call is sent, by its own REL32
+  relocation retargeted to the handler's symbol plus the stub's offset, to a
+  0x39-byte stub appended to the handler's section. With the .vf2bugs byte 0
+  the stub jumps to the stock _sprintf. With it 1 it formats the same format
+  and arguments through __stdio_common_vsprintf with a count of 0x100 and the
+  C99 snprintf option (_CRT_INTERNAL_PRINTF_STANDARD_SNPRINTF_BEHAVIOR, 2):
+  the text is cut at 255 characters and always terminated, so the cookie is
+  never reached. A message that fits is byte for byte the stock one. Nothing
+  else in the handlers changes; the message only goes to printf, which a
+  windowed game has no console for.
+- Evidence: tests/test_server_error_text.py links each handler's whole object
+  by hand and runs it from its entry under unicorn with a JSON reply whose
+  "error" is 1,000 characters: with the byte 1 exactly 0x100 bytes are written
+  (the last a terminator), at [ebp-104h], and the handler returns through its
+  cookie check; with the byte 0, and in the stock object, it runs over and
+  the cookie check fails. A short error and the longest one that fits give
+  the stock object's bytes exactly. The UCRT's __stdio_common_vsprintf (a DLL
+  import) is modelled by its documented options. With VF2_SERVER_REPLY_EXE
+  each linked executable must hold six stubs, each reached by exactly one
+  call. Static and emulated evidence only; the game was never run.
