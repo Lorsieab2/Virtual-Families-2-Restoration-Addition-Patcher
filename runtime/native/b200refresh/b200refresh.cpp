@@ -10,17 +10,17 @@
 // is bought), the save file gets only what the game itself saves for its own pick, and the press touches no
 // other page (On Sale is never touched by R anywhere). Hairstyles are not drawn at random, so R leaves them alone.
 //
-// The Flea Market page depends on the patcher's "All 36 Flea Market goods" setting (the executable's .vf2flea
-// byte, read at each press):
-//   on (byte 1, the default): the store lists all 36 goods there at all times, unlimited, so there is nothing
-//     to refresh, and the game's own Flea Market draw must not run: it also sets every pooled good's stock
-//     count to 1 and would make 33 unlimited goods sell out for good. R does nothing there (the game's own
-//     key handler gets the key). An executable without the byte (built before the setting) is the same.
-//   off (byte 0): the Flea Market is the stock one, 5 goods re-picked 6 real hours after the last pick. R
-//     makes that pick happen now: the next-pick time is set to 0 (due) and the store's own SetStoreCategory
-//     lists the page again, whose GetCategoryItemCount runs the game's own MaybeUpdateRotatingItems (its
-//     shuffle, its stock counts, its next pick 6 real hours later). If the game clock is still 0, so no pick
-//     can be due, the old next-pick time is put back and nothing is changed.
+// On the Flea Market page R ALWAYS makes the game's own Flea Market pick happen now (owner, 2026-11-01: "R
+// needs to work regardless of if everything already shows or not if the patch is on"): the next-pick time is
+// set to 0 (due), the game's own MaybeUpdateRotatingItems runs (its shuffle, its stock counts, its next pick
+// 6 real hours later) and the store's own SetStoreCategory lists the page again. If the game clock is still
+// 0, so no pick can be due, the old next-pick time is put back and nothing is changed. What the page then
+// shows is the patcher's "All 36 Flea Market goods" setting (the executable's .vf2flea byte):
+//   on (byte 1, the default): all 36 goods, so the player sees no change; every one of the 36 reads as in
+//     stock whatever count the pick left (the patcher's GetNumAvailable hook), so the pick sells nothing out.
+//   off (byte 0): the stock Flea Market, the 5 goods just picked.
+// An executable without the byte (built before the setting, without the always-in-stock rule) has no loader
+// for this DLL; were it loaded there anyway, R leaves its Flea Market to the game's own key handler.
 //
 // How: CScrollingStoreScene's HandleKey vtable slot (slot 2, the slot ldwEventManager::HandleKey calls) is
 // replaced by RefreshHandleKey. The function in that slot is the identical-code-folded HandleKey five
@@ -57,8 +57,8 @@ static volatile unsigned char *FleaFlag;  // the executable's .vf2flea byte (0 w
 //   magic 'RFFH', version, requested (1 = setting on), resolved (1 = every pin found and every derivation
 //   agreed), installed (1 = the slot write is live), writeMask (bit w: write w live), redraws (R presses that
 //   redrew the outfits), passed (R presses given to the game's own handler: another page, or the Flea Market
-//   with all 36 goods listed), fleaRedraws (R presses that picked the stock Flea Market again), fleaFlag (1 =
-//   the executable has the .vf2flea byte)
+//   of an executable without the .vf2flea byte), fleaRedraws (R presses that picked the Flea Market again,
+//   whatever the .vf2flea byte), fleaFlag (1 = the executable has the .vf2flea byte)
 struct RefreshStatus {
     unsigned magic;
     unsigned version;
@@ -320,15 +320,18 @@ static bool Resolve() {
 typedef bool (__thiscall *HandleKeyFn)(void *scene, int type, int code, int sym);
 typedef void (__thiscall *MaybeUpdateOutfitsFn)(void *inventory, bool force);
 typedef void (__thiscall *SetStoreCategoryFn)(void *scene, int category);
+typedef void (__thiscall *MaybeUpdateRotatingItemsFn)(void *inventory);
 
-// The stock Flea Market's pick, now: only while the "All 36 Flea Market goods" byte exists and is 0.
-static bool RedrawStockFleaMarket(void *scene) {
-    if (!FleaFlag || *FleaFlag != 0) return false;
+// The game's own Flea Market pick, now, whatever the "All 36 Flea Market goods" byte says (it only decides
+// what the page lists). Not in an executable without the byte (see the top of the file).
+static bool RedrawFleaMarket(void *scene) {
+    if (!FleaFlag) return false;
     volatile unsigned *next = (volatile unsigned *)(SITE(INVENTORY_MANAGER) + RFSH_FLEA_NEXT_PICK_FIELD);
     unsigned saved = *next;
     *next = 0;
-    ((SetStoreCategoryFn)SITE(SET_STORE_CATEGORY))(scene, (int)RFSH_FLEA_MARKET_CATEGORY);
+    ((MaybeUpdateRotatingItemsFn)SITE(MAYBE_UPDATE_ROTATING))((void *)SITE(INVENTORY_MANAGER));
     if (*next == 0) *next = saved;          // the clock was 0: no pick could be due, so nothing changed
+    ((SetStoreCategoryFn)SITE(SET_STORE_CATEGORY))(scene, (int)RFSH_FLEA_MARKET_CATEGORY);
     return true;
 }
 
@@ -341,7 +344,7 @@ static bool __fastcall RefreshHandleKey(void *scene, void *, int type, int code,
             ++B200Refresh_Status.redraws;
             return true;
         }
-        if (category == (int)RFSH_FLEA_MARKET_CATEGORY && RedrawStockFleaMarket(scene)) {
+        if (category == (int)RFSH_FLEA_MARKET_CATEGORY && RedrawFleaMarket(scene)) {
             ++B200Refresh_Status.fleaRedraws;
             return true;
         }

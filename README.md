@@ -262,6 +262,35 @@ actions, as before. **Tools** holds:
   the family member standing on the floor. Code: `src/vf2_picture_maker.py` (the window and the save),
   `src/vf2_people_pictures.py` (the people as the game draws them), `src/vf2_picture_image.py` (the pictures, the
   PNG reader and writer, the game's scaled draw).
+
+  **All game pictures** (the third tab) offers every picture the game has, by category (people, pets, furniture,
+  upgrades, rooms and the house, weather and nature, effects and animations, work and food props, store and tray
+  icons, collectibles and collections, goals and trophies, buttons and controls, dialogs and panels, meters and
+  bars, meters assembled, screens and backgrounds, fonts, cursors, the patcher's pictures), with a search box:
+  - all 632 entries of the game's image table (`theGraphicsManager`'s `ImageList`), each cut into every cell exactly
+    as `ldwImageGrid`'s constructors and `GetCellRect` cut it (11,922 cells: every animation frame, furniture turned
+    each way, button states, the people's sheets);
+  - every other file in Images: the house map tiles, the fonts and the splash screen the code loads by name, and the
+    unused ones (`main_BG.png`, `VD_BG_2.png`, `MenuBtnCurrency2.png` and the two DRM pictures: nothing in the code
+    names them), marked **(unused)**; the four table entries whose files the game does not have are listed as
+    **(missing)**;
+  - the bars assembled at any level: the Details screen's five bars and the loading bar
+    (`theContinuousVariableMeter`, empty to full), and the two meters the game never calls
+    (`theSlicedVariableMeter`, `theVariableMeter`), marked **(unused)**;
+  - in a patched game, every file that is not the original game's (new or changed), marked **(patcher)**, the new
+    ones in their own category by folder.
+  **Save all shown** saves every frame of everything the search shows, a folder per category. The list comes from
+  `src/vf2_game_pictures.json` (made by `scripts/build_vf2_image_table.py` from the objects and the clean install's
+  file list); the pictures are read from the game folder at run time and no game art is in the repository.
+  Checked (`tests/test_game_pictures.py`): the data file is what the objects give; `GetImage` and `GetCellRect` run
+  under unicorn (`tests/vf2_pictures_emu.py`) for all 628 entries the game folder has and every cell's file and
+  rectangle is the Picture Maker's; the three meters' `DrawPercentMeter` make exactly the Picture Maker's calls at
+  every colour and many levels; `ClipRect` clips as the Picture Maker does; bars match a Pillow composite pixel for
+  pixel. Not checked against the game: JPEG and GIF pixels (decoded by Windows, not the game's libjpeg), how the
+  code draws the files it loads by name (shown whole), the unused percent meter's colour (drawn at 90% on a clear
+  background; the game blends it over the screen). Not assembled: whole screens, dialogs, rooms or the house with
+  furniture placed, pets in motion, weather over the house, day and night; their pieces are all offered as cells.
+  Code: `src/vf2_game_pictures.py`.
 - **How to Use...** opens the guide: one short page per control. A small **?** button beside each control
   opens the page for it. The pages are `src/vf2_how_to_use.json`, read by `src/vf2_how_to_use.py`.
 
@@ -453,11 +482,12 @@ release bundle, like almost everything else)
     the one the game makes for a new family; the next timed pick moves to 4 hours of game time later, as after
     any pick. Hairstyles are never picked at random, so they stay. An outfit already bought keeps its own
     look: the store copies the pick into the purchase, and R changes only the store's rows;
-  - on the **Flea Market** page, only while **All 36 Flea Market goods** is unticked: the game's own pick
-    (`MaybeUpdateRotatingItems`) happens now, 5 new goods with the game's own stock rules, and the next one
-    6 hours of real time later. With All 36 Flea Market goods ticked (the default) R does nothing there:
-    every good is already listed, and the game's pick would set each good's stock to 1, so 33 goods that
-    never run out would sell out for good after one purchase each;
+  - on the **Flea Market** page, always: the game's own pick (`MaybeUpdateRotatingItems`) happens now,
+    5 new goods with the game's own stock rules, and the next one 6 hours of real time later. R always
+    redraws; with **All 36 Flea Market goods** ticked (the default) you won't see a change in the Flea Market
+    list: all 36 stay listed, and every one of them reads as in stock whatever count the pick left (the
+    pick sets each good's stock to 1, a purchase to 0), so nothing sells out. Untick it later and the stock
+    page shows the latest pick's 5 goods with their stock counts;
   - nowhere else: not on any other store page, not On Sale, not outside the store, and not while a box
     (the buy box, the bank, a message, Redeem Credit) is open, because every store box takes the keys
     first. The store screen has no text box, so typing never triggers it.
@@ -467,6 +497,17 @@ release bundle, like almost everything else)
   The save gets only what the game itself saves for its own pick. With the setting off the DLL is not
   installed and the executable never loads it. **Not live tested yet**: proved by emulating the built
   executable and the real DLL (see `tests/test_b200_store_refresh.py`).
+- **Time Controls** (`.vf2time`, an Optional patch, **on by default**; since B201) - a Time Controls button
+  on the game's Settings screen opens a window to pause and resume, pick Slow, Normal, Fast, 5x or 10x, and
+  Time Warp everyone at home by +3 years. **The Time Warp costs the same as the store's own Time Warp**
+  (owner decision 2026-11-01; free in releases up to B205): the companion DLL (`vf2time_b200.dll`) reads the
+  store's price of its Time Warp item from the game when you click it (`CInventoryManager::GetPrice`, the
+  call the store's own price code makes; $2,000 in the game's table) and pays it the way a store purchase
+  pays. A family with less money is told so and nothing changes (no money, no ageing); nothing is paid if
+  nobody at home can age. With **Free and Guaranteed Cheats** ticked (the executable's 1-byte `.vf2free`
+  section holds 1) it is free; an executable without that section charges. Pause and the speeds are
+  unchanged. **Not live tested**: proved by emulating the built executables with the real DLL and the
+  game's own price and money code (see `tests/test_b200_time_controls.py`).
 - **Up to 28 Children** (`.vf2kids`, in the patcher's own **Experimental** section (red heading, under Optional Patches, with the warning "Experimental: not yet tested in a running game. Back up your saves before using it."), off by default; Enable All and `--enable-all` leave it off, so it is only ever ticked deliberately; added after B201, not yet in a release) - one
   generation may have up to 28 children instead of 6. Only the first 6 appear in the Family Tree, as
   before; every child, the 7th to the 28th included, can be chosen to inherit the house in Next

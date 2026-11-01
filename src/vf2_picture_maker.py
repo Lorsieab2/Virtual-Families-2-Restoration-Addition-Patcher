@@ -9,7 +9,10 @@ The Fish and Plant Tycoon Fix Patcher's Picture Studio (src/picture_studio.py), 
   body frame and head turn, on the Details screen, on an event screen, in the Family Tree); one who has left home
   or died is drawn only in the Family Tree, as the game does.
 * "Make your own": any sex, age, head (hairstyle) and outfit, in any of those ways.
-* Both tabs: in the house, any item a family member can carry (every cell of carrying.png and
+* "All game pictures": every picture the game has (vf2_game_pictures): every image-table entry cut into its cells
+  as the game cuts them, every other Images file, the meters assembled at any level, the unused ones and the
+  patcher's own, by category, searchable; "Save all shown" writes every frame in a folder per category.
+* Both people tabs: in the house, any item a family member can carry (every cell of carrying.png and
   collectables_small.png, the ones the game never shows too, each labelled), in any body position.
 * PNGs: clear, cut to the drawn pixels with a small margin (or none), at the game's size, 2x or 4x (crisp) or any
   width and height (smooth).
@@ -27,6 +30,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
 import vf2_genealogy as gen
+import vf2_game_pictures as gp
 import vf2_people_pictures as pp
 import vf2_picture_image as pi
 import vf2_save_reader as reader
@@ -396,6 +400,8 @@ class PictureMaker:
         self.notebook.pack(fill="both", expand=True, pady=(8, 0))
         self._build_save_tab()
         self._build_custom_tab()
+        self._build_all_tab()
+        self.notebook.bind("<<NotebookTabChanged>>", lambda _e: self._tab_changed())
 
     def _scrolled(self, parent) -> ttk.Frame:
         """A frame with scroll bars both ways, for a pane that may not fit a small window."""
@@ -490,6 +496,169 @@ class PictureMaker:
         ttk.Button(right, text="Save PNG...", command=lambda: self.save_png("custom")).pack(anchor="w", pady=(6, 0))
         self._fill_custom()
 
+    # ---- All game pictures
+    def _build_all_tab(self) -> None:
+        tab = ttk.Frame(self.notebook, padding=6)
+        self.all_tab = tab
+        self.notebook.add(tab, text="All game pictures")
+        self.all_pictures: list = []
+        self.all_nodes: dict = {}
+        self.all_folder = None
+        self.search_var = tk.StringVar(master=self.window)
+        right = self._scrolled(tab)
+        right.pack(side="right", fill="y")
+        left = ttk.Frame(tab)
+        left.pack(side="left", fill="both", expand=True)
+        find = ttk.Frame(left)
+        find.pack(fill="x", pady=(0, 4))
+        ttk.Label(find, text="Search:").pack(side="left")
+        entry = ttk.Entry(find, textvariable=self.search_var, width=30)
+        entry.pack(side="left", padx=(4, 0), fill="x", expand=True)
+        entry.bind("<Return>", lambda _e: self.fill_all())
+        ttk.Button(find, text="Find", command=self.fill_all).pack(side="left", padx=(4, 0))
+        self.all_tree = ttk.Treeview(left, columns=("frames",), show="tree headings", selectmode="browse")
+        self.all_tree.heading("#0", text="Every picture in the game")
+        self.all_tree.heading("frames", text="Frames")
+        self.all_tree.column("#0", width=340)
+        self.all_tree.column("frames", width=70, stretch=False)
+        yscroll = ttk.Scrollbar(left, orient="vertical", command=self.all_tree.yview)
+        self.all_tree.configure(yscrollcommand=yscroll.set)
+        yscroll.pack(side="right", fill="y")
+        self.all_tree.pack(side="left", fill="both", expand=True)
+        self.all_tree.bind("<<TreeviewSelect>>", lambda _e: self._picked_all())
+        pane = right.inner
+        self.all_preview = self._preview_pane(pane)
+        row = ttk.Frame(pane, padding=(0, 6))
+        row.pack(fill="x")
+        ttk.Label(row, text="Frame:").pack(side="left")
+        self.all_frame = ttk.Combobox(row, state="readonly", width=34)
+        self.all_frame.pack(side="left", padx=(4, 0))
+        self.all_frame.bind("<<ComboboxSelected>>", lambda _e: self._show_all())
+        buttons = ttk.Frame(pane, padding=(0, 6))
+        buttons.pack(fill="x")
+        ttk.Button(buttons, text="Save PNG...", command=lambda: self.save_png("all")).pack(anchor="w")
+        ttk.Button(buttons, text="Save all shown (every frame, a folder per category)...",
+                   command=self.save_all_pictures).pack(anchor="w", pady=(6, 0))
+
+    def _tab_changed(self) -> None:
+        with contextlib.suppress(tk.TclError):
+            if self.notebook.select() == str(self.all_tab) and self.all_folder != self.art.folder:
+                self.fill_all()
+
+    def load_all(self) -> list:
+        """The catalogue of the chosen game folder (vf2_game_pictures), made once per folder."""
+        if self.all_folder != self.art.folder or self.all_source is None:
+            self.all_source = gp.Folder(self.art.folder)
+            self.all_pictures = gp.catalogue(self.all_source) if self.art.folder is not None else []
+            self.all_folder = self.art.folder
+        return self.all_pictures
+
+    all_source = None
+
+    def shown_pictures(self) -> list:
+        return gp.search(self.load_all(), self.search_var.get())
+
+    def fill_all(self) -> None:
+        tree = self.all_tree
+        tree.delete(*tree.get_children())
+        self.all_nodes = {}
+        self.shown.pop("all", None)
+        if self.art.folder is None:
+            self._show(self.all_preview, None, "Choose the game folder first: the pictures come from it.")
+            return
+        try:
+            pictures = self.shown_pictures()
+        except (OSError, pi.PictureError, ValueError) as exc:
+            self._show(self.all_preview, None, f"The game folder could not be read: {exc}")
+            return
+        groups: dict = {}
+        for picture in pictures:
+            parent = groups.get(picture.category)
+            if parent is None:
+                parent = tree.insert("", "end", text=picture.category, open=False)
+                groups[picture.category] = parent
+            name = picture.label
+            if picture.category == "The patcher's pictures" and "/" in (picture.file or ""):
+                folder_name = picture.file.rsplit("/", 1)[0]
+                key = (picture.category, folder_name)
+                sub = groups.get(key)
+                if sub is None:
+                    sub = tree.insert(parent, "end", text=folder_name, open=False)
+                    groups[key] = sub
+                parent, name = sub, picture.file.rsplit("/", 1)[1] + (f" ({picture.status})" if picture.status else "")
+            node = tree.insert(parent, "end", text=name, values=(len(picture.frames),))
+            self.all_nodes[node] = picture
+        for category, node in groups.items():
+            if isinstance(category, str):
+                count = sum(1 for p in pictures if p.category == category)
+                tree.item(node, text=f"{category} ({count})")
+        self._show(self.all_preview, None, f"{len(pictures)} pictures. Click one to see it as the game draws it."
+                   if pictures else "Nothing matches the search.")
+
+    def selected_picture(self):
+        selection = self.all_tree.selection()
+        return self.all_nodes.get(selection[0]) if selection else None
+
+    def _picked_all(self) -> None:
+        picture = self.selected_picture()
+        if picture is None:
+            return
+        self.all_frame.configure(values=picture.frames)
+        if picture.frames:
+            self.all_frame.current(0)
+        else:
+            self.all_frame.set("")
+        self._show_all()
+
+    def _show_all(self) -> None:
+        picture = self.selected_picture()
+        if picture is None:
+            return
+        words = [f"{picture.label}: {picture.category}."] + ([picture.reason] if picture.reason else []) + \
+            list(picture.notes)
+        if not picture.frames:
+            self.shown.pop("all", None)
+            self._show(self.all_preview, None, " ".join(words))
+            return
+        try:
+            image = gp.render(self.all_source, picture, max(0, self.all_frame.current()))
+        except (OSError, pi.PictureError, ValueError, KeyError) as exc:
+            self.shown.pop("all", None)
+            self._show(self.all_preview, None, f"{picture.label}: this cannot be drawn ({exc}).")
+            return
+        self.shown["all"] = image
+        self._show(self.all_preview, image, " ".join(words))
+
+    def save_all_pictures(self, folder: str | None = None) -> Path | None:
+        pictures = [p for p in self.shown_pictures() if p.frames] if self.art.folder is not None else []
+        if not pictures:
+            self._tell("info", "Nothing to save: choose the game folder (and clear the search).")
+            return None
+        try:
+            options = self.export_choice()
+        except pi.PictureError as exc:
+            self._tell("warning", str(exc))
+            return None
+        if folder is None:
+            folder = filedialog.askdirectory(parent=self.window, title="Save every picture in...")
+        if not folder:
+            return None
+        base = pi.safe_file_name("Virtual Families 2 pictures" + (f" - {self.search_var.get()}"
+                                                                  if self.search_var.get().strip() else ""))
+        target, n = Path(folder) / base, 2
+        while target.exists():
+            target, n = Path(folder) / f"{base} ({n})", n + 1
+        try:
+            saved, failed = gp.save_all(self.all_source, pictures, target, options)
+        except OSError as exc:
+            self._tell("warning", f"The pictures could not be saved: {exc}")
+            return None
+        text = f"{saved} picture(s) saved in {target}, a folder for each category."
+        if failed:
+            text += "\nNot saved:\n" + "\n".join(failed[:10])
+        self._tell("info", text)
+        return target
+
     def close(self) -> None:
         with contextlib.suppress(tk.TclError):
             self.window.grab_release()
@@ -556,6 +725,9 @@ class PictureMaker:
         with contextlib.suppress(tk.TclError):
             self._fill_custom()
             self._show_saved()
+            if hasattr(self, "all_tab") and self.notebook.select() == str(self.all_tab) \
+                    and self.all_folder != self.art.folder:
+                self.fill_all()
 
     # ---- the save
     def browse_saves(self, chosen: str | None = None) -> None:
@@ -763,6 +935,12 @@ class PictureMaker:
         return export_options(self.size_var.get(), self.width_var.get(), self.height_var.get(), self.margin_var.get())
 
     def picture_name(self, which: str) -> str:
+        if which == "all":
+            picture = self.selected_picture()
+            if picture is None:
+                return "picture"
+            frame = self.all_frame.get() if len(picture.frames) > 1 else ""
+            return gp.safe(f"{picture.label}{f' - {frame}' if frame else ''}")
         if which == "save":
             item = self.selected_item()
             if item is None:

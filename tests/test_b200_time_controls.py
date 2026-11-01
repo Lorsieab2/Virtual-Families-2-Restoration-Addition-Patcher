@@ -101,6 +101,28 @@ def test_the_source_has_no_hard_coded_game_address():
     assert not found, f"literal addresses in the module source: {found}"
 
 
+def test_the_time_warp_price_is_never_built_in():
+    """The DLL reads the store's Time Warp price from the game (GetPrice); it holds no price of its own."""
+    text = (SRC / "b200time_time.inc").read_text() + (SRC / "b200time.cpp").read_text()
+    code = re.sub(r"//[^\n]*", "", text)
+    code = re.sub(r'L?"(?:[^"\\]|\\.)*"', '""', code)
+    assert not re.search(r"\b2000\b|\b0x7D0\b|2,000", code, re.I)
+    header = (SRC / "b200time_sites.h").read_text()
+    assert "#define B200TC_TIME_WARP_ITEM 0x112u" in header
+    for key in ("STORE_TIME_WARP_PRICE", "ITEM_INFO_TABLE", "MONEY_ADJUST", "CALC_PRICE", "TIME_WARP_CASE"):
+        assert "B200TC_%s " % key not in header, key
+    for site in ("INVENTORY_MANAGER", "GET_PRICE", "MONEY", "MONEY_SPEND"):
+        assert re.search(r"B200_SITE_%s\b" % site, header), site
+    assert "GetPrice(Inventory, B200TC_TIME_WARP_ITEM)" in text
+    assert "MoneySpend(Money, -(float)price, false)" in text
+
+
+def test_the_free_cheats_contract_is_the_section_name():
+    text = (SRC / "b200time_time.inc").read_text()
+    assert "{ '.', 'v', 'f', '2', 'f', 'r', 'e', 'e' }" in text
+    assert S.FREE_CHEATS_SECTION == ".vf2free" and len(S.FREE_CHEATS_SECTION) == 8
+
+
 # ===================================================================== with the core exe
 def test_every_site_is_proved_against_the_b200_executable():
     G.validate(core_exe_bytes())
@@ -136,7 +158,10 @@ def test_wrong_constants_are_refused(monkeypatch):
                         ("VILLAGER_MANAGER", S.VILLAGER_MANAGER + 4), ("GAME_STATE_INSTANCE_PTR", 0x685A8C),
                         ("OPTIONS_TEXT_COLOUR", S.OPTIONS_TEXT_COLOUR + 4), ("VILLAGER_STRIDE", S.VILLAGER_STRIDE + 4),
                         ("GAME_STATE_SPEED_FIELD", 0x25B1C), ("BUTTON_CTOR", S.BUTTON_CTOR + 0x10),
-                        ("OPTIONS_CTOR_LAST_CALL", S.OPTIONS_CTOR_LAST_CALL + 5)):
+                        ("OPTIONS_CTOR_LAST_CALL", S.OPTIONS_CTOR_LAST_CALL + 5),
+                        ("TIME_WARP_ITEM", S.TIME_WARP_ITEM - 1), ("MONEY", S.MONEY + 8),
+                        ("GET_PRICE", S.GET_PRICE + 0x10), ("INVENTORY_MANAGER", S.INVENTORY_MANAGER + 4),
+                        ("MONEY_SPEND", S.MONEY_SPEND + 0x20), ("STORE_TIME_WARP_PRICE", 2500)):
         with monkeypatch.context() as mp:
             mp.setattr(S, name, value)
             with pytest.raises(G.SiteError):
@@ -406,8 +431,41 @@ MUTATIONS = [
      "case ID_TC_FAST: ChooseSpeed(B200TC_SPEED_SLOW);"),
     ("speed: 10x is 5x", "b200time_time.inc", "case ID_TC_X10: ChooseSpeed(B200TC_SPEED_10X);",
      "case ID_TC_X10: ChooseSpeed(B200TC_SPEED_5X);"),
-    ("dialog: warp without asking", "b200time_time.inc", "== IDYES)\n                StartTimeWarp(kWarpTicks);",
-     "== IDYES || true)\n                StartTimeWarp(kWarpTicks);"),
+    ("dialog: warp without asking", "b200time_time.inc", "MB_YESNO | MB_ICONQUESTION) != IDYES) return;",
+     "MB_YESNO | MB_ICONQUESTION) != IDYES && false) return;"),
+    ("price: built in", "b200time_time.inc", "    return GetPrice(Inventory, B200TC_TIME_WARP_ITEM);",
+     "    return 2 * 1000;"),
+    ("price: another store item", "b200time_time.inc", "GetPrice(Inventory, B200TC_TIME_WARP_ITEM);",
+     "GetPrice(Inventory, B200TC_TIME_WARP_ITEM + 1);"),
+    ("price: never paid", "b200time_time.inc", "    if (WarpPending && !free) MoneySpend(Money, -(float)price, false);\n", ""),
+    ("price: paid twice", "b200time_time.inc", "MoneySpend(Money, -(float)price, false);",
+     "MoneySpend(Money, -2 * (float)price, false);"),
+    ("price: paid when free", "b200time_time.inc", "if (WarpPending && !free) MoneySpend", "if (WarpPending) MoneySpend"),
+    ("price: paid with nobody queued", "b200time_time.inc", "if (WarpPending && !free) MoneySpend",
+     "if (!free) MoneySpend"),
+    ("price: paid before asking", "b200time_time.inc",
+     "    if (MessageBoxW(dlg, text, L\"Time Warp\", MB_YESNO | MB_ICONQUESTION) != IDYES) return;\n",
+     "    MoneySpend(Money, -(float)price, false);\n"
+     "    if (MessageBoxW(dlg, text, L\"Time Warp\", MB_YESNO | MB_ICONQUESTION) != IDYES) return;\n"),
+    ("short: not refused", "b200time_time.inc", "if (!free && *Money < (double)price) {", "if (false) {"),
+    ("short: exactly enough refused", "b200time_time.inc", "*Money < (double)price", "*Money <= (double)price"),
+    ("short: refused but still warps", "b200time_time.inc",
+     "which is not enough. Nothing was changed.\");\n        *p = 0;\n        MessageBoxW(dlg, text, L\"Time Warp\", "
+     "MB_OK | MB_ICONINFORMATION);\n        return;",
+     "which is not enough. Nothing was changed.\");\n        *p = 0;\n        MessageBoxW(dlg, text, L\"Time Warp\", "
+     "MB_OK | MB_ICONINFORMATION);\n        StartTimeWarp(kWarpTicks);\n        return;"),
+    ("short: wrong balance shown", "b200time_time.inc", "p = PutMoney(p, Dollars());", "p = PutMoney(p, Dollars() + 1);"),
+    ("free: never", "b200time_time.inc", "return size >= 1 && exe[s[i].VirtualAddress] == 1;", "return false;"),
+    ("free: any byte", "b200time_time.inc", "exe[s[i].VirtualAddress] == 1;", "exe[s[i].VirtualAddress] != 0;"),
+    ("free: without the section", "b200time_time.inc", "    }\n    return false;\n}\n\n// The store's price",
+     "    }\n    return true;\n}\n\n// The store's price"),
+    ("free: name not compared", "b200time_time.inc", "        if (k != IMAGE_SIZEOF_SHORT_NAME) continue;\n", ""),
+    ("free: label says so wrongly", "b200time_time.inc", 'p = PutText(p, L"free");', 'p = PutText(p, L"fee");'),
+    ("money: thousands", "b200time_time.inc", "if (n && n % 3 == 0)", "if (n && n % 4 == 0)"),
+    ("abi: money is another site", "b200time_time.inc", "Money = (double *)SITE(MONEY);",
+     "Money = (double *)SITE(GAME_TIME);"),
+    ("abi: GetPrice is another site", "b200time_time.inc", "GetPrice = (GetPriceFn)SITE(GET_PRICE);",
+     "GetPrice = (GetPriceFn)SITE(GAME_STATE_LOAD);"),
     ("dialog: status shows the wrong speed", "b200time_time.inc", 'speed == (int)B200TC_SPEED_FAST ? L"fast"',
      'speed == (int)B200TC_SPEED_FAST ? L"slow"'),
     ("save: clock not rebased", "b200time_time.inc", "    if (running) SetSpeed(GameTime, B200TC_SPEED_NORMAL);\n", ""),

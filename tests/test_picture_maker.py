@@ -776,7 +776,8 @@ def test_the_tools_tab_opens_one_picture_maker(tk_root, tmp_path, monkeypatch):
     maker = app.picture_maker()
     assert maker.window.title() == "Picture Maker" and "picture_maker" in app.help_keys
     assert app.picture_maker() is maker                                     # one at a time
-    assert [maker.notebook.tab(t, "text") for t in maker.notebook.tabs()] == ["From my save", "Make your own"]
+    assert [maker.notebook.tab(t, "text") for t in maker.notebook.tabs()] == ["From my save", "Make your own",
+                                                                             "All game pictures"]
     assert maker.window.resizable() == (True, True)
     maker.close()
 

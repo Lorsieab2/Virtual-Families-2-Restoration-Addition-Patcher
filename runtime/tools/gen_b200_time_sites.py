@@ -298,6 +298,11 @@ def _cross_checks():
         "game_state_load_speed": ({0x468A20}, {S.GAME_TIME, S.GAME_STATE_SPEED_FIELD}),
         "game_state_save_time": ({0x468AC0}, {S.GAME_TIME}),
         "game_state_save_blob": (set(), {S.GAME_STATE_SPEED_FIELD}),
+        "calc_price_head": ({S.GET_PRICE}, {S.INVENTORY_MANAGER, 0xD4, 3}),
+        "purchase_spend": ({S.CALC_PRICE, S.MONEY_SPEND}, {S.MONEY}),
+        "money_spend_wrapper": ({S.MONEY_ADJUST}, set()),
+        "store_time_warp_case": ({0x481D80}, {S.MONEY, S.GAME_STATE_SPEED_FIELD, S.PAUSED_OFFSET,
+                                              (-3660) & 0xFFFFFFFF}),
     }
 
 
@@ -360,7 +365,9 @@ def validate(exe_bytes: bytes) -> Model:
                ("game_state_load_head", S.GAME_STATE_LOAD), ("game_state_save_head", S.GAME_STATE_SAVE),
                ("button_ctor_head", S.BUTTON_CTOR), ("set_text", S.BUTTON_SET_TEXT),
                ("add_control_head", S.SCENE_ADD_CONTROL), ("image_grid", S.GRAPHICS_GET_IMAGE_GRID),
-               ("graphics_get", S.GRAPHICS_GET), ("game_new", S.GAME_NEW), ("set_checked", S.CONTROL_SET_CHECKED))
+               ("graphics_get", S.GRAPHICS_GET), ("game_new", S.GAME_NEW), ("set_checked", S.CONTROL_SET_CHECKED),
+               ("calc_price_head", S.CALC_PRICE), ("money_spend_wrapper", S.MONEY_SPEND),
+               ("money_adjust_head", S.MONEY_ADJUST), ("store_time_warp_case", S.TIME_WARP_CASE))
     for pin_name, va in entries:
         if by_name[pin_name].va != va:
             raise SiteError(f"{pin_name} is not the entry {va:#x}")
@@ -368,6 +375,22 @@ def validate(exe_bytes: bytes) -> Model:
     for name, tail in (("button_ctor_ret", b"\xC2\x18\x00"), ("add_control_ret", b"\xC2\x04\x00")):
         if by_name[name].bytes != tail:
             raise SiteError(f"{name}: not the expected return")
+    if not by_name["money_spend_wrapper"].bytes.endswith(b"\xC2\x08\x00"):
+        raise SiteError("the money wrapper does not end in ret 8")
+    # GetPrice is thiscall with one int (every exit ret 4), the caller CalcPrice does not clean the stack.
+    price_exits = [i for i in _md().disasm(core.read(S.GET_PRICE, 0xA0), S.GET_PRICE) if i.mnemonic == "ret"]
+    if not price_exits or any(i.op_str != "4" for i in price_exits):
+        raise SiteError("CInventoryManager::GetPrice has an exit that is not ret 4")
+    # TIME_WARP_ITEM is the store's Time Warp: HandleUpgrade sends it to the Time Warp case, and its itemInfo
+    # row is that item at the store price.
+    index = core.read(S.HANDLE_UPGRADE_INDEX + S.TIME_WARP_ITEM - S.FIRST_UPGRADE_ITEM, 1)[0]
+    if core.u32(S.HANDLE_UPGRADE_TABLE + 4 * index) != S.TIME_WARP_CASE:
+        raise SiteError("HandleUpgrade does not send TIME_WARP_ITEM to the Time Warp case")
+    row = S.ITEM_INFO_TABLE + S.TIME_WARP_ITEM * 0x24
+    if core.u32(row) != S.TIME_WARP_ITEM or core.u32(row + 0xC) != S.STORE_TIME_WARP_PRICE:
+        raise SiteError("the itemInfo row of TIME_WARP_ITEM is not the Time Warp at the store price")
+    if core.u32(S.GET_PRICE + 0x97) != S.ITEM_INFO_TABLE + 0xC:
+        raise SiteError("GetPrice does not read the price field of the itemInfo table")
     grid = by_name["image_grid"]
     rets = [i for i in _md().disasm(grid.bytes, grid.va) if i.mnemonic == "ret"]
     if not rets or any(i.op_str != "4" for i in rets):

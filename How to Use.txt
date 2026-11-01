@@ -40,19 +40,27 @@ https://github.com/Lorsieab2/Virtual-Families-2-Restoration-Addition-Patcher/
    - R Refreshes the Store (a cheat): in the store, press R on the Clothing
      and Hairstyles page to pick the six outfits again (hairstyles stay;
      outfits you already bought keep their looks). On the Flea Market page R
-     picks 5 new goods, but only while All 36 Flea Market goods is unticked.
+     always picks 5 new goods; with All 36 Flea Market goods on you won't see
+     a change in the Flea Market list (all 36 stay listed and in stock).
      R does nothing anywhere else, and nothing while a box is open.
+
+   Time Controls (on by default) adds a Time Controls button to the game's
+   Settings screen: pause, resume, Slow, Normal, Fast, 5x and 10x, and a Time
+   Warp of +3 years for everyone at home. The Time Warp costs the same as the
+   store's own Time Warp ($2,000, read from the game's store when you click
+   it). If your family cannot afford it, you are told so and nothing changes.
+   With Free and Guaranteed Cheats ticked it is free.
 
    Two text settings; only one can be on (ticking one unticks the other):
    - Render Unicode with In-Game Fonts (on by default): the game shows and
-     accepts every letter and character: accents (é ñ ş ı İ ğ), Greek,
+     accepts every letter and character: accented letters, Turkish letters, Greek,
      Cyrillic, Japanese, Chinese, Korean, symbols, emoji. Type them with your
      keyboard's own keys, dead keys, Alt codes or an input method. Letters the
      game's fonts lack are made in the same style ("patcher-made"). A name
      still fits its box: a letter that would not fit is not added.
    - Use Unicode Font (overrides in-game fonts) (off by default): every text
      is drawn with a Windows font (Segoe UI) at the game fonts' sizes instead.
-   Names with only Latin letters (é, ü ...) are saved exactly as before, so
+   Names with only Western European letters are saved exactly as before, so
    the original game shows them too; other names show as odd letters in the
    original game, never a crash.
 

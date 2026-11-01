@@ -23,6 +23,8 @@ typedef void *(__thiscall *GetEvictFontFn)(void *strings);
 typedef bool (__thiscall *HandleMessageFn)(void *scene, int message, long param);
 typedef void (__thiscall *IncrementAgeFn)(int *age, int ticks);
 typedef bool (__thiscall *GameStateSlotFn)(void *state, int slot);
+typedef int (__thiscall *GetPriceFn)(void *inventory, int item);
+typedef void (__thiscall *MoneySpendFn)(void *money, float amount, bool flag);
 
 // Resolved from the live module base by ResolveAbi() before anything is planned.
 static SetSpeedFn SetSpeed;
@@ -41,6 +43,10 @@ static GameStateSlotFn NativeGameStateLoad;
 static unsigned NativeSetChecked;       // read by the naked constructor stub
 static unsigned char **GameStatePtr;
 static unsigned VillagerBase;           // first villager's age field: manager + array + age offset
+static GetPriceFn GetPrice;
+static void *Inventory;
+static MoneySpendFn MoneySpend;
+static double *Money;                   // CMoney's balance (its first field)
 
 static void ResolveAbi() {
     SetSpeed = (SetSpeedFn)SITE(SET_SPEED);
@@ -59,6 +65,10 @@ static void ResolveAbi() {
     NativeSetChecked = SITE(CONTROL_SET_CHECKED);
     GameStatePtr = (unsigned char **)SITE(GAME_STATE_INSTANCE_PTR);
     VillagerBase = SITE(VILLAGER_MANAGER) + B200TC_VILLAGER_ARRAY_OFFSET + B200TC_VILLAGER_AGE_OFFSET;
+    GetPrice = (GetPriceFn)SITE(GET_PRICE);
+    Inventory = (void *)SITE(INVENTORY_MANAGER);
+    MoneySpend = (MoneySpendFn)SITE(MONEY_SPEND);
+    Money = (double *)SITE(MONEY);
 }
 
 static const int kTimeButtonId = B200TC_TIME_BUTTON_ID;
@@ -168,6 +178,43 @@ static int WarpTicksFor(const int *age, int ticks) {
 // count in [ebp-14h] for the accumulator remainder, so only the age is affected.
 static void __fastcall IncrementAgeWithWarp(int *age, void *, int ticks) {
     NativeIncrementAge(age, WarpTicksFor(age, ticks));
+}
+
+// ---------------------------------------------------------------- the Time Warp's price
+// Owner decision 2026-11-01: the button costs what the store's own Time Warp costs, read from the game
+// at the click (CInventoryManager::GetPrice for the store's Time Warp item, as the store's CalcPrice
+// asks it), and paid the way a store purchase pays (the store's money call with the negated price).
+// With the patcher's Free and Guaranteed Cheats ticked it stays free.
+
+// Free and Guaranteed Cheats: the running executable's own 1-byte ".vf2free" section holds 1. No such
+// section (every build up to B205), an empty one, or any other byte: not free.
+static bool FreeAndGuaranteedCheats() {
+    const unsigned char *exe = (const unsigned char *)GetModuleHandleW(0);
+    if (!exe) return false;
+    const IMAGE_NT_HEADERS32 *nt = (const IMAGE_NT_HEADERS32 *)(exe + ((const IMAGE_DOS_HEADER *)exe)->e_lfanew);
+    const IMAGE_SECTION_HEADER *s = IMAGE_FIRST_SECTION(nt);
+    static const char kName[IMAGE_SIZEOF_SHORT_NAME] = { '.', 'v', 'f', '2', 'f', 'r', 'e', 'e' };
+    for (unsigned i = 0; i < nt->FileHeader.NumberOfSections; ++i) {
+        unsigned k = 0;
+        while (k < IMAGE_SIZEOF_SHORT_NAME && s[i].Name[k] == (BYTE)kName[k]) ++k;
+        if (k != IMAGE_SIZEOF_SHORT_NAME) continue;
+        unsigned size = s[i].Misc.VirtualSize ? s[i].Misc.VirtualSize : s[i].SizeOfRawData;
+        return size >= 1 && exe[s[i].VirtualAddress] == 1;
+    }
+    return false;
+}
+
+// The store's price of its Time Warp now (-1 if the game does not know the item).
+static int TimeWarpPrice() {
+    return GetPrice(Inventory, B200TC_TIME_WARP_ITEM);
+}
+
+// Whole dollars of the balance (the game shows money rounded down; the balance never goes below 0).
+static unsigned Dollars() {
+    double balance = *Money;
+    if (!(balance > 0)) return 0;
+    if (balance >= 2147483647.0) return 2147483647u;
+    return (unsigned)(int)balance;
 }
 
 // ---------------------------------------------------------------- save and load
@@ -296,6 +343,58 @@ static wchar_t *PutText(wchar_t *p, const wchar_t *s) {
     return p;
 }
 
+// "$1,234,567"
+static wchar_t *PutMoney(wchar_t *p, unsigned v) {
+    wchar_t digits[16];
+    int n = 0;
+    do { digits[n++] = (wchar_t)(L'0' + v % 10); v /= 10; } while (v);
+    *p++ = L'$';
+    while (n) {
+        *p++ = digits[--n];
+        if (n && n % 3 == 0) *p++ = L',';
+    }
+    return p;
+}
+
+// The Time Warp button: refused (nothing changes) when the family cannot pay the store's price; else
+// asked, then everyone at home is queued and the price is paid. Free with Free and Guaranteed Cheats.
+// Nothing is paid when nobody at home can age.
+static void TimeWarpClicked(HWND dlg) {
+    bool free = FreeAndGuaranteedCheats();
+    int price = TimeWarpPrice();
+    wchar_t text[400];
+    wchar_t *p = text;
+    if (!free && price < 0) {
+        MessageBoxW(dlg, L"The game does not know the store's Time Warp, so its price cannot be read. Nothing "
+                         L"was changed.", L"Time Warp", MB_OK | MB_ICONINFORMATION);
+        return;
+    }
+    if (!free && *Money < (double)price) {
+        p = PutText(p, L"The Time Warp costs ");
+        p = PutMoney(p, (unsigned)price);
+        p = PutText(p, L", the same as the store's Time Warp. Your family has ");
+        p = PutMoney(p, Dollars());
+        p = PutText(p, L", which is not enough. Nothing was changed.");
+        *p = 0;
+        MessageBoxW(dlg, text, L"Time Warp", MB_OK | MB_ICONINFORMATION);
+        return;
+    }
+    p = PutText(p, L"Everyone at home ages at once, with every normal rule: birthdays, leaving home, and old "
+                   L"age. ");
+    if (free) {
+        p = PutText(p, L"It is free: Free and Guaranteed Cheats is on.");
+    } else {
+        p = PutText(p, L"It costs ");
+        p = PutMoney(p, (unsigned)price);
+        p = PutText(p, L", the store's Time Warp price.");
+    }
+    p = PutText(p, L" Continue?");
+    *p = 0;
+    if (MessageBoxW(dlg, text, L"Time Warp", MB_YESNO | MB_ICONQUESTION) != IDYES) return;
+    StartTimeWarp(kWarpTicks);
+    if (WarpPending && !free) MoneySpend(Money, -(float)price, false);
+}
+
 static void RefreshTime(HWND dlg) {
     int speed = UnderlyingSpeed();
     const wchar_t *name = speed == (int)B200TC_SPEED_SLOW ? L"slow" : speed == (int)B200TC_SPEED_NORMAL ? L"normal"
@@ -323,12 +422,7 @@ static INT_PTR CALLBACK TimeProc(HWND dlg, UINT msg, WPARAM wp, LPARAM) {
         case ID_TC_FAST: ChooseSpeed(B200TC_SPEED_FAST); break;
         case ID_TC_X5: ChooseSpeed(B200TC_SPEED_5X); break;
         case ID_TC_X10: ChooseSpeed(B200TC_SPEED_10X); break;
-        case ID_TC_WARP:
-            if (MessageBoxW(dlg, L"Everyone at home ages at once, with every normal rule: birthdays, leaving "
-                                 L"home, and old age. Continue?", L"Time Warp",
-                            MB_YESNO | MB_ICONQUESTION) == IDYES)
-                StartTimeWarp(kWarpTicks);
-            break;
+        case ID_TC_WARP: TimeWarpClicked(dlg); break;
         case IDOK: case IDCANCEL: EndDialog(dlg, 0); return TRUE;
         }
         RefreshTime(dlg);
@@ -342,6 +436,15 @@ static Template TimeTemplate;  // file scope: no run-time initialiser, no C runt
 
 static void ShowTimeControls(HWND owner) {
     Template &t = TimeTemplate;
+    // The button names its price as the store has it when the dialog opens.
+    wchar_t warpLabel[64];
+    wchar_t *p = PutText(warpLabel, L"Time Warp: +3 years (");
+    int price = TimeWarpPrice();
+    if (FreeAndGuaranteedCheats()) p = PutText(p, L"free");
+    else if (price >= 0) p = PutMoney(p, (unsigned)price);
+    else p = PutText(p, L"unavailable");
+    p = PutText(p, L")");
+    *p = 0;
     t.Begin(L"Time Controls", 250, 150, 10);
     t.Item(STATIC, SS_LEFT, 10, 8, 230, 12, ID_TC_STATUS, L"");
     t.Item(BUTTON, BS_PUSHBUTTON | WS_TABSTOP, 10, 24, 112, 16, ID_TC_PAUSE, L"Pause");
@@ -352,7 +455,7 @@ static void ShowTimeControls(HWND owner) {
     t.Item(BUTTON, BS_PUSHBUTTON | WS_TABSTOP, 167, 48, 73, 16, ID_TC_FAST, L"Fast");
     t.Item(BUTTON, BS_PUSHBUTTON | WS_TABSTOP, 10, 68, 112, 16, ID_TC_X5, L"5x");
     t.Item(BUTTON, BS_PUSHBUTTON | WS_TABSTOP, 128, 68, 112, 16, ID_TC_X10, L"10x");
-    t.Item(BUTTON, BS_PUSHBUTTON | WS_TABSTOP, 10, 94, 230, 16, ID_TC_WARP, L"Time Warp: +3 years");
+    t.Item(BUTTON, BS_PUSHBUTTON | WS_TABSTOP, 10, 94, 230, 16, ID_TC_WARP, warpLabel);
     t.Item(BUTTON, BS_DEFPUSHBUTTON | WS_TABSTOP, 165, 126, 75, 16, IDOK, L"Close");
     DialogBoxIndirectParamW(ThisModule, t.Get(), owner, TimeProc, 0);
 }
