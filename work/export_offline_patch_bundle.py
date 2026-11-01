@@ -113,14 +113,16 @@ FINAL_PLAYTEST_DEFAULT_ON_SETTINGS = frozenset({
     "mobile_renovations",
     "mobile_sound_assets",
     "mobile_furniture_behaviors",
-    "cheat_upgrades",
     "ai_generated_bathroom2_renovations",
     "time_controls",
     "family_history",
     "r_refreshes_store",
-    "expanded_flea_market",
     "render_unicode_in_game_fonts",
 })
+# cheat_upgrades and expanded_flea_market left this set on 1 November 2026: every release bundle is
+# exported with this profile, so listing them shipped both ON although the SETTINGS table had them OFF
+# (the owner's rule: cheats off by default). The profile may only turn on what the table turns on;
+# EveryPatchDefaultsOn pins that, and the release gate compares the shipped defaults with the table.
 # up_to_28_children is Experimental: the final playtest profile leaves it off too, like Enable All.
 # Empty by design. The owner's standing instruction is that a playtest ships
 # with every patch on -- "make sure your playtests ship and compile with every
