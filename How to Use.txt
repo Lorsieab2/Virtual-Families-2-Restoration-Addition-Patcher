@@ -31,18 +31,43 @@ https://github.com/Lorsieab2/Virtual-Families-2-Restoration-Addition-Patcher/
 
 6. Review the optional patch checkboxes.
 
-   Two store settings, both on by default:
+   Four buttons pick a whole set at once (each has a ? beside it):
+   - Select All Patches: every patch except the Experimental ones.
+   - Default Patches: the recommended set. Every content patch and fix is
+     on; the cheats are off (see below), and so are Up to 28 Children and
+     the transparent invisible-furniture swap (place the furniture first).
+   - Owner's Defaults: every patch except Up to 28 Children, the cheats and
+     both invisible-furniture patches included.
+   - Deselect All Patches: clears every tick.
+   Patch Selection Settings... opens a window with a search box and every
+   patch: tick the ones you want there, then press Tick These or Untick
+   These. A patch that needs another one ticks it too.
+
+   Cheats are off by default (tick them if you want them):
+   - Cheat Upgrades: the Special Upgrades cheat rows (money, food, prices,
+     achievements, babies and more). No AI Icons only changes these rows'
+     icons, so it waits for Cheat Upgrades and comes back on with it.
+   - Free and Guaranteed Cheats: unlocks exactly the Force Successful
+     Pregnancy row, the $0 Anti-Spam Software Ownership and Rockhound
+     Certificate Ownership rows (on the Special Upgrades page, with Cheat
+     Upgrades), and a free Time Warp in Time Controls.
    - All 36 Flea Market goods: the Flea Market lists all 36 of its goods all
      the time, always in stock (the Towelette, Anti-spam Software and
-     Rockhound Certificate too: buy them again and again). Untick it for the
+     Rockhound Certificate too: buy them again and again). Unticked it is the
      original game's Flea Market: 5 goods, picked again after 6 hours of
      real time.
-   - R Refreshes the Store (a cheat): in the store, press R on the Clothing
-     and Hairstyles page to pick the six outfits again (hairstyles stay;
-     outfits you already bought keep their looks). On the Flea Market page R
-     always picks 5 new goods; with All 36 Flea Market goods on you won't see
-     a change in the Flea Market list (all 36 stay listed and in stock).
-     R does nothing anywhere else, and nothing while a box is open.
+   - All outfits and hairstyles always for sale: the Clothing and Hairstyles
+     page lists every outfit and all 100 hairstyles. Unticked it shows the
+     original six rotating outfits plus 6 rotating hairstyle and holiday
+     outfit rows, which change when the six outfits do (every 4 game hours).
+
+   R Refreshes the Store (a cheat, on by default): in the store, press R on
+   the Clothing and Hairstyles page to pick the six outfits again (and the 6
+   rotating rows with them; with All outfits and hairstyles on, hairstyles
+   stay; outfits you already bought keep their looks). On the Flea Market
+   page R always picks 5 new goods; with All 36 Flea Market goods on you
+   won't see a change in the Flea Market list (all 36 stay listed and in
+   stock). R does nothing anywhere else, and nothing while a box is open.
 
    Time Controls (on by default) adds a Time Controls button to the game's
    Settings screen: pause, resume, Slow, Normal, Fast, 5x and 10x, and a Time
