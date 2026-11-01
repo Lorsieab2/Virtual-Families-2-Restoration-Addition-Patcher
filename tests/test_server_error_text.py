@@ -26,7 +26,6 @@ from __future__ import annotations
 import faulthandler
 import glob
 import os
-import re
 import shutil
 import struct
 import sys
@@ -361,22 +360,21 @@ def test_executables_built_with_the_fix():
         while at >= 0:
             stubs.append(at - 0x0D)
             at = image.find(tail, at + 1)
-        assert len(stubs) == 6, (path, len(stubs))
-        calls = {}
-        for match in re.finditer(b"\xE8", image):
-            i = match.start()
-            if i + 5 <= len(image):
-                calls.setdefault(i + 5 + struct.unpack_from("<i", image, i + 1)[0], []).append(i)
-        callers = 0
+        # Every handler the linker kept has its message format in the image (the rebuilt executables drop the
+        # unreferenced CMicroTransaction); each kept one's "push fmt; push eax; call" must call a stub.
+        linked = []
+        for _name, _handler, prefix in HANDLERS:
+            fmt = image.find(prefix.encode() + b" (Callback) Server error: %s\n\0")
+            if fmt < 0:
+                continue
+            push = image.find(b"\x68" + struct.pack("<I", base + fmt))
+            assert push > 0 and image.find(b"\x68" + struct.pack("<I", base + fmt), push + 1) < 0, (path, prefix)
+            assert image[push - 7 : push] == bytes.fromhex("508D85FCFEFFFF") and image[push + 5 : push + 7] == b"\x50\xE8"
+            linked.append((prefix, push + 6 + 5 + struct.unpack_from("<i", image, push + 7)[0]))
+        assert {"[LogIn]", "[RetrieveMessage]", "[Poll]", "[Vote]", "[PromoCode]"} <= {p for p, _t in linked}, path
+        assert sorted(target for _p, target in linked) == sorted(stubs), (path, linked, stubs)
         for stub in stubs:
             assert image[stub : stub + 2] == b"\x80\x3D"
             assert bugs.VirtualAddress <= struct.unpack_from("<I", image, stub + 2)[0] - base < \
                 bugs.VirtualAddress + bugs.Misc_VirtualSize, path
             assert image[stub + 0x2B : stub + 0x2E] == b"\x83\xC9\x02"
-            # exactly one call (from its handler, after the format push) reaches each stub
-            found = calls.get(stub, [])
-
-            assert len(found) == 1, (path, hex(base + stub), found)
-            assert image[found[0] - 13 : found[0] - 6] == bytes.fromhex("508D85FCFEFFFF")
-            callers += 1
-        assert callers == 6 and flag
