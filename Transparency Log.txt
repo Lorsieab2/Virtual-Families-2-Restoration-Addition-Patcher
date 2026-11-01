@@ -336,5 +336,16 @@ Changelog
   nothing is sent that the game did not already send. Checked under emulation;
   never tested in a running game.
 
+- Fix Vanilla Game Bugs, server error text (B205; owner-approved 31 October
+  2026): when one of the server's answers carries an error, each of the six
+  answer handlers (log in, messages, polls, votes, promo codes, purchases)
+  writes a "Server error" note with that error text into 256 bytes of
+  memory with no limit, so an error text longer than about 220 characters
+  overran it and closed the game (0xC0000409). Now the note is cut to fit; a
+  short one is exactly the same as before. LDW's server sends no such answer
+  today. A small stub beside each handler, behind the .vf2bugs byte; nothing
+  is written to disk. Checked under emulation; never tested in a running
+  game.
+
 Have fun! -Lorsieab2 :)
 

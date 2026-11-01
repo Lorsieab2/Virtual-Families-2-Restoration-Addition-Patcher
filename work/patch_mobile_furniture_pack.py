@@ -26092,6 +26092,111 @@ def patch_server_reply_guard(manifest):
     }
 
 
+# 5. The server's error text overflows a stack buffer (owner-approved for B205,
+#    2026-10-31). Each of the six reply handlers, when the reply's JSON has an
+#    "error" string, formats "[<Name>] (Callback) Server error: %s\n" with it
+#    into a 0x100-byte stack buffer ([ebp-104h]; the /GS cookie is at
+#    [ebp-4]) through the object's own unbounded _sprintf. An error longer
+#    than the buffer less the prefix (about 220 characters) runs over the
+#    cookie: 0xC0000409. Fixed: the handler's call goes to a stub appended to
+#    its own section that, with the .vf2bugs byte 1, formats the same text
+#    with the same arguments through __stdio_common_vsprintf bounded to
+#    0x100 bytes with the C99 snprintf behaviour (truncate, always
+#    terminate); with the byte 0 it jumps to the stock _sprintf. A message
+#    that fits is byte-for-byte the stock one.
+SERVER_ERROR_HANDLERS = (
+    ("LogIn.obj", "?Callback@CLogIn@@CAXPBD@Z"),
+    ("RetrieveMessage.obj", "?Callback@CRetrieveMessage@@CAXPBD@Z"),
+    ("Poll.obj", "?Callback@CPoll@@CAXPBD@Z"),
+    ("Vote.obj", "?Callback@CVote@@CAXPBD@Z"),
+    ("PromoCode.obj", "?Callback@CPromoCode@@CAXPBD@Z"),
+    ("MicroTransaction.obj", "?Callback@CMicroTransaction@@CAXPBD@Z"),
+)
+SERVER_ERROR_BUFFER_SIZE = 0x100     # [ebp-104h] .. [ebp-5]; [ebp-4] is the cookie
+SERVER_ERROR_STUB_SIZE = 0x39
+_CRT_PRINTF_STANDARD_SNPRINTF_BEHAVIOR = 0x2
+
+
+def patch_server_error_text_bounded(manifest):
+    sites = {}
+    for obj_name, handler in SERVER_ERROR_HANDLERS:
+        obj_path = PATCHED / obj_name
+        obj = CoffObject(obj_path)
+        func = obj.symbol(handler)
+        sec = obj.section(func.section)
+        if func.value != 0:
+            raise RuntimeError(f"{handler} does not start its section")
+        code = bytes(obj.buf[sec.raw_ptr : sec.raw_ptr + sec.raw_size])
+        if code[:0x13] != bytes.fromhex("558BEC81EC04010000A100000000" "33C5" "8945FC"):
+            raise RuntimeError(f"{handler} frame drifted (sub esp,104h; cookie at [ebp-4])")
+        relocations = _function_relocations(obj, sec)
+        calls = [v for v, (name, rtype) in relocations.items()
+                 if name == "_sprintf" and rtype == IMAGE_REL_I386_REL32]
+        if len(calls) != 1:
+            raise RuntimeError(f"{handler}: {len(calls)} _sprintf calls, expected 1")
+        call = calls[0]
+        # push eax (the error text); lea eax,[ebp-104h]; push fmt; push eax; call _sprintf
+        if code[call - 14 : call] != bytes.fromhex("50" "8D85FCFEFFFF" "6800000000" "50" "E8"):
+            raise RuntimeError(f"{handler} sprintf site +{call - 1:#x} drifted")
+        fmt_name, fmt_type = relocations.get(call - 6, (None, None))
+        if fmt_type != IMAGE_REL_I386_DIR32 or "?$CICallback?$CJ?5Se" not in (fmt_name or ""):
+            raise RuntimeError(f"{handler} sprintf format drifted: {fmt_name}")
+        if struct.unpack_from("<i", code, call)[0] != 0:
+            raise RuntimeError(f"{handler} sprintf call carries an addend")
+
+        stub_off = sec.raw_size
+        stub = bytearray()
+        stub += b"\x80\x3D\0\0\0\0\x00"                   # +00 cmp byte [flag],0
+        stub += b"\x0F\x84\0\0\0\0"                       # +07 je _sprintf (stock, unbounded)
+        stub += b"\x55"                                   # +0D push ebp
+        stub += b"\x8B\xEC"                               # +0E mov ebp,esp
+        stub += b"\x8D\x45\x10"                           # +10 lea eax,[ebp+10h] (the arguments)
+        stub += b"\x50"                                   # +13 push eax
+        stub += b"\x6A\x00"                               # +14 push 0 (locale)
+        stub += b"\xFF\x75\x0C"                           # +16 push [ebp+0Ch] (format)
+        stub += b"\x68" + struct.pack("<I", SERVER_ERROR_BUFFER_SIZE)  # +19 push 100h (buffer size)
+        stub += b"\xFF\x75\x08"                           # +1E push [ebp+8] (buffer)
+        stub += b"\xE8\0\0\0\0"                           # +21 call ___local_stdio_printf_options
+        stub += b"\x8B\x08"                               # +26 mov ecx,[eax]
+        stub += b"\xFF\x70\x04"                           # +28 push [eax+4]
+        stub += b"\x83\xC9" + bytes([_CRT_PRINTF_STANDARD_SNPRINTF_BEHAVIOR])  # +2B or ecx,2
+        stub += b"\x51"                                   # +2E push ecx
+        stub += b"\xE8\0\0\0\0"                           # +2F call ___stdio_common_vsprintf
+        stub += b"\x83\xC4\x1C"                           # +34 add esp,1Ch
+        stub += b"\x5D"                                   # +37 pop ebp
+        stub += b"\xC3"                                   # +38 ret
+        assert len(stub) == SERVER_ERROR_STUB_SIZE
+        obj.insert_section_bytes(sec.index, stub_off, bytes(stub))
+        for at, name, rtype in (
+            (0x02, VANILLA_BUGS_FLAG_SYMBOL, IMAGE_REL_I386_DIR32),
+            (0x09, "_sprintf", IMAGE_REL_I386_REL32),
+            (0x22, "___local_stdio_printf_options", IMAGE_REL_I386_REL32),
+            (0x30, "___stdio_common_vsprintf", IMAGE_REL_I386_REL32),
+        ):
+            obj.append_relocation(sec.index, stub_off + at, obj.append_undefined_symbol(name), rtype)
+        # The handler's call now lands on the stub: the same REL32, to the
+        # handler's own symbol (section start) plus the stub's offset.
+        sec = obj.section(sec.index)
+        obj.retarget_relocation(sec.index, call, obj.symbol(handler).index, IMAGE_REL_I386_REL32)
+        struct.pack_into("<i", obj.buf, sec.raw_ptr + call, stub_off)
+        obj.write(obj_path)
+        sites[handler] = {"call": hex(call - 1), "stub_offset": hex(stub_off)}
+    manifest["ServerErrorTextBounded"] = {
+        "status": "installed",
+        "offline_patcher_setting": VANILLA_BUGS_SETTING,
+        "sites": sites,
+        "rule": (
+            "the handler's \"Server error: %s\" message is formatted through __stdio_common_vsprintf "
+            "with a 0x100-byte count and the C99 snprintf behaviour (truncated, always terminated)"
+        ),
+        "flag_off": "the stock unbounded _sprintf",
+        "stock_defect": (
+            "a JSON \"error\" string longer than about 220 characters overran the 0x100-byte stack "
+            "buffer into the /GS cookie: 0xC0000409"
+        ),
+    }
+
+
 def patch_fix_vanilla_game_bugs(manifest):
     """Every stock-game menu fix, behind the one .vf2bugs byte."""
     patch_title_menu_start_over_confirms(manifest)
@@ -26099,6 +26204,7 @@ def patch_fix_vanilla_game_bugs(manifest):
     patch_title_menu_stale_hotspot(manifest)
     patch_title_menu_refresh_on_activate(manifest)
     patch_server_reply_guard(manifest)
+    patch_server_error_text_bounded(manifest)
     manifest["FixVanillaGameBugs"] = {
         "status": "dormant native hooks installed in every executable",
         "offline_patcher_setting": VANILLA_BUGS_SETTING,
@@ -26118,6 +26224,7 @@ def patch_fix_vanilla_game_bugs(manifest):
             "TitleMenuStaleHotspot",
             "TitleMenuRefresh",
             "ServerReplyGuard",
+            "ServerErrorTextBounded",
         ],
         "flag_off": "every site runs the stock instructions it displaced",
     }
