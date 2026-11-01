@@ -353,6 +353,8 @@ SOURCE_BACKED_OPTIONAL_SETTINGS = {
     "family_history",
     "r_refreshes_store",
     "expanded_flea_market",
+    "free_guaranteed_cheats",
+    "all_outfits_hairstyles",
 }
 EXECUTABLE_OVERLAY_OPTIONAL_SETTINGS = {
     "island_events",
@@ -601,8 +603,23 @@ SETTINGS = [
     {
         "id": "expanded_flea_market",
         "label": "All 36 Flea Market goods",
-        "description": "The store's Flea Market lists all 36 of its goods at all times (as every earlier patched build did). Unticked, the Flea Market is the original game's: 5 of the 36 goods, picked at random and picked again 6 hours of real time later, one of each to a pick. While it is ticked all 36 goods are always in stock, even one bought while it was unticked and the 3 the game stocks only one of (the Towelette, the Anti-spam Software and the Rockhound Certificate): buying one of those again adds another to the tray, or leaves the certificate owned, and an owned one keeps its checkmark. The saved stock counts are not changed.",
-        "default": True,
+        "description": "The store's Flea Market lists all 36 of its goods at all times (as every earlier patched build did). Unticked, the Flea Market is the original game's: 5 of the 36 goods, picked at random and picked again 6 hours of real time later, one of each to a pick. While it is ticked all 36 goods are always in stock, even one bought while it was unticked and the 3 the game stocks only one of (the Towelette, the Anti-spam Software and the Rockhound Certificate): buying one of those again adds another to the tray, or leaves the certificate owned, and an owned one keeps its checkmark. The saved stock counts are not changed. Off by default (owner 2026-11-01).",
+        "default": False,
+        "category": "optional",
+    },
+    {
+        "id": "all_outfits_hairstyles",
+        "label": "All outfits and hairstyles always for sale",
+        "description": (
+            "Off by default. Ticked, the store's Clothing and Hairstyles page lists every outfit and hairstyle at all "
+            "times, as every earlier patched build did: the 6 original rows, the added outfits for every body (holiday "
+            "outfits included) and the 100 hairstyles. Unticked, the page is the original game's six rotating outfits "
+            "(Discount, Department and Designer, picked again every 4 hours of game time), plus 6 rotating rows drawn "
+            "from the added hairstyles and holiday outfits; those 6 change whenever the six outfits do (every 4 game "
+            "hours, a new family, or R with R Refreshes the Store). The added outfits for the other bodies come round "
+            "in the original six. Items already bought keep working, and nothing in a save is changed."
+        ),
+        "default": False,
         "category": "optional",
     },
     {
@@ -657,8 +674,23 @@ SETTINGS = [
     {
         "id": "cheat_upgrades",
         "label": "Cheat Upgrades",
-        "description": "Enables the cheat-only executable overlay. Adds function-grouped money, food, achievement/puzzle/collection, price, and malfunction rows, including Trigger all house malfunctions and Fix all house malfunctions. Trigger makes the Router offline and Fix returns it online; Fix clears all 11 malfunction props without resetting ants. The Dryer lint fire remains a legitimate native random malfunction and requires a Dryer. Price modes affect every purchase routed through the store price calculator; Reset Price Multiplier restores original calculated prices. Rebuying Maid/Gardener fires that worker; rebuying an owned house renovation `0xE1-0xEA` returns it and rebuilds the native content map so the renovation can be purchased again. Anti-Spam Software and Rockhound Certificate are independently repurchaseable in every patched executable, including saves where the effect flag is already cleared; buying an active row removes its state at zero price. Other B150 cheat behavior remains absent when this setting is disabled.",
-        "default": True,
+        "description": "Enables the cheat-only executable overlay. Adds function-grouped money, food, achievement/puzzle/collection, price, and malfunction rows, including Trigger all house malfunctions and Fix all house malfunctions. Trigger makes the Router offline and Fix returns it online; Fix clears all 11 malfunction props without resetting ants. The Dryer lint fire remains a legitimate native random malfunction and requires a Dryer. Price modes affect every purchase routed through the store price calculator; Reset Price Multiplier restores original calculated prices. Rebuying Maid/Gardener fires that worker; rebuying an owned house renovation `0xE1-0xEA` returns it and rebuilds the native content map so the renovation can be purchased again. Anti-Spam Software and Rockhound Certificate are independently repurchaseable in every patched executable, including saves where the effect flag is already cleared; buying an active row removes its state at zero price. Other B150 cheat behavior remains absent when this setting is disabled. Off by default (owner 2026-11-01: cheats are off unless chosen). Three rows (Force Successful Pregnancy, Anti-Spam Software Ownership and Rockhound Certificate Ownership) are listed only while Free and Guaranteed Cheats is ticked as well.",
+        "default": False,
+        "category": "optional",
+    },
+    {
+        "id": "free_guaranteed_cheats",
+        "label": "Free and Guaranteed Cheats",
+        "description": (
+            "Cheat, off by default. Unlocks exactly these: on the store's Special Upgrades page (with Cheat Upgrades "
+            "ticked), the Force Successful Pregnancy row (the next try for a baby always passes its pregnancy roll), "
+            "the Anti-Spam Software Ownership row (installs the Anti-spam Software for $0, without a computer) and the Rockhound "
+            "Certificate Ownership row (grants the $1,500 Rockhound Certificate for $0); and a free Time Warp in Time "
+            "Controls (unticked, the Time Controls Time Warp costs the store's own Time Warp price). Unticked, those "
+            "three rows are not listed and every other Cheat Upgrades row is unchanged. Nothing in a save is changed: "
+            "a Force Successful Pregnancy already bought stays armed."
+        ),
+        "default": False,
         "category": "optional",
     },
     {
@@ -667,7 +699,8 @@ SETTINGS = [
         "description": (
             "Requires Cheat Upgrades. Replaces only the late Special Upgrade icon PNGs with replacement images "
             "sourced from other LDW games, online art sources, or custom-made artwork. Disabling restores the "
-            "current Cheat Upgrades icons."
+            "current Cheat Upgrades icons. On by default, but it only takes effect while Cheat Upgrades is ticked "
+            "(those icons belong to Cheat Upgrades rows); ticking Cheat Upgrades ticks it again."
         ),
         "default": True,
         "category": "optional",
@@ -1106,6 +1139,8 @@ RUNTIME_FLAG_SECTION_BY_SETTING = {
     "family_history": ".vf2hist",
     "r_refreshes_store": ".vf2rfsh",
     "expanded_flea_market": ".vf2flea",
+    "free_guaranteed_cheats": ".vf2free",
+    "all_outfits_hairstyles": ".vf2clth",
     "same_sex_marriage": ".vf2same",
     "holiday_furniture": ".vf2goal",
     "mobile_furniture_behaviors": ".vf2beh",
@@ -1587,6 +1622,50 @@ def expanded_flea_market_post_asset_patches(
     )
 
 
+def free_guaranteed_cheats_post_asset_patches(
+    executable_sources: list[Path],
+    *,
+    output_exe_name: str,
+    build_manifest_data: dict[str, Any],
+) -> list[dict[str, Any]]:
+    contract = build_manifest_data.get("FreeGuaranteedCheats")
+    if not isinstance(contract, dict):
+        return []
+    runtime_flag = contract.get("runtime_flag")
+    if not isinstance(runtime_flag, dict):
+        raise ValueError("Build manifest has an invalid FreeGuaranteedCheats contract.")
+    return setting_runtime_flag_post_asset_patches(
+        executable_sources,
+        output_exe_name=output_exe_name,
+        runtime_flag=runtime_flag,
+        section_name=RUNTIME_FLAG_SECTION_BY_SETTING["free_guaranteed_cheats"],
+        setting_id="free_guaranteed_cheats",
+        feature_label="Free and Guaranteed Cheats",
+    )
+
+
+def all_outfits_post_asset_patches(
+    executable_sources: list[Path],
+    *,
+    output_exe_name: str,
+    build_manifest_data: dict[str, Any],
+) -> list[dict[str, Any]]:
+    contract = build_manifest_data.get("AllOutfitsForSale")
+    if not isinstance(contract, dict):
+        return []
+    runtime_flag = contract.get("runtime_flag")
+    if not isinstance(runtime_flag, dict):
+        raise ValueError("Build manifest has an invalid AllOutfitsForSale contract.")
+    return setting_runtime_flag_post_asset_patches(
+        executable_sources,
+        output_exe_name=output_exe_name,
+        runtime_flag=runtime_flag,
+        section_name=RUNTIME_FLAG_SECTION_BY_SETTING["all_outfits_hairstyles"],
+        setting_id="all_outfits_hairstyles",
+        feature_label="All outfits and hairstyles always for sale",
+    )
+
+
 OUTFIT_PICTURES_DLL_NAME = "vf2outfits_b200.dll"
 OUTFIT_PICTURES_INI_NAME = "vf2outfits.ini"
 OUTFIT_PICTURES_INI_TEXT = "[Patches]\r\nOutfitPictures=1\r\n"
@@ -1997,6 +2076,16 @@ def b152_runtime_flag_post_asset_patches(
             build_manifest_data=build_manifest_data,
         ),
         *expanded_flea_market_post_asset_patches(
+            executable_sources,
+            output_exe_name=output_exe_name,
+            build_manifest_data=build_manifest_data,
+        ),
+        *free_guaranteed_cheats_post_asset_patches(
+            executable_sources,
+            output_exe_name=output_exe_name,
+            build_manifest_data=build_manifest_data,
+        ),
+        *all_outfits_post_asset_patches(
             executable_sources,
             output_exe_name=output_exe_name,
             build_manifest_data=build_manifest_data,
