@@ -73,6 +73,12 @@ Copy everything in `Documents\LDW\Virtual Families 2 - Modded B205` except the `
   - Special Upgrades lists 53 rows with Cheat Upgrades (50 with Free and Guaranteed Cheats off) and 10 without.
   - House Renovations lists 30 rows with Mobile Renovations and 10 without.
 - The bundle reproduces the build on a clean install, 8194 of 8194 files.
-- The release gate passed: **RELEASE GATE PASSED**, with no features lost against 26 retained releases (B179 to B205).
+- The release gate passed: **RELEASE GATE PASSED**, with no features lost against 26 retained releases (B179 to B205). It now also checks that every shipped default matches the settings table ("shipped defaults match the SETTINGS table"). The first export, set aside unpublished, fails that check: it shipped Cheat Upgrades and All 36 Flea Market goods ON.
+- Full test suite with release-only tests, against this matrix and bundle (16 workers): 2877 passed, 38 skipped, 0 failed, 0 errors.
+- Every Python module of the unzipped bundle imports from the bundle itself (26 of 26).
+- A default apply of the zip onto a clean game folder made `Virtual Families 2 - Modded B206.exe`.
+  - These are off: Cheat Upgrades, Free and Guaranteed Cheats, All 36 Flea Market goods, All outfits and hairstyles always for sale, the transparent invisible-furniture swap, and Up to 28 Children.
+  - Everything else is on. No AI Icons stays waiting for Cheat Upgrades.
+  - In that executable, Special Upgrades lists 10 rows and House Renovations 30 (emulated). The Clothing and Hairstyles page lists 12 rows.
 - **Not yet tried in a running game:** the Time Warp price, R on the Flea Market, the two new settings, the presets window and the House Renovations fix.
-- Asset: `VF2-B206-Release.zip`, 164,809,325 bytes, SHA-256 `b37957717551133b1689025fdfa39ea8df629d8a61b569b1a722032e65c095d8`.
+- Asset: `VF2-B206-Release.zip`, 164,809,307 bytes, SHA-256 `f10dd621ddb6ce385096b74fe5f43b28d9f69e4cfbad67496c36f3017f7ad45f`.
