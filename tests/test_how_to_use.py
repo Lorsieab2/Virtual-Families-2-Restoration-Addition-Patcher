@@ -75,7 +75,7 @@ class GuideContentTests(unittest.TestCase):
             self.assertIn(needle, flea)
         r = guides.guide("r_refreshes_store").text
         for needle in ("press R", "Shift+R", "Clothing and Hairstyles", "Hairstyles stay", "already bought",
-                       "only while All 36 Flea Market goods is unticked", "outside the store", "box is open",
+                       "R always redraws", "you won't see a change in the Flea Market list", "outside the store", "box is open",
                        "On Sale", "on by default"):
             self.assertIn(needle, r)
 

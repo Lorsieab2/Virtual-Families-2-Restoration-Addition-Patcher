@@ -342,6 +342,9 @@ def validate(exe_bytes: bytes) -> Model:
     if ("mov", f"edx, dword ptr [ecx + {S.FLEA_NEXT_PICK_FIELD:#x}]") not in mur \
             or ("mov", f"dword ptr [ecx + {S.FLEA_NEXT_PICK_FIELD:#x}], eax") not in mur:
         raise SiteError("MaybeUpdateRotatingItems does not keep its next-pick time at the field the DLL clears")
+    # The DLL calls it as thiscall with no argument: it must end in a plain ret (the callee pops nothing).
+    if by_name["maybe_update_rotating_items"].bytes[-1:] != b"\xC3":
+        raise SiteError("MaybeUpdateRotatingItems does not end in a plain ret")
     # The force flag is the byte argument: cmp byte [ebp+8],0; jne past the clock test.
     muo = by_name["maybe_update_outfits"].bytes
     if muo[3:7] != b"\x80\x7D\x08\x00" or muo[10] != 0x75:

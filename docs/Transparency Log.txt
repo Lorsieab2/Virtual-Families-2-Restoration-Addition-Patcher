@@ -958,6 +958,50 @@ R Refreshes the Store and All 36 Flea Market goods (final B204 rebuild; not live
   must carry the new executable code (both bytes, the loader line and the two
   gated hooks) and ship vf2refresh_b200.dll.
 
+R always redraws the Flea Market (after B205; not live tested)
+--------------------------------------------------------------
+
+- Owner rule 2026-11-01: "R needs to work regardless of if everything
+  already shows or not if the patch is on." R always redraws; with All 36 on
+  you won't see a change in the Flea Market list. This replaces the earlier
+  rule above (R did nothing on the Flea Market while .vf2flea was 1).
+- Why it is safe now: since PR #457, while .vf2flea is 1 the GetNumAvailable
+  head hook answers 1 for all 36 goods whatever count is saved, so the
+  game's pick setting each pooled good's count to 1 (and a purchase then to
+  0) sells nothing out. With .vf2flea 0 later the counts are the stock ones
+  for the latest pick.
+- The change (vf2refresh_b200.dll only; no executable change): on category
+  0Fh, whatever the .vf2flea byte, the DLL sets the next-pick time
+  InventoryManager+4A0h to 0, calls CInventoryManager::
+  MaybeUpdateRotatingItems() itself (the .vf2flea hooks answer
+  GetCategoryItemCount before the stock case 0Fh could run it), puts the old
+  value back if the real clock is 0 (no pick could be due), then calls the
+  store's own SetStoreCategory(0Fh) to list the page again. A 4th DLL pin,
+  the whole MaybeUpdateRotatingItems (330 bytes, relocated fields and call
+  displacements wildcarded), gives its address; it was already proved for
+  the tests and now resolves in the DLL too. An executable without the
+  .vf2flea byte (built before the setting and before the always-in-stock
+  rule; it has no .vf2rfsh loader) still gets the game's own key handler on
+  the Flea Market. The Clothing and Hairstyles page is unchanged: R always
+  forces MaybeUpdateOutfits(true), with .vf2flea 0 or 1.
+- Emulated (the real DLL and the real B200 / B205 game code under unicorn,
+  at the link address and relocated): with All 36 on, R runs the game's
+  shuffle over the 36 goods (GetRandom(36) 36 times), the page is listed
+  again with all 36, only the Flea Market's rows, count, clock and the
+  goods' counts change; then every one of the 36 still reads as in stock
+  and draws no sold-out mark, each is bought twice through the executable's
+  own HandlePurchaseItem (one save per purchase, every count ends at 0 and
+  never below, the game's own TakeOne takes each bought good out of the
+  pick's 5 rows so the pick's count ends at 0, and nothing else in the
+  inventory is written but the Rockhound Certificate's owned byte),
+  each is still in stock afterwards, and a second R shuffles the 33 goods
+  that are not bought one-offs; byte 1 then 0 shows R's pick as the stock
+  page's 5; with All 36 off R still picks 5 new goods; the Clothing page R
+  draws the six outfits with the byte 0 and 1. New source mutations (the old
+  All-36 skip, the direct pick call removed, the relist removed, the clock
+  not cleared, the clothing draw skipped with All 36 on) are each caught.
+- Not live tested.
+
 B153 default-off native debugger input milestone
 -------------------------------------------------
 

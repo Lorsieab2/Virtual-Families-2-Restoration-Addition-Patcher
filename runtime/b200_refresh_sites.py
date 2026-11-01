@@ -27,20 +27,21 @@ What the DLL does (one write at install, a vtable slot):
   GenUncommonBodyType (32 + rand 12) and GenRareBodyType (44 + rand 6), and sets the next timed pick to
   game seconds + 3840h, exactly as the timed draw does. Nothing else is written. Every other key, page and
   type goes to the game's own HandleKey, unchanged.
-* On the Flea Market page (category 0Fh) it depends on the patcher's "All 36 Flea Market goods" setting,
-  the .vf2flea byte of the executable (the DLL reads it by section name at each press):
-  - byte 1 (setting on, the default): the store lists all 36 goods at all times (the
-    VF2GetExpandedFleaMarketCount / Item hooks), so there is nothing to refresh, and the game's own Flea
-    Market draw (MaybeUpdateRotatingItems) must not run: it also sets each pooled good's stock count to 1,
-    which would make 33 unlimited goods sell out for good after one purchase. R does nothing there (the
-    game's own handler gets the key). An executable with no .vf2flea section (built before the setting)
-    always lists the 36, and is treated the same way.
-  - byte 0 (setting off): the Flea Market is the stock one (5 goods, re-picked 6 real hours after the last
-    pick). R makes the game's own pick happen now: the next-pick time [InventoryManager+4A0h] is set to 0,
-    which is due, and the store's own SetStoreCategory(0Fh) lists the page again, whose GetCategoryItemCount
-    runs MaybeUpdateRotatingItems: 5 goods picked with the game's own shuffle (GetRandom), their stock
-    counts set as the game sets them, the next pick at now + 5460h (21,600 real seconds). If the game clock
-    is still 0 (no pick can be due) the old next-pick time is put back, so nothing is changed.
+* On the Flea Market page (category 0Fh) R ALWAYS makes the game's own Flea Market pick happen now (owner,
+  2026-11-01: "R needs to work regardless of if everything already shows or not if the patch is on"): the
+  next-pick time [InventoryManager+4A0h] is set to 0, which is due, the game's own
+  CInventoryManager::MaybeUpdateRotatingItems() runs (5 goods picked with the game's own shuffle, GetRandom;
+  their stock counts set as the game sets them; the next pick at now + 5460h, 21,600 real seconds), and the
+  store's own SetStoreCategory(0Fh) lists the page again. If the game clock is still 0 (no pick can be due)
+  the old next-pick time is put back, so nothing is changed. What the page shows depends on the patcher's
+  "All 36 Flea Market goods" setting, the .vf2flea byte of the executable:
+  - byte 1 (setting on, the default): the page lists all 36 goods (the VF2GetExpandedFleaMarketCount / Item
+    hooks), so the player sees no change, and every one of the 36 reads as in stock whatever count the pick
+    left (the patcher's GetNumAvailable hook, PR #457), so the pick sells nothing out.
+  - byte 0 (setting off): the stock Flea Market: the 5 goods just picked, their counts the stock ones.
+  An executable with no .vf2flea section (built before the setting, so without the always-in-stock rule
+  either) has no .vf2rfsh loader and never loads this DLL; the DLL still leaves its Flea Market to the
+  game's own handler.
 * While a box is open (the buy box, a message box, the bank, the Redeem Credit box) no key reaches the
   store: every store box is shown with ldwDialog::DoModal(scene, false), which makes the box modal in
   ldwEventManager, and ldwEventManager::HandleKey stops at a modal handler. The store screen itself has no
@@ -102,6 +103,7 @@ STORE_HANDLE_KEY = 0x4025E0         # the folded scene HandleKey(type, code, sym
 SET_STORE_CATEGORY = 0x48CE00       # CScrollingStoreScene::SetStoreCategory(EInventoryCategory) thiscall, ret 4
 INVENTORY_MANAGER = 0x6852C0        # the global CInventoryManager InventoryManager
 MAYBE_UPDATE_OUTFITS = 0x46BE30     # CInventoryManager::MaybeUpdateOutfits(bool force) thiscall, ret 4
+MAYBE_UPDATE_ROTATING = 0x46BEB0    # CInventoryManager::MaybeUpdateRotatingItems() thiscall, ret: the Flea Market pick
 STORE_VTABLE = 0x4F8EB0             # CScrollingStoreScene's vtable (found through RTTI by the DLL)
 STORE_SLOT_HANDLE_KEY = STORE_VTABLE + 4 * HANDLE_KEY_VSLOT
 
@@ -116,7 +118,6 @@ GET_CATEGORY_ITEM_COUNT = 0x46B6D0  # CInventoryManager::GetCategoryItemCount (p
 CLOTHING_COUNT_CASE = 0x46B77E      # its cases 9/0Bh/0Ch (return 1), then 0Dh: push 0; call MaybeUpdateOutfits; mov eax, count
 RESET_FORCED_DRAW = 0x46C163        # CInventoryManager::Reset: clear +384h, then push 1; mov ecx,esi; call MaybeUpdateOutfits
 EVENT_MANAGER_HANDLE_KEY = 0x474750 # ldwEventManager::HandleKey(type, code, sym): the key dispatch to the subscribed handlers
-MAYBE_UPDATE_ROTATING = 0x46BEB0    # CInventoryManager::MaybeUpdateRotatingItems() thiscall: the Flea Market pick
 FLEA_COUNT_CASE = 0x46B799          # GetCategoryItemCount: case 0Eh (return 12h), then case 0Fh -> MaybeUpdateRotatingItems
 GET_SECONDS_FROM_GAME_START = 0x475830  # ldwGameState::GetSecondsFromGameStart() thiscall (the real clock the pick uses)
 STRING_MANAGER_GET = 0x4A87A0       # theStringManager::Get() (SetStoreCategory's first call)
@@ -194,8 +195,7 @@ PINS = [
         "next-pick time [this+4A0h] more than 5460h ahead is clamped to 1; when now > [this+4A0h] the 36 goods "
         "of gGoodiesList (each not a bought one-off, each stock count set to 1) are shuffled with GetRandom, "
         "the first 5 stored at +488h..+498h, the count +49Ch = 5 and +4A0h = now + 5460h. A next-pick time of "
-        "0 is due whenever now > 0.",
-        dll=False,
+        "0 is due whenever now > 0. The DLL calls it, after clearing +4A0h, on every R on the Flea Market page.",
     ),
     Pin(
         "flea_count_case", FLEA_COUNT_CASE,
@@ -262,11 +262,12 @@ PINS = [
 ]
 
 # Addresses the DLL derives (in this order: the header's enum).
-ADDRESS_CONSTANTS = ("STORE_HANDLE_KEY", "INVENTORY_MANAGER", "MAYBE_UPDATE_OUTFITS", "SET_STORE_CATEGORY")
+ADDRESS_CONSTANTS = ("STORE_HANDLE_KEY", "INVENTORY_MANAGER", "MAYBE_UPDATE_OUTFITS", "SET_STORE_CATEGORY",
+                     "MAYBE_UPDATE_ROTATING")
 # Addresses only the tests need.
 TEST_ADDRESS_CONSTANTS = ("GAME_TIME", "GAME_TIME_SECONDS", "GEN_COMMON_BODY", "GEN_RARE_BODY",
                           "GEN_UNCOMMON_BODY", "GET_RANDOM", "GET_CATEGORY_ITEM_COUNT",
-                          "EVENT_MANAGER_HANDLE_KEY", "MAYBE_UPDATE_ROTATING", "GET_SECONDS_FROM_GAME_START",
+                          "EVENT_MANAGER_HANDLE_KEY", "GET_SECONDS_FROM_GAME_START",
                           "STRING_MANAGER_GET", "GET_STRING", "TEXT_SET_TEXT", "GAME_STATE_GET",
                           "GET_NUM_AVAILABLE", "STORE_DRAW_NUM_AVAILABLE", "HANDLE_PURCHASE_ITEM", "TAKE_ONE",
                           "GET_USE_COUNT", "TOOL_TRAY", "TOOL_TRAY_ADD_ITEM", "SAVE_CURRENT_GAME")

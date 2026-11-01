@@ -463,7 +463,8 @@ def test_exporter_records_drive_the_real_loader_and_the_flea_byte(built, tmp_pat
     w.page(scen.FLEA)
     assert w.item_count() == 36
     w.clear()
-    assert w.key(scen.TYPE_CHAR, ord("r")) == 0 and w.randoms == []
+    # R always runs the game's own Flea Market pick; the page keeps listing all 36
+    assert w.key(scen.TYPE_CHAR, ord("r")) == 1 and w.randoms == [36] * 36 and w.item_count() == 36
 
 
 # Each mutation of the DLL source must make the named scenario fail (the scenarios are not vacuous).
@@ -484,15 +485,32 @@ MUTATIONS = [
      "scenario_only_the_store_slot_is_written"),
     ("installs with the setting off", '    return GetPrivateProfileIntW(L"Patches", L"RefreshKey", 0, path) == 1;',
      '    return GetPrivateProfileIntW(L"Patches", L"RefreshKey", 0, path) == 0;', "scenario_setting_off_writes_nothing"),
-    ("the 36 goods redrawn", "    if (!FleaFlag || *FleaFlag != 0) return false;", "    if (!FleaFlag) return false;",
+    ("R left alone with all 36 on (the old rule)", "    if (!FleaFlag) return false;",
+     "    if (!FleaFlag || *FleaFlag != 0) return false;", "scenario_all_36_r_then_every_good_stays_buyable"),
+    ("R left alone with all 36 on, the byte flipped", "    if (!FleaFlag) return false;",
+     "    if (!FleaFlag || *FleaFlag != 0) return false;", "scenario_byte_one_lists_all_36_again"),
+    ("R redraws without the byte", "    if (!FleaFlag) return false;", "    if (!SITE(INVENTORY_MANAGER)) return false;",
+     "scenario_flea_market_r_with_all_36_listed"),
+    ("the pick not called (all 36 on)",
+     "    ((MaybeUpdateRotatingItemsFn)SITE(MAYBE_UPDATE_ROTATING))((void *)SITE(INVENTORY_MANAGER));\n", "",
+     "scenario_all_36_r_then_every_good_stays_buyable"),
+    ("the pick not called (the byte 1 on the stock exe test)",
+     "    ((MaybeUpdateRotatingItemsFn)SITE(MAYBE_UPDATE_ROTATING))((void *)SITE(INVENTORY_MANAGER));\n", "",
      "scenario_byte_one_lists_all_36_again"),
+    ("the page not listed again", "    ((SetStoreCategoryFn)SITE(SET_STORE_CATEGORY))(scene, (int)RFSH_FLEA_MARKET_CATEGORY);\n",
+     "    (void)scene;\n", "scenario_stock_flea_market_r_picks_five_new_goods"),
     ("the stock pick not made due", "    *next = 0;\n", "    *next = *next;\n",
      "scenario_stock_flea_market_r_picks_five_new_goods"),
+    ("the pick not made due with all 36 on", "    *next = 0;\n", "    *next = *next;\n",
+     "scenario_all_36_r_then_every_good_stays_buyable"),
     ("the old clock not put back", "    if (*next == 0) *next = saved;", "    (void)saved;",
      "scenario_stock_flea_market_clock_at_zero_changes_nothing"),
-    ("the Flea Market page never redraws", "if (category == (int)RFSH_FLEA_MARKET_CATEGORY && RedrawStockFleaMarket(scene))",
-     "if (category == (int)RFSH_CLOTHING_CATEGORY && RedrawStockFleaMarket(scene))",
+    ("the Flea Market page never redraws", "if (category == (int)RFSH_FLEA_MARKET_CATEGORY && RedrawFleaMarket(scene))",
+     "if (category == (int)RFSH_CLOTHING_CATEGORY && RedrawFleaMarket(scene))",
      "scenario_stock_flea_market_r_picks_five_new_goods"),
+    ("the clothing draw skipped with all 36 on", "        if (category == (int)RFSH_CLOTHING_CATEGORY) {",
+     "        if (category == (int)RFSH_CLOTHING_CATEGORY && !(FleaFlag && *FleaFlag == 1)) {",
+     "scenario_stock_flea_market_clothing_r_is_unchanged"),
 ]
 
 
