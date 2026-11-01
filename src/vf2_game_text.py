@@ -96,6 +96,13 @@ def encode(text: str) -> bytes:
     return text.encode("utf-8", "surrogatepass")
 
 
+# The largest name a Virtual Families 2 text box can hold, in bytes of the stored form: ldwTextControl::SetCanEdit
+# caps every box at 4B0h = 1,200 bytes (300 characters of 4 bytes in the worst case; GetText then cuts to the
+# destination field). The save fields themselves are fixed (player and nickname 20, family member 19 with the stock
+# box at 18, Family Tree note 80); a longer name needs a per-save sidecar. One named constant, so the shared limit
+# across the patchers can be set here.
+TEXT_BOX_CEILING_BYTES = 1200
+
 # ====================================================================== characters (grapheme clusters)
 
 _EXTEND_STARTS = [a for a, _b in _tables.EXTEND]

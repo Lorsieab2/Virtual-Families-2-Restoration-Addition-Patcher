@@ -843,12 +843,16 @@ static void BlitGlyph(void *window, SDL_Surface *surf, const Rect &g, int x, int
 }
 
 // Make every glyph a text needs before the game's tinted sheet is taken (a new glyph may remake the sheet).
+static bool JustMapped(const ut::Unit &u, const unsigned char *raw, const ut::Unit **mapped);
+
 static void Prepare(FontRec *f, unsigned impl, const unsigned char *text, unsigned limit) {
     ut::Units it;
     it.Init(text, ut::Length(text));
     ut::Unit u;
     Rect r;
-    while (it.Next(u) && u.start + u.size <= limit) if (!u.IsNewline()) GlyphFor(f, impl, u, text, true, r);
+    const ut::Unit *mapped;
+    while (it.Next(u) && u.start + u.size <= limit)
+        if (!u.IsNewline() && !JustMapped(u, text, &mapped)) GlyphFor(f, impl, u, text, true, r);
 }
 
 static unsigned FontOf(void *window, void *font) {
@@ -881,6 +885,17 @@ static void __fastcall UniDrawString(void *window, void *, const char *text, int
     }
 }
 
+struct JustState { bool active; unsigned impl; unsigned count; ut::Unit units[128]; const unsigned char *raw; };
+static JustState Just;
+
+// Inside DrawStringJustified's call (the only stock caller of DrawChars, which it calls on a literal " " to measure a
+// space), a byte 80h..FFh of the mapped copy is the character it stands for.
+static bool JustMapped(const ut::Unit &u, const unsigned char *raw, const ut::Unit **mapped) {
+    if (!Just.active || u.size != 1 || raw[u.start] < 0x80 || raw[u.start] - 0x80u >= Just.count) return false;
+    *mapped = &Just.units[raw[u.start] - 0x80];
+    return true;
+}
+
 // ldwGameWindowImpl::DrawChars(text, count, x, y, measureOnly, colour, font): at most `count` bytes, never part of a
 // character; returns how far x moved.
 static int __fastcall UniDrawChars(void *window, void *, const char *text, int count, int x, int y, int measureOnly,
@@ -903,7 +918,10 @@ static int __fastcall UniDrawChars(void *window, void *, const char *text, int c
         used += u.size;
         if (u.IsNewline()) { y += IMPL_FIELD(impl, 0x04); x = x0; continue; }
         Rect g;
-        if (!GlyphFor(f, impl, u, raw, false, g)) continue;
+        const ut::Unit *mapped = 0;
+        bool ok = JustMapped(u, raw, &mapped) ? GlyphFor(f, impl, *mapped, Just.raw, false, g)
+                                               : GlyphFor(f, impl, u, raw, false, g);
+        if (!ok) continue;
         int w = g.r - g.l;
         if (!w) continue;
         if (!(measureOnly & 0xFF)) BlitGlyph(window, surf, g, x, y, color);
@@ -936,8 +954,6 @@ static const char *__fastcall UniNextLine(void *font, void *, const char *src, c
 }
 
 // ---------------------------------------------------------------- DrawStringJustified: one byte per character
-struct JustState { bool active; unsigned impl; unsigned count; ut::Unit units[128]; const unsigned char *raw; };
-static JustState Just;
 
 static void __fastcall UniCharRect(void *impl, void *, int ch, int *rect) {
     if (ch < 0x100) {
