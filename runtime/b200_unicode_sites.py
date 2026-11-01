@@ -54,6 +54,7 @@ TEXT_VSLOT_HANDLE_KEY = 2           # ldwTextControlImpl vtable: HandleKey
 FONT_TYPE_NAME = ".?AVldwFontImpl@@"
 TEXT_TYPE_NAME = ".?AVldwTextControlImpl@@"
 JUSTIFIED_STEAL = 9                 # DrawStringJustified: push ebp; mov ebp,esp; sub esp,550h
+SET_TEXT_STEAL = 5                  # ldwTextControlImpl::SetText: push ebp; mov ebp,esp; push esi; push edi
 
 # (pin name, object file, decorated function name)
 FUNCTIONS = (
@@ -68,6 +69,7 @@ FUNCTIONS = (
     ("get_image", "ldwFontImpl", "?GetImage@ldwFontImpl@@QAEPAUSDL_Surface@@UldwColor@@@Z"),
     ("text_handle_key", "ldwTextControl", "?HandleKey@ldwTextControlImpl@@UAE_NHHH@Z"),
     ("get_text", "ldwTextControl", "?GetText@ldwTextControl@@QAEXPADH@Z"),
+    ("set_text", "ldwTextControl", "?SetText@ldwTextControlImpl@@QAEXPBD@Z"),
 )
 
 # Sites: (site name, pin, how). "entry" = the pin's own address; ("call", symbol) = the target of the pin's call
@@ -84,6 +86,7 @@ SITES = (
     ("GET_IMAGE", "get_image", "entry"),
     ("TEXT_HANDLE_KEY", "text_handle_key", "entry"),
     ("GET_TEXT", "get_text", "entry"),
+    ("SET_TEXT", "set_text", "entry"),
     ("CLIP_RECT", "draw_string", ("call", "?ClipRect@ldwGameWindowImpl@@AAE_NAAUldwRect@@AAH1@Z")),
     ("BLIT_ALPHA", "draw_string",
      ("call", "?BlitRectWithAlpha@ldwGameWindowImpl@@AAEXPAUSDL_Surface@@HHHHHHMM_N@Z")),

@@ -81,18 +81,20 @@ typedef int (__fastcall *JustifiedFn)(void *self, void *, const char *, int, int
 
 static PollEventFn RealPoll;
 static unsigned char JustifiedTrampoline[32];
+static unsigned char SetTextTrampoline[16];
 
 // ================================================================ status
 // B200Unicode_Status: magic 'UNXT', version, mode (0 off, 1 in-game fonts, 2 Unicode font), resolved, installed,
 // writeMask, fonts (font objects given glyph room), patcherGlyphs (loaded), runtimeGlyphs (drawn with GDI), boxes
 // (missing-glyph boxes), typed (characters added by typing), refused (characters refused: the box was full),
-// fittedCuts (GetText cuts that ended at a character before the field's end)
+// fittedCuts (GetText cuts that ended at a character before the field's end), keptNames (GetText calls that kept a
+// set-in name too long for the box instead of cutting it; version 2)
 struct UnicodeStatus {
     unsigned magic, version, mode, resolved, installed, writeMask, fonts, patcherGlyphs, runtimeGlyphs, boxes, typed,
-        refused, fittedCuts;
+        refused, fittedCuts, keptNames;
 };
 extern "C" __declspec(dllexport) volatile UnicodeStatus B200Unicode_Status = {
-    UNI_STATUS_MAGIC, 1u, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+    UNI_STATUS_MAGIC, 2u, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 
 static HMODULE ThisModule;
 static wchar_t Folder[MAX_PATH];
@@ -267,6 +269,9 @@ static bool Resolve() {
     static const unsigned char head[UNI_JUSTIFIED_STEAL] = { 0x55, 0x8B, 0xEC, 0x81, 0xEC, 0x50, 0x05, 0x00, 0x00 };
     for (unsigned k = 0; k < UNI_JUSTIFIED_STEAL; ++k)
         if (((const unsigned char *)SITE(DRAW_JUSTIFIED))[k] != head[k]) { Log("DrawStringJustified's start differs"); return false; }
+    static const unsigned char setHead[UNI_SET_TEXT_STEAL] = { 0x55, 0x8B, 0xEC, 0x56, 0x57 };
+    for (unsigned k = 0; k < UNI_SET_TEXT_STEAL; ++k)
+        if (((const unsigned char *)SITE(SET_TEXT))[k] != setHead[k]) { Log("ldwTextControlImpl::SetText's start differs"); return false; }
     return true;
 }
 
@@ -1086,9 +1091,39 @@ static int __fastcall UniDrawJustified(void *self, void *, const char *text, int
     return r;
 }
 
+// ================================================================ names the game put into a box
+// The text boxes whose text the game set (ldwTextControlImpl::SetText) and the player has not changed since. Such a
+// text is the stored name itself: GetText never cuts it (UniGetText). Any key that changes the text takes the box off
+// the list (UniHandleKey); SetText puts it back.
+static const unsigned kSetIn = 64;
+static unsigned SetIn[kSetIn];
+
+static bool IsSetIn(unsigned impl) {
+    for (unsigned i = 0; i < kSetIn; ++i) if (SetIn[i] == impl) return true;
+    return false;
+}
+
+static void MarkSetIn(unsigned impl, bool on) {
+    unsigned free = kSetIn;
+    for (unsigned i = 0; i < kSetIn; ++i) {
+        if (SetIn[i] == impl) { if (!on) SetIn[i] = 0; return; }
+        if (!SetIn[i] && free == kSetIn) free = i;
+    }
+    if (on) SetIn[free < kSetIn ? free : (impl >> 4) % kSetIn] = impl;    // full: replace one (it then may be cut)
+}
+
+typedef void (__thiscall *SetTextFn)(void *impl, const char *text);
+// ldwTextControlImpl::SetText's first 5 bytes jump here; the stock function runs through the trampoline.
+static void __fastcall UniSetText(void *impl, void *, const char *text) {
+    MarkSetIn((unsigned)impl, true);
+    ((SetTextFn)(void *)SetTextTrampoline)(impl, text);
+}
+
 // ================================================================ typing
 static bool __fastcall UniHandleKey(void *ctl, void *, int type, int code, int sym) {
     unsigned c = (unsigned)ctl;
+    if (type == UNI_KEY_TYPE_CHARACTER && (((unsigned)code & UNI_KEY_MARK) || sym == 8 || (sym >= 0x20 && sym <= 0xFF)))
+        MarkSetIn(c, false);                                               // the player changes the text
     bool editing = *(unsigned char *)(c + 0x25) && *(unsigned *)(c + 0x1C) && *(unsigned char *)(*(unsigned *)(c + 0x1C) + 8);
     if (type == UNI_KEY_TYPE_CHARACTER && editing && !*(unsigned char *)(c + 0x2F) &&
         (((unsigned)code & UNI_KEY_MARK) || sym == 8)) {
@@ -1123,6 +1158,11 @@ static bool __fastcall UniHandleKey(void *ctl, void *, int type, int code, int s
 }
 
 // ldwTextControl::GetText(buffer, size): the text cut to size - 1 bytes at a character, the rest zeros.
+// A text the game set (SetText) and the player has not changed that does not fit is never cut: GetText gives an empty
+// text. The stock game shows a family member's name (char[25], up to 24 bytes) in the family member screen's box
+// and on Done / another member copies GetText(buf, 13h) - 18 bytes - over the name: viewing a member with a longer
+// name would shorten it. Every such caller (theVillagerScene's Done and UpdateSelection, CAdoptionScene /
+// CDatingScene's accept) skips an empty text and keeps the stored name (tests/test_name_boxes.py).
 static void __fastcall UniGetText(void *ctl, void *, char *dst, int size) {
     unsigned impl = *(unsigned *)((unsigned)ctl + 0x10);
     const char *src = impl ? *(const char **)(impl + 0x30) : 0;
@@ -1132,19 +1172,64 @@ static void __fastcall UniGetText(void *ctl, void *, char *dst, int size) {
     static unsigned cps[1300];
     static unsigned char cut[1300];
     unsigned n = ut::Length((const unsigned char *)src);
+    if (n > (unsigned)size - 1 && IsSetIn(impl)) { ++B200Unicode_Status.keptNames; return; }
     unsigned room = (unsigned)size - 1 < sizeof(cut) ? (unsigned)size - 1 : sizeof(cut);
     unsigned k = ut::Fit((const unsigned char *)src, n, room, cut, cps, 1290);     // cut also holds failed tries
     for (unsigned i = 0; i < k; ++i) dst[i] = (char)cut[i];
     if (k < n) ++B200Unicode_Status.fittedCuts;
 }
 
+// The game's SDL2.dll (2.0.3) makes its text from each WM_KEYDOWN with ToUnicode, one UTF-16 unit at a time and
+// each unit as if it were a whole character: a character beyond U+FFFF (an emoji, Cuneiform) typed through
+// SendInput(KEYEVENTF_UNICODE) - as input methods and the touch keyboard send it - arrives as two SDL_TEXTINPUT
+// events, ED A0..AF xx (the high surrogate) then ED B0..BF xx (the low one): not UTF-8, so the text rule would type
+// each as three odd letters. JoinSurrogates rewrites a text into UTF-8: a high half followed by a low half (in the same
+// text, or the high one at the end of the previous text) becomes the one character; a half without its partner is
+// left out. Returns the new length; `pending` keeps a high half for the next text. The two events are what the real
+// SDL2.dll gives for SendInput (tests/sdl_surrogate_probe.c, tests/test_b200_unicode_dll.py).
+static unsigned PendingHigh;
+
+static unsigned SurrogateAt(const unsigned char *t, unsigned n, unsigned i) {
+    if (i + 2 < n && t[i] == 0xED && t[i + 1] >= 0xA0 && t[i + 1] <= 0xBF && (t[i + 2] & 0xC0) == 0x80)
+        return 0xD000u | ((t[i + 1] & 0x3Fu) << 6) | (t[i + 2] & 0x3Fu);
+    return 0;
+}
+
+static unsigned JoinSurrogates(const unsigned char *t, unsigned n, unsigned char *out, unsigned &pending,
+                               bool &changed) {
+    unsigned o = 0;
+    changed = false;
+    for (unsigned i = 0; i < n;) {
+        unsigned s = SurrogateAt(t, n, i);
+        if (!s) {
+            if (pending) { pending = 0; changed = true; }                 // a high half without its low one
+            out[o++] = t[i++];
+            continue;
+        }
+        changed = true;
+        i += 3;
+        if (s < 0xDC00) { pending = s; continue; }                         // high: wait for the low one
+        if (!pending) continue;                                            // a low half without its high one
+        unsigned cp = 0x10000 + ((pending - 0xD800) << 10) + (s - 0xDC00);
+        pending = 0;
+        out[o++] = (unsigned char)(0xF0 | (cp >> 18));
+        out[o++] = (unsigned char)(0x80 | ((cp >> 12) & 0x3F));
+        out[o++] = (unsigned char)(0x80 | ((cp >> 6) & 0x3F));
+        out[o++] = (unsigned char)(0x80 | (cp & 0x3F));
+    }
+    return o;
+}
+
 static int __cdecl UniPollEvent(void *event) {
     int r = RealPoll(event);
     if (!r || !event || *(unsigned *)event != UNI_SDL_TEXTINPUT) return r;
-    const unsigned char *text = (const unsigned char *)event + UNI_TEXT_FIELD;
-    unsigned n = 0;
-    while (n < 32 && text[n]) ++n;
-    if (n == 1 && text[0] < 0x80) return r;                             // one ASCII key: the stock path
+    const unsigned char *raw = (const unsigned char *)event + UNI_TEXT_FIELD;
+    unsigned rn = 0;
+    while (rn < 32 && raw[rn]) ++rn;
+    unsigned char text[48];                  // a 3-byte half becomes at most 4 bytes: 32 bytes in, 43 out
+    bool joined = false;
+    unsigned n = JoinSurrogates(raw, rn, text, PendingHigh, joined);
+    if (!joined && n == 1 && text[0] < 0x80) return r;                  // one ASCII key: the stock path
     unsigned cps[32];
     unsigned count = ut::IsUtf8(text, n) ? ut::Decode(text, n, cps, 32) : 0;
     if (!count && n) count = ut::Decode(text, n, cps, 32);
@@ -1194,6 +1279,11 @@ static int BuildPlan(unsigned mode, Plan &plan) {
     PlanJump(plan, SITE(NEXT_LINE), (const void *)&UniNextLine, 5);
     PlanJump(plan, SITE(GET_TEXT), (const void *)&UniGetText, 5);
     PlanJump(plan, SITE(DRAW_JUSTIFIED), (const void *)&UniDrawJustified, UNI_JUSTIFIED_STEAL);
+    for (unsigned i = 0; i < UNI_SET_TEXT_STEAL; ++i) SetTextTrampoline[i] = ((const unsigned char *)SITE(SET_TEXT))[i];
+    SetTextTrampoline[UNI_SET_TEXT_STEAL] = 0xE9;
+    *(int *)(SetTextTrampoline + UNI_SET_TEXT_STEAL + 1) =
+        (int)((SITE(SET_TEXT) + UNI_SET_TEXT_STEAL) - ((unsigned)SetTextTrampoline + UNI_SET_TEXT_STEAL + 5));
+    PlanJump(plan, SITE(SET_TEXT), (const void *)&UniSetText, UNI_SET_TEXT_STEAL);
     PlanSlot(plan, FontVtable + 4 * UNI_FONT_VSLOT_CHAR_RECT, (const void *)&UniCharRect);
     PlanSlot(plan, TextVtable + 4 * UNI_TEXT_VSLOT_HANDLE_KEY, (const void *)&UniHandleKey);
     PlanSlot(plan, PollSlot, (const void *)&UniPollEvent);
@@ -1213,6 +1303,7 @@ static bool WriteCode(unsigned va, const unsigned char *bytes, unsigned len, boo
 static bool Apply(Plan &plan) {
     DWORD old = 0;
     if (!VirtualProtect(JustifiedTrampoline, sizeof(JustifiedTrampoline), PAGE_EXECUTE_READWRITE, &old)) return false;
+    if (!VirtualProtect(SetTextTrampoline, sizeof(SetTextTrampoline), PAGE_EXECUTE_READWRITE, &old)) return false;
     RealPoll = *(PollEventFn *)PollSlot;
     if (!RealPoll) return false;
     for (unsigned i = 0; i < plan.count; ++i) {
@@ -1348,5 +1439,6 @@ extern "C" __declspec(dllexport) void __cdecl B200Unicode_TestHooks(unsigned *ou
     out[0] = (unsigned)&UniDrawString; out[1] = (unsigned)&UniDrawChars; out[2] = (unsigned)&UniGetWidth;
     out[3] = (unsigned)&UniNextLine; out[4] = (unsigned)&UniGetText; out[5] = (unsigned)&UniDrawJustified;
     out[6] = (unsigned)&UniCharRect; out[7] = (unsigned)&UniHandleKey; out[8] = (unsigned)&UniPollEvent;
+    out[9] = (unsigned)&UniSetText;
 }
 #endif

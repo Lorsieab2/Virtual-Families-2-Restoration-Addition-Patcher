@@ -57,7 +57,7 @@ def test_the_dll_source_names_every_site_and_writes_nothing_else():
     for site, _pin, _how in S.SITES:
         assert f"UNI_SITE_{site}" in header
     # the only writes: the plan's entry jumps, the two vtable slots and the import slot
-    assert src.count("PlanJump(plan,") == 6 and src.count("PlanSlot(plan,") == 3
+    assert src.count("PlanJump(plan,") == 7 and src.count("PlanSlot(plan,") == 3
     assert not re.search(r"\b0x4[0-9A-Fa-f]{5}\b", src)                # no game address (the image is relocated)
     assert 'L"vf2unicodefont.ini"' in src and 'L"vf2unicode.ini"' in src
 
@@ -174,7 +174,7 @@ class World:
         out = e.alloc(4 * 12)
         e.call(e.dll_export("B200Unicode_TestHooks"), (out,))
         keys = ("draw_string", "draw_chars", "get_width", "next_line", "get_text", "draw_justified", "char_rect",
-                "handle_key", "poll")
+                "handle_key", "poll", "set_text")
         return {k: e.r32(out + 4 * i) for i, k in enumerate(keys)}
 
     def game_seams(self, sites):
@@ -214,10 +214,11 @@ def test_the_plan_is_the_proved_sites(exe, dlls, delta):
     h = w.hooks()
     jumps = {wr["va"]: wr for wr in writes if not wr["data"]}
     slots = {wr["va"]: wr for wr in writes if wr["data"]}
-    assert len(writes) == 9 and len(jumps) == 6 and len(slots) == 3
+    assert len(writes) == 10 and len(jumps) == 7 and len(slots) == 3
     for site, hook, length in (("DRAW_STRING", "draw_string", 5), ("DRAW_CHARS", "draw_chars", 5),
                                ("GET_WIDTH", "get_width", 5), ("NEXT_LINE", "next_line", 5),
-                               ("GET_TEXT", "get_text", 5), ("DRAW_JUSTIFIED", "draw_justified", 9)):
+                               ("GET_TEXT", "get_text", 5), ("DRAW_JUSTIFIED", "draw_justified", 9),
+                               ("SET_TEXT", "set_text", 5)):
         wr = jumps[s[site]]
         assert wr["len"] == length and wr["bytes"][0] == 0xE9
         assert (s[site] + 5 + struct.unpack("<i", wr["bytes"][1:5])[0]) & 0xFFFFFFFF == h[hook]
@@ -375,6 +376,54 @@ def test_typed_text_reaches_the_game_one_character_at_a_time(typing_world):
     w.keys.clear()
     e.call(w.h["poll"], (ev,))
     assert w.keys == [] and e.r32(ev) == 0x300
+
+    # A character beyond U+FFFF typed with SendInput(KEYEVENTF_UNICODE) / an input method: the game's SDL2.dll 2.0.3
+    # gives two events, one per UTF-16 half, each written as if it were a character (ED A0..AF xx, ED B0..BF xx);
+    # SURROGATE_EVENTS are what the real SDL2.dll gave for SendInput (tests/sdl_surrogate_probe.c). The DLL joins
+    # the halves into the one character and never types them as letters.
+    def run(texts):
+        w.keys.clear()
+        hidden = []
+        for text in texts:
+            events.append((S.SDL_TEXTINPUT, text))
+            assert e.call(w.h["poll"], (ev,)) == 1
+            hidden.append(e.r32(ev) == S.SDL_HIDDEN_EVENT)
+        return list(w.keys), hidden
+    for (high, low), cp in SURROGATE_EVENTS:
+        assert run([high, low]) == ([(5, cp | S.KEY_MARK, 0)], [True, True])
+        assert run([high + low]) == ([(5, cp | S.KEY_MARK, 0)], [True])            # both halves in one text
+        assert run([b"x" + high, low + b"y"]) == ([(5, 0, ord("x")), (5, cp | S.KEY_MARK, 0), (5, 0, ord("y"))],
+                                                  [True, True])
+        assert run([low]) == ([], [True])                                       # a low half alone: nothing
+        assert run([high, b"a"]) == ([(5, 0, ord("a"))], [True, True])          # a high half alone: nothing
+        assert run([high, high, low]) == ([(5, cp | S.KEY_MARK, 0)], [True, True, True])
+    assert run([b"a"]) == ([], [False])                                         # the stock path again
+
+
+SURROGATE_EVENTS = [((b"\xED\xA0\xBD", b"\xED\xB1\x8D"), 0x1F44D),                # U+1F44D thumbs up
+                    ((b"\xED\xA0\x88", b"\xED\xB0\x80"), 0x12000)]                # U+12000 Cuneiform A
+
+
+def test_the_real_sdl_splits_a_character_beyond_ffff(tmp_path):
+    """Opt-in (VF2_SDL_INPUT_PROBE=1, it types into its own small window): SendInput(KEYEVENTF_UNICODE) into the
+    game's own SDL2.dll gives SURROGATE_EVENTS; a character below U+10000 arrives whole."""
+    if os.environ.get("VF2_SDL_INPUT_PROBE") != "1" or not _vcvars():
+        pytest.skip("opt-in: VF2_SDL_INPUT_PROBE=1 and VF2_VCVARS32")
+    sdl = Path(os.environ.get("VF2_VANILLA_GAME_DIR") or ROOT / "work" / "vanilla_runtime_payload") / "SDL2.dll"
+    exe = tmp_path / "probe.exe"
+    bat = tmp_path / "build.bat"
+    bat.write_text(f'@call "{_vcvars()}" >nul\r\n@cl /nologo /Fe"{exe}" /Fo"{tmp_path}\\\\" '
+                   f'"{ROOT / "tests" / "sdl_surrogate_probe.c"}" user32.lib\r\n', encoding="ascii")
+    r = subprocess.run(["cmd.exe", "/c", str(bat)], capture_output=True, text=True)
+    assert r.returncode == 0, r.stdout + r.stderr
+    out = subprocess.run([str(exe), str(sdl)], capture_output=True, text=True, timeout=60).stdout
+
+    def unit(b):
+        return "%04X" % (0xD000 | ((b[1] & 0x3F) << 6) | (b[2] & 0x3F))
+    want = ["case 00E9 0000: [C3A9]", "case 65E5 0000: [E697A5]"]
+    for (high, low), _cp in SURROGATE_EVENTS:
+        want.append(f"case {unit(high)} {unit(low)}: [{high.hex().upper()}] [{low.hex().upper()}]")
+    assert out.splitlines()[:4] == want, out
 
 
 # ---------------------------------------------------------------------------------------------- drawing
