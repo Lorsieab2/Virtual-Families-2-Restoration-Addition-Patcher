@@ -3694,7 +3694,7 @@ Unicode text: Render Unicode with In-Game Fonts, Use Unicode Font, Game Font Tex
   resolver over the real B205 core, at its base and relocated; its typing,
   GetText and SDL_PollEvent hooks; its DrawString over the real executable
   draws the patcher's glyphs, pixel for pixel, in all four fonts).
-- Live check needed: type é, ü, ı, ş, a dead-key accent, an Alt code, an IME
+- Live check needed: type accented, Turkish and other letters, a dead-key accent, an Alt code, an IME
   word and an emoji into a family member's name and a player name; see them in
   the house, the Details screen, the Family Tree, a Random Event and the store;
   save, quit, restart; open the same save in the B205 game (odd letters, no
