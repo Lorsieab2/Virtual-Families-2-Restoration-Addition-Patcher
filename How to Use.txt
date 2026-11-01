@@ -37,7 +37,8 @@ https://github.com/Lorsieab2/Virtual-Families-2-Restoration-Addition-Patcher/
      on; the cheats are off (see below), and so are Up to 28 Children and
      the transparent invisible-furniture swap (place the furniture first).
    - Owner's Defaults: every patch except Up to 28 Children, the cheats and
-     both invisible-furniture patches included.
+     both invisible-furniture patches included; of the two text settings it
+     ticks Render Unicode with In-Game Fonts (Use Unicode Font stays off).
    - Deselect All Patches: clears every tick.
    Patch Selection Settings... opens a window with a search box and every
    patch: tick the ones you want there, then press Tick These or Untick
@@ -84,7 +85,10 @@ https://github.com/Lorsieab2/Virtual-Families-2-Restoration-Addition-Patcher/
      game's fonts lack are made in the same style ("patcher-made"). A name
      still fits its box: a letter that would not fit is not added.
    - Use Unicode Font (overrides in-game fonts) (off by default): every text
-     is drawn with a Windows font (Segoe UI) at the game fonts' sizes instead.
+     is drawn with a Windows font instead. Pick it with Unicode Font... on the
+     Tools tab (any installed font or a .ttf/.otf/.ttc file; Segoe UI if you
+     pick none). Each text size keeps its height and is sized so a line is as
+     wide as before, so screens still fit.
    Names with only Western European letters are saved exactly as before, so
    the original game shows them too; other names show as odd letters in the
    original game, never a crash.
@@ -137,6 +141,10 @@ a PNG picture: type or paste any text, pick the font and colour, and add
 accents or any character from the picker. Letters the fonts lack are drawn in
 the fonts' own style and marked "(patcher-made)"; the preview is exactly what
 the game draws. Pick the game folder first (the letters come from it).
+Unicode Font chooses the font Use Unicode Font draws the game's text with:
+pick the modded game folder, then a font from the list or a font file. The
+preview shows the game's four text sizes as the game will draw them. Save;
+the game uses it from its next start. Patching the same folder again keeps it.
 Game Speed pauses or unpauses a family in its save. Quit the game first, pick
 the family (each shows its speed now) and choose Paused or Normal. Paused works
 as if you paused just before the game last saved; Normal as if you unpaused it

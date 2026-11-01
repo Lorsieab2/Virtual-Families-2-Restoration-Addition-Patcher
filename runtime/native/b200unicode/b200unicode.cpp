@@ -394,15 +394,17 @@ static const wchar_t *FaceFor(unsigned base) {
 }
 
 // src/vf2_glyph_render.render + src/vf2_game_text.runtime_glyph: the cluster drawn glyph by glyph on a 10 x px canvas
-// (pen from x = px, the text's top at `top`), cut to its advance, grey -> the sheet's alpha levels. alpha gets
-// width * lineHeight bytes (at most cap). Returns the width, or -1 when no font has the character.
-static int RenderRuntime(const ut::Unit &u, const UniFont &font, unsigned char *alpha, unsigned cap) {
+// (pen from x = px, the text's top at ty; baseline: the text's baseline at ty, TA_BASELINE - Use Unicode Font), cut to
+// its advance, grey -> the sheet's alpha levels. alpha gets width * lineHeight bytes (at most cap). Returns the
+// width, or -1 when no font has the character.
+static int RenderRuntime(const ut::Unit &u, const UniFont &font, int px, int ty, bool baseline, unsigned char *alpha,
+                         unsigned cap) {
     unsigned base = u.cps[0];
     for (unsigned i = 0; i < u.ncp && i < ut::kMaxClusterCps; ++i)
         if (!ut::IsExtend(u.cps[i]) || u.ncp == 1) { base = u.cps[i]; break; }
     const wchar_t *face = FaceFor(base);
     if (!face) return -1;
-    int px = font.px, h = font.lineHeight, width = 10 * (px > 1 ? px : 1);
+    int h = font.lineHeight, width = 10 * (px > 1 ? px : 1);
     CmapCache *cm = CmapOf(face, font.weight);
     HDC dc = CreateCompatibleDC(0);
     if (!dc) return -1;
@@ -422,7 +424,7 @@ static int RenderRuntime(const ut::Unit &u, const UniFont &font, unsigned char *
     SetTextColor(dc, 0x00FFFFFF);
     SetBkColor(dc, 0);
     SetBkMode(dc, OPAQUE);
-    SetTextAlign(dc, 0);
+    SetTextAlign(dc, baseline ? TA_BASELINE : 0);
     unsigned char *b = (unsigned char *)bits;
     for (int k = 0; k < width * h * 4; ++k) b[k] = 0;
     int pen = px;
@@ -431,7 +433,7 @@ static int RenderRuntime(const ut::Unit &u, const UniFont &font, unsigned char *
         unsigned g = GlyphIndex(cm, u.cps[i]);
         if (!g) continue;
         WORD gi = (WORD)g;
-        ExtTextOutW(dc, pen, font.top, ETO_GLYPH_INDEX, 0, (LPCWSTR)&gi, 1, 0);
+        ExtTextOutW(dc, pen, ty, ETO_GLYPH_INDEX, 0, (LPCWSTR)&gi, 1, 0);
         ABC abc;
         if (GetCharABCWidthsI(dc, gi, 1, 0, &abc)) pen += abc.abcA + (int)abc.abcB + abc.abcC;
     }
@@ -481,6 +483,7 @@ struct FontRec {
     unsigned patcherCount;
     int index;                // UNI_FONTS index, -1 = not one of the four (left stock)
     int lineHeight, sheetW, stockH, nextX, nextY;
+    int px, base;             // Use Unicode Font: the fitted pixel size and the baseline row (FitOverride)
     SDL_Surface *sheet;
     GlyphSlot *slots;
 };
@@ -706,6 +709,8 @@ static int PatcherCell(FontRec &f, unsigned cp, unsigned char *cell, unsigned ca
     SdlUnlock(src);
     return g.w;
 }
+static void FitOverride(FontRec &f, unsigned impl);    // Use Unicode Font: below
+
 // The record of a font object; the first time, the font is recognised by its glyph widths and given its room.
 static FontRec *Ensure(unsigned impl) {
     if (!impl) return 0;
@@ -733,6 +738,9 @@ static FontRec *Ensure(unsigned impl) {
     if (!GrowSheet(f, 16 * lineHeight)) { f.index = -1; return &f; }
     f.nextX = 0;
     f.nextY = f.stockH;
+    f.px = UNI_FONTS[f.index].px;
+    f.base = UNI_FONTS[f.index].top;
+    if (Mode == 2) FitOverride(f, impl);
     LoadPatcherGlyphs(f);
     ++B200Unicode_Status.fonts;
     return &f;
@@ -761,6 +769,52 @@ static Rect StockRect(unsigned impl, unsigned b) {
     const int *e = table + 5 * charmap[b & 0xFF];
     Rect r = { e[1], e[2], e[3], e[4] };
     return r;
+}
+
+// ================================================================ Use Unicode Font
+// src/vf2_game_text.fit_unicode_font / unicode_baseline (VF1's FitChosenFont, the same arithmetic): the size at
+// which kFitReference is as wide in the chosen face as the game font draws it, within 60% to 130% of the game
+// font's fitted Segoe UI size (that size when the face is not installed); every face's baseline where Segoe UI's
+// falls in the game font's line.
+static const char kFitReference[] = "The quick brown fox jumps over the lazy dog 0123456789";
+
+// GetTextExtentPoint32W of text in face (0 when Windows has no font of that name), or tmAscent when ascent.
+static int FaceMeasure(const wchar_t *face, int px, int weight, const char *text, bool ascent) {
+    HDC dc = CreateCompatibleDC(0);
+    if (!dc) return 0;
+    HFONT f = MakeFont(face, px, weight);
+    HGDIOBJ old = SelectObject(dc, f);
+    int out = 0;
+    if (ascent) {
+        TEXTMETRICW tm;
+        if (GetTextMetricsW(dc, &tm)) out = tm.tmAscent;
+    } else {
+        wchar_t got[LF_FACESIZE], w[64];
+        int n = 0;
+        while (text[n] && n < 63) { w[n] = (wchar_t)(unsigned char)text[n]; ++n; }
+        SIZE size = { 0, 0 };
+        if (GetTextFaceW(dc, LF_FACESIZE, got) && lstrcmpiW(got, face) == 0 && GetTextExtentPoint32W(dc, w, n, &size))
+            out = size.cx;
+    }
+    SelectObject(dc, old);
+    DeleteObject(f);
+    DeleteDC(dc);
+    return out;
+}
+
+static void FitOverride(FontRec &f, unsigned impl) {
+    const UniFont &font = UNI_FONTS[f.index];
+    f.base = font.top + FaceMeasure(L"Segoe UI", font.px, font.weight, 0, true);
+    int game = 0;
+    for (const char *p = kFitReference; *p; ++p) {
+        Rect r = StockRect(impl, (unsigned char)*p);
+        game += r.r - r.l;
+    }
+    int width = OverrideFace[0] ? FaceMeasure(OverrideFace, font.px, font.weight, kFitReference, false) : 0;
+    if (width <= 0 || game <= 0) return;
+    int em = (font.px * game * 2 + width) / (2 * width);
+    int lo = font.px * 6 / 10, hi = font.px * 13 / 10;
+    f.px = em < lo ? lo : em > hi ? hi : em;
 }
 
 // src/vf2_game_text.GameFont.glyph. create: false = never make a glyph now (while the game holds a tinted sheet).
@@ -798,7 +852,8 @@ static bool GlyphFor(FontRec *f, unsigned impl, const ut::Unit &u, const unsigne
         if (!create) return false;
         static unsigned char cell[512 * 64];
         const UniFont &font = UNI_FONTS[f->index];
-        int w = RenderRuntime(u, font, cell, sizeof(cell));
+        int w = Mode == 2 ? RenderRuntime(u, font, f->px, f->base, true, cell, sizeof(cell))
+                          : RenderRuntime(u, font, font.px, font.top, false, cell, sizeof(cell));
         if (w < 0) { w = MissingBox(font, cell, sizeof(cell)); ++B200Unicode_Status.boxes; }
         else ++B200Unicode_Status.runtimeGlyphs;
         if (w < 0 || !PlaceGlyph(*f, s, cell, w)) { s->w = 0; }
@@ -1179,6 +1234,8 @@ static bool Apply(Plan &plan) {
 // name>, File=<a .ttf/.otf in "Unicode Text\" beside the DLL, added for this game only>.
 // The two settings are exclusive and each installs its own ini: vf2unicodefont.ini (Mode=2) with Use Unicode Font,
 // vf2unicode.ini (Mode=1) with Render Unicode with In-Game Fonts.
+// The font chosen with the patcher's Unicode Font tool (src/vf2_unicode_font.py) is "Unicode Font\Unicode Font.ini"
+// [UnicodeFont] Face=, File=<a .ttf/.otf/.ttc copied into "Unicode Font\">; it wins over [Font] when it names a face.
 static unsigned ReadSettings() {
     wchar_t path[MAX_PATH];
     unsigned mode = 0;
@@ -1186,6 +1243,21 @@ static unsigned ReadSettings() {
     else if (InFolder(L"vf2unicode.ini", path)) mode = GetPrivateProfileIntW(L"Patches", L"Mode", 0, path) == 1 ? 1u : 0u;
     OverrideFace[0] = 0;
     if (mode == 2) {
+        wchar_t choice[MAX_PATH];
+        if (InFolder(L"Unicode Font\\Unicode Font.ini", choice)
+                && GetPrivateProfileStringW(L"UnicodeFont", L"Face", L"", OverrideFace, LF_FACESIZE, choice)
+                && OverrideFace[0]) {
+            wchar_t file[MAX_PATH], rel[MAX_PATH] = L"Unicode Font\\", full[MAX_PATH];
+            if (GetPrivateProfileStringW(L"UnicodeFont", L"File", L"", file, MAX_PATH, choice) && file[0]) {
+                bool plain = true;
+                for (unsigned i = 0; file[i]; ++i) if (file[i] == L'\\' || file[i] == L'/' || file[i] == L':') plain = false;
+                if (plain && lstrlenW(rel) + lstrlenW(file) < MAX_PATH - 1) {
+                    lstrcatW(rel, file);
+                    if (InFolder(rel, full)) AddFontResourceExW(full, FR_PRIVATE, 0);
+                }
+            }
+            return mode;
+        }
         GetPrivateProfileStringW(L"Font", L"Face", L"Segoe UI", OverrideFace, LF_FACESIZE, path);
         wchar_t file[MAX_PATH], rel[MAX_PATH] = L"Unicode Text\\", full[MAX_PATH];
         if (GetPrivateProfileStringW(L"Font", L"File", L"", file, MAX_PATH, path) && file[0]) {
@@ -1258,6 +1330,14 @@ extern "C" __declspec(dllexport) void __cdecl B200Unicode_TestSites(unsigned *ou
     out[UNI_SITE_COUNT] = FontVtable;
     out[UNI_SITE_COUNT + 1] = TextVtable;
     out[UNI_SITE_COUNT + 2] = PollSlot;
+}
+// the settings as Startup reads them, from `folder` (with its trailing backslash): the mode
+extern "C" __declspec(dllexport) unsigned __cdecl B200Unicode_TestReadSettings(const wchar_t *folder) {
+    unsigned n = 0;
+    while (folder[n] && n + 1 < MAX_PATH) { Folder[n] = folder[n]; ++n; }
+    Folder[n] = 0;
+    Mode = ReadSettings();
+    return Mode;
 }
 // SDL2.dll / SDL2_image.dll' functions, as Startup finds them
 extern "C" __declspec(dllexport) int __cdecl B200Unicode_TestLoadSdl() { return LoadSdl() ? 1 : 0; }

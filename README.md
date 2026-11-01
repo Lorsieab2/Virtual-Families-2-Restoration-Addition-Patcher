@@ -216,6 +216,11 @@ actions, as before. **Tools** holds:
   and a character picker (accents by language, and any Unicode character by name or code). Letters the fonts lack
   are patcher-made in the fonts' own style and labelled "(patcher-made)". Code: `src/vf2_text_tool.py`,
   `src/vf2_game_text.py`, `src/vf2_glyph_maker.py`, `src/vf2_glyph_render.py`, `src/vf2_game_fonts.json`.
+  "As Use Unicode Font draws it, with:" previews the text in a chosen Windows font as that setting draws it.
+- **Unicode Font...** picks the font **Use Unicode Font (overrides in-game fonts)** draws the game's text with
+  (as VF1 v1.7's): the modded game folder, any installed font (with a search) or a .ttf/.otf/.ttc file, a
+  preview of the game's four fonts drawn as the game will draw them, and Save. Code: `src/vf2_unicode_font.py`;
+  tests: `tests/test_unicode_font.py`.
 - **Picture Maker...** draws family members exactly as Virtual Families 2 draws them and saves them as PNG
   pictures with a clear background: the Fish and Plant Tycoon patcher's Picture Studio made for this game. **From
   my save** lists everyone in a family's save by where they are (at home, left home, died, earlier generations only
@@ -400,7 +405,8 @@ verified against the shipped `manifest.json`.
 **Choosing a set.** Above the list are the Virtual Villagers patcher's four buttons, each with a **?**:
 **Select All Patches** (everything but Experimental), **Default Patches** (the defaults below), **Owner's
 Defaults** (everything except Up to 28 Children: every cheat and both invisible-furniture settings, the
-transparent swap overriding the visible graphics) and **Deselect All Patches**. **Patch Selection
+transparent swap overriding the visible graphics; of the two text settings Render Unicode with In-Game
+Fonts, so Use Unicode Font stays off) and **Deselect All Patches**. **Patch Selection
 Settings...** opens a window with a search box and one tick box per patch; **Tick These** / **Untick These**
 apply the chosen patches, ticking what each needs (or unticking what needs it) as a click does.
 
@@ -468,7 +474,8 @@ release bundle, like almost everything else)
   save's counts are kept and count again the moment the setting is unticked.
 - **Render Unicode with In-Game Fonts** (`.vf2utxt`, Optional, **on by default**; new in B207, needs the
   B207 executables) and **Use Unicode Font (overrides in-game fonts)** (`.vf2ufnt`, Optional, **off by default**).
-  The two cannot be on together: ticking one unticks the other in the GUI, the command line refuses both, and the
+  The two cannot be on together: ticking one unticks the other in the GUI, Patch Selection Settings refuses Tick
+  These with both chosen, the command line refuses `--enable` of both, and the
   bundle's settings say so (`"excludes"`). Both install the companion DLL `vf2unicode_b200.dll` (the second under
   the name `vf2unicodefont_b200.dll`, so each setting removes only its own files):
   - **what the game can show**: every Unicode character (U+0000..U+10FFFF, beyond U+FFFF too): accents,
@@ -490,12 +497,21 @@ release bundle, like almost everything else)
     `src/vf2_game_text.py`, which every patcher reader and writer uses (logs, Family Tree, Rename Family, Copy
     Player Slot, the tools). The original game shows UTF-8 names as odd letters (Ã© for é) and never crashes
     (`tests/test_vf2_game_text.py` runs its own drawing code over every byte);
-  - **Use Unicode Font** draws every character, ASCII too, with Segoe UI at each game font's size (Face= in
-    `vf2unicodefont.ini`), with the same fallback for missing characters, so screens keep their layout.
+  - **Use Unicode Font** draws every character, ASCII too, with the font chosen with **Unicode Font...** on the
+    Tools tab (Segoe UI when none), then the same fallback for missing characters. Each game font keeps its line
+    height, baseline (TA_BASELINE at Segoe UI's baseline) and weight; its size is fitted so "The quick brown fox
+    jumps over the lazy dog 0123456789" is as wide as the game font draws it, within 60-130% of the fitted Segoe UI
+    size (as VF1 v1.7), so screens keep their layout. The choice is
+    `Virtual Families 2 Patcher Files\Unicode Font\Unicode Font.ini` `[UnicodeFont] Face=` / `File=` (UTF-16, any
+    font name; a font file is copied into that folder and loaded with `AddFontResourceExW(FR_PRIVATE)`, for the
+    game only); without it, `Face=` in `vf2unicodefont.ini`. Patching the same modded folder again keeps the
+    `Unicode Font` folder.
   - Evidence: the game's own DrawString / DrawChars / GetWidth / GetHeight / GetNextJustifiedLine run under
     emulation give exactly what `src/vf2_game_text.py` gives for every single-byte text; the DLL's own C++ text
     rules equal the Python for thousands of texts; and the DLL's DrawString, run under emulation over the real B205
-    executable, draws the same glyphs at the same places with the same pixels as the patcher.
+    executable, draws the same glyphs at the same places with the same pixels as the patcher; with Use Unicode
+    Font (real GDI under emulation, `tests/test_unicode_font.py`) the same for Segoe UI, Comic Sans MS and Arial
+    loaded from a font file, in all four fonts.
 - **R Refreshes the Store** (`.vf2rfsh`, an Optional patch and a cheat, **on by default**; new in the final
   B204 rebuild) - in the store, press **R** (or Shift+R) to pick the store's random items again, the
   game's own way and with the game's own odds:

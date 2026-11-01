@@ -668,6 +668,15 @@ def _hidden_lines() -> list[Fact]:
            "ldwFont::Load byte map (entry 0 = '!' for bytes without a glyph); DrawString / DrawChars / GetWidth / "
            "GetNextJustifiedLine emulated against src/vf2_game_text.py (tests/test_vf2_game_text.py); the DLL's "
            "DrawString emulated over the B205 executable (tests/test_b200_unicode_dll.py)"),
+        _f(g, "Use Unicode Font (overrides in-game fonts): every letter, the plain ones too, is drawn in the font "
+              "picked with Unicode Font... on the Tools tab (Segoe UI if none). Each of the game's four text sizes "
+              "keeps its line height and baseline, and the font is sized so \"The quick brown fox jumps over the "
+              "lazy dog 0123456789\" is as wide as the game's own letters draw it (never under 60% or over 130% "
+              "of the usual size), so screens still fit. A letter the font lacks comes from Segoe UI and the other "
+              "Windows fonts.", E,
+           "vf2unicode_b200.dll FitOverride / RenderRuntime (TA_BASELINE) = vf2_game_text.fit_unicode_font / "
+           "with_unicode_font; DrawString and GetWidth emulated with real GDI for Segoe UI, Comic Sans MS and "
+           "Arial from a file (tests/test_unicode_font.py)"),
     ]
     return out
 

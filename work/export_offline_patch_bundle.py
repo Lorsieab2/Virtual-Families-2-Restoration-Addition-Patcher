@@ -41,6 +41,7 @@ GUI_TOOL_FILES = (
     "vf2_glyph_maker.py",        # Game Font Text: the patcher-made letters
     "vf2_game_fonts.json",       # Game Font Text: the four game fonts' metrics (numbers only, no game art)
     "vf2_text_tool.py",          # Game Font Text: the window
+    "vf2_unicode_font.py",       # Unicode Font: the window that picks Use Unicode Font's font
     # The Family Tree Maker (the Tools tab's link): the family, the log and tree file readers, the picture, the
     # editor, and the owner's backgrounds and logos beside them (FAMILY_TREE_ASSETS).
     "vf2_genealogy.py",
@@ -655,7 +656,7 @@ SETTINGS = [
     {
         "id": "use_unicode_font",
         "label": "Use Unicode Font (overrides in-game fonts)",
-        "description": "Every text in the game is drawn with a Windows font instead of the game's own four fonts, at each font's size and weight so screens keep their layout (Segoe UI unless you pick another), with Windows' other fonts for any character it lacks. Typing, names and saves work as with Render Unicode with In-Game Fonts. Cannot be on together with Render Unicode with In-Game Fonts. Installs a small companion DLL in the Virtual Families 2 Patcher Files folder next to the game; unticking the setting removes it and the game is unmodified again.",
+        "description": "Every text in the game is drawn with a Windows font instead of the game's own four fonts, at each font's height and weight, sized so a line is as wide as before and screens keep their layout (Segoe UI unless you pick another with Unicode Font... on the Tools tab: any installed font or a font file), with Windows' other fonts for any character it lacks. Typing, names and saves work as with Render Unicode with In-Game Fonts. Cannot be on together with Render Unicode with In-Game Fonts. Installs a small companion DLL in the Virtual Families 2 Patcher Files folder next to the game; unticking the setting removes it and the game is unmodified again.",
         "default": False,
         "category": "optional",
         "excludes": ["render_unicode_in_game_fonts"],

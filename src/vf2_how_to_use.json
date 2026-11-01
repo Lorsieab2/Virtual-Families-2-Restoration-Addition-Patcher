@@ -91,7 +91,7 @@
       "guide": [
         "Ticks the set the patcher's owner plays with: every patch except Up to 28 Children (Experimental).",
         "That includes every cheat, and both invisible-furniture patches: the transparent graphics replace the visible ones, so the invisible furniture really is invisible.",
-        "Of the two text patches it ticks Use Unicode Font (overrides in-game fonts); only one can be on.",
+        "Of the two text patches it ticks Render Unicode with In-Game Fonts and leaves Use Unicode Font (overrides in-game fonts) off; only one can be on.",
         "Then click Dry Run and Enable/Disable Patches to build it."
       ]
     },
@@ -302,7 +302,20 @@
         "Pick one of the game's four fonts, a colour (white, black, brown or your own) and, if you like, a wrap width in pixels (0: each line break starts a new line).",
         "Accents: choose a language, then click a letter to add it. Any character: type a name (snowman, heart) or a code (U+2603), click Find, then Insert.",
         "Letters the game's fonts do not have are made by the patcher in the font's style and marked (patcher-made). The line under the preview counts each kind.",
-        "Pick the game folder: the letters come from it, and it is only read. Save PNG: at the game's size, 2x or 4x (crisp), or your own size (smooth)."
+        "Pick the game folder: the letters come from it, and it is only read. Save PNG: at the game's size, 2x or 4x (crisp), or your own size (smooth).",
+        "Tick \"As Use Unicode Font draws it, with:\" and pick a font to see the text as that setting draws it."
+      ]
+    },
+    "unicode_font": {
+      "section": "Tools",
+      "title": "Unicode Font",
+      "guide": [
+        "Chooses the font Use Unicode Font draws the game's text with.",
+        "Pick the modded game folder, then a font from the list or Choose a font file... (a .ttf, .otf or .ttc file).",
+        "The preview shows the game's four text sizes exactly as the game will draw them. Press Save.",
+        "The game uses it from its next start. Use Unicode Font must be ticked and patched too.",
+        "A font file is copied into the patcher's files in that folder and used by the game only, never installed in Windows. Patching the same folder again keeps the choice.",
+        "Letters the font lacks come from Segoe UI and the other Windows fonts. Saves and game files are not changed."
       ]
     },
     "how_to_use": {

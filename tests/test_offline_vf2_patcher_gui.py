@@ -1621,12 +1621,12 @@ class PresetButtonAndSelectionWindowTests(unittest.TestCase):
         self.app.clear_all_settings()
         self.app.select_owners_default_settings()
         self.root.update()
-        # of the two exclusive text settings: Use Unicode Font on, Render Unicode with In-Game Fonts off
-        owners = self.ids - {"up_to_28_children", "render_unicode_in_game_fonts"}
+        # of the two exclusive text settings: Render Unicode with In-Game Fonts on, Use Unicode Font off
+        owners = self.ids - {"up_to_28_children", "use_unicode_font"}
         self.assertEqual(self.ticked(), owners)
         for setting_id in self.CHEATS | {"no_ai_icons", "invisible_furniture_visible_graphics",
                                          "invisible_furniture_transparent_graphics", "time_controls",
-                                         "use_unicode_font"}:
+                                         "render_unicode_in_game_fonts"}:
             self.assertIn(setting_id, self.ticked())
         self.assertEqual(gui.owners_default_selection(self.app.settings), owners)
 
@@ -1692,6 +1692,39 @@ class PresetButtonAndSelectionWindowTests(unittest.TestCase):
         # Opening it again raises the same window.
         self.app.open_patch_selection_settings()
         self.assertIs(self.app._patch_selection_dialog, dialog)
+
+    def test_the_selection_window_refuses_both_unicode_settings(self):
+        """Tick These with Render Unicode with In-Game Fonts and Use Unicode Font both chosen is refused and
+        changes nothing; with one of them it ticks that one and unticks the other."""
+        self.app.select_default_settings()
+        self.root.update()
+        before = self.ticked()
+        self.assertIn("render_unicode_in_game_fonts", before)
+        self.assertNotIn("use_unicode_font", before)
+        self.app.quiet_selection = True
+        self.app.open_patch_selection_settings()
+        self.root.update()
+        by_id = {setting_id: var for setting_id, _label, var, _box in self.app._patch_selection_choices}
+        by_id["use_unicode_font"].set(True)
+        by_id["render_unicode_in_game_fonts"].set(True)
+        by_id["cheat_upgrades"].set(True)
+        self.app._patch_selection_apply(True)
+        self.root.update()
+        self.assertIn("cannot both be on", self.app.last_selection_problem)
+        self.assertEqual(self.ticked(), before)                    # nothing half done
+        by_id["render_unicode_in_game_fonts"].set(False)
+        self.app._patch_selection_apply(True)
+        self.root.update()
+        self.assertEqual(self.app.last_selection_problem, "")
+        self.assertIn("use_unicode_font", self.ticked())
+        self.assertIn("cheat_upgrades", self.ticked())
+        self.assertNotIn("render_unicode_in_game_fonts", self.ticked())
+        # unticking both at once is fine
+        by_id["render_unicode_in_game_fonts"].set(True)
+        self.app._patch_selection_apply(False)
+        self.root.update()
+        self.assertFalse({"use_unicode_font", "render_unicode_in_game_fonts"} & self.ticked())
+        self.app._patch_selection_dialog.destroy()
 
     def test_patch_name_search_matches_every_word(self):
         self.assertTrue(gui.patch_name_matches("Free and Guaranteed Cheats", "guaranteed free"))

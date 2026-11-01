@@ -320,6 +320,10 @@ ALLOWED = {
     ("vf2_glyph_maker.py", "ascii"): "the patcher's own glyph list file",
     ("vf2_game_text.py", "latin-1"): "the rule itself",
     ("vf2_text_tool.py", "utf-16-le"): "dropping lone surrogates from typed text",
+    ("vf2_glyph_render.py", "utf-16-be"): "a font file's own name table",
+    ("vf2_glyph_render.py", "mac_roman"): "a font file's own name table (Macintosh records)",
+    ("vf2_unicode_font.py", "utf-16"): "the Unicode Font tool's own ini (Windows' Unicode ini form)",
+    ("vf2_unicode_font.py", "latin-1"): "reading back a hand-edited ini of the tool's",
 }
 CODEC = re.compile(r"""(?:\.(?:decode|encode)\(\s*|encoding\s*=\s*|codecs\.\w+\([^)]*?)["']([A-Za-z0-9_-]+)["']""")
 SAVE_TEXT_MODULES = ("vf2_save_reader.py", "vf2_genealogy.py", "vf2_family_history.py", "vf2_rename_family.py",

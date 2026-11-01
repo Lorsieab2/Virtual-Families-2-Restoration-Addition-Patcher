@@ -3678,6 +3678,7 @@ class TestSuiteCopiesInSyncTests(unittest.TestCase):
              "vf2_glyph_maker.py",
              "vf2_game_fonts.json",
              "vf2_text_tool.py",
+             "vf2_unicode_font.py",
             "vf2_crash_capture.py",
             "vf2_genealogy.py",
             "vf2_family_history.py",

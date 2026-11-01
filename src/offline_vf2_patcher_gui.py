@@ -59,9 +59,10 @@ PRESET_BUTTONS = (
 )
 # Owner's Defaults ticks every patch except these (owner, 2026-11-01: "everything except Up to 28
 # Children"; both Cheat settings and both Invisible Furniture settings are ON in it -- the transparent
-# swap overrides the visible graphics). Of the two exclusive text settings it ticks "Use Unicode Font
-# (overrides in-game fonts)" and leaves "Render Unicode with In-Game Fonts" off (owner, 2026-11-01).
-OWNERS_DEFAULT_OFF_SETTING_IDS = frozenset({"up_to_28_children", "render_unicode_in_game_fonts"})
+# swap overrides the visible graphics). Of the two exclusive text settings it ticks "Render Unicode with
+# In-Game Fonts" and leaves "Use Unicode Font (overrides in-game fonts)" off (owner, 2026-11-01, later the
+# same day: it was the reverse before).
+OWNERS_DEFAULT_OFF_SETTING_IDS = frozenset({"up_to_28_children", "use_unicode_font"})
 PATCH_SELECTION_SETTINGS_TITLE = "Patch Selection Settings"
 
 
@@ -1422,6 +1423,19 @@ class VF2PatcherGUI(ToolsTabMixin):
                 messagebox.showinfo(PATCH_SELECTION_SETTINGS_TITLE, "Tick at least one patch in the list first.",
                                     parent=dialog)
                 return
+            self.last_selection_problem = ""
+            if tick:
+                # two patches that cannot be on together are refused, never half done (as VF1's window)
+                for setting_id in chosen:
+                    clash = [o for o in getattr(self.settings[setting_id], "excludes", ()) if o in chosen]
+                    if clash:
+                        self.last_selection_problem = (
+                            f"{self.settings[setting_id].label} and {self.settings[clash[0]].label} cannot both be "
+                            "on. Choose one of them.")
+                        if not getattr(self, "quiet_selection", False):
+                            messagebox.showerror(PATCH_SELECTION_SETTINGS_TITLE, self.last_selection_problem,
+                                                 parent=dialog)
+                        return
             self.set_named_settings(chosen, tick)
             done = [setting_id for setting_id in chosen if self.setting_vars[setting_id].get() == tick]
             names = ", ".join(self.settings[setting_id].label for setting_id in chosen)
