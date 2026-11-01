@@ -3817,3 +3817,21 @@ Unicode text: Render Unicode with In-Game Fonts, Use Unicode Font, Game Font Tex
   the house, the Details screen, the Family Tree, a Random Event and the store;
   save, quit, restart; open the same save in the B205 game (odd letters, no
   crash); Use Unicode Font: every screen's text fits.
+
+Release profile shipped two cheats ON (B206's first export; fixed before publishing)
+------------------------------------------------------------------------------------
+
+- Every release bundle is exported with --final-playtest-all-enabled, and
+  apply_final_playtest_defaults sets default True for each setting in
+  FINAL_PLAYTEST_DEFAULT_ON_SETTINGS. That set still listed cheat_upgrades and
+  expanded_flea_market, so B206's first export shipped both ON although the
+  SETTINGS table (the owner's 1 November 2026 rule) has them OFF. A default
+  apply of that zip enabled them; the release gate passed, because it checked
+  which settings ship, never their defaults.
+- Fix: both left the set; the release profile may only turn on what the table
+  turns on (tests/test_export_offline_patch_bundle.py
+  test_the_release_profile_ships_the_tables_defaults), and the release gate now
+  compares every shipped default with the table and quarantines a bundle that
+  differs (work/gate_release_zip.py defaults_differ_from_the_table).
+- No executable changes: B206 was exported again from the same 32 executables.
+
