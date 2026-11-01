@@ -155,14 +155,15 @@ def fit(text: str, max_bytes: int) -> bytes:
     raw = encode(text)
     if len(raw) <= max_bytes:
         return raw
+    # Every start is tried, not only up to the first that is too long: a start whose single bytes happen to
+    # read as UTF-8 must be stored as UTF-8 (longer), while a longer start can be single bytes again.
     out = b""
     prefix = ""
     for c in clusters(text):
         prefix += c
         piece = encode(prefix)          # the cut text gets its own stored form (it may be Latin-1 again)
-        if len(piece) > max_bytes:
-            break
-        out = piece
+        if len(piece) <= max_bytes:
+            out = piece
     return out
 
 
@@ -194,7 +195,16 @@ def units(raw: bytes) -> list[Unit]:
     """The text's characters with their bytes. Single-byte text: one unit per byte (as the stock code steps)."""
     raw = bytes(raw).split(b"\0", 1)[0]
     if is_utf8(raw):
-        return [Unit(c, c.encode("utf-8", "surrogatepass")) for c in clusters(raw.decode("utf-8"))]
+        out = []
+        for c in clusters(raw.decode("utf-8")):
+            if c.startswith("\r") and len(c) > 1:
+                # CR is a unit of its own (the drawing code steps over CR and LF one at a time, as for single-byte
+                # text: LF is a line break); what follows it is read again as characters
+                out.append(Unit("\r", b"\r"))
+                out += [Unit(d, d.encode("utf-8", "surrogatepass")) for d in clusters(c[1:])]
+            else:
+                out.append(Unit(c, c.encode("utf-8", "surrogatepass")))
+        return out
     return [Unit(_single_byte_char(b), bytes([b])) for b in raw]
 
 

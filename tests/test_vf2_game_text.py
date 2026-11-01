@@ -187,3 +187,18 @@ def test_the_tools_wrap_never_drops_a_letter():
                             (b"a b c", 1), (b"x", 0)):
             lines = T.wrap(f, text, width)
             assert b"".join(lines) == text.replace(b" ", b"")
+
+
+def test_crlf_is_a_line_break_in_utf8_text_too():
+    """UTF-8 text steps over CR and LF one at a time like single-byte text, so LF still breaks the line (Codex)."""
+    f = T.load_font("Segoe24")
+    placed = T.draw_string(f, T.encode("日\r\n本"), 0, 0)
+    assert [p.unit.text for p in placed][-1] == "本" and placed[-1].y == f.line_height and placed[-1].x == 0
+
+
+def test_fit_keeps_a_name_that_fits_after_a_start_that_does_not():
+    """A start of single bytes that reads as UTF-8 must be stored as UTF-8 (longer); the whole name can still fit
+    as single bytes (Codex)."""
+    name = "a" * 16 + "Ã©é"
+    assert len(T.encode(name)) == 19
+    assert T.fit(name, 19) == T.encode(name)

@@ -128,8 +128,9 @@ struct Units {
         Push(u, cp);
         pos += len;
         unsigned c2, l2;
-        if (cp == 0x0D && Peek(pos, &c2, &l2) && c2 == 0x0A) { Push(u, c2); pos += l2; }
-        else if (IsRegional(cp) && Peek(pos, &c2, &l2) && IsRegional(c2)) { Push(u, c2); pos += l2; }
+        // CR and LF are two units here (LF is the line break), as in single-byte text
+        if (cp == 0x0D) { u.size = pos - u.start; return true; }
+        if (IsRegional(cp) && Peek(pos, &c2, &l2) && IsRegional(c2)) { Push(u, c2); pos += l2; }
         while (Peek(pos, &c2, &l2) && IsExtend(c2)) {
             Push(u, c2);
             pos += l2;
@@ -231,11 +232,10 @@ inline unsigned Fit(const unsigned char *s, unsigned n, unsigned maxBytes, unsig
     unsigned total = Decode(s, n, cps, cpsCap);
     unsigned best = 0, i = 0;
     bool any = false;
+    // every start is tried (a start that must be UTF-8 can be longer than a longer start in single bytes)
     while (i < total) {
         unsigned end = ClusterEnd(cps, total, i);
-        if (Encode(cps, end, out, maxBytes) < 0) break;
-        best = end;
-        any = true;
+        if (Encode(cps, end, out, maxBytes) >= 0) { best = end; any = true; }
         i = end;
     }
     if (!any) return 0;

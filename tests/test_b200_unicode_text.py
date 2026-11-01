@@ -205,3 +205,12 @@ def test_fit_for_the_text_boxes_get_text(lib):
             out = ctypes.create_string_buffer(n + 8)
             k = lib.UtFit(raw, len(raw), n, out)
             assert out.raw[:k] == T.fit(T.decode(raw), n), (raw, n)
+
+
+def test_fit_tries_every_start(lib):
+    lib.UtFit.argtypes = [ctypes.c_char_p, ctypes.c_uint32, ctypes.c_uint32, ctypes.c_char_p]
+    lib.UtFit.restype = ctypes.c_uint32
+    raw = T.encode("a" * 16 + "Ã©é")
+    out = ctypes.create_string_buffer(32)
+    k = lib.UtFit(raw, len(raw), 19, out)
+    assert out.raw[:k] == raw
