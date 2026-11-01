@@ -1,5 +1,5 @@
 """Copy Player Slot: copy one Virtual Families 2 family, with every file kept for it, into an empty save slot of the
-same save folder under a new name, in a closed game's saves.
+same save folder (or, after a warning, over another family's slot) under a new name, in a closed game's saves.
 
 Modelled on the Fish and Plant Tycoon patcher's Copy Slot (src/save_tools.py copy_slot), on Virtual Families 2's own
 layout. Every file below was found by reading the code that writes it.
@@ -49,13 +49,22 @@ The copy, and how each file stays valid for the copied, renamed save
       target's number.
 
 Safety
-    * Refused while the game that uses the save folder is running, and when the target slot is in use: it has a save
-      file, or the settings file marks it in use. A used slot is never written.
-    * Before anything is written the whole save folder is backed up with Back Up Saves' own copier, labelled
-      "(before copy)".
-    * A deleted family's leftovers in the target slot (its previous save, sidecars, or patcher folder) are never
-      overwritten or deleted: each is renamed beside itself with " (set aside before copy <date>)", which no game
-      or patcher code reads. They are also in the backup.
+    * Refused while the game that uses the save folder is running. The target is any slot but the source.
+    * Empty slots (the owner, 2026-11-01: "the game sees (game name)1-5.ldw as player slots"): a slot is empty when
+      it has no "Virtual Families 2<N>.ldw", whatever the settings file says, and a slot with a save is a player
+      even if the settings call it NEW PLAYER. This is the game's own rule: at every start theGameState::Load()
+      loads each slot's save and sets the slot's in-use flag and entry only when it loads (NEW PLAYER and a clear
+      flag otherwise); the Change Player list and New Player then go by that flag.
+    * Replacing a family (the owner, 2026-11-01: "able to overwrite existing slots (with a confirmation prompt)"):
+      a slot that holds a family is written only when the caller passes replace=True, after a Yes to a prompt that
+      names the family replaced (confirmation_text, in the words all the patchers share).
+    * Before anything is written the whole save folder is backed up with Back Up Saves' own copier, as
+      "Backups\\Backup <YYYY-MM-DD HH-MM-SS> (before copy)".
+    * The target's own files are never overwritten or deleted, and none stays attached to the copy: the replaced
+      family's save, or a deleted family's leftovers in an empty slot, and in both cases the previous save, the
+      sidecars (and those a DLL set aside) and the patcher's Save <N> folder are moved, keeping their paths, into
+      "Backups\\Replaced by copy <YYYY-MM-DD HH-MM-SS> - Save <N> - <old name>". Nothing reads that folder (see
+      aside_folder) and Restore Saves never offers it; a failure moves everything back.
     * Every file is written to a temporary file first, then moved into place; a new file never replaces one that
       is there, and the settings file is replaced as Rename Family replaces it. Every file is read back. Any
       failure removes every file the copy made, puts the settings file and every set-aside file back, and so
@@ -89,7 +98,7 @@ SIDECAR_FOLDERS = ("Children", "Outfits")               # b200kids.cpp / b200out
 EXPORTS_FOLDER = "Family Tree"                          # Save <N>\Family Tree: made again each time; not copied
 TREE_FORMAT = "Virtual Families 2 Patcher family tree"   # vf2_tree_memory.FORMAT
 FLAG_FIRST = reader.HEADER_SIZE + 0x79                   # the settings file's in-use flag of slot 1 (gs+0x25B99)
-SET_ASIDE = "set aside before copy"
+REPLACED = "replaced by copy"
 
 # The two sidecar formats (runtime/native/b200kids/b200kids.cpp and b200outfits.cpp, "the sidecar"): magic, version 1
 # at +8, "VF2B200\0" at +12, the file's size at +20, the save file's FNV-1a 64 at +24 and its size at +32, and the
@@ -258,9 +267,9 @@ def read_slots(folder: Path) -> list[SlotInfo]:
     infos: list[SlotInfo] = []
     for slot in SLOTS:
         path = save_path(folder, slot)
-        flagged = settings is not None and in_use_flag(settings, slot)
         if not path.exists():
-            infos.append(SlotInfo(slot, None, flagged, "This slot has no family."))
+            # No save: an empty New Player slot, whatever the settings' stale entry says (target_problem).
+            infos.append(SlotInfo(slot, None, False, "This slot has no family."))
             continue
         try:
             name = rename.save_name(path.read_bytes())
@@ -276,26 +285,39 @@ def read_slots(folder: Path) -> list[SlotInfo]:
     return infos
 
 
-def target_problem(folder: Path, slot: int) -> str | None:
-    """Why ``slot`` cannot receive a copy (it is in use, or the settings cannot be read), or None."""
+def slot_is_empty(folder: Path, slot: int) -> bool:
+    """No "Virtual Families 2<N>.ldw": an empty New Player slot, whatever the settings' entry and flag say. The game
+    rebuilds both from the saves at every start (theGameState::Load(): the flag is set only for a save that loads)."""
+    return not save_path(folder, slot).exists()
+
+
+def target_problem(folder: Path, slot: int, replace: bool = False) -> str | None:
+    """Why ``slot`` cannot receive a copy, or None. A slot with a save is refused unless ``replace`` (the player said
+    Yes to replacing that family); an empty slot (slot_is_empty) is always offered."""
     if slot not in SLOTS:
         return f"There is no save slot {slot}."
-    if save_path(folder, slot).exists():
-        return f"Save {slot} is in use ({reader.save_file_name(slot)} is there). A used slot is never written."
-    settings = _settings_bytes(folder)
-    if settings is None:
+    if not slot_is_empty(folder, slot) and not replace:
+        return (f"Save {slot} is in use ({reader.save_file_name(slot)} is there). It is replaced only after you agree "
+                "to replace that family.")
+    if _settings_bytes(folder) is None:
         return f"The settings file {rename.settings_path(folder).name} could not be read."
-    if in_use_flag(settings, slot):
-        return f"The game's settings mark Save {slot} as in use, so it is never written."
     return None
 
 
-def confirmation_text(folder: Path, source: int, name: bytes | None, target: int, new_name: str) -> str:
-    """The question asked before a copy (the owner, 2026-10-31: every Copy Player Slot has a confirmation prompt)."""
-    return (f"Copy \"{rename.shown(name)}\" (Save {source}) into the empty Save {target} as \"{new_name}\"?\n\n"
-            f"Save folder: {folder.name}\n\n"
-            f"The save folder is backed up first, as \"Backup <date> {BACKUP_LABEL}\". Save {source} and every other "
-            "slot are not changed.")
+def confirmation_text(folder: Path, source: int, name: bytes | None, target: int, new_name: str,
+                      when: datetime | None = None) -> str:
+    """The question asked before a copy, in the words all the patchers share (the owner, 2026-10-31: every Copy Player
+    Slot has a confirmation prompt; 2026-11-01: replacing a family says which family is replaced). ``when`` is the
+    time the copy will be given (copy_slot's ``now``), so the folder named here is the one made."""
+    when = when or datetime.now()
+    old = target_family_name(folder, target)
+    aside = f"{save_backup.BACKUPS_FOLDER}\\{aside_name(when, target, old)}"
+    tail = f"The whole save folder ({folder}) is backed up first"
+    if not slot_is_empty(folder, target):
+        return (f"Save {target} holds the {old} family. It will be replaced by a copy of {rename.shown(name)} "
+                f"(Save {source}), named {new_name}. {tail}, and {old}'s files are kept in {aside}. Replace it?")
+    return (f"Save {target} is empty. It will get a copy of {rename.shown(name)} (Save {source}), named {new_name}. "
+            f"{tail}. Copy it?")
 
 
 # ---------------------------------------------------------------------------
@@ -325,21 +347,61 @@ class CopyPlan:
     set_aside: list[tuple[Path, Path]] = field(default_factory=list)     # (leftover, where it goes)
     notes: list[str] = field(default_factory=list)
     skipped: list[tuple[Path, str]] = field(default_factory=list)
+    replaced: bytes | None = None   # the target's own save as it was read, when a family is replaced
+    aside_folder: Path | None = None    # Backups\Replaced by copy <date>, where the target's files go
 
 
-def _set_aside_name(path: Path, stamp: str) -> Path:
-    label = f" ({SET_ASIDE} {stamp})"
-    if path.is_dir():
-        return path.with_name(path.name + label)
-    return path.with_name(path.stem + label + path.suffix)
+_UNSAFE = re.compile(r'[\\/:*?"<>|]')
 
 
-def leftovers(folder: Path, target: int) -> list[Path]:
-    """What a deleted family left in the empty target slot, which the copy would otherwise write over: the previous
-    save, the sidecars and the patcher's folder for the slot (the game's delete removes only the save itself)."""
-    found = [save_path(folder, target + reader.PREVIOUS_SAVE_OFFSET)]
+def aside_name(when: datetime, target: int, old_name: str) -> str:
+    """"Replaced by copy <YYYY-MM-DD HH-MM-SS> - Save <N> - <old name>" (the name all the patchers share)."""
+    shown = _UNSAFE.sub("_", old_name).strip(" .") or "(no name)"
+    return f"{REPLACED.capitalize()} {when:%Y-%m-%d %H-%M-%S} - Save {target} - {shown}"
+
+
+def target_family_name(folder: Path, target: int) -> str:
+    """The name of the family whose files are in the target slot: its save's, else its previous save's (a deleted
+    family's leftovers), else "(no name)"."""
+    for number in (target, target + reader.PREVIOUS_SAVE_OFFSET):
+        try:
+            name = rename.save_name(save_path(folder, number).read_bytes())
+        except OSError:
+            continue
+        if name is not None:
+            return rename.shown(name)
+    return "(no name)"
+
+
+def aside_folder(folder: Path, when: datetime, target: int, old_name: str) -> Path:
+    """<save folder>\\Backups\\<aside_name> (" (2)", ... when taken): where a replaced family's files and an empty
+    slot's leftovers go, keeping their paths. Nothing reads it: the game opens only exact save names in the save
+    folder, the DLLs only their own sidecar paths, Back Up Saves copies everything but Backups and offers only
+    "Backup <date>" folders for a restore, and the patcher's readers look only at the slot's own paths."""
+    base = folder / save_backup.BACKUPS_FOLDER / aside_name(when, target, old_name)
+    candidate, k = base, 2
+    while candidate.exists():
+        candidate = base.with_name(f"{base.name} ({k})")
+        k += 1
+    return candidate
+
+
+def leftovers(folder: Path, target: int, replace: bool = False) -> list[Path]:
+    """The target slot's own files, which the copy would otherwise write over or leave attached to it: the save
+    (only when a family is replaced), the previous save, the sidecars (and the ones a DLL set aside) and the
+    patcher's folder for the slot. In an empty slot they are what a deleted family left (the game's delete removes
+    only the save itself)."""
+    previous = target + reader.PREVIOUS_SAVE_OFFSET
+    found = [save_path(folder, target)] if replace else []
+    found.append(save_path(folder, previous))
     for kind in SIDECAR_FOLDERS:
-        found += [sidecar_path(folder, kind, target), sidecar_path(folder, kind, target + reader.PREVIOUS_SAVE_OFFSET)]
+        for number in (target, previous):
+            found.append(sidecar_path(folder, kind, number))
+            where = folder / DATA_FOLDER / kind
+            if where.is_dir():
+                prefix = (reader.save_file_name(number) + ".unreadable-").casefold()
+                found += sorted(p for p in where.iterdir()
+                                if p.is_file() and p.name.casefold().startswith(prefix) and p.suffix.casefold() == ".dat")
     found.append(slot_root(folder, target))
     return [path for path in found if path.exists()]
 
@@ -461,14 +523,16 @@ def _plan_sidecars(plan: CopyPlan, saves: dict[int, tuple[bytes, bytes]]) -> Non
                                       describes=describes - source + target))
 
 
-def plan_copy(folder: Path, source: int, target: int, new_name: str, when: datetime | None = None) -> CopyPlan:
-    """Every file the copy writes, with its bytes, without writing anything. CopyError when it cannot be done."""
+def plan_copy(folder: Path, source: int, target: int, new_name: str, when: datetime | None = None,
+              replace: bool = False) -> CopyPlan:
+    """Every file the copy writes, with its bytes, without writing anything. CopyError when it cannot be done.
+    ``replace``: the player agreed to replace the family in ``target`` (refused otherwise)."""
     when = when or datetime.now()
     if source not in SLOTS:
         raise CopyError(f"There is no save slot {source}.")
     if target == source:
-        raise CopyError("Choose an empty slot other than the family's own.")
-    problem = target_problem(folder, target)
+        raise CopyError("Choose a slot other than the family's own.")
+    problem = target_problem(folder, target, replace)
     if problem:
         raise CopyError(problem)
     problem = rename.name_problem(new_name)
@@ -512,11 +576,13 @@ def plan_copy(folder: Path, source: int, target: int, new_name: str, when: datet
     flag = FLAG_FIRST + target - 1
     updated = updated[:flag] + b"\x01" + updated[flag + 1:]
     plan.settings = rename.FileChange(settings_file, settings, updated)
-    stamp = when.strftime("%Y-%m-%d %H-%M-%S")
-    plan.set_aside = [(path, _set_aside_name(path, stamp)) for path in leftovers(folder, target)]
-    for _path, aside in plan.set_aside:
-        if aside.exists():
-            raise CopyError(f"{aside.name} is already there; try again in a moment.")
+    replacing = not slot_is_empty(folder, target)
+    if replacing:
+        plan.replaced = save_path(folder, target).read_bytes()
+    found = leftovers(folder, target, replace=replacing)
+    if found:
+        plan.aside_folder = aside_folder(folder, when, target, target_family_name(folder, target))
+        plan.set_aside = [(path, plan.aside_folder / path.relative_to(folder)) for path in found]
     written = [entry.path for entry in plan.files]
     if len({str(path).casefold() for path in written}) != len(written):
         raise CopyError("Two of the files to copy would have the same name; nothing was changed.")
@@ -578,6 +644,8 @@ class CopyResult:
     set_aside: list[tuple[Path, Path]] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
     skipped: list[tuple[Path, str]] = field(default_factory=list)
+    aside_folder: Path | None = None     # Backups\Replaced by copy <date> - Save <N> - <old name>, when made
+    replaced: bool = False               # a family was replaced
 
 
 def _refuse_if_running(folder: Path, processes: save_backup.ProcessController) -> None:
@@ -632,7 +700,7 @@ def verify(plan: CopyPlan) -> None:
 
 
 def _roll_back(plan: CopyPlan, created: list[Path], folders: list[Path], moved: list[tuple[Path, Path]],
-               settings_written: bool) -> list[str]:
+               settings_written: bool, aside_folders: list[Path] | None = None) -> list[str]:
     problems: list[str] = []
     if settings_written and plan.settings is not None:
         try:
@@ -657,6 +725,11 @@ def _roll_back(plan: CopyPlan, created: list[Path], folders: list[Path], moved: 
             os.rename(aside, original)
         except OSError as exc:
             problems.append(f"{aside.name}: {exc}")
+    for directory in reversed(aside_folders or []):
+        try:
+            directory.rmdir()
+        except OSError:
+            pass
     return problems
 
 
@@ -667,17 +740,21 @@ def copy_slot(
     new_name: str,
     processes: save_backup.ProcessController | None = None,
     now: datetime | None = None,
+    replace: bool = False,
 ) -> CopyResult:
-    """Copy the family in ``source`` into the empty slot ``target`` of ``folder`` as ``new_name``.
+    """Copy the family in ``source`` into slot ``target`` of ``folder`` as ``new_name``.
 
-    Refused (CopyError, nothing changed) when the game is running, the target slot is in use, the name breaks the
-    game's rule, or the saves cannot be read. Otherwise the folder is backed up first ("(before copy)"), every file
-    is written through a temporary file and read back, and any failure puts the folder back as it was.
+    An empty target (no save) always; one that holds a family only with ``replace`` (the player said Yes to
+    confirmation_text's "Replace it?"). Refused (CopyError, nothing changed) when the game is running, the target holds
+    a family and ``replace`` is not given, the name breaks the game's rule, or the saves cannot be read. Otherwise the
+    folder is backed up first ("(before copy)"), the target's own files are moved into Backups\\Replaced by copy
+    <date> - Save <N> - <old name>, every file is written through a temporary file and read back, and any failure
+    puts the folder back as it was.
     """
     controller = processes if processes is not None else save_backup.WindowsProcesses()
     when = now or datetime.now()
     _refuse_if_running(folder, controller)
-    plan = plan_copy(folder, source, target, new_name, when)
+    plan = plan_copy(folder, source, target, new_name, when, replace)
     try:
         backup = save_backup.copy_save_folder(folder, when, suffix=BACKUP_LABEL)
     except save_backup.BackupError as exc:
@@ -686,15 +763,23 @@ def copy_slot(
     created: list[Path] = []
     folders: list[Path] = []
     moved: list[tuple[Path, Path]] = []
+    aside_folders: list[Path] = []
     settings_written = False
     try:
-        if target_problem(folder, target):
-            raise CopyError(target_problem(folder, target))
+        problem = target_problem(folder, target, plan.replaced is not None)
+        if problem:
+            raise CopyError(problem)
+        now_there = save_path(folder, target).read_bytes() if save_path(folder, target).exists() else None
+        if now_there != plan.replaced:
+            raise CopyError(f"Save {target} changed while the family was being copied.")
         if save_path(folder, source).read_bytes() != plan.original:
             raise CopyError("The family's save changed while it was being copied.")
         if plan.settings.path.read_bytes() != plan.settings.original:
             raise CopyError(f"{plan.settings.path.name} changed while the family was being copied.")
         for original, aside in plan.set_aside:
+            if aside.exists():
+                raise CopyError(f"{aside} is already there; nothing was moved over it.")
+            _make_folders(folder, aside, aside_folders)
             os.rename(original, aside)
             moved.append((original, aside))
         for entry in plan.files:
@@ -705,7 +790,7 @@ def copy_slot(
         rename._write_atomically(plan.settings.path, plan.settings.updated)
         verify(plan)
     except (OSError, CopyError, rename.RenameError, reader.SaveFormatError) as exc:
-        problems = _roll_back(plan, created, folders, moved, settings_written)
+        problems = _roll_back(plan, created, folders, moved, settings_written, aside_folders)
         if problems:
             raise CopyError(
                 f"The copy failed ({exc}) and these could not be put back: {'; '.join(problems)}. "
@@ -715,4 +800,4 @@ def copy_slot(
             f"The copy failed ({exc}); everything was put back as it was. A backup is in {backup.backup_folder}."
         ) from exc
     return CopyResult(folder, source, target, rename.shown(plan.old_name), new_name, backup, plan.files,
-                      plan.set_aside, plan.notes, plan.skipped)
+                      plan.set_aside, plan.notes, plan.skipped, plan.aside_folder, plan.replaced is not None)
