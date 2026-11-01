@@ -142,6 +142,21 @@ class EveryPatchDefaultsOn(unittest.TestCase):
         return {row["id"] for row in exporter.SETTINGS
                 if row.get("category") == "experimental"}
 
+    # The owner's decision (2026-11-01): "Use Unicode Font (overrides in-game fonts)" defaults OFF because it
+    # cannot be on together with "Render Unicode with In-Game Fonts", which defaults ON (one of the two must be the
+    # default). An exclusive alternative must name the default-on setting it excludes (pinned below).
+    EXCLUSIVE_ALTERNATIVES = frozenset({
+        "use_unicode_font",
+    })
+
+    def test_an_exclusive_alternative_excludes_a_default_on_setting(self):
+        rows = {row["id"]: row for row in exporter.SETTINGS}
+        for sid in self.EXCLUSIVE_ALTERNATIVES:
+            with self.subTest(setting=sid):
+                others = rows[sid].get("excludes") or []
+                self.assertTrue(others and all(rows[o]["default"] for o in others))
+                self.assertTrue(all(sid in (rows[o].get("excludes") or []) for o in others))
+
     # The owner's cheat rule (2026-11-01): "anything that sets prices to 0 is
     # DEFAULT OFF", "Anything that makes villagers succeed in skills 100%, no
     # failing, is DEFAULT off", and "Keep off by default: All items show in
@@ -156,7 +171,8 @@ class EveryPatchDefaultsOn(unittest.TestCase):
 
     @property
     def EXCEPTIONS(self):
-        return set(self.SEQUENCING_EXCEPTIONS) | set(self.CHEAT_EXCEPTIONS) | self.experimental_ids()
+        return (set(self.SEQUENCING_EXCEPTIONS) | set(self.CHEAT_EXCEPTIONS) | self.experimental_ids()
+                | set(self.EXCLUSIVE_ALTERNATIVES))
 
     def test_the_cheat_settings_default_off_and_their_neighbours_on(self):
         rows = {row["id"]: row for row in exporter.SETTINGS}
@@ -3643,6 +3659,12 @@ class TestSuiteCopiesInSyncTests(unittest.TestCase):
             "vf2_game_mechanics.py",
             "vf2_game_mechanics_window.py",
             "vf2_save_reader.py",
+            "vf2_game_text.py",
+            "vf2_unicode_tables.py",
+             "vf2_glyph_render.py",
+             "vf2_glyph_maker.py",
+             "vf2_game_fonts.json",
+             "vf2_text_tool.py",
             "vf2_crash_capture.py",
             "vf2_genealogy.py",
             "vf2_family_history.py",

@@ -59,8 +59,9 @@ PRESET_BUTTONS = (
 )
 # Owner's Defaults ticks every patch except these (owner, 2026-11-01: "everything except Up to 28
 # Children"; both Cheat settings and both Invisible Furniture settings are ON in it -- the transparent
-# swap overrides the visible graphics).
-OWNERS_DEFAULT_OFF_SETTING_IDS = frozenset({"up_to_28_children"})
+# swap overrides the visible graphics). Of the two exclusive text settings it ticks "Use Unicode Font
+# (overrides in-game fonts)" and leaves "Render Unicode with In-Game Fonts" off (owner, 2026-11-01).
+OWNERS_DEFAULT_OFF_SETTING_IDS = frozenset({"up_to_28_children", "render_unicode_in_game_fonts"})
 PATCH_SELECTION_SETTINGS_TITLE = "Patch Selection Settings"
 
 
@@ -1483,6 +1484,12 @@ class VF2PatcherGUI(ToolsTabMixin):
             self._syncing_settings = True
             try:
                 self._tick_prerequisites(setting_id)
+                # ticking one of two settings that cannot be on together unticks the other
+                setting = self.settings.get(setting_id)
+                for other in getattr(setting, "excludes", ()):
+                    other_var = self.setting_vars.get(other)
+                    if other_var is not None and other_var.get():
+                        other_var.set(False)
                 # A setting only its missing prerequisite switched off comes back with it:
                 # Default Patches leaves No AI Icons waiting for Cheat Upgrades, and ticking
                 # Cheat Upgrades ticks it again.
@@ -1517,6 +1524,14 @@ class VF2PatcherGUI(ToolsTabMixin):
         previous = getattr(self, "_syncing_settings", False)
         self._syncing_settings = True
         try:
+            # settings that cannot be on together (a bulk tick such as Enable All): the default one stays
+            settings = getattr(self, "settings", {}) or {}
+            if any(getattr(s, "excludes", ()) for s in settings.values()):
+                ticked = {setting_id for setting_id, var in self.setting_vars.items() if var.get()}
+                keep = patcher.resolve_exclusions(
+                    {k: v for k, v in settings.items() if k in self.setting_vars}, ticked)
+                for setting_id in ticked - keep:
+                    self.setting_vars[setting_id].set(False)
             changed = True
             while changed:
                 changed = False

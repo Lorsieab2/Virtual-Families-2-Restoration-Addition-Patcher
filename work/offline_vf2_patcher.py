@@ -126,6 +126,8 @@ class PatchSetting:
     readiness_status: str | None = None
     readiness_reason: str | None = None
     selection_policy: str | None = None
+    # Settings that cannot be on together with this one (the manifest's "excludes"; always both ways).
+    excludes: tuple[str, ...] = ()
 
     @property
     def experimental(self) -> bool:
@@ -1159,8 +1161,54 @@ def manifest_settings(manifest: dict[str, Any]) -> dict[str, PatchSetting]:
             readiness_status=readiness_status,
             readiness_reason=readiness_reason,
             selection_policy=selection_policy,
+            excludes=tuple(
+                normalize_setting_id(value, f"setting {setting_id} excludes")
+                for value in (raw.get("excludes") or [])
+            ),
         )
+    # "excludes" works both ways, and only between settings this manifest has.
+    pairs: dict[str, set[str]] = {setting_id: set() for setting_id in settings}
+    for setting_id, setting in settings.items():
+        for other in setting.excludes:
+            if other in settings and other != setting_id:
+                pairs[setting_id].add(other)
+                pairs[other].add(setting_id)
+    for setting_id, others in pairs.items():
+        settings[setting_id] = dataclasses.replace(settings[setting_id], excludes=tuple(sorted(others)))
     return settings
+
+
+def resolve_exclusions(
+    settings: dict[str, PatchSetting],
+    enabled: set[str],
+    chosen: set[str] | frozenset[str] = frozenset(),
+) -> set[str]:
+    """Settings that cannot be on together: of two that exclude each other, the one named in `chosen` (the
+    --enable list, the box just ticked) stays; else the one on by default stays. Both chosen is an error."""
+    result = set(enabled)
+    for setting_id in sorted(result):
+        if setting_id not in result:
+            continue
+        for other in settings[setting_id].excludes:
+            if other not in result:
+                continue
+            if setting_id in chosen and other in chosen:
+                raise PatchError(
+                    f"{settings[setting_id].label} and {settings[other].label} cannot be on together; "
+                    "choose one."
+                )
+            if other in chosen:
+                keep, drop = other, setting_id
+            elif setting_id in chosen:
+                keep, drop = setting_id, other
+            elif settings[other].default and not settings[setting_id].default:
+                keep, drop = other, setting_id
+            else:
+                keep, drop = setting_id, other
+            result.discard(drop)
+            if drop == setting_id:
+                break
+    return result
 
 
 READINESS_BLOCKED_MARKERS = ("stop", "pending", "unlinked")
@@ -1341,6 +1389,7 @@ def resolve_enabled_settings(manifest: dict[str, Any], args: argparse.Namespace)
             raise PatchError(f"Unknown setting: {setting_id}")
     enabled.update(enable_ids)
     enabled.difference_update(disable_ids)
+    enabled = resolve_exclusions(settings, enabled, set(enable_ids))
     blocked = [
         settings[setting_id]
         for setting_id in sorted(enabled)

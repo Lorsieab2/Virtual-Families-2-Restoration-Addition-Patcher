@@ -648,6 +648,26 @@ def _hidden_lines() -> list[Fact]:
            "[scene+0D4h]; every store box: ldwDialog::DoModal(scene, false) -> SetModal, and "
            "ldwEventManager::HandleKey stops at a modal handler; all emulated (tests/test_b200_store_refresh.py)",
            sub=True),
+        _f(g, "Typing a name. Unpatched game: a text box takes only keys that send one plain letter (A-Z, digits, "
+              "punctuation); accented keys, dead keys, Alt codes and input methods send nothing. The box holds up "
+              "to 20 letters for a player name, 18 for a family member and 80 for the Family Tree note, and the "
+              "game keeps 19, 18 and 79 of them. With the patcher (\"Render Unicode with In-Game Fonts\" or \"Use "
+              "Unicode Font (overrides in-game fonts)\", one of the two): every character the keyboard sends is "
+              "taken, accents, other alphabets and emoji too. Letters beyond the game's own Latin letters take "
+              "more room (2 to 4 places each), so fewer of them fit: a letter that would not fit is not added, "
+              "Backspace removes a whole letter, and the name is never cut inside a letter.", C,
+           "CheckForEvents: SDL_TEXTINPUT -> HandleKey(5, 0, char) only when strlen == 1; ldwTextControlImpl::"
+           "HandleKey appends 20h..FFh while length < [+28h]; SetCanEdit(true, 14h / 12h / 50h); GetText strncpy "
+           "14h / 13h / 50h. Patched: vf2unicode_b200.dll's SDL_PollEvent, HandleKey and GetText hooks, emulated "
+           "(tests/test_b200_unicode_dll.py)"),
+        _f(g, "Showing text. Unpatched game: its four fonts have the plain letters and the Western European ones "
+              "(é, ü, ñ, ß ...); any other byte draws as \"!\". With the patcher: every character is drawn, in the "
+              "game's own fonts where they have it, else a letter the patcher made in the same style, else a "
+              "Windows font at the same size; names saved with other alphabets show as odd letters (no crash) if "
+              "the save is opened in the unpatched game.", E,
+           "ldwFont::Load byte map (entry 0 = '!' for bytes without a glyph); DrawString / DrawChars / GetWidth / "
+           "GetNextJustifiedLine emulated against src/vf2_game_text.py (tests/test_vf2_game_text.py); the DLL's "
+           "DrawString emulated over the B205 executable (tests/test_b200_unicode_dll.py)"),
     ]
     return out
 

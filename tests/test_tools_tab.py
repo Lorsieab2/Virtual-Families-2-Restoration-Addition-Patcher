@@ -111,7 +111,7 @@ class ToolsTabTests(unittest.TestCase):
         self.assertEqual(links, ["Back Up Saves", "Restore Saves...", "Copy Player Slot...", "Rename Family...",
                                  "Game Speed...",
                                  "Family Tree Maker...", "Game Mechanics...", "Picture Maker...",
-                                 "How to Use..."])
+                                 "Game Font Text...", "How to Use..."])
         boxes = [str(w.cget("text")) for w in found if w.winfo_class() == "TLabelframe"]
         self.assertEqual(boxes, ["Virtual Families 2", "How to Use"])
         self.app._refresh_saves_found()

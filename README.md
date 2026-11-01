@@ -210,6 +210,12 @@ actions, as before. **Tools** holds:
   `src/family_tree_backgrounds/`; the evidence: `docs/family-tree-maker.md`; tests: `tests/test_family_tree.py`
   and `tests/test_family_tree_memory.py`, `tests/test_relationships.py`, `tests/test_tree_namesakes.py`,
   `tests/test_tree_big_speed.py`.
+- **Game Font Text...** writes any text in the game's own four fonts and saves it as a PNG (Game size, 2x, 4x,
+  a custom size, the Picture Maker's export): a text box, the font, the game's tint colours, a wrap width, a
+  live preview drawn exactly as the game draws text (`src/vf2_game_text.py`, proved against the game's own code),
+  and a character picker (accents by language, and any Unicode character by name or code). Letters the fonts lack
+  are patcher-made in the fonts' own style and labelled "(patcher-made)". Code: `src/vf2_text_tool.py`,
+  `src/vf2_game_text.py`, `src/vf2_glyph_maker.py`, `src/vf2_glyph_render.py`, `src/vf2_game_fonts.json`.
 - **Picture Maker...** draws family members exactly as Virtual Families 2 draws them and saves them as PNG
   pictures with a clear background: the Fish and Plant Tycoon patcher's Picture Studio made for this game. **From
   my save** lists everyone in a family's save by where they are (at home, left home, died, earlier generations only
@@ -311,19 +317,19 @@ checked against `manifest.json`, the release notes and the owner's confirmed
 play reports; superseded claims are marked rather than deleted.*
 
 The GUI reads its checkboxes from the shipped manifest, so the exact list follows
-the release you downloaded. The next bundle offers 43 settings: B205's 41 plus two new ones.
+the release you downloaded. The next bundle offers 45 settings (B206): B205's 41 plus **Free and
+Guaranteed Cheats**, **All outfits and hairstyles always for sale** (both off by default), **Render Unicode
+with In-Game Fonts** and **Use Unicode Font (overrides in-game fonts)** (only one of the two can be on).
 
 That number is not simply the count of settings the patcher defines, which is
-44. The settings list drops any optional setting that has no packaged source
+46. The settings list drops any optional setting that has no packaged source
 assets -- in B201, as in B180, the two named just below -- and the export adds
 one setting of its own, `core_assets`, which copies the support files and
-generated assets that are not tied to a single feature. So 44 defined, less 2
-without packaged assets, plus 1 generated, is the 43 the GUI shows. (B205 and
-the final B204 rebuild: 42 - 2 + 1 = 41, the 39 of the first B204 bundles plus **All 36 Flea Market
-goods** and **R Refreshes the Store**; the next bundle adds **Free and Guaranteed Cheats** and **All
-outfits and hairstyles always for sale**, both off by default. B205's two website fixes are part of Fix
-Vanilla Game Bugs, not new settings. The first
-B204 bundles: 40 - 2 + 1 = 39. Before
+generated assets that are not tied to a single feature. So 46 defined, less 2
+without packaged assets, plus 1 generated, is the 45 the GUI shows. (B205 and the
+final B204 rebuild, which added **All 36 Flea Market goods** and **R Refreshes the Store**: 42 - 2 + 1 = 41;
+B205's two website fixes are part of Fix Vanilla Game Bugs, not new settings. The first B204 bundles:
+40 - 2 + 1 = 39. Before
 the Family History log it was 39 - 2 + 1: B202's and B203's bundles offered 38 settings;
 before Up to 28 Children existed the same sum was 38 - 2 + 1: B201's bundle offered
 37 settings; before Time Controls the B198 through B200 bundles offered 36,
@@ -459,6 +465,36 @@ release bundle, like almost everything else)
   Software (installed) or Rockhound Certificate still shows its owned checkmark while it can be
   bought again. The patcher's `GetNumAvailable` hook answers "in stock" and writes nothing, so the
   save's counts are kept and count again the moment the setting is unticked.
+- **Render Unicode with In-Game Fonts** (`.vf2utxt`, Optional, **on by default**; new after B205, needs the
+  B206 executables) and **Use Unicode Font (overrides in-game fonts)** (`.vf2ufnt`, Optional, **off by default**).
+  The two cannot be on together: ticking one unticks the other in the GUI, the command line refuses both, and the
+  bundle's settings say so (`"excludes"`). Both install the companion DLL `vf2unicode_b200.dll` (the second under
+  the name `vf2unicodefont_b200.dll`, so each setting removes only its own files):
+  - **what the game can show**: every Unicode character (U+0000..U+10FFFF, beyond U+FFFF too): accents,
+    Latin Extended, Turkish ı İ ğ ş, Vietnamese, Greek, Cyrillic, CJK, Hangul, Cuneiform, symbols and emoji, in
+    every text the game draws (names, dialogs, the store, events, tips): its four fonts (Segoe24, Segoe24Bold,
+    Segoe32Bold, Segoe36Bold: the only fonts the game has) have ASCII and Latin-1; 2,123 more characters per font
+    are **patcher-made** (`Virtual Families 2 Patcher Files\Unicode Text\<font>.png` + `.txt`, made at export
+    from the original game's own font pictures: accented letters composed from the game's own letters and accents,
+    the rest drawn in the fonts' own style), and anything else is drawn when first needed from the first Windows
+    font that has it (Segoe UI, Segoe UI Historic, Segoe UI Symbol, Segoe UI Emoji, the CJK fonts, Nirmala UI,
+    Ebrima ..., Noto if installed) at the game font's fitted size, weight and alpha levels, else a box. Emoji are
+    drawn in one colour (the text's), not in full colour;
+  - **typing**: the game's text boxes take every character the keyboard sends (accented keys, dead keys, Alt
+    codes, an input method); the original game drops all of them (`CheckForEvents` only passes a one-byte
+    `SDL_TEXTINPUT`). A character is added only if the whole name still fits the box; Backspace removes a whole
+    character (an emoji with its skin tone too); copying a name to its save field never cuts inside a character;
+  - **saves**: the names stay in their own fields. Text of ASCII and Latin-1 letters is stored one byte per letter
+    exactly as before (the original game and older tools show it); anything else is UTF-8. The one rule is
+    `src/vf2_game_text.py`, which every patcher reader and writer uses (logs, Family Tree, Rename Family, Copy
+    Player Slot, the tools). The original game shows UTF-8 names as odd letters (Ã© for é) and never crashes
+    (`tests/test_vf2_game_text.py` runs its own drawing code over every byte);
+  - **Use Unicode Font** draws every character, ASCII too, with Segoe UI at each game font's size (Face= in
+    `vf2unicodefont.ini`), with the same fallback for missing characters, so screens keep their layout.
+  - Evidence: the game's own DrawString / DrawChars / GetWidth / GetHeight / GetNextJustifiedLine run under
+    emulation give exactly what `src/vf2_game_text.py` gives for every single-byte text; the DLL's own C++ text
+    rules equal the Python for thousands of texts; and the DLL's DrawString, run under emulation over the real B205
+    executable, draws the same glyphs at the same places with the same pixels as the patcher.
 - **R Refreshes the Store** (`.vf2rfsh`, an Optional patch and a cheat, **on by default**; new in the final
   B204 rebuild) - in the store, press **R** (or Shift+R) to pick the store's random items again, the
   game's own way and with the game's own odds:

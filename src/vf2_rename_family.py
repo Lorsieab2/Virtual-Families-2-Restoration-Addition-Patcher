@@ -23,10 +23,13 @@ The rule (VERIFIED)
     0x40E5D3), but GetText(buffer, 0x14) strncpy's 20 bytes and forces buffer[19] = 0 (0x40E22B), so at most 19
     characters are ever stored. The box accepts keys 0x20..0xFF (0x40E5DF..0x40E5EA). An empty box is refused
     (theChangePlayerDlg puts NEW PLAYER back), and a box whose text is exactly "NEW PLAYER" is treated as an
-    empty slot (strcmp 0x41F315..0x41F359), so that name is refused here. Only printable ASCII 0x20..0x7E is
-    accepted here. A name that breaks the rule is refused, never cut short.
-    UNCONFIRMED (not traced): whether keys 0x80..0xFF ever reach the box from a keyboard, and which symbols
-    the game's font can draw.
+    empty slot (strcmp 0x41F315..0x41F359), so that name is refused here. A name that breaks the rule is
+    refused, never cut short.
+    The name is stored with the patcher's one text rule (vf2_game_text.encode): a name of ASCII and Latin-1
+    letters (U+00A0..U+00FF, which the game's own fonts draw) is one byte per character, exactly as the game
+    stores what is typed in its box; any other character makes the name UTF-8 (2 to 4 bytes a character), which
+    the Unicode Text patch draws. Any character may be typed except control characters; the limit is the field's
+    19 bytes, counted in that stored form, and is shown in characters.
 
 What is written
     * The slot save: gs+0x25ABC (20 bytes): the new name, the rest zeroed.
@@ -63,22 +66,25 @@ from __future__ import annotations
 
 import os
 import re
+import unicodedata
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
+import vf2_family_history as family_history
+import vf2_game_text as game_text
 import vf2_save_backup as save_backup
 import vf2_save_reader as reader
 
 SLOTS = tuple(reader.FAMILY_SLOTS)
 BACKUP_LABEL = save_backup.BEFORE_RENAME
-MAX_LENGTH = 19                          # GetText(buffer, 0x14) keeps 19 characters (0x40E22B)
+MAX_LENGTH = 19                          # GetText(buffer, 0x14) keeps 19 bytes (0x40E22B): 19 one-byte characters
+MAX_BYTES = MAX_LENGTH                   # the stored name's bytes (vf2_game_text.encode), before the field's 0
 NAME_FIELD = 20                          # gs+0x25ABC, char[20]
 MENU_FIELD = 0x15                        # one slot-menu entry in the settings file
 MENU_FIRST = reader.HEADER_SIZE + 0x10   # file offset of slot 1's entry (gs+0x25B30)
 EMPTY_SLOT_TEXT = "NEW PLAYER"           # string 0xA34: the game's text for an empty slot
-PRINTABLE = frozenset(chr(code) for code in range(0x20, 0x7F))
 
 
 class RenameError(Exception):
@@ -102,16 +108,42 @@ def settings_path(folder: Path) -> Path:
 # ---------------------------------------------------------------------------
 
 
+def _unusable(ch: str) -> bool:
+    """A control character (tab, line break, 0, the C1 controls) or half of a surrogate pair: never in a name."""
+    return unicodedata.category(ch) in ("Cc", "Cs")
+
+
+def name_size(name: str) -> int:
+    """How many bytes ``name`` takes in the save (vf2_game_text.encode)."""
+    return len(game_text.encode(name))
+
+
+def name_counter(name: str) -> tuple[str, bool]:
+    """The counter the Rename Family and Copy Player Slot boxes show, and whether the name is too long. In
+    characters (vf2_game_text.length); a name with a character of more than one byte also says its bytes."""
+    count, size = game_text.length(name), name_size(name)
+    if size == count:
+        return f"{count} / {MAX_LENGTH} characters", size > MAX_BYTES
+    return f"{count} characters ({size} / {MAX_BYTES} bytes)", size > MAX_BYTES
+
+
 def name_problem(name: str) -> str | None:
     """Why ``name`` cannot be a family's name, or None if it can."""
     if not name:
         return "Type a name."
-    bad = sorted({ch for ch in name if ch not in PRINTABLE})
+    bad = sorted({ch for ch in name if _unusable(ch)})
     if bad:
         shown = " ".join(repr(ch) for ch in bad)
         return f"Virtual Families 2 cannot use these characters in a name: {shown}."
-    if len(name) > MAX_LENGTH:
-        return f"{len(name)} characters is too long: the game keeps at most {MAX_LENGTH}."
+    size = name_size(name)
+    if size > MAX_BYTES:
+        count = game_text.length(name)
+        if size == count:
+            return f"{count} characters is too long: the game keeps at most {MAX_LENGTH}."
+        fits = game_text.decode(game_text.fit(name, MAX_BYTES))
+        return (f"{count} characters is too long: this name needs {size} bytes and the game keeps {MAX_BYTES} "
+                f"(a letter beyond Latin-1 takes 2 to 4 bytes). The first {game_text.length(fits)} characters "
+                f"fit: \"{fits}\".")
     if not name.strip(" "):
         return "A name cannot be only spaces."
     if name == EMPTY_SLOT_TEXT:
@@ -165,7 +197,7 @@ def menu_name(data: bytes, slot: int) -> bytes | None:
 
 
 def shown(raw: bytes | None) -> str:
-    return "(no name)" if not raw else raw.decode("cp1252", "replace")
+    return "(no name)" if not raw else game_text.decode(raw)
 
 
 @dataclass
@@ -217,11 +249,10 @@ def read_slots(folder: Path) -> list[SlotInfo]:
 
 
 def _with_name(data: bytes, offset: int, width: int, name: str) -> bytes:
-    """``data`` with the field at ``offset`` holding ``name``, NUL-padded."""
-    encoded = name.encode("ascii")
-    if len(encoded) + 1 > width:
+    """``data`` with the field at ``offset`` holding ``name`` in its stored form (vf2_game_text), NUL-padded."""
+    if name_size(name) + 1 > width:
         raise RenameError(f"{name!r} does not fit a {width}-byte name field.")
-    return data[:offset] + encoded + b"\0" * (width - len(encoded)) + data[offset + width:]
+    return data[:offset] + game_text.field_bytes(name, width) + data[offset + width:]
 
 
 def _write_atomically(path: Path, data: bytes) -> None:
@@ -288,7 +319,7 @@ def plan_changes(folder: Path, slot: int, new_name: str) -> tuple[bytes, list[Fi
     offset = _name_offset(data)
     if old is None or offset is None:
         raise RenameError(f"{save.name} is not a Virtual Families 2 save the game can load.")
-    if old == new_name.encode("ascii"):
+    if old == game_text.encode(new_name):
         raise RenameError(f"Family slot {slot} is already called {new_name}.")
     settings = settings_path(folder)
     try:
@@ -364,13 +395,13 @@ def log_rename(folder: Path, slot: int, old: str, new: str, when: datetime) -> P
         return None
     number = 1
     for path in files:
-        text = path.read_bytes().decode("cp1252", errors="replace")
+        text = family_history.log_text(path.read_bytes())
         number = max([number] + [int(n) + 1 for n in _RENAMED.findall(text)])
     newest = files[-1]
     data = newest.read_bytes()
     prefix = b"" if not data or data.endswith(b"\n") else b"\r\n"
     with open(newest, "ab") as out:
-        out.write(prefix + history_record(old, new, when, number).encode("latin-1"))
+        out.write(prefix + family_history.log_bytes(history_record(old, new, when, number)))
     return newest
 
 
@@ -416,7 +447,7 @@ def rename_family(
         raise RenameError(f"The backup before renaming failed, so nothing was changed. {exc}") from exc
     _refuse_if_running(folder, controller)        # the backup took a moment
     done: list[FileChange] = []
-    target = new_name.encode("ascii")
+    target = game_text.encode(new_name)
     try:
         for change in changes:
             if change.path.read_bytes() != change.original:
