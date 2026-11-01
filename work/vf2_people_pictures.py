@@ -24,6 +24,15 @@ tests/test_picture_maker.py runs that code under emulation (tests/vf2_people_emu
   cells drawn smaller, growing every age unit.
 * Babies on the way: while a mother is expecting (CVillagerState+24h), CVillagerManager::DrawCarriedItems draws
   cell 3 of carrying.png once for each baby (CVillagerState+28h, 1-3) beside her.
+* Carried items (CVillagerManager::DrawCarriedItems, only in the house): what a family member carries is one
+  value (CVillager+1BB9Ch, ECarrying; -1 nothing, 3 the baby, which this draw skips). A value below 79 is cell
+  <value> of carrying.png drawn 10 left and 10 up of the carry place; 79 or more is cell <value - 79> of
+  collectables_small.png drawn at the carry place itself. The carry place is the babies' place: the villager's
+  place moved by (int)(zoom * -7) and (int)(zoom * -33), each times CVillager::Scale, then 10 lower in body
+  positions 2, 9, 17 and 18 (CVillager+1BB98h) and 20 lower in body position 23. Items are drawn at their own size
+  at every age, behind the family member when the frame faces NE, NW or N, else in front, after any babies.
+  src/vf2_carried_items.json lists which values the game's code ever carries (scripts/build_vf2_carried_items.py)
+  and CARRIED_ITEMS names every cell of both sheets, the unused ones too.
 * The patcher's expansion outfits (body values 50-53, the B97 GetOutfit hook) are drawn, in a patched game, from
   Images\\VillagerBodies\\<Sex>\\Body_<NN>\\<bodies|actions|sit>\\Frame<NN>.png and, on the Details screen, from
   Images\\VillagerDetailBodies\\<Sex>\\Body_<NN>\\Frame00.png, each where the stock cell would go
@@ -50,6 +59,7 @@ IMAGES = {
     21: ("bigheads", 12, 50, 2, 1),
     22: ("highrez_bodies_final2.png", 2, 50, 1, 1),
     478: ("carrying.png", 13, 7, 1, 1),
+    493: ("collectables_small.png", 6, 16, 1, 1),
     576: ("female_heads", 24, 50, 2, 1),
     577: ("female_bodies00.png", 32, 50, 1, 1),
     578: ("female_actions00.png", 15, 50, 1, 1),
@@ -242,11 +252,12 @@ def details_plan(person: Person, turn: int = 0, patched: bool = False, at: tuple
 
 
 def house_plan(person: Person, frame: int, turn: int, shadow: bool = True, patched: bool = False,
-               at: tuple = (0, 0)) -> list[Layer]:
+               at: tuple = (0, 0), carried: "CarriedItem | None" = None, position: int = 0) -> list[Layer]:
     """CVillagerManager::DrawVillager at the house's 100% zoom, the villager's place `at`: its shadow, the body
     (frame 0-55) with its "next" point on the feet (CVillager::FeetPos: the place plus 28 x 81 scaled), the head
-    (turn 0-11) on the neck, and an expecting mother's babies (DrawCarriedItems) behind her when the frame faces
-    NE, NW or N (GetDirection 0, 3 or 4), else in front."""
+    (turn 0-11) on the neck, and DrawCarriedItems' pictures -- an expecting mother's babies, then the item carried
+    (`carried`; body position `position` sets its height) -- behind them when the frame faces NE, NW or N
+    (GetDirection 0, 3 or 4), else in front."""
     px, py = at
     s, hs = body_scale(person.age), head_scale(person.age)
     fx, fy = px - int(pi.f32(s * -28.0)), py - int(pi.f32(s * -81.0))
@@ -255,12 +266,14 @@ def house_plan(person: Person, frame: int, turn: int, shadow: bool = True, patch
         layers.append(Layer("shadow", fx - int(pi.f32(s * 34.0)), fy - int(pi.f32(s * 32.0)), percent(s),
                             file=f"Images/{SHADOW}"))
     babies = []
+    bx = px - int(pi.f32(-7 * s))                     # DrawCarriedItems' place: (int)(zoom * -7) then * Scale
+    by = py - int(pi.f32(-33 * s)) + carry_drop(position)
     if person.babies > 0:
-        bx = px - int(pi.f32(-7 * s))                 # DrawCarriedItems' place: (int)(zoom * -7) then * Scale
-        by = py - int(pi.f32(-33 * s))
         spots = [(bx - 10, by - 10), (bx - 15, by - 5), (bx - 10, by - 1)]
         babies = [Layer("baby", x, y, 100, image=CARRYING, col=BABY_CELL % 13, row=BABY_CELL // 13)
                   for x, y in spots[:min(3, person.babies)]]
+    if carried is not None:
+        babies.append(carried_layer(carried, bx, by))
     direction = facing(frame)
     behind = direction in (0, 3, 4)
     if behind:
@@ -326,6 +339,278 @@ def tray_outfit_plan(sex: int, picture: int, in_tray: bool = True, at: tuple = (
     w, h = 91, 91                                   # the actions sheet's cell (1365 / 15, 4550 / 50)
     x, y = px - w // 2, py - h // 2 + 2
     return [Layer("outfit", x, y, 70 if in_tray else 100, image=image, col=14, row=picture, centre=True)]
+
+
+# ------------------------------------------------------------------ carried items
+
+CARRIED_FILE = Path(__file__).resolve().parent / "vf2_carried_items.json"
+COLLECTABLES = 493                          # CVillagerManager+28h: collectables_small.png, 6 x 16 cells
+COLLECTABLE_BASE = 0x4F                     # DrawCarriedItems: a value of 79 or more is a collectables cell
+CARRY_SHEETS = {CARRYING: "carrying.png", COLLECTABLES: "collectables_small.png"}
+POSITIONS = 24                              # EBodyPosition 0-23 (CAnimManager::GetAnimFrame's table)
+DROP_10 = (2, 9, 17, 18)                    # DrawCarriedItems: these body positions hold it 10 lower
+DROP_20 = (23,)                             # and this one 20 lower
+
+# The game's code names for the actions that carry things (CBehavior's handlers), in words.
+ACTION_WORDS = {
+    "AddDustingBehavior": "dusting", "AdmiringTools": "admiring the tools", "BBQing": "barbecuing",
+    "BangingDishes": "banging the dishes", "CelebratingBaby": "celebrating a new baby",
+    "CelebratingMarriage": "celebrating a wedding", "CheckOutStrangeSmell": "checking out a strange smell",
+    "CheckingFurnitureMagazine": "looking at a furniture magazine", "ChildrenPlayCook0": "children playing cook",
+    "ChildrenPlayCook1": "children playing cook", "ChildrenPlayCook2": "children playing cook",
+    "ChildrenPlayCook3": "children playing cook", "ChildrenPlayCook4": "children playing cook",
+    "ChildrenPlayWorkman0": "children playing workman", "ChildrenPlayWorkman1": "children playing workman",
+    "ChildrenPlayWorkman2": "children playing workman", "ChildrenPlayWorkman3": "children playing workman",
+    "CleanCobwebs": "cleaning cobwebs", "CleanDirtSmudge": "cleaning a dirt smudge",
+    "CleanFridge": "cleaning the fridge", "CleanKitchenCounter": "cleaning the kitchen counter",
+    "CleanOven": "cleaning the oven", "CleanUpMeal": "clearing up after a meal", "CleaningBBQ": "cleaning the barbecue",
+    "DoingLaundry": "doing the laundry", "DustingFurniture": "dusting the furniture",
+    "EatingABurger": "eating a burger", "FeedingBirds": "feeding the birds", "FeedingTheFish": "feeding the fish",
+    "FixingBRoomSink0": "fixing a bathroom sink", "FixingBRoomSink1": "fixing a bathroom sink",
+    "FixingKitchenSink": "fixing the kitchen sink", "FixingLaundryFire": "putting out a laundry fire",
+    "FixingNorthBRoomSink": "fixing a bathroom sink", "FixingNorthShower": "fixing a shower",
+    "FixingNorthToilet": "fixing a toilet", "FixingShower": "fixing a shower", "FixingStove": "putting out a stove fire",
+    "FixingToilet": "fixing a toilet", "GettingCinnamon": "getting the cinnamon",
+    "GoInHouse": "coming home with a rose", "GoInHouseKidBed": "coming home with a rose",
+    "GoInHouseSofa": "coming home with a rose", "HaveBreakfast": "having breakfast",
+    "HeatUpFood": "heating up food", "IroningShirt": "ironing a shirt", "KillingAnts": "killing ants",
+    "LookingForLaundry": "looking for laundry", "LookingForSnacks0": "looking for a snack",
+    "LookingForSnacks1": "looking for a snack", "LookingForSnacks2": "looking for a snack",
+    "LookingForSnacks3": "looking for a snack", "LookingForSnacks4": "looking for a snack",
+    "LookingPictures": "looking at pictures", "MakeCoffee": "making coffee",
+    "MakingAVanillaSoyDecafGrandeLatte": "making a fancy latte", "MeasuringHeight": "measuring a child's height",
+    "MendingButton": "mending a button", "OfficeCarreerWork": "working at an office career",
+    "OrganizingBedroomCloset": "organizing the closet", "OrganizingTools": "organizing the tools",
+    "PickCollectable": "picking up a collectible", "PickupSock": "picking up a sock",
+    "PlayingBoardGame": "playing a board game", "Polishing": "polishing", "PreparingAMeal": "preparing a meal",
+    "ProcessNearbyCollectables": "picking up something lying nearby", "PullingWeeds": "pulling weeds",
+    "PutAwaySockPile": "putting away the sock pile", "PuttingAwayGroceries": "putting away the groceries",
+    "PuttingAwayShirts": "putting away shirts", "PuttingAwaySocks": "putting away socks",
+    "ReadMagazine": "reading a magazine", "ReadingBook": "reading a book", "ReadingNewspaper": "reading the newspaper",
+    "RememberingTheDead": "remembering the dead", "ShreddingDocs": "shredding documents",
+    "SortingMail": "sorting the mail", "StudyRecipe": "studying a recipe", "Studying": "studying",
+    "StudyingInBed0": "studying in bed", "StudyingInBed1": "studying in bed", "StudyingInBed2": "studying in bed",
+    "StudyingInBedDispatch": "studying in bed", "StudyingInHammock": "studying in the hammock",
+    "StudyingInKitchen": "studying in the kitchen", "StudyingOnPatio": "studying on the patio",
+    "SweepingFloor": "sweeping the floor", "TakingOutKitchenTrash": "taking out the kitchen trash",
+    "TearingBook": "tearing up a book", "TeenHomework": "a teen doing homework", "TeenStudy": "a teen studying",
+    "TestBevmacModule": "a developers' test action left in the code", "ThrowAwayOldFood": "throwing away old food",
+    "ThrowAwayWrapper": "throwing away a candy wrapper", "ThrowingClothes": "throwing clothes about",
+    "ToySandbox": "playing in the sandbox", "ToySmallKitchenForKids": "playing with the toy kitchen",
+    "UseDryingRack": "using the drying rack", "UseIroningBoard": "using the ironing board",
+    "VacuumingLivingroom": "vacuuming the living room", "WateringFlowers": "watering the flowers",
+    "WateringRoses": "watering the roses", "WateringWindowBoxes": "watering the window boxes",
+    "WorkKitchen0": "working in the kitchen", "WorkWorkshop": "working in the workshop",
+    "WritingMemoirs": "writing memoirs",
+}
+
+# carrying.png, cell by cell (13 x 7, 56 x 56 pixels each): what the picture shows.
+CARRYING_NAMES = (
+    "Empty wicker basket", "Folded clothes", "Basket of laundry", "Baby", "Wooden plank", "Basket of wet laundry",
+    "Cinnamon jar", "Bunch of flowers", "Fish", "Crab", "Cake", "Wrench", "Pizza",
+    "Bowl of rainbow cereal", "Bowl of berry cereal", "Bowl of blue cereal", "Bowl of cereal squares",
+    "Bowl of rice", "Bowl of cereal rings", "Bowl of tomatoes", "Empty plate", "Bottle of champagne",
+    "Small saucepan", "Saucepan of vegetables", "Pot of stew", "Frying pan",
+    "Pots and pans", "Striped jug", "Frying pan of vegetables", "Cooking pot with lid", "Open cooking pot",
+    "Bag of pasta", "Chopping board", "Bottle of soda", "Bottle of cleaner", "Board game", "Fire extinguisher",
+    "Red rose", "Plunger",
+    "Green bucket", "Bucket of soapy water", "Trash bag", "Feather duster", "Basket of tools", "Watering can",
+    "Paint can and brush", "Hand vacuum", "Pliers", "Newspaper", "Magazine", "TV remote", "Spray bottle",
+    "Yellow notepad", "Sheet of paper", "Papers", "Stapler", "Hole punch", "Ruler", "Hammer", "Flashlight",
+    "Gift box", "Coffee mug", "Letters", "Cleaning rag", "Dirty dishes",
+    "Baguette", "Bag of chips", "Loaf of bread", "Carton of milk", "Wheel of cheese", "Yogurt", "Chicken",
+    "Steak", "Burger patties", "Cucumber", "Eggplant", "Lettuce", "Hamburger",
+    "Orange slices",
+)
+
+# collectables_small.png's families (6 x 16 cells, 40 x 40 pixels): first value, how many, name.
+COLLECTABLE_FAMILIES = (
+    (0x4F, 12, "Insect"), (0x5B, 12, "Leaf or nut"), (0x67, 12, "Raptor fossil"), (0x73, 6, "Sock"),
+    (0x79, 4, "Candy wrapper"), (0x7D, 4, "Weed"), (0x81, 2, "Cobweb"), (0x83, 3, "Dirt smudge"),
+    (0x86, 12, "Pterodactyl fossil"), (0x92, 12, "Bottle cap"), (0x9E, 12, "Holiday ornament"),
+)
+RARITY = ("common", "common", "common", "common", "uncommon", "uncommon", "uncommon", "uncommon", "rare", "rare",
+          "rare", "rare")
+COLLECTIONS = {0x4F, 0x5B, 0x67, 0x86, 0x92}            # the five stock collections (CCollectionScene)
+MESS_ACTIONS = {0x73: "PickupSock", 0x79: "ThrowAwayWrapper", 0x7D: "PullingWeeds", 0x83: "CleanDirtSmudge"}
+
+USED, UNUSED, NEVER = "carried in the game", "unused in the game", "never shown"
+
+# The values the patcher's own added actions carry (work/patch_mobile_furniture_pack.py: its PlanToCarry calls).
+PATCHER_CARRIES = {
+    0x0D: "preparing a picnic", 0x0E: "preparing a picnic", 0x0F: "preparing a picnic", 0x10: "preparing a picnic",
+    0x11: "preparing a picnic", 0x12: "preparing a picnic", 0x13: "preparing a picnic",
+    0x21: "getting some drinks for the patio", 0x2C: "watering the Christmas tree",
+    0x31: "reading a book on a lounger", 0x36: "studying on the lounger", 0x40: "taking out a picnic",
+}
+
+
+@dataclass(frozen=True)
+class CarriedItem:
+    """One cell of carrying.png or collectables_small.png. `value` is the ECarrying value that draws it (None: no
+    value can); `status` USED, UNUSED or NEVER and `reason` says why in words; `from_game` is False when the
+    game never places this cell in a family member's hands, so its place is the nearest real rule."""
+    key: str
+    sheet: int
+    cell: int
+    value: int | None
+    name: str
+    group: str
+    status: str
+    reason: str
+    from_game: bool = True
+
+    @property
+    def label(self) -> str:
+        mark = "" if self.status == USED else f" ({self.status})"
+        return f"{self.name}{mark}"
+
+
+def _actions(names) -> str:
+    words = []
+    for name in names:
+        word = ACTION_WORDS.get(name, name)
+        if word not in words:
+            words.append(word)
+    return ", ".join(words)
+
+
+_CARRIED: list | None = None
+
+
+def carried_data() -> dict:
+    return json.loads(CARRIED_FILE.read_text(encoding="utf-8"))
+
+
+def carried_items() -> list[CarriedItem]:
+    """Every cell of both sheets, in sheet order: carrying.png's 91, then collectables_small.png's 96."""
+    global _CARRIED
+    if _CARRIED is not None:
+        return _CARRIED
+    data = carried_data()
+    used = {int(v): names for v, names in data["values"].items() if int(v) >= 0}
+    out = []
+    for cell in range(13 * 7):
+        key, name = f"carrying:{cell}", CARRYING_NAMES[cell] if cell < len(CARRYING_NAMES) else f"Empty cell {cell}"
+        group = "Babies" if cell == BABY_CELL else ("Empty cells" if cell >= COLLECTABLE_BASE else "Household items")
+        if cell >= COLLECTABLE_BASE:
+            out.append(CarriedItem(key, CARRYING, cell, None, name, group, NEVER,
+                                   f"Never shown: cell {cell} of carrying.png is empty, and no carried value can "
+                                   "draw it (a value of 79 or more draws from the collectibles sheet instead). "
+                                   "Position not from the game: drawn where carrying.png items go.", False))
+        elif cell == BABY_CELL:
+            out.append(CarriedItem(key, CARRYING, cell, cell, name, group, NEVER,
+                                   "Never shown as a carried item: the carry draw skips value 3. The game draws this "
+                                   "baby only beside an expecting mother (Babies on the way), and the first baby goes "
+                                   "exactly here."))
+        elif cell in used:
+            extra = (f" The patcher's added actions carry it too: {PATCHER_CARRIES[cell]}."
+                     if cell in PATCHER_CARRIES else "")
+            out.append(CarriedItem(key, CARRYING, cell, cell, name, group, USED,
+                                   f"Carried in the game: {_actions(used[cell])}.{extra}"))
+        elif cell in PATCHER_CARRIES:
+            out.append(CarriedItem(key, CARRYING, cell, cell, name, group, UNUSED,
+                                   f"Unused in the original game: no action in its code carries value {cell}. The "
+                                   f"patcher's added actions carry it: {PATCHER_CARRIES[cell]}."))
+        else:
+            out.append(CarriedItem(key, CARRYING, cell, cell, name, group, UNUSED,
+                                   f"Unused in the game: no action in the game's code carries value {cell}; the "
+                                   f"picture is in carrying.png (cell {cell}), and the carry draw would put it "
+                                   "here."))
+    pickup = set(data["pickup"])
+    for cell in range(6 * 16):
+        value = COLLECTABLE_BASE + cell
+        key = f"collectable:{cell}"
+        family = next(((first, n, word) for first, n, word in COLLECTABLE_FAMILIES if first <= value < first + n),
+                      None)
+        if family is None:
+            blank = cell >= 92
+            name = f"Empty cell {cell}" if blank else "Green leaf (extra picture)"
+            out.append(CarriedItem(key, COLLECTABLES, cell, value, name, "Empty cells" if blank else "Collectibles",
+                                   UNUSED if not blank else NEVER,
+                                   (f"Never shown: cell {cell} of collectables_small.png is empty."
+                                    if blank else
+                                    f"Unused in the game: nothing in the game's code makes item {value}, so no "
+                                    "one picks it up; the carry draw would put it here.")))
+            continue
+        first, _n, word = family
+        index = value - first
+        if first in COLLECTIONS:
+            name = f"{word} {index + 1} ({RARITY[index]})"
+            extra = (" (the Rock Hound Certificate is needed to pick up fossils)" if first in (0x67, 0x86) else "")
+            out.append(CarriedItem(key, COLLECTABLES, cell, value, name, "Collectibles", USED,
+                                   f"Carried in the game: {_actions(['PickCollectable'])}{extra}, on the way to "
+                                   "the collection."))
+        elif first == 0x9E:
+            out.append(CarriedItem(key, COLLECTABLES, cell, value, f"{word} {index + 1} ({RARITY[index]})",
+                                   "Collectibles", NEVER,
+                                   "Never shown in the original game: nothing in it makes an ornament. With the "
+                                   "patcher's Holiday Ornaments a family member picks it up like any collectible "
+                                   f"({NOT_CHECKED_WHILE_IT_RUNS})."))
+        elif first == 0x81:
+            out.append(CarriedItem(key, COLLECTABLES, cell, value, f"{word} {index + 1}", "Mess", NEVER,
+                                   "Never shown: nothing in the game's code makes a cobweb, so the cleaning that "
+                                   "would carry one never finds one; the carry draw would put it here."))
+        else:
+            action = MESS_ACTIONS[first]
+            if action not in pickup:
+                raise ValueError(f"{action} no longer carries what it picks up")
+            out.append(CarriedItem(key, COLLECTABLES, cell, value, f"{word} {index + 1}", "Mess", USED,
+                                   f"Carried in the game: {_actions([action])}."))
+    _CARRIED = out
+    return out
+
+
+NOT_CHECKED_WHILE_IT_RUNS = "placed by the game's own carry draw; the patcher's ornament spawning is not checked " \
+                            "against the game while it runs"
+
+
+def carried_item(key: str | None) -> CarriedItem | None:
+    if not key:
+        return None
+    return next((item for item in carried_items() if item.key == key), None)
+
+
+def carry_drop(position: int) -> int:
+    """How much lower DrawCarriedItems draws for a body position (CVillager+1BB98h)."""
+    return 20 if position in DROP_20 else (10 if position in DROP_10 else 0)
+
+
+def body_positions() -> list:
+    """CAnimManager::GetAnimFrame for body positions 0-23: [frame, direction] (-2: any direction; frame -1:
+    nothing)."""
+    return links()["positions"]
+
+
+def positions_for_frame(frame: int) -> list[int]:
+    """The body positions whose waiting frame is `frame` (a walking frame 0-31 is the table's frame 0-7 turned to
+    a direction, DrawVillager adding direction * 8)."""
+    out = []
+    for position, (anim, direction) in enumerate(body_positions()):
+        if anim < 0:
+            continue
+        if anim < 8:
+            if frame < 32 and frame % 8 == anim and direction in (-2, frame // 8):
+                out.append(position)
+        elif anim == frame:
+            out.append(position)
+    return out
+
+
+def default_position(frame: int) -> int:
+    """The body position a frame is drawn in when nothing else is said: the first that waits in that frame, else
+    0 (the neutral position every plan starts from)."""
+    found = positions_for_frame(frame)
+    return found[0] if found else 0
+
+
+def carried_layer(item: CarriedItem, x: int, y: int) -> Layer:
+    """DrawCarriedItems' draw of the item at the carry place (x, y): a carrying.png cell 10 left and 10 up, a
+    collectables cell at the place itself; never scaled."""
+    cols = IMAGES[item.sheet][1]
+    if item.sheet == CARRYING:
+        return Layer("carried", x - 10, y - 10, 100, image=CARRYING, col=item.cell % cols, row=item.cell // cols)
+    return Layer("carried", x, y, 100, image=COLLECTABLES, col=item.cell % cols, row=item.cell // cols)
 
 
 # ------------------------------------------------------------------ the game's pictures

@@ -322,6 +322,19 @@ Changelog
   saves. Checked against the game's own drawing code run under emulation and
   pixel for pixel against the game's sheets; never tested in a running game.
 
+- Picture Maker, carried items (after B205): in both tabs a family member in
+  the house can carry any of the 187 carried-item pictures the game has (the
+  91 cells of carrying.png and the 96 of collectables_small.png): 151 the game
+  carries, 5 unused in the game and 31 never shown (the baby as a carried
+  value, the cobwebs, the Holiday ornaments in the original game, 16 empty
+  cells), each named and marked with the reason. Drawn as the game's
+  CVillagerManager::DrawCarriedItems draws them, for the chosen frame, body
+  position and age; the empty carrying.png cells no carried value can reach
+  are placed where carrying.png items go (position not from the game). A save
+  does not keep what anyone carries. Python only; nothing is written but the
+  PNGs the player saves. Checked against the game's own code under emulation
+  and pixel for pixel; never tested in a running game.
+
 - Fix Vanilla Game Bugs, startup crash (after B204; owner-approved 31 October
   2026): at every start the game asks LDW's server to log in
   (ldwsoftware.com/game_backend/login.php; later message.php and poll.php).

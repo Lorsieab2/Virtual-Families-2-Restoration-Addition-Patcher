@@ -3351,6 +3351,61 @@ Picture Maker (Tools tab, B205)
   Tree's frame round a portrait; the house is shown at its normal zoom.
 
 
+Picture Maker: carried items (after B205)
+-----------------------------------------
+
+- What it is: a "Carrying" choice in both tabs (with a "Body position"
+  choice), in the house only, as the game draws carried items only there.
+  All 187 carried-item pictures are offered: carrying.png (13 x 7 cells of
+  56 x 56) and collectables_small.png (6 x 16 cells of 40 x 40). Python only
+  (src/vf2_people_pictures.py, src/vf2_picture_maker.py,
+  src/vf2_carried_items.json, scripts/build_vf2_carried_items.py); no
+  executable or DLL changes.
+- How the game draws them (B200 desktop objects):
+  CVillagerManager::DrawCarriedItems(villager, place), called from
+  DrawVillager before the body when GetDirection is 0, 3 or 4 (NE, NW, N),
+  else after the head, never on water. The place is the villager's place
+  minus (int)(zoom * -7) and (int)(zoom * -33), each times CVillager::Scale;
+  body position (CVillager+1BB98h) 2, 9, 17 or 18 moves it 10 down, 23 moves
+  it 20 down. An expecting mother's babies (cell 3) come first. Then the
+  carried value (CVillager+1BB9Ch): -1 and 3 draw nothing; below 79, cell
+  <value> of carrying.png (CVillagerManager+24h, image 478) at the place
+  minus 10, 10; 79 or more, cell <value - 79> of collectables_small.png
+  (+28h, image 493) at the place. CSceneManager::Draw, alpha 1.0: never
+  scaled. The body position comes from CAnimManager::GetAnimFrame's 24-entry
+  table (CVillager::StartWaiting); the Picture Maker takes the first position
+  that waits in the chosen frame (else 0) or the one the player picks.
+- Which values the game carries: only CVillager::SetCarrying writes the
+  value (ForceCarrying has no caller); every item comes from a
+  CVillagerPlans::PlanToCarry step. tests/vf2_carry_scan.py reads all 301
+  PlanToCarry calls in the objects (constants, registers, GetRandom ranges,
+  flag choices, cmov pairs, CBehavior::RandomFoodCarryable's 19 values,
+  jump-table branches) with nothing left unresolved; the pickup actions carry
+  what lies on the floor. carrying.png values never carried: 0 (empty
+  basket), 33 (soda bottle; only the patcher's patio drinks carry it), 45
+  (paint can), 50 (TV remote); value 3 (the baby) is set only by the AI for
+  an expecting mother and skipped by the carry draw. carrying.png cells 79-90
+  are empty and unreachable. collectables_small.png: the 60 collectibles
+  (0x4F-0x72, 0x86-0x9D) and the socks, wrappers, weeds and dirt smudges are
+  carried by their pickup actions; the cobwebs (0x81, 0x82) are never made
+  (CCollectableItem's spawners make only 0x73-0x80 and 0x83-0x85; the spawn
+  areas are the five collections); the Holiday ornaments (0x9E-0xA9) only
+  with the patcher's Holiday Ornaments; cell 91 (a leaf) is never made;
+  cells 92-95 are empty. The patcher's own added actions carry 13-19, 33, 44,
+  49, 54 and 64 (work/patch_mobile_furniture_pack.py, checked by a test).
+- Evidence: tests/test_picture_maker.py runs DrawVillager with
+  DrawCarriedItems under unicorn for every value 0-174 in 10 cases (frames on
+  both sides, body positions 0, 2, 3, 7, 9, 16, 17, 18, 23, ages 0-1,300,
+  both sexes, with and without babies): 1,750 draws, all equal the Picture
+  Maker's; values 79-90 draw the collectibles sheet; six whole pictures equal
+  a Pillow composite of the game's sheets pixel for pixel; the carried-items
+  file equals a fresh scan; the body-position table equals GetAnimFrame's.
+- Not checked against the game: the patcher's ornament spawning (the
+  ornaments' carried draw is the game's own), and anything in a running game.
+  Position not from the game: carrying.png cells 79-90, drawn where
+  carrying.png items go. The game was never run.
+
+
 Startup crash: LDW server reply (Fix Vanilla Game Bugs, after B204)
 --------------------------------------------------------------------
 

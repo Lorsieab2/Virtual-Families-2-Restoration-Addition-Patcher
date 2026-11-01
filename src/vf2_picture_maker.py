@@ -9,6 +9,8 @@ The Fish and Plant Tycoon Fix Patcher's Picture Studio (src/picture_studio.py), 
   body frame and head turn, on the Details screen, on an event screen, in the Family Tree); one who has left home
   or died is drawn only in the Family Tree, as the game does.
 * "Make your own": any sex, age, head (hairstyle) and outfit, in any of those ways.
+* Both tabs: in the house, any item a family member can carry (every cell of carrying.png and
+  collectables_small.png, the ones the game never shows too, each labelled), in any body position.
 * PNGs: clear, cut to the drawn pixels with a small margin (or none), at the game's size, 2x or 4x (crisp) or any
   width and height (smooth).
 
@@ -75,10 +77,17 @@ def describe(person: pp.Person) -> str:
 NOT_CHECKED = "not checked against the game"
 
 
-def notes(view: str, person: pp.Person | None, patched: bool, tray: pp.TrayOutfit | None = None) -> list[str]:
+def notes(view: str, person: pp.Person | None, patched: bool, tray: pp.TrayOutfit | None = None,
+          carrying: str | None = None) -> list[str]:
     """What the picture does not show of the game's screen, and what has not been checked against the running
     game's own drawing (said in the window and in the README)."""
     out = []
+    item = pp.carried_item(carrying)
+    if item is not None:
+        if view == HOUSE:
+            out.append(f"Carrying: {item.name}. {item.reason}")
+        else:
+            out.append(f"Carrying {item.name}: not drawn here; the game draws carried items only in the house.")
     if view == TREE:
         out.append("The Family Tree's own frame round the portrait is not drawn.")
     if view == HOUSE:
@@ -143,22 +152,28 @@ def saved_items(folder: Path, slot: int) -> list[SavedItem]:
 
 def render_item(art: pp.GameArt, item: SavedItem, view: str, *, frame: int = DEFAULT_FRAME,
                 turn: int = DEFAULT_TURN, big_turn: int = 1, facing_you: bool = True, shadow: bool = True,
-                patched: bool | None = None) -> pi.Image:
+                patched: bool | None = None, carrying: str | None = None, position: int | None = None) -> pi.Image:
     """The picture of one saved item, in one of its views."""
     if view not in item.views:
         view = item.views[0]
     return pp.render(art, plan_for(item.person, view, frame=frame, turn=turn, big_turn=big_turn,
                                    facing_you=facing_you, shadow=shadow,
-                                   patched=art.patched if patched is None else patched, tray=item.tray))
+                                   patched=art.patched if patched is None else patched, tray=item.tray,
+                                   carrying=carrying, position=position))
 
 
 def plan_for(person: pp.Person | None, view: str, *, frame: int = DEFAULT_FRAME, turn: int = DEFAULT_TURN,
              big_turn: int = 1, facing_you: bool = True, shadow: bool = True, patched: bool = False,
-             tray: pp.TrayOutfit | None = None) -> list:
+             tray: pp.TrayOutfit | None = None, carrying: str | None = None, position: int | None = None) -> list:
+    """The layers of one picture. `carrying` is a carried item's key (pp.carried_items) and `position` the body
+    position (None: the one the game waits in for `frame`); both matter only in the house, the one place the game
+    draws carried items."""
     if view == TRAY:
         return pp.tray_outfit_plan(tray.sex, tray.picture)
     if view == HOUSE:
-        return pp.house_plan(person, frame, turn, shadow=shadow, patched=patched)
+        where = pp.default_position(frame) if position is None else int(position)
+        return pp.house_plan(person, frame, turn, shadow=shadow, patched=patched,
+                             carried=pp.carried_item(carrying), position=where)
     if view == DETAILS:
         return pp.details_plan(person, big_turn, patched=patched)
     if view == EVENT:
@@ -205,8 +220,30 @@ def custom_fields(patched: bool) -> list[Field]:
         Field("facing", "Head (event screen)", (Choice(True, "Facing you"), Choice(False, "Turned")), True),
         Field("babies", "Babies on the way (in the house)",
               tuple(Choice(n, "None" if n == 0 else str(n)) for n in range(4)), 0),
+        Field("carrying", "Carrying (in the house)", carrying_choices(), None),
+        Field("position", "Body position (in the house)", position_choices(), None),
         Field("shadow", "Shadow (in the house)", (Choice(True, "Shown"), Choice(False, "Not shown")), True),
     ]
+
+
+def carrying_choices() -> tuple:
+    """Nothing, then every carried-item picture the game has, in sheet order, each named with its group; the ones
+    the game never puts in a family member's hands say so."""
+    return (Choice(None, "Nothing"),) + tuple(Choice(item.key, f"{item.group}: {item.label}")
+                                              for item in pp.carried_items())
+
+
+def position_choices() -> tuple:
+    """"As the game waits in this frame", then body positions 0-23 with the frame each waits in and how much lower
+    a carried item goes."""
+    out = [Choice(None, "As the game waits in this frame")]
+    for position, (frame, _direction) in enumerate(pp.body_positions()):
+        where = pp.FRAME_NAMES[frame] if 0 <= frame < len(pp.FRAME_NAMES) else "no frame of its own"
+        if 0 <= frame < 8:
+            where = f"walking frame {frame + 1}, any direction"
+        drop = pp.carry_drop(position)
+        out.append(Choice(position, f"Position {position}: {where}" + (f"; item {drop} lower" if drop else "")))
+    return tuple(out)
 
 
 def person_from_spec(spec: dict) -> pp.Person:
@@ -220,14 +257,17 @@ def render_custom(art: pp.GameArt, spec: dict, patched: bool | None = None) -> p
     return pp.render(art, plan_for(person, spec.get("view", HOUSE), frame=int(spec.get("frame", DEFAULT_FRAME)),
                                    turn=int(spec.get("turn", DEFAULT_TURN)), big_turn=int(spec.get("big_turn", 1)),
                                    facing_you=bool(spec.get("facing", True)), shadow=bool(spec.get("shadow", True)),
-                                   patched=art.patched if patched is None else patched))
+                                   patched=art.patched if patched is None else patched,
+                                   carrying=spec.get("carrying"), position=spec.get("position")))
 
 
 def custom_name(spec: dict) -> str:
     person = person_from_spec(spec)
     view = VIEW_NAMES.get(spec.get("view", HOUSE), "")
+    item = pp.carried_item(spec.get("carrying")) if spec.get("view", HOUSE) == HOUSE else None
+    holding = f", carrying {item.name}" if item is not None else ""
     return (f"{pp.SEXES[person.sex]}, {person.age // pp.YEAR} years, head {person.head:02d}, outfit "
-            f"{person.body:02d} - {view}")
+            f"{person.body:02d}{holding} - {view}")
 
 
 # ------------------------------------------------------------------ export choices
@@ -300,7 +340,9 @@ class PictureMaker:
         self.slots: list[int] = []
         self.shown: dict[str, pi.Image] = {}
         self.custom_boxes: dict[str, dict] = {}
-        self.quiet = False                             # tests: messages are kept, not shown
+        self.carrying_options = carrying_choices()
+        self.position_options = position_choices()
+        self.quiet = False                            # tests: messages are kept, not shown
         self.last_message = ""
         self._build()
         self.game_var.trace_add("write", lambda *_a: self._game_changed())
@@ -410,10 +452,13 @@ class PictureMaker:
                 ("turn", "Head turn:", pp.HEAD_NAMES[:12]),
                 ("big_turn", "Big head turn:", pp.HEAD_NAMES[12:]),
                 ("facing", "Event head:", ["Facing you", "Turned"]),
-                ("shadow", "Shadow:", ["Shown", "Not shown"]))
+                ("shadow", "Shadow:", ["Shown", "Not shown"]),
+                ("carrying", "Carrying:", [c.label for c in self.carrying_options]),
+                ("position", "Body position:", [c.label for c in self.position_options]))
         for row, (key, label, values) in enumerate(rows):
             ttk.Label(ways, text=label).grid(row=row, column=0, sticky="w", pady=2)
-            box = ttk.Combobox(ways, state="readonly", width=30, values=values)
+            box = ttk.Combobox(ways, state="readonly", width=44 if key in ("carrying", "position") else 30,
+                               values=values)
             box.grid(row=row, column=1, sticky="w", padx=(4, 0), pady=2)
             box.bind("<<ComboboxSelected>>", lambda _e: self._show_saved())
             self.save_controls[key] = box
@@ -422,6 +467,11 @@ class PictureMaker:
         self.save_controls["big_turn"].current(1)
         self.save_controls["facing"].current(0)
         self.save_controls["shadow"].current(0)
+        self.save_controls["carrying"].current(0)
+        self.save_controls["position"].current(0)
+        ttk.Label(ways, text="A save does not keep what anyone is carrying: pick it here. The game draws carried "
+                             "items only in the house.", wraplength=320, justify="left", foreground="#555555").grid(
+            row=len(rows), column=0, columnspan=2, sticky="w", pady=(4, 0))
         buttons = ttk.Frame(pane, padding=(0, 6))
         buttons.pack(fill="x")
         ttk.Button(buttons, text="Save PNG...", command=lambda: self.save_png("save")).pack(anchor="w")
@@ -607,7 +657,9 @@ class PictureMaker:
         c = self.save_controls
         return {"frame": max(0, c["frame"].current()), "turn": max(0, c["turn"].current()),
                 "big_turn": max(0, c["big_turn"].current()), "facing_you": c["facing"].current() != 1,
-                "shadow": c["shadow"].current() != 1}
+                "shadow": c["shadow"].current() != 1,
+                "carrying": self.carrying_options[max(0, c["carrying"].current())].key,
+                "position": self.position_options[max(0, c["position"].current())].key}
 
     def render_saved(self, item: SavedItem, view: str | None = None) -> pi.Image:
         return render_item(self.art, item, view or self.saved_view(item), patched=self.look_patched(),
@@ -627,7 +679,8 @@ class PictureMaker:
             self._show(self.save_preview, None, f"{item.label}: this cannot be drawn ({exc}).")
             return
         self.shown["save"] = image
-        said = notes(self.saved_view(item), item.person, self.look_patched(), item.tray)
+        said = notes(self.saved_view(item), item.person, self.look_patched(), item.tray,
+                     self.saved_options()["carrying"] if item.person is not None else None)
         self._show(self.save_preview, image, " ".join([f"{item.label}: {item.detail}"] + said))
 
     def _show(self, preview: dict, image: pi.Image | None, text: str) -> None:
@@ -658,7 +711,7 @@ class PictureMaker:
         for row, fld in enumerate(custom_fields(self.look_patched())):
             ttk.Label(frame, text=f"{fld.label}:").grid(row=row, column=0, sticky="w", pady=3)
             labels = [o.label + ("  (patcher)" if o.patcher else "") for o in fld.options]
-            box = ttk.Combobox(frame, values=labels, state="readonly", width=40)
+            box = ttk.Combobox(frame, values=labels, state="readonly", width=52)
             box.grid(row=row, column=1, sticky="w", padx=(6, 0), pady=3)
             keep = picks.get(fld.key)
             if keep in labels:
@@ -670,7 +723,10 @@ class PictureMaker:
             self.custom_boxes[fld.key] = {"box": box, "field": fld}
         ttk.Label(frame, text="Heads 00-49 are the game's 50 faces and hairstyles of each sex (the patcher's store "
                               "sells all 100 as hairstyles). From 45 years a head is drawn old, and below 14 years "
-                              "the body and head are drawn smaller every age unit, as the game does.",
+                              "the body and head are drawn smaller every age unit, as the game does. Every "
+                              "carried-item picture the game has can be carried, the ones the game never puts in "
+                              "a family member's hands too (they say so); the game draws carried items only in the "
+                              "house, at their own size, held lower in some sitting and lying positions.",
                   wraplength=520, justify="left", foreground="#555555").grid(
             row=len(self.custom_boxes), column=0, columnspan=2, sticky="w", pady=(10, 0))
         self._show_custom()
@@ -699,7 +755,7 @@ class PictureMaker:
             return
         self.shown["custom"] = image
         person = person_from_spec(spec)
-        said = notes(spec.get("view", HOUSE), person, self.look_patched())
+        said = notes(spec.get("view", HOUSE), person, self.look_patched(), carrying=spec.get("carrying"))
         self._show(self.custom_preview, image, " ".join([describe(person)] + said))
 
     # ---- saving
@@ -711,7 +767,9 @@ class PictureMaker:
             item = self.selected_item()
             if item is None:
                 return "picture"
-            return pi.safe_file_name(f"{item.label} - {VIEW_NAMES[self.saved_view(item)]}")
+            view = self.saved_view(item)
+            held = pp.carried_item(self.saved_options()["carrying"]) if view == HOUSE else None
+            return pi.safe_file_name(f"{item.label}{f' carrying {held.name}' if held else ''} - {VIEW_NAMES[view]}")
         return pi.safe_file_name(custom_name(self.custom_spec()))
 
     def save_png(self, which: str, path: str | None = None) -> Path | None:
