@@ -311,16 +311,18 @@ checked against `manifest.json`, the release notes and the owner's confirmed
 play reports; superseded claims are marked rather than deleted.*
 
 The GUI reads its checkboxes from the shipped manifest, so the exact list follows
-the release you downloaded. The B205 bundle offers 41 settings, the same 41 as the final B204
-rebuild: the 39 of the first B204 bundles plus **All 36 Flea Market goods** and **R Refreshes the Store**
-(both on by default). B205's two website fixes are part of Fix Vanilla Game Bugs, not new settings.
+the release you downloaded. The next bundle offers 43 settings: B205's 41 plus two new ones.
 
 That number is not simply the count of settings the patcher defines, which is
-42. The settings list drops any optional setting that has no packaged source
+44. The settings list drops any optional setting that has no packaged source
 assets -- in B201, as in B180, the two named just below -- and the export adds
 one setting of its own, `core_assets`, which copies the support files and
-generated assets that are not tied to a single feature. So 42 defined, less 2
-without packaged assets, plus 1 generated, is the 41 the GUI shows. (The first
+generated assets that are not tied to a single feature. So 44 defined, less 2
+without packaged assets, plus 1 generated, is the 43 the GUI shows. (B205 and
+the final B204 rebuild: 42 - 2 + 1 = 41, the 39 of the first B204 bundles plus **All 36 Flea Market
+goods** and **R Refreshes the Store**; the next bundle adds **Free and Guaranteed Cheats** and **All
+outfits and hairstyles always for sale**, both off by default. B205's two website fixes are part of Fix
+Vanilla Game Bugs, not new settings. The first
 B204 bundles: 40 - 2 + 1 = 39. Before
 the Family History log it was 39 - 2 + 1: B202's and B203's bundles offered 38 settings;
 before Up to 28 Children existed the same sum was 38 - 2 + 1: B201's bundle offered
