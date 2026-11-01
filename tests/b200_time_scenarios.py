@@ -51,6 +51,7 @@ class World:
         self.e = Emu(exe, dll, delta)
         self.delta = delta
         self.exe_path = str(exe)
+        self.dll_path = str(dll)
         self.model, self.sites, self.pin_locs = proved(self.exe_path)
         if native_scan:
             self._native_scan()
@@ -233,6 +234,49 @@ class World:
         r = self.e.call(self.e.dll_export("B200Time_TestTime"), (op, arg))
         return struct.unpack("<i", struct.pack("<I", r))[0]
 
+    # ------------------------------------------------------------------ money and the store's Time Warp row
+    def money(self) -> float:
+        """CMoney's balance (the double at its first field), as the game keeps it."""
+        return struct.unpack("<d", self.e.read(self.s("MONEY"), 8))[0]
+
+    def set_money(self, v: float):
+        self.e.write(self.s("MONEY"), struct.pack("<d", v))
+
+    def time_warp_row_price(self) -> int:
+        """Live address of the price field of the store's Time Warp itemInfo row (id 112h, owned flag -1,
+        1 use, price), found in THIS executable's mapped image (each variant links it elsewhere)."""
+        want = struct.pack("<IiI", 0x112, -1, 1)
+        hits = []
+        for sec in self.e.exe.sections:
+            if sec.Characteristics & 0x20000000:
+                continue
+            base = self.e.base + sec.VirtualAddress
+            data = self.e.read(base, min(sec.Misc_VirtualSize, sec.SizeOfRawData))
+            j = data.find(want)
+            while j >= 0:
+                if j % 4 == 0:
+                    hits.append(base + j + 12)
+                j = data.find(want, j + 1)
+        assert len(hits) == 1, f"the Time Warp's itemInfo row found {len(hits)} times"
+        return hits[0]
+
+    def template_texts(self, tmpl: int) -> str:
+        """A dialog template read as UTF-16 (every string in it starts on a WORD boundary)."""
+        return self.e.read(tmpl, 0x1000).decode("utf-16-le", "replace")
+
+    def messages(self):
+        return [c for c in self.e.calls if c[0] == "MessageBoxW"]
+
+    def villager_bytes(self) -> bytes:
+        """Every villager record of the manager, byte for byte."""
+        return self.e.read(self.villager_base(0), 30 * 0x1CC0C)
+
+    def with_free_section(self, byte):
+        """A fresh World on a copy of this executable that carries a 1-byte .vf2free section holding `byte`
+        (the Free and Guaranteed Cheats contract); None = the executable as built (no such section)."""
+        exe = self.exe_path if byte is None else free_section_copy(self.exe_path, byte)
+        return World(exe, self.dll_path, self.delta, install=True)
+
     # ------------------------------------------------------------------ villagers
     def villager_base(self, k):
         return self.s("VILLAGER_MANAGER") + 0x1CC70 + k * 0x1CC0C
@@ -326,6 +370,59 @@ class World:
             UC_X86_REG_EBP: frame, UC_X86_REG_ESP: frame - 0x24,
         }, stack)
         return frame
+
+
+# ====================================================================== the .vf2free contract, on a copy
+_FREE_COPIES = {}
+
+
+def add_section(data: bytes, name: bytes, payload: bytes, characteristics: int) -> bytes:
+    """`data` (a PE file) with one more section at the end of the image. When the headers have no room for
+    one more section header, every section's file data moves down by one file alignment (the image, its
+    addresses and its relocations are unchanged: only file offsets move)."""
+    import pefile
+    pe = pefile.PE(data=data)
+    fa, sa = pe.OPTIONAL_HEADER.FileAlignment, pe.OPTIONAL_HEADER.SectionAlignment
+    align = lambda v, a: (v + a - 1) // a * a  # noqa: E731
+    out = bytearray(data)
+    last = pe.sections[-1]
+    header_at = last.get_file_offset() + 40
+    headers = pe.OPTIONAL_HEADER.SizeOfHeaders
+    shift = 0
+    if header_at + 40 > headers:
+        shift = align(header_at + 40 - headers, fa)
+        assert headers + shift <= min(s.VirtualAddress for s in pe.sections), "the headers cannot grow"
+        assert not pe.OPTIONAL_HEADER.DATA_DIRECTORY[4].Size, "a signed file"
+        out[headers:headers] = b"\0" * shift
+        struct.pack_into("<I", out, pe.OPTIONAL_HEADER.get_file_offset() + 60, headers + shift)
+        for s in pe.sections:
+            if s.PointerToRawData:
+                struct.pack_into("<I", out, s.get_file_offset() + 20, s.PointerToRawData + shift)
+        for d in getattr(pe, "DIRECTORY_ENTRY_DEBUG", []):
+            if d.struct.PointerToRawData:
+                struct.pack_into("<I", out, d.struct.get_file_offset() + shift + 24, d.struct.PointerToRawData + shift)
+    va = align(last.VirtualAddress + max(last.Misc_VirtualSize, last.SizeOfRawData), sa)
+    raw_at = align(len(out), fa)
+    raw = payload + b"\0" * (align(len(payload), fa) - len(payload))
+    out += b"\0" * (raw_at - len(out)) + raw
+    struct.pack_into("<8sIIIIIIHHI", out, header_at, name.ljust(8, b"\0"), len(payload), va, len(raw), raw_at,
+                     0, 0, 0, 0, characteristics)
+    struct.pack_into("<H", out, pe.FILE_HEADER.get_file_offset() + 2, pe.FILE_HEADER.NumberOfSections + 1)
+    struct.pack_into("<I", out, pe.OPTIONAL_HEADER.get_file_offset() + 56, align(va + len(payload), sa))
+    return bytes(out)
+
+
+def free_section_copy(exe_path, byte: int) -> str:
+    """A copy of the executable with the patcher's .vf2free section (initialised data, read/write, 1 byte)."""
+    import tempfile
+    key = (str(exe_path), byte)
+    if key not in _FREE_COPIES:
+        data = add_section(Path(exe_path).read_bytes(), b".vf2free", bytes([byte]), 0xC0000040)
+        folder = Path(tempfile.mkdtemp(prefix="vf2free"))
+        path = folder / Path(exe_path).name
+        path.write_bytes(data)
+        _FREE_COPIES[key] = str(path)
+    return _FREE_COPIES[key]
 
 
 # ====================================================================== scenarios
@@ -639,20 +736,122 @@ def scenario_warp_button(w: World):
         w.set_villager(k, active=0)
     for k in (0, 1, 2):
         w.set_villager(k)
+    w.set_money(10_000.0)
     w.open_time_dialog()
     w.e.messagebox_answer = 7      # IDNO
     assert w.press(ID_WARP) == "Running. Speed: normal."
     assert w.test_time(5) == 0
+    assert w.money() == 10_000.0, "No pays nothing"
     w.e.messagebox_answer = 6      # IDYES
     assert w.press(ID_WARP) == "Running. Speed: normal. A time warp is under way."
     assert w.test_time(5) == 3
-    assert any("Everyone at home ages at once" in str(c) for c in w.e.calls if c[0] == "MessageBoxW")
+    assert any("Everyone at home ages at once" in str(c) for c in w.messages())
     w.run_timeflow()
     assert [w.age(k) for k in (0, 1, 2)] == [162, 162, 162]       # 100 + 2 native ticks + 60 (3 years)
     assert w.press(ID_NORMAL) == "Running. Speed: normal."          # the note goes once nobody is pending
     # the dialog closes on Close / Escape / the X button
     for msg, wp in ((WM_COMMAND, 1), (WM_COMMAND, 2), (0x10, 0)):
         assert w.dlg(msg, wp, 0) == 1
+
+
+def _three_at_home(w: World):
+    for k in range(30):
+        w.set_villager(k, active=0)
+    for k in (0, 1, 2):
+        w.set_villager(k)
+
+
+def scenario_warp_costs_the_store_price(w: World):
+    """Yes pays exactly the store's Time Warp price, through the REAL GetPrice, money call and CMoney::Adjust,
+    and the warp happens; the price is read from the game at the click, not built in."""
+    _three_at_home(w)
+    assert w.test_time(7) == 0, "an executable without .vf2free is not free"
+    assert w.test_time(8) == 2000, "the store's own Time Warp price"
+    w.set_money(5_000.5)
+    tmpl, _owner = w.open_time_dialog()
+    assert "Time Warp: +3 years ($2,000)" in w.template_texts(tmpl)
+    w.e.messagebox_answer = 6
+    assert w.press(ID_WARP) == "Running. Speed: normal. A time warp is under way."
+    assert w.money() == 3_000.5, w.money()
+    asked = w.messages()[-1]
+    assert "It costs $2,000, the store's Time Warp price. Continue?" in asked[1] and asked[2] == "Time Warp", asked
+    assert w.test_time(5) == 3
+    w.run_timeflow()
+    assert [w.age(k) for k in (0, 1, 2)] == [162, 162, 162]
+    assert w.money() == 3_000.5, "the warp's own ticks cost nothing more"
+    # the store's price changes (as a patched store row could): the button follows it at once
+    row = w.time_warp_row_price()
+    w.e.w32(row, 2_500)
+    assert w.test_time(8) == 2_500
+    for k in (0, 1, 2):
+        w.set_villager(k)
+    assert w.press(ID_WARP) == "Running. Speed: normal. A time warp is under way."
+    assert w.money() == 500.5 and "It costs $2,500," in w.messages()[-1][1]
+    # exactly enough is enough, and leaves 0
+    w.e.w32(row, 2_000)
+    w.set_money(2_000.0)
+    for k in (0, 1, 2):
+        w.set_villager(k)
+    assert w.press(ID_WARP) == "Running. Speed: normal. A time warp is under way."
+    assert w.money() == 0.0
+    # nobody at home who can age: nothing is queued and nothing is paid
+    for k in range(30):
+        w.set_villager(k, active=0)
+    w.set_money(9_000.0)
+    w.press(ID_WARP)
+    assert w.test_time(5) == 0 and w.money() == 9_000.0
+
+
+def scenario_warp_refused_when_short(w: World):
+    """Short of the price: told so, never asked, and nothing changes (money, queue, every villager byte)."""
+    _three_at_home(w)
+    w.open_time_dialog()
+    for money in (1_999.75, 0.0, 1.0):
+        w.set_money(money)
+        before = w.villager_bytes()
+        shown = len(w.messages())
+        w.e.messagebox_answer = 6
+        assert w.press(ID_WARP) == "Running. Speed: normal."
+        assert w.money() == money, (money, w.money())
+        assert w.test_time(5) == 0
+        assert w.villager_bytes() == before
+        new = w.messages()[shown:]
+        assert len(new) == 1, new
+        assert new[0][1] == ("The Time Warp costs $2,000, the same as the store's Time Warp. Your family has $%s, "
+                             "which is not enough. Nothing was changed." % f"{int(money):,}"), new[0]
+    w.run_timeflow()
+    assert [w.age(k) for k in (0, 1, 2)] == [102, 102, 102], "only the ordinary ticks"
+    assert w.money() == 1.0
+
+
+def scenario_warp_free_with_the_cheat(w: World):
+    """.vf2free = 1 (Free and Guaranteed Cheats): free, even with no money. Any other byte, or no section: charged."""
+    free = w.with_free_section(1)
+    _three_at_home(free)
+    assert free.test_time(7) == 1
+    free.set_money(10.0)
+    tmpl, _owner = free.open_time_dialog()
+    assert "Time Warp: +3 years (free)" in free.template_texts(tmpl)
+    free.e.messagebox_answer = 6
+    assert free.press(ID_WARP) == "Running. Speed: normal. A time warp is under way."
+    assert free.money() == 10.0
+    assert "It is free: Free and Guaranteed Cheats is on. Continue?" in free.messages()[-1][1]
+    assert free.test_time(5) == 3
+    free.run_timeflow()
+    assert [free.age(k) for k in (0, 1, 2)] == [162, 162, 162]
+    for byte in (0, 2):
+        paid = w.with_free_section(byte)
+        _three_at_home(paid)
+        assert paid.test_time(7) == 0, byte
+        paid.set_money(2_100.0)
+        paid.open_time_dialog()
+        paid.e.messagebox_answer = 6
+        assert paid.press(ID_WARP) == "Running. Speed: normal. A time warp is under way."
+        assert paid.money() == 100.0, (byte, paid.money())
+        paid.run_timeflow()
+        assert paid.test_time(5) == 0
+        assert paid.press(ID_WARP) == "Running. Speed: normal.", "$100 is not enough"
+        assert paid.money() == 100.0 and paid.test_time(5) == 0, byte
 
 
 def scenario_pins_are_enforced(w: World):
@@ -765,6 +964,9 @@ ALL = [
     scenario_time_warp,
     scenario_time_warp_skips_the_unlucky,
     scenario_warp_button,
+    scenario_warp_costs_the_store_price,
+    scenario_warp_refused_when_short,
+    scenario_warp_free_with_the_cheat,
     scenario_save_normalises_the_speed,
     scenario_load_normalises_the_speed,
 ]

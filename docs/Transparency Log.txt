@@ -3455,3 +3455,37 @@ Server error text overflows a reply handler's buffer (Fix Vanilla Game Bugs, B20
   import) is modelled by its documented options. With VF2_SERVER_REPLY_EXE
   each linked executable must hold six stubs, each reached by exactly one
   call. Static and emulated evidence only; the game was never run.
+
+Time Warp costs the store's price (Time Controls, after B205)
+-------------------------------------------------------------
+
+- Owner decision 2026-11-01: the Time Controls window's "Time Warp: +3 years"
+  button costs the same as the store's own Time Warp (Special Upgrades item
+  0x112, $2,000). Pause, Resume and the speeds are unchanged; Time Controls
+  stays on by default.
+- runtime/native/b200time/b200time_time.inc TimeWarpClicked: the price is
+  read at the click from CInventoryManager::GetPrice for item 0x112 on the
+  inventory manager, the call the store's CalcPrice makes; the DLL holds no
+  price and no game address (five new pins in runtime/b200_time_sites.py:
+  CalcPrice's GetPrice call, HandlePurchaseItem's payment, the store's money
+  wrapper, CMoney::Adjust and HandleUpgrade's Time Warp case; the generator
+  proves the HandleUpgrade jump table sends 0x112 to the Time Warp case and
+  that its itemInfo row is priced 2,000). A balance (CMoney's double) below
+  the price: a message box says so and nothing changes. Otherwise the player
+  is asked; on Yes everyone at home and alive is queued as before and the
+  price is paid through the store's money call (negated price, false), as
+  HandlePurchaseItem pays. Nothing is paid when nobody at home can age.
+- Free and Guaranteed Cheats: the DLL looks for a section named ".vf2free" in
+  the running executable's own section table (GetModuleHandle(NULL)); with a
+  size of 1 or more and its byte 1 the warp is free. No section (every build
+  up to B205) or any other byte: charged.
+- Evidence: tests/b200_time_scenarios.py, under unicorn on the B200 and B205
+  core executables at the link address and relocated, with the real GetPrice,
+  money wrapper and CMoney::Adjust: Yes pays exactly the store price and the
+  villagers age 3 years; a changed store row price is followed; exactly
+  enough leaves $0; short of money nothing changes (money, the queue and
+  every villager byte); a copy of the executable with a .vf2free section
+  holding 1 is free, holding 0 or 2 is charged. Source mutations
+  (tests/test_b200_time_controls.py) must each fail a scenario. All 32 B200
+  and 32 B205 matrix executables resolve every pin. Not tested in a running
+  game.

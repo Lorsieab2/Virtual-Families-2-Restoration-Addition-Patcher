@@ -43,6 +43,12 @@
 //      remainder uses the NATIVE ticks (saved in [ebp-14h] before the call), so
 //      it is untouched. No age is written directly, so leaving home at 19 and
 //      the oldest-age record still run.
+//   6. Time Warp costs what the store's own Time Warp costs (owner decision
+//      2026-11-01): the price is read at the click from the game's
+//      CInventoryManager::GetPrice for the store's Time Warp item, and paid
+//      through the store's own money call. A family that cannot pay is told so
+//      and nothing changes. With the patcher's Free and Guaranteed Cheats ticked
+//      (the executable's own ".vf2free" byte is 1) the warp stays free.
 
 #define WIN32_LEAN_AND_MEAN
 // The dialog uses modern (comctl32 v6) controls through the manifest dependency
@@ -414,7 +420,8 @@ extern "C" __declspec(dllexport) void __cdecl B200Time_TestSites(unsigned *out) 
     for (unsigned i = 0; i < B200_SITE_COUNT; ++i) out[i] = Sites[i];
 }
 // The state machine without the dialog: op 1 pause, 2 resume, 3 speed(arg),
-// 4 start a warp of arg ticks, 5 warp pending villager count, 6 speed field.
+// 4 start a warp of arg ticks, 5 warp pending villager count, 6 speed field,
+// 7 Free and Guaranteed Cheats (1 = free), 8 the store's Time Warp price.
 extern "C" __declspec(dllexport) int __cdecl B200Time_TestTime(int op, int arg) {
     switch (op) {
     case 1: PauseGame(); return 0;
@@ -428,6 +435,8 @@ extern "C" __declspec(dllexport) int __cdecl B200Time_TestTime(int op, int arg) 
         return n;
     }
     case 6: return SpeedField() ? *SpeedField() : -1;
+    case 7: return FreeAndGuaranteedCheats() ? 1 : 0;
+    case 8: return TimeWarpPrice();
     }
     return -1;
 }

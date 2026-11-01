@@ -347,5 +347,18 @@ Changelog
   is written to disk. Checked under emulation; never tested in a running
   game.
 
+- Time Controls, Time Warp price (after B205; owner decision 1 November
+  2026): the Time Warp button (+3 years) in the Time Controls window now costs
+  the same as the store's own Time Warp. The Time Controls DLL asks the game
+  for the store's price of its Time Warp item when you click it (the same
+  function the store uses, so it is $2,000 unless the store's price changes)
+  and pays it the way a store purchase pays. A family with less money is told
+  so and nothing changes: no money, no ageing. Nothing is paid when nobody at
+  home can age. With Free and Guaranteed Cheats ticked (the executable's own
+  1-byte .vf2free section holds 1) it stays free; an executable without that
+  section, as every build up to B205, charges. Pause and the speeds are
+  unchanged. The DLL still holds no game address; checked under emulation
+  with the game's own price and money code; never tested in a running game.
+
 Have fun! -Lorsieab2 :)
 
