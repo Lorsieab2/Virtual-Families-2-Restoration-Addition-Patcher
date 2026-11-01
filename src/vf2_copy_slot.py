@@ -175,6 +175,41 @@ def rekeyed(data: bytes, save: bytes) -> bytes:
     return body + struct.pack("<Q", fnv1a64(body))
 
 
+def sidecar_describes(kind: str, data: bytes, save: bytes) -> bool:
+    """True when the sidecar's bytes validate as its DLL reads them and name ``save``'s hash and size."""
+    sidecar = read_sidecar(kind, data)
+    return sidecar is not None and sidecar.save_size == len(save) and sidecar.save_hash == fnv1a64(save)
+
+
+def sidecar_rekeys(folder: Path, slot: int, saves) -> list[tuple[Path, str, bytes, bytes]]:
+    """The sidecars of ``slot`` to re-key after a tool rewrote some of its saves: (path, kind, bytes now, re-keyed).
+
+    ``saves`` is (bytes before, bytes after) for each save the tool rewrote. b200kids and b200outfits take a sidecar
+    as their save's only when it names the hash and size of the save as it is on disk (AfterLoad; b200kids otherwise
+    keeps only the extra children still at home), so each Children and Outfits file of the slot (N and N+20: both
+    DLLs also read the N+20 file for save N) that described one of those saves BEFORE the change is re-keyed to it,
+    exactly as a copy's sidecar is (rekeyed: the hash, the size and the checksum, nothing else), and checked again.
+    One that is damaged, describes none of them, or whose save did not change is left out. Nothing is written here.
+    """
+    saves = list(saves)
+    out: list[tuple[Path, str, bytes, bytes]] = []
+    for kind in SIDECAR_FOLDERS:
+        for number in (slot, slot + reader.PREVIOUS_SAVE_OFFSET):
+            path = sidecar_path(folder, kind, number)
+            try:
+                data = path.read_bytes()
+            except OSError:
+                continue
+            for before, after in saves:
+                if sidecar_describes(kind, data, before):
+                    if after != before:
+                        updated = rekeyed(data, after)
+                        if sidecar_describes(kind, updated, after):
+                            out.append((path, kind, data, updated))
+                    break
+    return out
+
+
 # ---------------------------------------------------------------------------
 # The slots
 # ---------------------------------------------------------------------------

@@ -43,11 +43,18 @@ Safety
       "(before rename)".
     * Every file is written beside itself and swapped in with os.replace, then read back. Any failure puts every
       file already changed back exactly as it was.
-    * No data file is written. The Up to 28 Children file beside a save is named after the save file, not the
-      name, so it is untouched. When the Family History log patch has already made a log for the slot
-      (Virtual Families 2 Patcher\\Save N\\Logs\\Family History), one dated line is added to it, after the
-      rename succeeded: "Rename Family: the player name <old> is now <new>" (a new numbered file, opened with
-      the new name, when the newest already holds 2000 lines). No log is ever started here.
+    * The Up to 28 Children and Outfits files ("Virtual Families 2 Patcher Data\\Children" / "\\Outfits") name
+      the FNV-1a 64 hash and size of the save they were written with, and b200kids / b200outfits take one as their
+      save's only when the loaded save still has them (AfterLoad; b200kids otherwise keeps only the extra children
+      still at home, and drops those who left or died). The new name changes the saves' bytes, so each of the
+      slot's Children and Outfits files (N and N+20) that described one of the renamed saves BEFORE the rename is
+      re-keyed to it, exactly as Copy Player Slot re-keys a copy's (vf2_copy_slot.sidecar_rekeys: the hash, the
+      size and the checksum, nothing else), written the same safe way and read back. One that described another
+      save, or is damaged, is left as it is.
+    * When the Family History log patch has already made a log for the slot (Virtual Families 2 Patcher\\Save
+      N\\Logs\\Family History), one "Family Renamed" record is added to its newest file after the rename
+      succeeded ("[date] Family Renamed <n>", "  Old name: <old>", "  New name: <new>"). No log is ever started
+      here.
 
 Nothing here touches Tk; the GUI runs it on a worker thread, and the tests drive it against a temporary copy of a
 save folder with a fake process list.
@@ -252,6 +259,7 @@ class RenameResult:
     backup: save_backup.BackupResult
     changed: list[Path] = field(default_factory=list)
     notes: list[Path] = field(default_factory=list)     # the Family History files that noted the rename
+    rematched: list[Path] = field(default_factory=list)  # Children / Outfits files re-keyed to the renamed saves
 
 
 def _refuse_if_running(folder: Path, processes: save_backup.ProcessController) -> None:
@@ -306,6 +314,26 @@ def plan_changes(folder: Path, slot: int, new_name: str) -> tuple[bytes, list[Fi
     return old, changes
 
 
+
+
+def plan_sidecar_changes(folder: Path, slot: int, changes: list[FileChange]) -> list[FileChange]:
+    """The slot's Children and Outfits files that described a save before ``changes``, re-keyed to it after."""
+    import vf2_copy_slot as copy_slot       # imported here: vf2_copy_slot imports this module
+
+    settings = settings_path(folder)
+    saves = [(change.original, change.updated) for change in changes if change.path != settings]
+    return [FileChange(path, old, new) for path, _kind, old, new in copy_slot.sidecar_rekeys(folder, slot, saves)]
+
+
+def sidecar_matches(path: Path, save: bytes) -> bool:
+    """True when the Children or Outfits file at ``path`` validates and names ``save``'s hash and size."""
+    import vf2_copy_slot as copy_slot
+
+    try:
+        data = path.read_bytes()
+    except OSError:
+        return False
+    return copy_slot.sidecar_describes(path.parent.name, data, save)
 
 
 def history_folder(folder: Path, slot: int) -> Path:
@@ -380,6 +408,8 @@ def rename_family(
     when = now or datetime.now()
     _refuse_if_running(folder, controller)
     old, changes = plan_changes(folder, slot, new_name)
+    sidecars = plan_sidecar_changes(folder, slot, changes)
+    changes = changes[:-1] + sidecars + changes[-1:]        # the settings file stays last
     try:
         backup = save_backup.copy_save_folder(folder, when, suffix=BACKUP_LABEL)
     except save_backup.BackupError as exc:
@@ -396,6 +426,11 @@ def rename_family(
         settings = settings_path(folder)
         for change in changes:
             data = change.path.read_bytes()
+            if change in sidecars:
+                if data != change.updated or not any(
+                        sidecar_matches(change.path, other.updated) for other in changes if other not in sidecars):
+                    raise RenameError(f"{change.path.name} does not match the renamed save.")
+                continue
             holds = (menu_name(data, slot) if change.path == settings else save_name(data)) == target
             if not holds:
                 raise RenameError(f"{change.path.name} does not hold the new name.")
@@ -416,4 +451,6 @@ def rename_family(
             notes.append(noted)
     except OSError:
         pass            # the rename itself is done; a log the patcher cannot write is left as it is
-    return RenameResult(folder, slot, shown(old), new_name, backup, [change.path for change in changes], notes)
+    return RenameResult(folder, slot, shown(old), new_name, backup,
+                        [change.path for change in changes if change not in sidecars], notes,
+                        [change.path for change in sidecars])
