@@ -495,13 +495,35 @@ STORE_REFRESH_FLAG_SYMBOL = "_gVF2StoreRefresh"
 STORE_REFRESH_DLL_NAME = "vf2refresh_b200.dll"
 STORE_REFRESH_INI_NAME = "vf2refresh.ini"
 STORE_REFRESH_STARTUP = "B200Refresh_Startup"
-# "All 36 Flea Market goods" (after B204, on by default): one dormant byte gating the Flea Market expansion
+# "All 36 Flea Market goods" (after B204; off by default since the owner's 2026-11-01 cheat rule): one dormant byte gating the Flea Market expansion
 # (VF2GetExpandedFleaMarketCount / Item). 1 lists all 36 goods at all times, as every build before it did;
 # 0 returns -1 from both hooks, so GetCategoryItemCount / GetCategoryItem run their stock bodies: 5 goods,
 # picked by MaybeUpdateRotatingItems every 6 real hours. The R Refreshes the Store DLL reads the byte too.
 EXPANDED_FLEA_MARKET_SETTING = "expanded_flea_market"
 EXPANDED_FLEA_MARKET_FLAG_SECTION = ".vf2flea"
 EXPANDED_FLEA_MARKET_FLAG_SYMBOL = "_gVF2ExpandedFleaMarket"
+# "Free and Guaranteed Cheats" (after B205, owner 2026-11-01; off by default): one dormant byte. In a Cheat
+# Upgrades executable the Special Upgrades page (category 0x14) lists the three FREE / NO-FAIL rows below only
+# while the byte is 1; 0 lists every other row in the same order. The same GetCategoryItemCount /
+# GetCategoryItem head hooks as the Flea Market answer for the page; nothing is written to the save. The
+# Time Controls DLL (vf2time_b200.dll) reads the byte too: its Time Warp is free only while it is 1.
+FREE_GUARANTEED_CHEATS_SETTING = "free_guaranteed_cheats"
+FREE_GUARANTEED_CHEATS_FLAG_SECTION = ".vf2free"
+FREE_GUARANTEED_CHEATS_FLAG_SYMBOL = "_gVF2FreeGuaranteedCheats"
+FREE_GUARANTEED_CHEAT_ITEM_IDS = (0x136, 0x158, 0x159)
+SPECIAL_UPGRADES_CATEGORY = 0x14
+# "All outfits and hairstyles always for sale" (after B205, owner 2026-11-01; off by default): one dormant
+# byte. 1 = the Clothing and Hairstyles page (category 0x0D) lists every row of gClothingList, as every build
+# before it did. 0 = the stock six rotating outfit rows, plus OUTFIT_ROTATION_EXTRA_ROWS rows drawn from the
+# added hairstyles and holiday outfits; the draw is keyed to the stock outfit pick time (+470h), so the extra
+# rows change exactly when the six outfits do (every 4 game hours, a new family, or R). Nothing is saved.
+ALL_OUTFITS_SETTING = "all_outfits_hairstyles"
+ALL_OUTFITS_FLAG_SECTION = ".vf2clth"
+ALL_OUTFITS_FLAG_SYMBOL = "_gVF2AllOutfitsForSale"
+CLOTHING_CATEGORY = 0x0D
+CLOTHING_STOCK_ROWS = 6
+OUTFIT_ROTATION_EXTRA_ROWS = 6
+OUTFIT_STOCK_NEXT_PICK_OFFSET = 0x470
 # "Outfit Pictures" (B204 update; part of Fix Vanilla Game Bugs, owner-approved 2026-10-27): the companion
 # DLL vf2outfits_b200.dll (runtime/native/b200outfits). It has no byte of its own: it rides the existing
 # dormant .vf2bugs byte of Fix Vanilla Game Bugs (one setting, one section: the release gate binds each
@@ -11697,6 +11719,29 @@ def visible_special_upgrade_desc_id_for(index):
     return ORIG_STRING_ONE_PAST_MAX + len(ITEMS) * 2 + mobile_island_event_string_count() + index
 
 
+def special_upgrades_added_ids():
+    """The rows gServicesList gains after its 6 stock rows, in this variant."""
+    return list(MOBILE_SPECIAL_UPGRADE_ITEM_IDS) + (
+        [item["item_id"] for item in CHEAT_UPGRADE_ITEMS if not item.get("details_only")]
+        if ENABLE_CHEAT_UPGRADES
+        else []
+    )
+
+
+def special_upgrades_list_count():
+    return 6 + len(special_upgrades_added_ids())
+
+
+def free_guaranteed_cheat_rows_listed():
+    """How many of the Free and Guaranteed Cheats rows this variant's Special Upgrades page carries."""
+    listed = special_upgrades_added_ids()
+    return sum(1 for item in FREE_GUARANTEED_CHEAT_ITEM_IDS if item in listed)
+
+
+def clothing_list_count():
+    return CLOTHING_STOCK_ROWS + OUTFIT_STORE_ENTRY_COUNT + HEAD_STORE_ENTRY_COUNT
+
+
 def cheat_upgrade_string_ids_for_entry(entry_index):
     if entry_index < 0 or entry_index >= len(CHEAT_UPGRADE_ITEMS):
         raise ValueError(f"Cheat upgrade string index is out of range: {entry_index}")
@@ -12168,6 +12213,9 @@ def patch_inventory_manager(manifest):
     clothing_sym = obj.symbol(GCLOTHINGLIST)
     clothing_old_count = 6
     clothing_new_count = clothing_old_count + len(clothing_ids)
+    if clothing_new_count != clothing_list_count():
+        # kVF2ClothingListCount (the All outfits gate) is rendered from clothing_list_count().
+        raise RuntimeError(f"gClothingList has {clothing_new_count} rows, the gate expects {clothing_list_count()}")
     holiday_desc_count = holiday_body_descriptor_count() if ENABLE_HOLIDAY_BODY_TYPES else 0
     obj.insert_section_bytes(
         clothing_sym.section,
@@ -12704,6 +12752,9 @@ def patch_visible_special_upgrades(manifest):
         struct.pack_into("<9I", obj.buf, iteminfo_raw + item_id * 36, *vals)
 
     new_count = len(original_visible_ids) + len(added_service_ids)
+    if added_service_ids != special_upgrades_added_ids() or new_count != special_upgrades_list_count():
+        # kVF2SpecialUpgradesListCount (the Free and Guaranteed Cheats gate) is rendered from these.
+        raise RuntimeError("gServicesList disagrees with special_upgrades_added_ids()")
     count_sym = obj.symbol(GET_CATEGORY_ITEM_COUNT)
     count_sec = obj.section(count_sym.section)
     count_raw = count_sec.raw_ptr + count_sym.value + 0x19
@@ -12907,21 +12958,29 @@ def patch_house_renovations(manifest):
         raise RuntimeError("Could not find House Renovations sort-count push")
     obj.buf[sort_push : sort_push + 2] = b"\x6A" + bytes([new_count])
 
-    bounds = obj.buf.find(b"\x83\xFE\x09", item_start, item_start + item_sec.raw_size)
-    if bounds < 0:
-        raise RuntimeError("Could not find House Renovations item bounds")
+    # The House Renovations bound is "cmp esi,9; ja short". Match the short ja too: in an executable
+    # without Cheat Upgrades the Special Upgrades page has exactly 10 rows, so patch_visible_special_upgrades
+    # has already written "cmp esi,9" at +0x1D -- followed by a NEAR ja. Matching the bare compare patched
+    # that site instead (the Special Upgrades page then read 30 rows, 20 past gServicesList) and left this
+    # page at 10 of its 30 rows, in every non-Cheat-Upgrades executable up to B205.
+    bounds_pattern = b"\x83\xFE\x09\x77"
+    bounds = obj.buf.find(bounds_pattern, item_start, item_start + item_sec.raw_size)
+    if bounds < 0 or obj.buf.find(bounds_pattern, bounds + 1, item_start + item_sec.raw_size) >= 0:
+        raise RuntimeError("Could not find exactly one House Renovations item bounds")
     obj.buf[bounds : bounds + 3] = b"\x83\xFE" + bytes([new_count - 1])
 
     count_sym = obj.symbol(GET_CATEGORY_ITEM_COUNT)
     count_sec = obj.section(count_sym.section)
     count_start = count_sec.raw_ptr + count_sym.value
-    count_return = obj.buf.find(
-        b"\xB8\x0A\x00\x00\x00\x5E\x5D\xC2\x04\x00",
-        count_start,
-        count_start + count_sec.raw_size,
-    )
-    if count_return < 0:
-        raise RuntimeError("Could not find House Renovations category count return")
+    # The House Renovations case follows another case's "pop esi; pop ebp; ret 4". The Special Upgrades
+    # case does not (it follows the jump table), and without Cheat Upgrades it too returns 10 by now (see
+    # the bounds above), so the bare "mov eax,10; pop; pop; ret 4" matched it first.
+    count_pattern = b"\x5E\x5D\xC2\x04\x00\xB8\x0A\x00\x00\x00\x5E\x5D\xC2\x04\x00"
+    count_end = count_start + count_sec.raw_size
+    count_return = obj.buf.find(count_pattern, count_start, count_end)
+    if count_return < 0 or obj.buf.find(count_pattern, count_return + 1, count_end) >= 0:
+        raise RuntimeError("Could not find exactly one House Renovations category count return")
+    count_return += 5
     obj.buf[count_return : count_return + 5] = b"\xB8" + struct.pack("<I", new_count)
 
     obj.write(PATCHED / "InventoryManager.obj")
@@ -13347,6 +13406,11 @@ public:
     void TakeOne(EInventoryItem item);
     void ReturnOne(EInventoryItem item);
     int GetNumAvailable(EInventoryItem item);
+    // Defined below: the public door to the private stock rotation, for the
+    // "All outfits and hairstyles always for sale" gate (.vf2clth).
+    void VF2MaybeUpdateOutfits(bool force);
+private:
+    void MaybeUpdateOutfits(bool force);
 public:
     char pad0[0x468];
     int maleOutfitBody;
@@ -13364,6 +13428,13 @@ extern CInventoryManager InventoryManager;
 extern CFurnitureManager FurnitureManager;
 extern CVillagerManager VillagerManager;
 extern EInventoryItem gGoodiesList[];
+extern EInventoryItem gServicesList[];
+extern EInventoryItem gClothingList[];
+
+void CInventoryManager::VF2MaybeUpdateOutfits(bool force)
+{{
+    MaybeUpdateOutfits(force);
+}}
 
 // Invisible furniture parity (owner request 2026-10-01: "if there's invisible
 // furniture the fixes apply to them as well"). A few stock routines ask
@@ -13945,13 +14016,102 @@ extern "C" bool __cdecl VF2RemoveOwnedUpgrade(int itemId) {{
 extern "C" __declspec(allocate(".vf2flea"))
 volatile unsigned char gVF2ExpandedFleaMarket = 0;
 
+// "Free and Guaranteed Cheats" (see FREE_GUARANTEED_CHEATS_* in the generator). 1 = the Special Upgrades page
+// lists its three FREE / NO-FAIL rows; 0 = the page lists every other row, in the same order.
+#pragma section("{FREE_GUARANTEED_CHEATS_FLAG_SECTION}", read, write)
+extern "C" __declspec(allocate("{FREE_GUARANTEED_CHEATS_FLAG_SECTION}"))
+volatile unsigned char gVF2FreeGuaranteedCheats = 0;
+static const int kVF2SpecialUpgradesCategory = {SPECIAL_UPGRADES_CATEGORY:#x};
+static const int kVF2SpecialUpgradesListCount = {special_upgrades_list_count()};
+static const int kVF2FreeGuaranteedCheatRowsListed = {free_guaranteed_cheat_rows_listed()};
+
+static bool VF2IsFreeGuaranteedCheatRow(int itemId) {{
+    return {" || ".join(f"itemId == {item:#x}" for item in FREE_GUARANTEED_CHEAT_ITEM_IDS)};
+}}
+
+static bool VF2HideFreeGuaranteedCheatRows() {{
+    return kVF2FreeGuaranteedCheatRowsListed > 0 && gVF2FreeGuaranteedCheats != 1;
+}}
+
+// "All outfits and hairstyles always for sale" (see ALL_OUTFITS_* in the generator). 1 = every row of
+// gClothingList; 0 = the six stock rotating rows plus {OUTFIT_ROTATION_EXTRA_ROWS} rows drawn from the added hairstyles and
+// holiday outfits, keyed to the stock outfit pick time so they change when the six outfits do.
+#pragma section("{ALL_OUTFITS_FLAG_SECTION}", read, write)
+extern "C" __declspec(allocate("{ALL_OUTFITS_FLAG_SECTION}"))
+volatile unsigned char gVF2AllOutfitsForSale = 0;
+static const int kVF2ClothingCategory = {CLOTHING_CATEGORY:#x};
+static const int kVF2ClothingStockRows = {CLOTHING_STOCK_ROWS};
+static const int kVF2ClothingListCount = {clothing_list_count()};
+static const int kVF2OutfitRotationExtraRows = {OUTFIT_ROTATION_EXTRA_ROWS};
+static const int kVF2OutfitStockNextPickOffset = {OUTFIT_STOCK_NEXT_PICK_OFFSET:#x};
+
+static bool VF2IsOutfitRotationPoolItem(int itemId) {{
+    if (itemId >= {HEAD_STORE_GENDER_ITEM_BASES["female"]:#x} && itemId < {HEAD_STORE_GENDER_ITEM_BASES["female"] + HEAD_STORE_VALUE_COUNT:#x}) return true;
+    if (itemId >= {HEAD_STORE_GENDER_ITEM_BASES["male"]:#x} && itemId < {HEAD_STORE_GENDER_ITEM_BASES["male"] + HEAD_STORE_VALUE_COUNT:#x}) return true;
+    if (itemId >= {OUTFIT_STORE_GENDER_ITEM_BASES["female"] + HOLIDAY_BODY_VALUES[0]:#x} && itemId <= {OUTFIT_STORE_GENDER_ITEM_BASES["female"] + HOLIDAY_BODY_VALUES[-1]:#x}) return true;
+    if (itemId >= {OUTFIT_STORE_GENDER_ITEM_BASES["male"] + HOLIDAY_BODY_VALUES[0]:#x} && itemId <= {OUTFIT_STORE_GENDER_ITEM_BASES["male"] + HOLIDAY_BODY_VALUES[-1]:#x}) return true;
+    return false;
+}}
+
+// The extra rows for the current stock pick: a partial Fisher-Yates over the pool, seeded by the pick time.
+// Writes up to kVF2OutfitRotationExtraRows items and returns how many.
+static int VF2OutfitRotationExtras(CInventoryManager* inventory, int* out) {{
+    int pool[{clothing_list_count()}];
+    int poolCount = 0;
+    for (int i = kVF2ClothingStockRows; i < kVF2ClothingListCount; ++i) {{
+        int itemId = (int)gClothingList[i];
+        if (VF2IsOutfitRotationPoolItem(itemId)) pool[poolCount++] = itemId;
+    }}
+    unsigned int seed = *(unsigned int*)((unsigned char*)inventory + kVF2OutfitStockNextPickOffset);
+    unsigned int state = seed * 2654435761u + 0x9E3779B9u;
+    int picked = 0;
+    for (; picked < kVF2OutfitRotationExtraRows && picked < poolCount; ++picked) {{
+        state = state * 1103515245u + 12345u;
+        int j = picked + (int)((state >> 8) % (unsigned int)(poolCount - picked));
+        int swap = pool[picked];
+        pool[picked] = pool[j];
+        pool[j] = swap;
+        out[picked] = pool[picked];
+    }}
+    return picked;
+}}
+
 extern "C" int __cdecl VF2GetExpandedFleaMarketCount(CInventoryManager* inventory, int category) {{
+    if (category == kVF2SpecialUpgradesCategory) {{
+        if (!VF2HideFreeGuaranteedCheatRows()) return -1;
+        return kVF2SpecialUpgradesListCount - kVF2FreeGuaranteedCheatRowsListed;
+    }}
+    if (category == kVF2ClothingCategory) {{
+        if (gVF2AllOutfitsForSale == 1) return -1;
+        // The stock count case runs the timed pick before it answers; this path answers instead of it.
+        inventory->VF2MaybeUpdateOutfits(false);
+        int extras[{OUTFIT_ROTATION_EXTRA_ROWS}];
+        return kVF2ClothingStockRows + VF2OutfitRotationExtras(inventory, extras);
+    }}
     if (category != kVF2FleaMarketCategory) return -1;
     if (gVF2ExpandedFleaMarket != 1) return -1;
     return kVF2FleaMarketGoodiesCount;
 }}
 
 extern "C" int __cdecl VF2GetExpandedFleaMarketItem(CInventoryManager* inventory, int category, int index) {{
+    if (category == kVF2SpecialUpgradesCategory) {{
+        if (!VF2HideFreeGuaranteedCheatRows()) return -1;
+        int shown = -1;
+        for (int i = 0; i < kVF2SpecialUpgradesListCount; ++i) {{
+            int itemId = (int)gServicesList[i];
+            if (VF2IsFreeGuaranteedCheatRow(itemId)) continue;
+            if (++shown == index) return itemId;
+        }}
+        return 0;
+    }}
+    if (category == kVF2ClothingCategory) {{
+        if (gVF2AllOutfitsForSale == 1) return -1;
+        if (index < kVF2ClothingStockRows) return -1;
+        int extras[{OUTFIT_ROTATION_EXTRA_ROWS}];
+        int count = VF2OutfitRotationExtras(inventory, extras);
+        int k = index - kVF2ClothingStockRows;
+        return k < count ? extras[k] : 0;
+    }}
     if (category != kVF2FleaMarketCategory) return -1;
     if (gVF2ExpandedFleaMarket != 1) return -1;
     if (index < 0 || index >= kVF2FleaMarketGoodiesCount) return 0;
@@ -26409,7 +26569,7 @@ def patch_expanded_flea_market_manifest(manifest):
         "status": "the Flea Market expansion is gated by a runtime byte in every executable",
         "offline_patcher_setting": EXPANDED_FLEA_MARKET_SETTING,
         "category": "optional",
-        "default": True,
+        "default": False,
         "hook": "VF2GetExpandedFleaMarketCount / VF2GetExpandedFleaMarketItem return -1 unless the byte is 1",
         "runtime_flag": {
             "symbol": EXPANDED_FLEA_MARKET_FLAG_SYMBOL,
@@ -26428,6 +26588,76 @@ def patch_expanded_flea_market_manifest(manifest):
             "save_counts": "never written",
         },
         "flag_off": "the stock Flea Market: 5 goods picked by MaybeUpdateRotatingItems, again 6 real hours later",
+        "save_format": "unchanged",
+    }
+
+
+def patch_free_guaranteed_cheats_manifest(manifest):
+    """Free and Guaranteed Cheats: the dormant .vf2free byte is compiled into every executable and read by the
+    same GetCategoryItemCount / GetCategoryItem head hooks as the Flea Market (Special Upgrades page) and by the
+    Time Controls DLL (its Time Warp is free only while the byte is 1). Requires those hooks."""
+    hooks = manifest.get("InventoryManager", {}).get("expanded_flea_market", {}).get("hooks")
+    if not hooks:
+        raise RuntimeError("Free and Guaranteed Cheats gates the store category hooks; patch them first")
+    manifest["FreeGuaranteedCheats"] = {
+        "status": "the Free and Guaranteed Cheats rows are gated by a runtime byte in every executable",
+        "offline_patcher_setting": FREE_GUARANTEED_CHEATS_SETTING,
+        "category": "optional",
+        "default": False,
+        "hook": "VF2GetExpandedFleaMarketCount / VF2GetExpandedFleaMarketItem answer the Special Upgrades page "
+                "(category 0x14) without the rows below while the byte is not 1",
+        "category_id": hex(SPECIAL_UPGRADES_CATEGORY),
+        "rows": [hex(item) for item in FREE_GUARANTEED_CHEAT_ITEM_IDS],
+        "rows_listed_in_this_variant": free_guaranteed_cheat_rows_listed(),
+        "special_upgrades_rows_flag_on": special_upgrades_list_count(),
+        "special_upgrades_rows_flag_off": special_upgrades_list_count() - free_guaranteed_cheat_rows_listed(),
+        "time_warp": "vf2time_b200.dll charges the store's Time Warp price unless this byte is 1",
+        "runtime_flag": {
+            "symbol": FREE_GUARANTEED_CHEATS_FLAG_SYMBOL,
+            "source_section": FREE_GUARANTEED_CHEATS_FLAG_SECTION,
+            "size": 1,
+            "default": "00",
+            "enabled": "01",
+            "linked_location_status": "pending_link_metadata",
+        },
+        "flag_on": "Force Successful Pregnancy, Anti-Spam Software Ownership and Rockhound Certificate Ownership "
+                   "are listed on the Special Upgrades page (Cheat Upgrades executables)",
+        "flag_off": "those three rows are not listed; every other row is listed in the same order",
+        "save_format": "unchanged",
+    }
+
+
+def patch_all_outfits_manifest(manifest):
+    """All outfits and hairstyles always for sale: the dormant .vf2clth byte is compiled into every executable
+    and read by the same GetCategoryItemCount / GetCategoryItem head hooks (Clothing page). Requires them."""
+    hooks = manifest.get("InventoryManager", {}).get("expanded_flea_market", {}).get("hooks")
+    if not hooks:
+        raise RuntimeError("All outfits and hairstyles gates the store category hooks; patch them first")
+    manifest["AllOutfitsForSale"] = {
+        "status": "the Clothing and Hairstyles page listing is gated by a runtime byte in every executable",
+        "offline_patcher_setting": ALL_OUTFITS_SETTING,
+        "category": "optional",
+        "default": False,
+        "hook": "VF2GetExpandedFleaMarketCount / VF2GetExpandedFleaMarketItem answer the Clothing page "
+                "(category 0x0D) while the byte is not 1",
+        "category_id": hex(CLOTHING_CATEGORY),
+        "rows_flag_on": clothing_list_count(),
+        "rows_flag_off": CLOTHING_STOCK_ROWS + OUTFIT_ROTATION_EXTRA_ROWS,
+        "rotation_extra_rows": OUTFIT_ROTATION_EXTRA_ROWS,
+        "rotation_pool": "the added hairstyles (0x480-0x4B1, 0x4C0-0x4F1) and holiday outfits (bodies 50-53)",
+        "rotation_key": "InventoryManager+470h, the stock outfit pick time (changes every 4 game hours, on a new "
+                        "family and on R)",
+        "runtime_flag": {
+            "symbol": ALL_OUTFITS_FLAG_SYMBOL,
+            "source_section": ALL_OUTFITS_FLAG_SECTION,
+            "size": 1,
+            "default": "00",
+            "enabled": "01",
+            "linked_location_status": "pending_link_metadata",
+        },
+        "flag_on": "every row of gClothingList is listed at all times (every build before it)",
+        "flag_off": "the six stock rotating outfit rows plus the rotating extra rows; the expansion outfits for "
+                    "bodies 0-49 come round in the stock six",
         "save_format": "unchanged",
     }
 
@@ -42482,6 +42712,9 @@ def main():
     patch_store_refresh_manifest(manifest)
     # All 36 Flea Market goods (.vf2flea; gates the expanded Flea Market hooks).
     patch_expanded_flea_market_manifest(manifest)
+    # Free and Guaranteed Cheats (.vf2free) and All outfits and hairstyles (.vf2clth): the same hooks.
+    patch_free_guaranteed_cheats_manifest(manifest)
+    patch_all_outfits_manifest(manifest)
     # Outfit Pictures (part of Fix Vanilla Game Bugs; the same loader loads its DLL last, on .vf2bugs).
     patch_outfit_pictures_manifest(manifest)
     # Invisible furniture counts as its stock donor where stock code tests

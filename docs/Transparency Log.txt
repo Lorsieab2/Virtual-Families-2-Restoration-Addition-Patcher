@@ -3642,3 +3642,58 @@ Time Warp costs the store's price (Time Controls, after B205)
   (tests/test_b200_time_controls.py) must each fail a scenario. All 32 B200
   and 32 B205 matrix executables resolve every pin. Not tested in a running
   game.
+
+
+Cheats off by default, Free and Guaranteed Cheats, All outfits and hairstyles, presets (after B205; not live tested)
+-------------------------------------------------------------------------------------------------------------------
+
+- Owner rules 2026-11-01: "anything that sets prices to 0 is DEFAULT OFF";
+  "Anything that makes villagers succeed in skills 100%, no failing, is
+  DEFAULT off"; "Keep off by default: All items show in flea
+  market/outfits/hairstyles"; content and paid upgrades stay on; "Owner's
+  Defaults" ticks everything except Up to 28 Children.
+- Defaults (work/export_offline_patch_bundle.py SETTINGS): cheat_upgrades,
+  free_guaranteed_cheats, expanded_flea_market and all_outfits_hairstyles are
+  False. FINAL_PLAYTEST_DEFAULT_ON_SETTINGS is unchanged (it still forces
+  cheat_upgrades and expanded_flea_market on in the playtest profile; the two
+  new settings are not in it).
+- free_guaranteed_cheats: the dormant byte .vf2free (symbol
+  _gVF2FreeGuaranteedCheats, 00 in every build, 01 when ticked; exporter
+  records via RUNTIME_FLAG_SECTION_BY_SETTING). VF2GetExpandedFleaMarketCount /
+  Item (the GetCategoryItemCount / GetCategoryItem head hooks) answer the
+  Special Upgrades page (category 0x14) of a Cheat Upgrades executable without
+  items 0x136, 0x158 and 0x159 while the byte is not 1: count 53 - 3 = 50,
+  items in gServicesList order skipping the three. Byte 1, or an executable
+  without Cheat Upgrades, falls through to the stock bodies (53 / 10 rows).
+  vf2time_b200.dll reads the same byte for its free Time Warp.
+- all_outfits_hairstyles: the dormant byte .vf2clth (symbol
+  _gVF2AllOutfitsForSale). Byte 1: the stock bodies, 214 rows of
+  gClothingList. Byte 0: the count hook calls the private
+  CInventoryManager::MaybeUpdateOutfits(false) (as the stock Clothing case
+  does) through a one-line member wrapper and answers 12: the six stock rows
+  (0x12-0x17, read by the stock item body) and 6 rows drawn by a partial
+  Fisher-Yates over the 108 hairstyle and holiday-outfit rows of gClothingList,
+  seeded by InventoryManager+470h (the stock outfit pick time). The draw
+  changes exactly when the stock pick does; nothing is stored.
+- Bug fixed with it (every B205-and-earlier executable without Cheat Upgrades
+  but with Mobile Renovations, 16 of 32): patch_visible_special_upgrades runs
+  first and, with exactly 10 Special Upgrades rows, writes "mov eax,10" and
+  "cmp esi,9" into the Special Upgrades case; patch_house_renovations then
+  searched for those bare bytes and patched that case to 30 / 29 instead of
+  its own. Emulated on B205's holiday_ornaments_mobile_renovations
+  executable: Special Upgrades 30 rows (20 past gServicesList), House
+  Renovations 10 of 30. The searches are now anchored (the preceding
+  "pop esi; pop ebp; ret 4" for the count, the short ja for the bound) and
+  must match exactly once.
+- GUI: Select All Patches / Default Patches / Owner's Defaults / Deselect All
+  Patches, each with a "?" guide, and a Patch Selection Settings window
+  (search, one tick box per patch, Tick These / Untick These with the same
+  dependency closing as a click). A setting unticked only because its
+  prerequisite is off (No AI Icons under Default Patches) is ticked again
+  when that prerequisite is ticked.
+- Proof: tests/test_store_page_gates_exe.py runs the executables' own
+  GetCategoryItemCount / GetCategoryItem under unicorn on two executables
+  built from this change (with and without Cheat Upgrades);
+  tests/test_offline_vf2_patcher_gui.py drives the real GUI class.
+- B206 must be built from this change: every executable gains the two
+  sections and the renovation fix.

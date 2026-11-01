@@ -938,6 +938,17 @@ def facts() -> list[Fact]:
            "stock exe sha256 1582d9e8: GetCategoryItemCount 0x4BB0A0 / GetCategoryItem 0x4BAA50, category 0x14 (the "
            "store menu's Special Upgrades row, table 0x5346E0), run as linked: 6 items, list 0x556E3C = 0x111, "
            "0x112, 0x113, 0x115, 0x116, 0x114"))
+    add(_f(MONEY, WITH_PATCHER + "with Cheat Upgrades the Special Upgrades page lists 53 items (the 10 above and 43 "
+                  "cheat rows). Force Successful Pregnancy, Anti-Spam Software Ownership and Rockhound Certificate "
+                  f"Ownership are listed only while \"{OPTION_FREE_CHEATS}\" is ticked (off by default): 50 items "
+                  "without it, every other row in the same order.", E,
+           "the .vf2free byte read by the GetCategoryItemCount / GetCategoryItem head hooks, category 0x14; run as "
+           "linked on two executables built from this change (tests/test_store_page_gates_exe.py)"))
+    add(_f(MONEY, "Patcher builds up to B205 without Cheat Upgrades but with Mobile Renovations listed 30 Special "
+                  "Upgrades items (20 read past the end of the list) and only 10 of the 30 House Renovations; later "
+                  "builds list 10 and 30.", E,
+           "B205 holiday_ornaments_mobile_renovations exe run as linked: counts 30 / 10; branch build: 10 / 30; "
+           "patch_house_renovations searches anchored (tests/test_store_page_gates_exe.py)"))
     add(_f(MONEY, WITH_PATCHER + "Brokerage Account: buying it raises interest to 11% a game day (24 hours of game time). Buying it again sets "
                   "interest to 1%; each purchase after that adds 2 points (3%, 5%, 7%, 9%) until 11% again.", E,
            "HandlePurchaseItem 0x48C110 -> 0x4B8B50 run as linked from 0.10: 0.11, 0.01, 0.03, 0.05, 0.07, 0.09, "
@@ -1634,6 +1645,8 @@ OPTION_RENOVATIONS = "Add mobile room renovations"
 OPTION_BATHROOM2 = "2nd Bathroom Mobile-Style Renovations (AI-Generated Art Warning)"
 OPTION_FLEA = "All 36 Flea Market goods"
 OPTION_REFRESH = "R Refreshes the Store"
+OPTION_FREE_CHEATS = "Free and Guaranteed Cheats"
+OPTION_ALL_OUTFITS = "All outfits and hairstyles always for sale"
 STORE_OPTION_NAMES = (OPTION_CHEATS, OPTION_RENOVATIONS, OPTION_BATHROOM2, OPTION_FLEA, OPTION_REFRESH)
 
 # The game's Likes text (string 0x7AF), comma-separated, the n-th name for like n (CLikeList::GetListAsString).
@@ -2625,6 +2638,14 @@ def _store_lines() -> list[Fact]:
                      "outfit bodies and 50 hairstyles for each sex.", E, cat + ": category 0xD"))
     add(_f(CLOTHING, UNPATCHED + "the tab lists the 6 outfits only.", E,
            "stock exe sha256 1582d9e8: category 0xD run as linked, 6 items"))
+    add(_f(CLOTHING, f"Patcher option \"{OPTION_ALL_OUTFITS}\" (off by default; every build up to B205 behaved as if "
+                     "it were on): ticked, the tab lists all 214 items at all times. Unticked, it lists 12: the 6 "
+                     "stock outfits below and 6 rows drawn from the 100 hairstyles and the 8 holiday outfits; the 6 "
+                     "change when the stock outfits are picked again (4 hours of game time, a new family, or R). The "
+                     "patcher's outfits for bodies 0 to 49 come round in the 6 stock rows. Nothing is saved.", E,
+           "the .vf2clth byte read by the GetCategoryItemCount / GetCategoryItem head hooks; draw keyed to "
+           "InventoryManager+470h; run as linked on two executables built from this change "
+           "(tests/test_store_page_gates_exe.py)"))
     add(_f(CLOTHING, "An outfit goes to the tray and is dropped on a family member of its sex: it changes that "
                      "member's outfit and the member starts Checking out new clothes. On the other sex: \"This outfit is for a male!\" (or female) and it stays in "
                      "the tray.", C, "HandleMouseDown 0x49EE90 cases 0x49 / 0x4A: gender +0x6A58, outfit +0x6A84"))
@@ -2637,8 +2658,10 @@ def _store_lines() -> list[Fact]:
     add(_f(CLOTHING, f"Patcher option \"{OPTION_REFRESH}\" (a cheat, on by default): on this tab R or Shift+R "
                      "picks the 6 stock outfits again at once, with the same odds (Discount 0 to 31, Department "
                      "32 to 43, Designer 44 to 49), and the next timed pick is 4 hours of game time later, as after "
-                     "any pick. The hairstyles are not picked at random, so they stay; an outfit already bought "
-                     "keeps its own. Unpatched (and with the option off) no key does this.", E,
+                     "any pick. The hairstyles are not picked at random, so they stay while \"All outfits and "
+                     "hairstyles always for sale\" is ticked; unticked, its 6 rotating hairstyle and holiday rows "
+                     "follow the new pick. An outfit already bought keeps its own. Unpatched (and with the option "
+                     "off) no key does this.", E,
            "vf2refresh_b200.dll: CInventoryManager::MaybeUpdateOutfits(true), the forced pick Reset makes; "
            "emulated: GetRandom bounds 20h, 20h, 0Ch, 0Ch, 6, 6, only +450h..+464h and +470h written "
            "(tests/test_b200_store_refresh.py)"))

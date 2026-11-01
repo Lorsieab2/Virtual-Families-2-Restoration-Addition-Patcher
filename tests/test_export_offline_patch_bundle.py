@@ -142,9 +142,38 @@ class EveryPatchDefaultsOn(unittest.TestCase):
         return {row["id"] for row in exporter.SETTINGS
                 if row.get("category") == "experimental"}
 
+    # The owner's cheat rule (2026-11-01): "anything that sets prices to 0 is
+    # DEFAULT OFF", "Anything that makes villagers succeed in skills 100%, no
+    # failing, is DEFAULT off", and "Keep off by default: All items show in
+    # flea market/outfits/hairstyles". Exactly these four; every content and
+    # paid setting stays on, and Owner's Defaults ticks them all.
+    CHEAT_EXCEPTIONS = frozenset({
+        "cheat_upgrades",
+        "free_guaranteed_cheats",
+        "expanded_flea_market",
+        "all_outfits_hairstyles",
+    })
+
     @property
     def EXCEPTIONS(self):
-        return set(self.SEQUENCING_EXCEPTIONS) | self.experimental_ids()
+        return set(self.SEQUENCING_EXCEPTIONS) | set(self.CHEAT_EXCEPTIONS) | self.experimental_ids()
+
+    def test_the_cheat_settings_default_off_and_their_neighbours_on(self):
+        rows = {row["id"]: row for row in exporter.SETTINGS}
+        for sid in sorted(self.CHEAT_EXCEPTIONS):
+            with self.subTest(setting=sid):
+                self.assertFalse(rows[sid]["default"])
+        # Not swept up with them: Time Controls, R, No AI Icons, the content.
+        for sid in ("time_controls", "r_refreshes_store", "no_ai_icons", "mobile_renovations",
+                    "ai_generated_bathroom2_renovations", "holiday_furniture", "holiday_outfits",
+                    "holiday_ornaments_collection", "outfit_store_expansion", "mobile_purchases",
+                    "invisible_furniture_visible_graphics"):
+            with self.subTest(setting=sid):
+                self.assertTrue(rows[sid]["default"])
+        free = rows["free_guaranteed_cheats"]["description"]
+        for name in ("Force Successful Pregnancy", "Anti-Spam Software Ownership",
+                     "Rockhound Certificate Ownership", "Time Warp"):
+            self.assertIn(name, free)
 
     def test_experimental_settings_default_off(self):
         on = sorted(row["id"] for row in exporter.SETTINGS

@@ -1527,5 +1527,173 @@ class ExperimentalSectionAndPageHeightTests(unittest.TestCase):
         self.assertLess(main_page * 2, 24000, main_page)
 
 
+
+class PresetButtonAndSelectionWindowTests(unittest.TestCase):
+    """The VV patcher's four presets and its Patch Selection Settings window, on VF2's real settings table.
+
+    Owner, 2026-11-01: cheats (Cheat Upgrades, Free and Guaranteed Cheats, All 36 Flea Market goods, All
+    outfits and hairstyles) default OFF; every content and paid patch stays ON; Owner's Defaults ticks
+    everything except Up to 28 Children, both invisible-furniture settings included.
+    """
+
+    # One window for the whole class: a full settings list is dozens of widgets, and building it per test
+    # used up the CI runner's window resources for the tests that run after this class.
+    @classmethod
+    def setUpClass(cls):
+        try:
+            import tkinter as tk
+        except ImportError:  # pragma: no cover
+            raise unittest.SkipTest("tkinter is not available")
+        try:
+            cls.root = tk.Tk()
+        except Exception:
+            raise unittest.SkipTest("no display available for Tk")
+        cls.root.withdraw()
+        sys.path.insert(0, str(ROOT.joinpath("work")))   # the exporter lives in work/ only
+        import export_offline_patch_bundle as exporter
+        cls.rows = [dict(row) for row in exporter.SETTINGS]
+        cls.ids = {row["id"] for row in cls.rows}
+        cls.app = gui.VF2PatcherGUI(cls.root)
+        cls.tmp = tempfile.TemporaryDirectory()
+
+        def asset(path, *requires):
+            return {"file_path": path, "source_path": "payload/x", "source_sha256": "0" * 64, "requires": list(requires)}
+
+        # The real bundle's dependency shapes: No AI Icons needs Cheat Upgrades, the 2nd Bathroom needs
+        # Mobile Renovations, the transparent swap needs the visible graphics.
+        extra = {
+            "no_ai_icons": ("core_executable", "cheat_upgrades"),
+            "ai_generated_bathroom2_renovations": ("core_executable", "mobile_renovations"),
+            "invisible_furniture_transparent_graphics": ("invisible_furniture_visible_graphics",),
+        }
+        records = [asset("Virtual Families 2.exe", "core_executable")]
+        for row in cls.rows:
+            if row["id"] != "core_executable":
+                records.append(asset(f"Images/{row['id']}.png", *extra.get(row["id"], ()), row["id"]))
+        manifest = {"manifest_version": 1, "settings": cls.rows, "asset_patches": records}
+        path = Path(cls.tmp.name) / "manifest.json"
+        path.write_text(json.dumps(manifest), encoding="utf-8")
+        cls.app.manifest_var.set(str(path))
+        assert cls.app.load_manifest_settings()
+        cls.root.update()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tmp.cleanup()
+        cls.root.destroy()
+
+    def tearDown(self):
+        dialog = getattr(self.app, "_patch_selection_dialog", None)
+        if dialog is not None and dialog.winfo_exists():
+            dialog.destroy()
+
+    def ticked(self):
+        return {setting_id for setting_id, var in self.app.setting_vars.items() if var.get()}
+
+    CHEATS = {"cheat_upgrades", "free_guaranteed_cheats", "expanded_flea_market", "all_outfits_hairstyles"}
+
+    def test_the_four_buttons_have_the_vv_names_and_a_guide_each(self):
+        self.assertEqual([text for text, _method, _key in gui.PRESET_BUTTONS],
+                         ["Select All Patches", "Default Patches", "Owner's Defaults", "Deselect All Patches"])
+        import vf2_how_to_use
+        for _text, method, key in gui.PRESET_BUTTONS:
+            self.assertTrue(callable(getattr(self.app, method)))
+            self.assertIn(key, vf2_how_to_use.keys())
+        self.assertIn("patch_selection_settings", vf2_how_to_use.keys())
+
+    def test_default_patches_is_the_new_defaults_exactly(self):
+        self.app.clear_all_settings()
+        self.app.select_default_settings()
+        self.root.update()
+        expected = self.ids - self.CHEATS - {"up_to_28_children", "invisible_furniture_transparent_graphics",
+                                             "no_ai_icons"}
+        self.assertEqual(self.ticked(), expected)
+        # No AI Icons only reskins Cheat Upgrades rows: it waits for Cheat Upgrades and comes back with it.
+        self.app.setting_vars["cheat_upgrades"].set(True)
+        self.root.update()
+        self.assertEqual(self.ticked(), expected | {"cheat_upgrades", "no_ai_icons"})
+        # The same on a fresh load.
+        self.assertTrue(self.app.load_manifest_settings())
+        self.root.update()
+        self.assertEqual(self.ticked(), expected)
+
+    def test_owners_defaults_is_everything_but_up_to_28_children(self):
+        self.app.clear_all_settings()
+        self.app.select_owners_default_settings()
+        self.root.update()
+        self.assertEqual(self.ticked(), self.ids - {"up_to_28_children"})
+        for setting_id in self.CHEATS | {"no_ai_icons", "invisible_furniture_visible_graphics",
+                                         "invisible_furniture_transparent_graphics", "time_controls"}:
+            self.assertIn(setting_id, self.ticked())
+        self.assertEqual(gui.owners_default_selection(self.app.settings), self.ids - {"up_to_28_children"})
+
+    def test_select_all_leaves_experimental_off_and_deselect_all_clears(self):
+        self.app.select_all_settings()
+        self.root.update()
+        experimental = {row["id"] for row in self.rows if row.get("category") == "experimental"}
+        self.assertEqual(experimental, {"up_to_28_children"})
+        self.assertEqual(self.ticked(), self.ids - experimental)
+        self.app.clear_all_settings()
+        self.root.update()
+        self.assertEqual(self.ticked(), set())
+        # Deselected on purpose: ticking Cheat Upgrades does not bring No AI Icons back.
+        self.app.setting_vars["cheat_upgrades"].set(True)
+        self.root.update()
+        self.assertEqual(self.ticked(), {"cheat_upgrades"})
+
+    def test_the_selection_window_searches_ticks_and_unticks(self):
+        self.app.clear_all_settings()
+        self.app.open_patch_selection_settings()
+        self.root.update()
+        dialog = self.app._patch_selection_dialog
+        self.assertEqual(dialog.title(), "Patch Selection Settings")
+        choices = self.app._patch_selection_choices
+        self.assertEqual([setting_id for setting_id, *_ in choices], list(self.app.setting_vars))
+
+        def shown():
+            return [setting_id for setting_id, _label, _var, box in choices if box.winfo_manager()]
+
+        self.assertEqual(len(shown()), len(choices))
+        self.app._patch_selection_search.set("invisible furniture")
+        self.root.update()
+        self.assertEqual(sorted(shown()), ["invisible_furniture_transparent_graphics",
+                                           "invisible_furniture_visible_graphics"])
+        self.app._patch_selection_search.set("CHEAT")
+        self.root.update()
+        self.assertEqual(sorted(shown()), ["cheat_upgrades", "free_guaranteed_cheats"])
+        self.app._patch_selection_search.set("no such patch")
+        self.root.update()
+        self.assertEqual(shown(), [])
+        self.app._patch_selection_search.set("")
+        self.root.update()
+        self.assertEqual(len(shown()), len(choices))
+
+        by_id = {setting_id: var for setting_id, _label, var, _box in choices}
+        # Tick These: a dependent brings its prerequisites, as a click does.
+        by_id["no_ai_icons"].set(True)
+        by_id["invisible_furniture_transparent_graphics"].set(True)
+        self.app._patch_selection_apply(True)
+        self.root.update()
+        self.assertEqual(self.ticked(), {"no_ai_icons", "cheat_upgrades", "core_executable",
+                                         "invisible_furniture_transparent_graphics",
+                                         "invisible_furniture_visible_graphics"})
+        # Untick These: a prerequisite takes what needs it.
+        for var in by_id.values():
+            var.set(False)
+        by_id["cheat_upgrades"].set(True)
+        by_id["invisible_furniture_visible_graphics"].set(True)
+        self.app._patch_selection_apply(False)
+        self.root.update()
+        self.assertEqual(self.ticked(), {"core_executable"})
+        # Opening it again raises the same window.
+        self.app.open_patch_selection_settings()
+        self.assertIs(self.app._patch_selection_dialog, dialog)
+
+    def test_patch_name_search_matches_every_word(self):
+        self.assertTrue(gui.patch_name_matches("Free and Guaranteed Cheats", "guaranteed free"))
+        self.assertFalse(gui.patch_name_matches("Free and Guaranteed Cheats", "free outfits"))
+        self.assertTrue(gui.patch_name_matches("Anything", "   "))
+
+
 if __name__ == "__main__":
     unittest.main()

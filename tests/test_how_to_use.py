@@ -70,7 +70,7 @@ class GuideContentTests(unittest.TestCase):
             self.assertIn(needle, text)
     def test_the_store_settings_are_covered(self):
         flea = guides.guide("expanded_flea_market").text
-        for needle in ("all 36", "on by default", "5 goods", "6 hours of real time", "always in stock", "Towelette",
+        for needle in ("all 36", "off by default", "Owner's Defaults ticks it", "5 goods", "6 hours of real time", "always in stock", "Towelette",
                        "Rockhound Certificate", "keeps its checkmark"):
             self.assertIn(needle, flea)
         r = guides.guide("r_refreshes_store").text
@@ -78,6 +78,17 @@ class GuideContentTests(unittest.TestCase):
                        "R always redraws", "you won't see a change in the Flea Market list", "outside the store", "box is open",
                        "On Sale", "on by default"):
             self.assertIn(needle, r)
+
+    def test_the_preset_buttons_and_the_selection_window_are_covered(self):
+        for key in ("select_all", "default_patches", "owners_defaults", "deselect_all", "patch_selection_settings"):
+            self.assertIn(key, guides.keys())
+            self.assertNotIn(key, guides.setting_keys())
+        self.assertIn("except Up to 28 Children", guides.guide("owners_defaults").text)
+        self.assertIn("both invisible-furniture patches", guides.guide("owners_defaults").text)
+        self.assertIn("The cheats are off", guides.guide("default_patches").text)
+        self.assertIn("comes back on when you tick Cheat Upgrades", guides.guide("default_patches").text)
+        for needle in ("search box", "Tick These", "Untick These"):
+            self.assertIn(needle, guides.guide("patch_selection_settings").text)
 
     def test_unknown_key_fails_loudly(self):
         with self.assertRaises(KeyError):

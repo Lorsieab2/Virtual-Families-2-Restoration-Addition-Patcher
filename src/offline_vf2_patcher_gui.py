@@ -50,6 +50,35 @@ SETTING_CATEGORIES = [
 EXPERIMENTAL_WARNING = patcher.EXPERIMENTAL_WARNING
 SETTING_CATEGORY_LOOKUP = {key: (label, color) for key, label, color in SETTING_CATEGORIES}
 
+# The four preset buttons, named as in the Virtual Villagers patcher: (label, method, "?" guide key).
+PRESET_BUTTONS = (
+    ("Select All Patches", "select_all_settings", "select_all"),
+    ("Default Patches", "select_default_settings", "default_patches"),
+    ("Owner's Defaults", "select_owners_default_settings", "owners_defaults"),
+    ("Deselect All Patches", "clear_all_settings", "deselect_all"),
+)
+# Owner's Defaults ticks every patch except these (owner, 2026-11-01: "everything except Up to 28
+# Children"; both Cheat settings and both Invisible Furniture settings are ON in it -- the transparent
+# swap overrides the visible graphics).
+OWNERS_DEFAULT_OFF_SETTING_IDS = frozenset({"up_to_28_children"})
+PATCH_SELECTION_SETTINGS_TITLE = "Patch Selection Settings"
+
+
+def owners_default_selection(settings: dict[str, patcher.PatchSetting]) -> set[str]:
+    """What Owner's Defaults ticks: every selectable setting but OWNERS_DEFAULT_OFF_SETTING_IDS."""
+    return {
+        setting_id
+        for setting_id, setting in settings.items()
+        if not setting.blocked and setting_id not in OWNERS_DEFAULT_OFF_SETTING_IDS
+    }
+
+
+def patch_name_matches(label: str, term: str) -> bool:
+    """The Patch Selection Settings search: every word of the term appears in the name, any case."""
+    words = (term or "").casefold().split()
+    name = (label or "").casefold()
+    return all(word in name for word in words)
+
 
 def clean_path_text(value: str | None) -> str:
     return (value or "").strip().strip('"')
@@ -661,6 +690,8 @@ class VF2PatcherGUI(ToolsTabMixin):
         self.setting_prerequisites: dict[str, frozenset[str]] = {}
         self.informational_settings: dict[str, frozenset[str]] = {}
         self._syncing_settings = False
+        # Settings unticked only because a prerequisite is off; ticking that prerequisite ticks them again.
+        self._auto_unticked: set[str] = set()
         self.description_widgets: list[tk.Text] = []
         self.loaded_manifest_path: str | None = None
         self.loaded_manifest_data: dict[str, object] | None = None
@@ -826,12 +857,20 @@ class VF2PatcherGUI(ToolsTabMixin):
         controls.grid(row=0, column=0, sticky="ew", pady=(0, 8))
         controls.columnconfigure(4, weight=1)
         self._button(controls, "Load Manifest Settings", self.load_manifest_settings).grid(row=0, column=0, padx=(0, 6))
-        self._button(controls, "Defaults", self.select_default_settings).grid(row=0, column=1, padx=(0, 6))
-        self._button(controls, "Enable All", self.select_all_settings).grid(row=0, column=2, padx=(0, 6))
-        self._button(controls, "Disable All", self.clear_all_settings).grid(row=0, column=3, padx=(0, 6))
-        self._help_button(controls, "patch_selection").grid(row=0, column=4, sticky="w")
-        self._button(controls, "Enable All Main Patches", lambda: self.select_category_settings("main")).grid(row=1, column=0, padx=(0, 6), pady=(6, 0))
-        self._button(controls, "Enable all Optional Content", lambda: self.select_category_settings("optional")).grid(row=1, column=1, padx=(0, 6), pady=(6, 0))
+        # The Virtual Villagers patcher's four buttons, each with its "?", on one row.
+        presets = ttk.Frame(controls)
+        presets.grid(row=0, column=1, columnspan=4, sticky="w")
+        for index, (text, command, key) in enumerate(PRESET_BUTTONS):
+            self._button(presets, text, getattr(self, command)).pack(side="left", padx=(8 if index else 0, 0))
+            self._help_button(presets, key).pack(side="left", padx=(2, 0))
+        # On a row of its own, as in the VV patcher: beside the four buttons the row is too wide.
+        more = ttk.Frame(controls)
+        more.grid(row=1, column=0, columnspan=5, sticky="w", pady=(6, 0))
+        self._button(more, PATCH_SELECTION_SETTINGS_TITLE + "...", self.open_patch_selection_settings).pack(side="left")
+        self._help_button(more, "patch_selection_settings").pack(side="left", padx=(2, 0))
+        self._button(more, "Enable All Main Patches", lambda: self.select_category_settings("main")).pack(side="left", padx=(8, 0))
+        self._button(more, "Enable all Optional Content", lambda: self.select_category_settings("optional")).pack(side="left", padx=(6, 0))
+        self._help_button(more, "patch_selection").pack(side="left", padx=(2, 0))
 
         outer = ttk.Frame(frame)
         outer.grid(row=1, column=0, sticky="nsew")
@@ -1287,6 +1326,117 @@ class VF2PatcherGUI(ToolsTabMixin):
             for var in self.setting_vars.values():
                 var.set(False)
 
+    def select_owners_default_settings(self) -> None:
+        """Owner's Defaults: every patch but Up to 28 Children (the cheats and both invisible-furniture rows too)."""
+        wanted = owners_default_selection(self.settings)
+        with self._bulk_setting_change():
+            for setting_id, var in self.setting_vars.items():
+                var.set(setting_id in wanted)
+
+    def set_named_settings(self, setting_ids, tick: bool) -> list[str]:
+        """Tick (or untick) these settings the way the player's own clicks do: a tick ticks what it needs,
+        an untick unticks what needs it. Returns the ids whose box this changed directly."""
+        changed = []
+        for setting_id in setting_ids:
+            var = self.setting_vars.get(setting_id)
+            if var is None or self.settings[setting_id].blocked or setting_id in self.informational_settings:
+                continue
+            if var.get() != tick:
+                var.set(tick)          # the trace runs _on_setting_toggled, exactly as for a click
+                changed.append(setting_id)
+        return changed
+
+    def open_patch_selection_settings(self) -> None:
+        """The VV patcher's "Patch Selection Settings..." window, for VF2's one game: a search box, one
+        checkbox per patch, and Tick These / Untick These for the chosen patches."""
+        existing = getattr(self, "_patch_selection_dialog", None)
+        if existing is not None and existing.winfo_exists():
+            existing.deiconify()
+            existing.lift()
+            existing.focus_set()
+            return
+        if not self.setting_vars:
+            messagebox.showinfo(PATCH_SELECTION_SETTINGS_TITLE, "Load a manifest first.", parent=self.root)
+            return
+        dialog = tk.Toplevel(self.root)
+        dialog.title(PATCH_SELECTION_SETTINGS_TITLE)
+        dialog.transient(self.root)
+        dialog.geometry("620x560")
+        self._patch_selection_dialog = dialog
+        frame = ttk.Frame(dialog, padding=12)
+        frame.pack(fill="both", expand=True)
+        ttk.Label(frame, text="Tick or untick several patches at once", font=("Segoe UI", 10, "bold")).pack(anchor="w")
+        ttk.Label(
+            frame,
+            text=(
+                "Choose patches below, then press Tick These or Untick These. "
+                "A patch that needs another one turns it on too, just as when you tick it yourself, "
+                "and unticking a patch unticks the patches that need it."
+            ),
+            wraplength=580,
+            justify="left",
+        ).pack(anchor="w", pady=(4, 8))
+        search_row = ttk.Frame(frame)
+        search_row.pack(fill="x", pady=(0, 6))
+        ttk.Label(search_row, text="Search:").pack(side="left")
+        search_var = tk.StringVar()
+        search_entry = ttk.Entry(search_row, textvariable=search_var)
+        search_entry.pack(side="left", fill="x", expand=True, padx=(6, 0))
+        list_box = ttk.Frame(frame)
+        list_box.pack(fill="both", expand=True)
+        canvas = tk.Canvas(list_box, borderwidth=0, highlightthickness=0)
+        scroll = ttk.Scrollbar(list_box, orient="vertical", command=canvas.yview)
+        canvas.configure(yscrollcommand=scroll.set)
+        canvas.pack(side="left", fill="both", expand=True)
+        scroll.pack(side="right", fill="y")
+        inner = ttk.Frame(canvas)
+        canvas.create_window((0, 0), window=inner, anchor="nw")
+        inner.bind("<Configure>", lambda _event: canvas.configure(scrollregion=canvas.bbox("all")))
+        choices: list[tuple[str, str, tk.BooleanVar, ttk.Checkbutton]] = []
+        for setting_id in self.setting_vars:
+            setting = self.settings[setting_id]
+            var = tk.BooleanVar(value=False)
+            box = ttk.Checkbutton(inner, text=setting.label, variable=var)
+            if setting.blocked or setting_id in self.informational_settings:
+                box.state(["disabled"])
+            choices.append((setting_id, setting.label, var, box))
+
+        def show_matches(*_args) -> None:
+            term = search_var.get()
+            for *_rest, box in choices:
+                box.pack_forget()
+            for _setting_id, label, _var, box in choices:
+                if patch_name_matches(label, term):
+                    box.pack(anchor="w", padx=(6, 0))
+            canvas.yview_moveto(0)
+
+        search_var.trace_add("write", show_matches)
+        show_matches()
+        self._patch_selection_choices = choices
+        self._patch_selection_search = search_var
+
+        def apply(tick: bool) -> None:
+            chosen = [setting_id for setting_id, _label, var, _box in choices if var.get()]
+            if not chosen:
+                messagebox.showinfo(PATCH_SELECTION_SETTINGS_TITLE, "Tick at least one patch in the list first.",
+                                    parent=dialog)
+                return
+            self.set_named_settings(chosen, tick)
+            done = [setting_id for setting_id in chosen if self.setting_vars[setting_id].get() == tick]
+            names = ", ".join(self.settings[setting_id].label for setting_id in chosen)
+            self.status_var.set(
+                f"{'Ticked' if tick else 'Unticked'} {len(done)} patch{'' if len(done) == 1 else 'es'}: {names}."
+            )
+
+        self._patch_selection_apply = apply
+        buttons = ttk.Frame(frame)
+        buttons.pack(fill="x", pady=(10, 0))
+        ttk.Button(buttons, text="Tick These", command=lambda: apply(True)).pack(side="left")
+        ttk.Button(buttons, text="Untick These", command=lambda: apply(False)).pack(side="left", padx=(8, 0))
+        ttk.Button(buttons, text="Close", command=dialog.destroy).pack(side="right")
+        dialog.bind("<Escape>", lambda _event: dialog.destroy())
+        search_entry.focus_set()
+
     def select_category_settings(self, category: str) -> None:
         with self._bulk_setting_change():
             for setting_id in setting_ids_for_category(self.settings, category):
@@ -1304,6 +1454,9 @@ class VF2PatcherGUI(ToolsTabMixin):
         """
         previous = getattr(self, "_syncing_settings", False)
         self._syncing_settings = True
+        if not previous:
+            # A preset says what it wants outright; what it leaves off is not "waiting".
+            self._auto_unticked = set()
         try:
             yield
         finally:
@@ -1324,10 +1477,23 @@ class VF2PatcherGUI(ToolsTabMixin):
         var = self.setting_vars.get(setting_id)
         if var is None:
             return
+        auto_unticked = getattr(self, "_auto_unticked", set())
+        auto_unticked.discard(setting_id)
         if var.get():
             self._syncing_settings = True
             try:
                 self._tick_prerequisites(setting_id)
+                # A setting only its missing prerequisite switched off comes back with it:
+                # Default Patches leaves No AI Icons waiting for Cheat Upgrades, and ticking
+                # Cheat Upgrades ticks it again.
+                prerequisite_map = getattr(self, "setting_prerequisites", {})
+                for other in sorted(auto_unticked):
+                    needs = prerequisite_map.get(other, frozenset())
+                    if other in self.setting_vars and all(
+                        self.setting_vars[need].get() for need in needs if need in self.setting_vars
+                    ):
+                        self.setting_vars[other].set(True)
+                        auto_unticked.discard(other)
             finally:
                 self._syncing_settings = False
         self._normalize_setting_selection()
@@ -1366,6 +1532,9 @@ class VF2PatcherGUI(ToolsTabMixin):
                     elif not satisfied and var.get():
                         var.set(False)
                         changed = True
+                        if not hasattr(self, "_auto_unticked"):
+                            self._auto_unticked = set()
+                        self._auto_unticked.add(setting_id)
         finally:
             self._syncing_settings = previous
 
