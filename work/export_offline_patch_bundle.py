@@ -532,7 +532,7 @@ SETTINGS = [
     {
         "id": "time_controls",
         "label": "Time Controls",
-        "description": "Adds a Time Controls button to the Settings screen, left of Done. It opens a window to pause and resume the game, choose Slow, Normal or Fast (the game's own speeds) or the extra 5x and 10x, and fast-forward everyone at home by three years with Time Warp (birthdays, leaving home and old age all still happen normally). The chosen speed is never saved: a saved village always comes back at normal speed, so a village saved at 10x does not age years while the game is closed. Installs a small companion DLL in the Virtual Families 2 Patcher Files folder next to the game; unticking the setting removes it and the game is the unmodified B201 again.",
+        "description": "Adds a Time Controls button to the Settings screen, left of Done. It opens a window to pause and resume the game, choose Slow, Normal or Fast (the game's own speeds) or the extra 5x and 10x, and fast-forward everyone at home by three years with Time Warp (birthdays, leaving home and old age all still happen normally). Time Warp costs the same as the store's own Time Warp ($2,000, read from the game's store when you click it); a family that cannot afford it is told so and nothing changes. With Free and Guaranteed Cheats ticked it is free. The chosen speed is never saved: a saved village always comes back at normal speed, so a village saved at 10x does not age years while the game is closed. Installs a small companion DLL in the Virtual Families 2 Patcher Files folder next to the game; unticking the setting removes it and the game is the unmodified B201 again.",
         "default": True,
         "category": "optional",
     },

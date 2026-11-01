@@ -44,6 +44,13 @@ https://github.com/Lorsieab2/Virtual-Families-2-Restoration-Addition-Patcher/
      a change in the Flea Market list (all 36 stay listed and in stock).
      R does nothing anywhere else, and nothing while a box is open.
 
+   Time Controls (on by default) adds a Time Controls button to the game's
+   Settings screen: pause, resume, Slow, Normal, Fast, 5x and 10x, and a Time
+   Warp of +3 years for everyone at home. The Time Warp costs the same as the
+   store's own Time Warp ($2,000, read from the game's store when you click
+   it). If your family cannot afford it, you are told so and nothing changes.
+   With Free and Guaranteed Cheats ticked it is free.
+
    Fix Vanilla Game Bugs (on by default) also stops a crash of the original
    game: at every start the game asks LDW's server to log in (login.php), and
    the server now sends back about 3 KB of text, more than the game has room

@@ -461,6 +461,17 @@ release bundle, like almost everything else)
   The save gets only what the game itself saves for its own pick. With the setting off the DLL is not
   installed and the executable never loads it. **Not live tested yet**: proved by emulating the built
   executable and the real DLL (see `tests/test_b200_store_refresh.py`).
+- **Time Controls** (`.vf2time`, an Optional patch, **on by default**; since B201) - a Time Controls button
+  on the game's Settings screen opens a window to pause and resume, pick Slow, Normal, Fast, 5x or 10x, and
+  Time Warp everyone at home by +3 years. **The Time Warp costs the same as the store's own Time Warp**
+  (owner decision 2026-11-01; free in releases up to B205): the companion DLL (`vf2time_b200.dll`) reads the
+  store's price of its Time Warp item from the game when you click it (`CInventoryManager::GetPrice`, the
+  call the store's own price code makes; $2,000 in the game's table) and pays it the way a store purchase
+  pays. A family with less money is told so and nothing changes (no money, no ageing); nothing is paid if
+  nobody at home can age. With **Free and Guaranteed Cheats** ticked (the executable's 1-byte `.vf2free`
+  section holds 1) it is free; an executable without that section charges. Pause and the speeds are
+  unchanged. **Not live tested**: proved by emulating the built executables with the real DLL and the
+  game's own price and money code (see `tests/test_b200_time_controls.py`).
 - **Up to 28 Children** (`.vf2kids`, in the patcher's own **Experimental** section (red heading, under Optional Patches, with the warning "Experimental: not yet tested in a running game. Back up your saves before using it."), off by default; Enable All and `--enable-all` leave it off, so it is only ever ticked deliberately; added after B201, not yet in a release) - one
   generation may have up to 28 children instead of 6. Only the first 6 appear in the Family Tree, as
   before; every child, the 7th to the 28th included, can be chosen to inherit the house in Next

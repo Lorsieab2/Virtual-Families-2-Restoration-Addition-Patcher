@@ -731,6 +731,18 @@ def facts() -> list[Fact]:
                  "Normal speed (the food groups, symptoms and the baby waiting time), 1 hour 1 minute at 10x.", C,
            "HandleUpgrade 0x48C2E0 case 0x112 on the purchase path HandleMouse -> HandlePurchaseItem: start time moved "
            "back 3,660 x option s, AllVillagersTimeflowUpkeep(true) (86,400 cap only), money capped at +750"))
+    add(_f(TIME, WITH_PATCHER + "the Time Controls window's Time Warp button (+3 years: 60 age units for everyone "
+                 "at home and alive, given with their next age step, with every normal rule) costs the same as the "
+                 "store's Time Warp: the store's own price ($2,000), read from the game when it is clicked and paid "
+                 "the way a store purchase pays. A family with less money is told so and nothing changes; nothing is "
+                 "paid when nobody at home can age. With the patcher option \"Free and Guaranteed Cheats\" on it is "
+                 "free. Patcher releases up to B205 gave it free.", E,
+           "runtime/native/b200time/b200time_time.inc TimeWarpClicked: CInventoryManager::GetPrice 0x46B9F0 for item "
+           "0x112 on the inventory manager, as CalcPrice 0x48ACB0 asks it; refused while the CMoney balance (the "
+           "double at 0x68658C) is below it; paid through the store's money call 0x4B85E0(-price, false), as "
+           "HandlePurchaseItem 0x48C0C8; free while the executable's .vf2free byte is 1. Emulated with the real "
+           "GetPrice, money call and CMoney::Adjust: tests/b200_time_scenarios.py scenario_warp_costs_the_store_price, "
+           "scenario_warp_refused_when_short, scenario_warp_free_with_the_cheat"))
 
     # ------------------------------------------------------------------ Hidden keys, clicks and cheats
     out.extend(_hidden_lines())
