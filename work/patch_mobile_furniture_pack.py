@@ -509,6 +509,24 @@ EXPANDED_FLEA_MARKET_FLAG_SYMBOL = "_gVF2ExpandedFleaMarket"
 # companion DLLs, once, only while .vf2bugs is 1; the DLL installs nothing unless its own pins match and
 # vf2outfits.ini says OutfitPictures=1. No generated code reads anything of it.
 OUTFIT_PICTURES_SETTING = VANILLA_BUGS_SETTING
+# Unicode text (after B205): the companion DLL vf2unicode_b200.dll (runtime/native/b200unicode), shipped under two
+# names, one per setting, because the two settings are mutually exclusive and each removes only its own files:
+# "Render Unicode with In-Game Fonts" (render_unicode_in_game_fonts, on by default: .vf2utxt loads
+# vf2unicode_b200.dll, whose vf2unicode.ini says Mode=1) and "Use Unicode Font (overrides in-game fonts)"
+# (use_unicode_font, off by default: .vf2ufnt loads vf2unicodefont_b200.dll, whose vf2unicodefont.ini says Mode=2).
+# Two dormant bytes; zero never loads the DLL. The same theGame::Init wrapper loads it after every other companion
+# DLL, once. The DLL installs nothing unless its own pins match and its ini says so. No generated code reads it.
+UNICODE_TEXT_SETTING = "render_unicode_in_game_fonts"
+UNICODE_TEXT_FLAG_SECTION = ".vf2utxt"
+UNICODE_TEXT_FLAG_SYMBOL = "_gVF2UnicodeText"
+UNICODE_TEXT_DLL_NAME = "vf2unicode_b200.dll"
+UNICODE_TEXT_INI_NAME = "vf2unicode.ini"
+UNICODE_FONT_SETTING = "use_unicode_font"
+UNICODE_FONT_FLAG_SECTION = ".vf2ufnt"
+UNICODE_FONT_FLAG_SYMBOL = "_gVF2UnicodeFont"
+UNICODE_FONT_DLL_NAME = "vf2unicodefont_b200.dll"
+UNICODE_FONT_INI_NAME = "vf2unicodefont.ini"
+UNICODE_TEXT_STARTUP = "B200Unicode_Startup"
 OUTFIT_PICTURES_FLAG_SECTION = VANILLA_BUGS_FLAG_SECTION
 OUTFIT_PICTURES_DLL_NAME = "vf2outfits_b200.dll"
 OUTFIT_PICTURES_INI_NAME = "vf2outfits.ini"
@@ -16248,6 +16266,32 @@ static void VF2LoadOutfitPicturesDll() {
     if (startup) startup();
 }
 
+// Unicode text loaders (see UNICODE_TEXT_* / UNICODE_FONT_* in the generator). Zero = never loads the companion
+// DLL. The two settings are exclusive; each has its own byte and its own copy of the DLL. Loaded by the same
+// wrapper, after every other companion DLL, once; nothing else reads the bytes.
+#pragma section(".vf2utxt", read, write)
+extern "C" __declspec(allocate(".vf2utxt"))
+volatile unsigned char gVF2UnicodeText = 0;
+#pragma section(".vf2ufnt", read, write)
+extern "C" __declspec(allocate(".vf2ufnt"))
+volatile unsigned char gVF2UnicodeFont = 0;
+
+static void VF2LoadUnicodeDll(const char *tail) {
+    unsigned short path[512];
+    unsigned long length = GetModuleFileNameW(0, path, 400);
+    if (length == 0 || length >= 400) return;
+    unsigned long cut = length;
+    while (cut > 0 && path[cut - 1] != 92) --cut;
+    if (cut == 0) return;
+    unsigned long out = cut;
+    for (const char *c = tail; *c; ++c) path[out++] = (unsigned short)(unsigned char)*c;
+    path[out] = 0;
+    void *module = LoadLibraryW(path);
+    if (!module) return;
+    void (__cdecl *startup)() = (void (__cdecl *)())GetProcAddress(module, "B200Unicode_Startup");
+    if (startup) startup();
+}
+
 extern "C" void *__cdecl VF2GameStateGetAfterTimeControlsLoad() {
     static bool tried = false;
     if (!tried) {
@@ -16257,6 +16301,8 @@ extern "C" void *__cdecl VF2GameStateGetAfterTimeControlsLoad() {
         if (gVF2FamilyHistory == 1) VF2LoadFamilyHistoryDll();
         if (gVF2StoreRefresh == 1) VF2LoadStoreRefreshDll();
         if (gVF2FixVanillaGameBugs == 1) VF2LoadOutfitPicturesDll();
+        if (gVF2UnicodeText == 1) VF2LoadUnicodeDll("__VF2_UNICODE_TEXT_RELATIVE_PATH__");
+        else if (gVF2UnicodeFont == 1) VF2LoadUnicodeDll("__VF2_UNICODE_FONT_RELATIVE_PATH__");
     }
     return theGameState::Get();
 }
@@ -18740,6 +18786,14 @@ extern "C" void __cdecl VF2ApplyVisibleSpecialUpgrade(int itemId) {
     special_upgrade_helper_cpp = special_upgrade_helper_cpp.replace(
         "__VF2_OUTFIT_PICTURES_RELATIVE_PATH__",
         TIME_CONTROLS_PATCHER_FOLDER + "\\\\" + OUTFIT_PICTURES_DLL_NAME,
+    )
+    special_upgrade_helper_cpp = special_upgrade_helper_cpp.replace(
+        "__VF2_UNICODE_TEXT_RELATIVE_PATH__",
+        TIME_CONTROLS_PATCHER_FOLDER + "\\\\" + UNICODE_TEXT_DLL_NAME,
+    )
+    special_upgrade_helper_cpp = special_upgrade_helper_cpp.replace(
+        "__VF2_UNICODE_FONT_RELATIVE_PATH__",
+        TIME_CONTROLS_PATCHER_FOLDER + "\\\\" + UNICODE_FONT_DLL_NAME,
     )
     special_upgrade_helper_cpp = special_upgrade_helper_cpp.replace(
         "__VF2_TIME_CONTROLS_RELATIVE_PATH__",
@@ -26430,6 +26484,47 @@ def patch_expanded_flea_market_manifest(manifest):
         "flag_off": "the stock Flea Market: 5 goods picked by MaybeUpdateRotatingItems, again 6 real hours later",
         "save_format": "unchanged",
     }
+
+
+def patch_unicode_text_manifest(manifest):
+    """Unicode text: two dormant bytes (.vf2utxt for Render Unicode with In-Game Fonts, .vf2ufnt for Use Unicode
+    Font) are compiled into every executable (special upgrade helper C++); the loader is the Time Controls wrapper
+    on theGame::Init's first call, which loads the companion DLL after every other one. Requires
+    patch_time_controls_loader."""
+    if "TimeControls" not in manifest:
+        raise RuntimeError("Unicode text rides the Time Controls loader; patch it first")
+    for key, setting, section, symbol, dll, ini, default, label in (
+        ("UnicodeText", UNICODE_TEXT_SETTING, UNICODE_TEXT_FLAG_SECTION, UNICODE_TEXT_FLAG_SYMBOL,
+         UNICODE_TEXT_DLL_NAME, UNICODE_TEXT_INI_NAME, True, "Render Unicode with In-Game Fonts"),
+        ("UnicodeFont", UNICODE_FONT_SETTING, UNICODE_FONT_FLAG_SECTION, UNICODE_FONT_FLAG_SYMBOL,
+         UNICODE_FONT_DLL_NAME, UNICODE_FONT_INI_NAME, False, "Use Unicode Font (overrides in-game fonts)"),
+    ):
+        manifest[key] = {
+            "status": "dormant loader installed in every executable",
+            "offline_patcher_setting": setting,
+            "label": label,
+            "category": "optional",
+            "default": default,
+            "excludes": UNICODE_FONT_SETTING if setting == UNICODE_TEXT_SETTING else UNICODE_TEXT_SETTING,
+            "hook": (
+                "theGame::Init's first call (theGameState::Get) -> VF2GameStateGetAfterTimeControlsLoad, which "
+                f"loads {TIME_CONTROLS_PATCHER_FOLDER}\\{dll} once when the byte is 1, after every other "
+                "companion DLL"
+            ),
+            "runtime_flag": {
+                "symbol": symbol,
+                "source_section": section,
+                "size": 1,
+                "default": "00",
+                "enabled": "01",
+                "linked_location_status": "pending_link_metadata",
+            },
+            "companion_dll": dll,
+            "companion_ini": ini,
+            "startup_export": UNICODE_TEXT_STARTUP,
+            "save_format": "unchanged: names stay in their own fields, in the patcher's one stored form",
+            "flag_off": "the DLL is never loaded: the game is the unmodified build",
+        }
 
 
 def patch_outfit_pictures_manifest(manifest):
@@ -42484,6 +42579,8 @@ def main():
     patch_expanded_flea_market_manifest(manifest)
     # Outfit Pictures (part of Fix Vanilla Game Bugs; the same loader loads its DLL last, on .vf2bugs).
     patch_outfit_pictures_manifest(manifest)
+    # Unicode text (.vf2utxt / .vf2ufnt; the same loader loads its DLL after every other one).
+    patch_unicode_text_manifest(manifest)
     # Invisible furniture counts as its stock donor where stock code tests
     # the donor's item id (every executable).
     patch_invisible_furniture_parity(manifest)

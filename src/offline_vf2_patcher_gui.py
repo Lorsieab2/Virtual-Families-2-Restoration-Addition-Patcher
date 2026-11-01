@@ -1328,6 +1328,12 @@ class VF2PatcherGUI(ToolsTabMixin):
             self._syncing_settings = True
             try:
                 self._tick_prerequisites(setting_id)
+                # ticking one of two settings that cannot be on together unticks the other
+                setting = self.settings.get(setting_id)
+                for other in getattr(setting, "excludes", ()):
+                    other_var = self.setting_vars.get(other)
+                    if other_var is not None and other_var.get():
+                        other_var.set(False)
             finally:
                 self._syncing_settings = False
         self._normalize_setting_selection()
@@ -1351,6 +1357,14 @@ class VF2PatcherGUI(ToolsTabMixin):
         previous = getattr(self, "_syncing_settings", False)
         self._syncing_settings = True
         try:
+            # settings that cannot be on together (a bulk tick such as Enable All): the default one stays
+            settings = getattr(self, "settings", {}) or {}
+            if any(getattr(s, "excludes", ()) for s in settings.values()):
+                ticked = {setting_id for setting_id, var in self.setting_vars.items() if var.get()}
+                keep = patcher.resolve_exclusions(
+                    {k: v for k, v in settings.items() if k in self.setting_vars}, ticked)
+                for setting_id in ticked - keep:
+                    self.setting_vars[setting_id].set(False)
             changed = True
             while changed:
                 changed = False

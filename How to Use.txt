@@ -43,6 +43,19 @@ https://github.com/Lorsieab2/Virtual-Families-2-Restoration-Addition-Patcher/
      picks 5 new goods, but only while All 36 Flea Market goods is unticked.
      R does nothing anywhere else, and nothing while a box is open.
 
+   Two text settings; only one can be on (ticking one unticks the other):
+   - Render Unicode with In-Game Fonts (on by default): the game shows and
+     accepts every letter and character: accents (é ñ ş ı İ ğ), Greek,
+     Cyrillic, Japanese, Chinese, Korean, symbols, emoji. Type them with your
+     keyboard's own keys, dead keys, Alt codes or an input method. Letters the
+     game's fonts lack are made in the same style ("patcher-made"). A name
+     still fits its box: a letter that would not fit is not added.
+   - Use Unicode Font (overrides in-game fonts) (off by default): every text
+     is drawn with a Windows font (Segoe UI) at the game fonts' sizes instead.
+   Names with only Latin letters (é, ü ...) are saved exactly as before, so
+   the original game shows them too; other names show as odd letters in the
+   original game, never a crash.
+
    Fix Vanilla Game Bugs (on by default) also stops a crash of the original
    game: at every start the game asks LDW's server to log in (login.php), and
    the server now sends back about 3 KB of text, more than the game has room
@@ -86,6 +99,11 @@ has no family surname: a slot is shown under the player name typed when it was
 started. Quit the game first; the new name can have up to 19 characters (the
 game keeps no more), and your saves are backed up first as
 "Backup <date> (before rename)".
+Game Font Text writes anything in the game's own four fonts and saves it as
+a PNG picture: type or paste any text, pick the font and colour, and add
+accents or any character from the picker. Letters the fonts lack are drawn in
+the fonts' own style and marked "(patcher-made)"; the preview is exactly what
+the game draws. Pick the game folder first (the letters come from it).
 Game Speed pauses or unpauses a family in its save. Quit the game first, pick
 the family (each shows its speed now) and choose Paused or Normal. Paused works
 as if you paused just before the game last saved; Normal as if you unpaused it

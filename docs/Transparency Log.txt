@@ -3510,3 +3510,60 @@ Server error text overflows a reply handler's buffer (Fix Vanilla Game Bugs, B20
   import) is modelled by its documented options. With VF2_SERVER_REPLY_EXE
   each linked executable must hold six stubs, each reached by exactly one
   call. Static and emulated evidence only; the game was never run.
+
+Unicode text: Render Unicode with In-Game Fonts, Use Unicode Font, Game Font Text (after B205; not live tested)
+---------------------------------------------------------------------------------------------------------------
+
+- Owner requests 2026-11-01: type anything in the game's own fonts with a
+  preview and PNG export, accents and any Unicode character, glyphs made where
+  missing; the game itself shows and accepts them; one text rule for every
+  reader; two exclusive settings, Render Unicode with In-Game Fonts (default
+  on) and Use Unicode Font (overrides in-game fonts) (default off).
+- The fonts (B200 desktop objects, the constructors run under emulation):
+  Segoe24, Segoe24Bold, Segoe32Bold, Segoe36Bold are the only fonts; each is a
+  white sheet (Images\<name>.png, 16 alpha levels) and a glyph table built by
+  ldwFont::Load / ldwFontImpl::Load: line heights 19, 19, 26, 29, kerning 0,
+  190 glyphs (ASCII 21h-7Fh, the space, Latin-1 A2h-FFh) and a 256-entry
+  byte map in which every other byte draws entry 0 ('!'). The sheets are
+  Segoe UI at 17 px (regular / bold), 23 px bold and 26 px bold (GDI advance
+  widths match within 4-7 px over 94 characters; 73-83% of pixels identical).
+  src/vf2_game_fonts.json holds these numbers (no game art).
+- Text pipeline: every string is char*; ldwGameWindowImpl::DrawString /
+  DrawChars, ldwGameWindow::DrawStringJustified and ldwFont::GetWidth /
+  GetNextJustifiedLine step one byte at a time, tint by ANDing each sheet
+  pixel with the colour (ldwFontImpl::GetImage, cached per colour at
+  impl+41Ch) and blit with SDL_UpperBlit (alpha FFh) or BlitRectWithAlpha.
+  Typing: CheckForEvents passes an SDL_TEXTINPUT only when it is exactly one
+  byte (HandleKey(5, 0, char)), so the original game drops every non-ASCII
+  key; ldwTextControlImpl::HandleKey appends bytes 20h-FFh while the length is
+  below its limit (SetCanEdit: 20 for player and nickname names, 18 for
+  family member names, 80 for the Family Tree note) and GetText strncpy's into
+  the field (20, 19, 80 bytes), cutting at a byte.
+- The patch (runtime/native/b200unicode, runtime/b200_unicode_sites.py): the
+  DLL finds 10 whole stock functions by their object-file bytes in all 32
+  B205 executables and B200 (runtime/tools/gen_b200_unicode_sites.py), jumps
+  from DrawString, DrawChars, GetWidth, GetNextJustifiedLine and GetText to
+  its versions (the stock functions with a character in place of a byte;
+  GetText cuts at a character), wraps DrawStringJustified (each character
+  beyond ASCII becomes one byte 80h-FFh for that call and the font's
+  GetCharSourceRect slot answers it), replaces ldwTextControlImpl's HandleKey
+  slot (a typed character is added in the stored form only if the whole text
+  fits; Backspace removes a character) and the SDL_PollEvent import slot (a
+  typed text other than one ASCII byte goes to the game one character at a
+  time as HandleKey(5, cp | 40000000h, 0), then is hidden from the stock
+  code). Glyphs: the font's sheet surface is replaced by a taller copy (stock
+  pixels unchanged), and patcher-made or Windows-drawn glyphs are added to it
+  and to every cached tinted copy when first used.
+- Evidence (emulation, not live): tests/test_vf2_game_text.py (the game's own
+  code: metrics, every byte's rectangle, width, height, DrawString, DrawChars
+  and line breaking for 156 texts x 4 fonts, and the unpatched game over every
+  UTF-8 byte); tests/test_b200_unicode_text.py (the DLL's C++ rules equal the
+  Python for about 3,000 texts); tests/test_b200_unicode_dll.py (the DLL's
+  resolver over the real B205 core, at its base and relocated; its typing,
+  GetText and SDL_PollEvent hooks; its DrawString over the real executable
+  draws the patcher's glyphs, pixel for pixel, in all four fonts).
+- Live check needed: type é, ü, ı, ş, a dead-key accent, an Alt code, an IME
+  word and an emoji into a family member's name and a player name; see them in
+  the house, the Details screen, the Family Tree, a Random Event and the store;
+  save, quit, restart; open the same save in the B205 game (odd letters, no
+  crash); Use Unicode Font: every screen's text fits.

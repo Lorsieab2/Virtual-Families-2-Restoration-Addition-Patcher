@@ -26,6 +26,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import vf2_game_text as game_text
 import vf2_genealogy as gen
 
 _HEADING = re.compile(r"^\[(?P<when>[^\]]*)\] (?P<kind>.+) (?P<n>\d+)$")
@@ -231,6 +232,21 @@ def _rename(h: History, old: str, new: str, sex: str) -> None:
     h.heirs = [(swap(x[0], x[1]),) + x[1:] for x in h.heirs]
 
 
+def log_text(raw: bytes) -> str:
+    """A Family History file's text. vf2history_b200.dll writes each name exactly as the save holds it (its bytes,
+    Text::Name), so a line holds a name in its stored form: every line is read with the patcher's one text rule
+    (vf2_game_text.decode): a line of Latin-1 / Windows-1252 bytes as before, a line of UTF-8 as UTF-8. A 0 byte
+    (never written) is kept as a character."""
+    return "\n".join("\0".join(game_text.decode(part) for part in line.split(b"\0"))
+                     for line in bytes(raw).split(b"\n"))
+
+
+def log_bytes(text: str) -> bytes:
+    """The bytes of a record the patcher adds to a Family History file: line by line in the stored form
+    (vf2_game_text.encode), as the DLL writes the names, so log_text reads it back exactly."""
+    return b"\n".join(game_text.encode(line) for line in text.split("\n"))
+
+
 def read(folder: Path, slot: int) -> History | None:
     paths = files(folder, slot)
     if not paths:
@@ -238,7 +254,7 @@ def read(folder: Path, slot: int) -> History | None:
     h = History()
     for path in paths:
         try:
-            parse(path.read_bytes().decode("cp1252", errors="replace"), h)
+            parse(log_text(path.read_bytes()), h)
         except OSError:
             continue
         h.files.append(path)

@@ -75,6 +75,12 @@ REQUIRED_RUNNERS = {
     "vf2_game_mechanics.py",
     "vf2_game_mechanics_window.py",
     "vf2_save_reader.py",
+    "vf2_game_text.py",
+    "vf2_unicode_tables.py",     # its Unicode tables (the Unicode text DLL has the same ones)
+    "vf2_glyph_render.py",       # Game Font Text: characters the game fonts lack, drawn in their style (GDI)
+    "vf2_glyph_maker.py",        # Game Font Text: the patcher-made letters
+    "vf2_game_fonts.json",       # Game Font Text: the four game fonts' metrics (numbers only, no game art)
+    "vf2_text_tool.py",          # Game Font Text: the window
     "vf2_genealogy.py",
     "vf2_family_history.py",
     "vf2_tree_memory.py",

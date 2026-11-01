@@ -34,6 +34,7 @@ import struct
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import vf2_game_text as game_text
 import vf2_save_reader as reader
 
 UNITS_PER_YEAR = reader.AGE_UNITS_PER_YEAR
@@ -244,7 +245,7 @@ def read_children_sidecar(data: bytes) -> ChildrenSidecar | None:
         slot, sex, state, head, body, age = struct.unpack_from("<6i", data, at)
         if not 0 <= slot < reader.VILLAGER_SLOTS or state not in KIDS_STATES:
             return None
-        name = data[at + 24:at + 24 + 28].split(b"\0", 1)[0].decode("cp1252", "replace")
+        name = game_text.decode(data[at + 24:at + 24 + 28])
         kids.append(ExtraChild(slot, sex, KIDS_STATES[state], head, body, age, name))
     return ChildrenSidecar(save_hash, save_size, gens, pslot, psex, kids)
 
@@ -264,8 +265,7 @@ def make_children_sidecar(save_bytes: bytes, generations: int, parent_slot: int,
     for i, c in enumerate(children):
         at = KIDS_HEADER + i * KIDS_ENTRY
         struct.pack_into("<6i", out, at, c.slot, c.sex, states[c.state], c.head, c.body, c.age)
-        name = c.name.encode("cp1252")[:27]
-        out[at + 24:at + 24 + len(name)] = name
+        out[at + 24:at + 24 + 28] = game_text.field_bytes(c.name, 28)    # never cut inside a character, 0-ended
     struct.pack_into("<Q", out, size - 8, fnv1a64(bytes(out[:-8])))
     return bytes(out)
 

@@ -294,6 +294,35 @@ Changelog
   game's type information) and needs executables built with its .vf2rfsh
   loader. The save gets only what the game itself saves for its own pick.
 
+- Render Unicode with In-Game Fonts (after B205; Optional, on by default) and
+  Use Unicode Font (overrides in-game fonts) (Optional, off by default): only
+  one can be on. Install vf2unicode_b200.dll (or the same DLL as
+  vf2unicodefont_b200.dll), its ini, and for the first setting the
+  patcher-made letters in "Unicode Text" (new pictures made from the game's own
+  font pictures; the game's pictures are never changed), in the Virtual
+  Families 2 Patcher Files folder, only while the setting is on. The DLL
+  replaces the start of five game functions (DrawString, DrawChars, GetWidth,
+  GetNextJustifiedLine, DrawStringJustified) and of the text box's GetText,
+  two pointers (the font's character rectangle and the text box's key
+  handler, found through the game's type information) and the executable's
+  SDL_PollEvent import, all found by exact bytes; anything it cannot prove
+  makes it install nothing. It draws characters the fonts lack with Windows'
+  own fonts and gives the fonts' pictures room for them in memory. Saves keep
+  names in their own fields: Latin-1 text one byte per letter as before,
+  anything else UTF-8. Needs executables built with the .vf2utxt / .vf2ufnt
+  loader bytes (B206).
+
+- Game Font Text (Tools tab, after B205): writes text in the game's four fonts
+  and saves a PNG. It reads the game's font pictures from the game folder and
+  writes only the PNG you save.
+
+- One text rule (after B205): every patcher tool that reads or writes a save
+  name or a Family History log line uses src/vf2_game_text.py (UTF-8 when the
+  bytes are valid UTF-8, else one byte per character; Latin-1 and the
+  Windows-1252 characters are written one byte each, anything else as UTF-8,
+  never cut inside a character). Rename Family and Copy Player Slot accept
+  any character within the 19-byte name field.
+
 - Copy Player Slot (Tools tab, after B204): copies one family into an empty
   save slot of the same save folder under a new name, with everything kept for
   it: the save, the game's previous save (slot + 20), the Up to 28 Children and

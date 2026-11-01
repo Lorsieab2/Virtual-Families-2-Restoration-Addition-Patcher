@@ -193,8 +193,8 @@
       "title": "Rename Family",
       "guide": [
         "Virtual Families 2 has no family surname: each family slot is shown under the player name typed when it was started, on the main menu and in Change Player. This changes that name.",
-        "Quit the game first, from its own menu. Click Rename Family..., pick the family, type the new name (up to 19 letters, digits, spaces and keyboard symbols), then Rename.",
-        "The game itself keeps at most 19 characters, and \"NEW PLAYER\" cannot be used: the game shows that for an empty slot.",
+        "Quit the game first, from its own menu. Click Rename Family..., pick the family, type the new name (any letters, digits, spaces and symbols, in any language), then Rename.",
+        "Up to 19 Latin letters; other letters and emoji take more room (the box counts). \"NEW PLAYER\" cannot be used: the game shows that for an empty slot.",
         "Your saves are backed up first, as \"Backup <date> (before rename)\", so Restore Saves can undo it."
       ]
     },
@@ -244,6 +244,17 @@
         "Carrying (in the house): pick any item a family member can hold, even ones the game never shows (marked). Saves do not keep what anyone carries.",
         "Pick the game folder: the pictures come from it. A patched game shows the patcher's expansion outfits; Patched look off shows the original game's.",
         "Save PNG: at the game's size, 2x or 4x (crisp), or your own size (smooth). Your saves and game folders are only read."
+      ]
+    },
+    "game_font_text": {
+      "section": "Tools",
+      "title": "Game Font Text",
+      "guide": [
+        "Type anything and see it drawn in the game's own fonts, exactly as the game draws text, then save it as a PNG picture with a clear background.",
+        "Pick one of the game's four fonts, a colour (white, black, brown or your own) and, if you like, a wrap width in pixels (0: each line break starts a new line).",
+        "Accents: choose a language, then click a letter to add it. Any character: type a name (snowman, heart) or a code (U+2603), click Find, then Insert.",
+        "Letters the game's fonts do not have are made by the patcher in the font's style and marked (patcher-made). The line under the preview counts each kind.",
+        "Pick the game folder: the letters come from it, and it is only read. Save PNG: at the game's size, 2x or 4x (crisp), or your own size (smooth)."
       ]
     },
     "how_to_use": {

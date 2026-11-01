@@ -1,5 +1,6 @@
 """The Tools tab: Back Up Saves, Restore Saves, Copy Player Slot, Rename Family, Game Speed, Game Mechanics, the Family Tree Maker
-(vf2_family_tree_window, its family read by vf2_genealogy), the Picture Maker (vf2_picture_maker) and the guide.
+(vf2_family_tree_window, its family read by vf2_genealogy), the Picture Maker (vf2_picture_maker), Game Font Text
+(vf2_text_tool) and the guide.
 
 A mixin for VF2PatcherGUI (offline_vf2_patcher_gui.py), kept in its own file so the window's patching code
 stays as it was.  It needs from the window: ``root``, ``status_var``, ``notebook``, ``_run_with_wait`` and the
@@ -145,6 +146,8 @@ class ToolsTabMixin:
         self._help_button(family, "game_mechanics").pack(side="left", padx=(3, 0))
         self._link(family, "Picture Maker...", self.picture_maker).pack(side="left", padx=(18, 0))
         self._help_button(family, "picture_maker").pack(side="left", padx=(3, 0))
+        self._link(family, "Game Font Text...", self.game_font_text).pack(side="left", padx=(18, 0))
+        self._help_button(family, "game_font_text").pack(side="left", padx=(3, 0))
 
         guide = ttk.LabelFrame(tab, text="How to Use", padding=10)
         guide.pack(fill="x", pady=(10, 0))
@@ -211,6 +214,15 @@ class ToolsTabMixin:
         import vf2_picture_maker
         folders = vf2_save_backup.find_save_folders(vf2_save_backup.documents_folder())
         return vf2_picture_maker.open_picture_maker(self, folders, tree_window._guess_game_folder(self))
+
+    # -- Game Font Text -----------------------------------------------------
+
+    def game_font_text(self):
+        """Game Font Text (vf2_text_tool): any text drawn in the game's own fonts and saved as a clear PNG. One at a
+        time: a second click brings it to the front."""
+        import vf2_family_tree_window as tree_window
+        import vf2_text_tool
+        return vf2_text_tool.open_text_tool(self, tree_window._guess_game_folder(self))
 
     # -- How to Use ---------------------------------------------------------
 
@@ -760,8 +772,9 @@ class ToolsTabMixin:
 
         def check(*_args) -> None:
             name = name_var.get()
-            counter_var.set(f"{len(name)} / {vf2_copy_slot.MAX_LENGTH} characters")
-            counter.configure(foreground="#a01010" if len(name) > vf2_copy_slot.MAX_LENGTH else "")
+            shown, too_long = vf2_rename_family.name_counter(name)
+            counter_var.set(shown)
+            counter.configure(foreground="#a01010" if too_long else "")
             info = chosen_slot()
             where = folder()
             problem = None
@@ -942,8 +955,9 @@ class ToolsTabMixin:
 
         def refresh_check(*_args) -> None:
             name = name_var.get()
-            counter_var.set(f"{len(name)} / {vf2_rename_family.MAX_LENGTH} characters")
-            counter.configure(foreground="#a01010" if len(name) > vf2_rename_family.MAX_LENGTH else "")
+            shown, too_long = vf2_rename_family.name_counter(name)
+            counter_var.set(shown)
+            counter.configure(foreground="#a01010" if too_long else "")
             info = chosen_slot()
             problem = None
             if folder() is None:
