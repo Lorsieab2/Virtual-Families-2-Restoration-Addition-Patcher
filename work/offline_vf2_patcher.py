@@ -28,6 +28,9 @@ from typing import Any, Callable
 
 BACKUP_MANIFEST = "vf2_patch_backup_manifest.json"
 DEFAULT_BACKUP_ROOT = ".vf2_patch_backups"
+# Kept when a modded output folder is refreshed: the Unicode Font tool's choice and font file
+# (src/vf2_unicode_font.py), so patching the same folder again keeps the player's font.
+KEPT_ON_REFRESH = ("Virtual Families 2 Patcher Files", "Unicode Font")
 DEFAULT_EXE_NAME = "Virtual Families 2.exe"
 DESKTOP_RUNTIME_SOURCE_FILENAME_RE = re.compile(r"DESKTOP-[A-Za-z0-9]+", flags=re.IGNORECASE)
 EXECUTABLE_OVERLAY_SETTINGS = {
@@ -1744,6 +1747,14 @@ def prepare_output_dir(
         emit_progress(args, f"Refreshing modded output folder from vanilla install: {output_root}")
         for child in output_root.iterdir():
             if child.name == DEFAULT_BACKUP_ROOT:
+                continue
+            kept = child / KEPT_ON_REFRESH[1]
+            if child.name == KEPT_ON_REFRESH[0] and child.is_dir() and not child.is_symlink() and kept.is_dir() \
+                    and not kept.is_symlink():
+                # the font chosen with the Tools tab's Unicode Font (vf2_unicode_font): the player's own choice
+                for inner in child.iterdir():
+                    if inner.name != KEPT_ON_REFRESH[1]:
+                        remove_output_entry(inner)
                 continue
             remove_output_entry(child)
     elif output_root.exists():

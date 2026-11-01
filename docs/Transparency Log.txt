@@ -3749,6 +3749,26 @@ Unicode text: Render Unicode with In-Game Fonts, Use Unicode Font, Game Font Tex
   resolver over the real B205 core, at its base and relocated; its typing,
   GetText and SDL_PollEvent hooks; its DrawString over the real executable
   draws the patcher's glyphs, pixel for pixel, in all four fonts).
+- Unicode Font (2026-11-01, as VF1 v1.7, its PR #55): Tools tab -> "Unicode
+  Font..." (src/vf2_unicode_font.py): the modded folder, any installed font or
+  a .ttf/.otf/.ttc file (copied into "Virtual Families 2 Patcher
+  Files\Unicode Font\"), a preview of the four game fonts, Save to
+  "Unicode Font\Unicode Font.ini" [UnicodeFont] Face=/File= (UTF-16 with a
+  BOM, so any font name; Windows' GetPrivateProfileStringW reads it back).
+  The DLL reads it in Mode 2 (else [Font] Face= in vf2unicodefont.ini), loads
+  the file with AddFontResourceExW(FR_PRIVATE), and per game font fits the size
+  (FitOverride = vf2_game_text.fit_unicode_font: the em at which "The quick
+  brown fox jumps over the lazy dog 0123456789" is as wide as the game font's
+  own glyph widths, 60-130% of the fitted Segoe UI px; the px when the face is
+  not installed) and draws every character with TA_BASELINE at the game font's
+  baseline (its top offset + Segoe UI's tmAscent). Game Font Text previews it
+  ("As Use Unicode Font draws it, with:"). offline_vf2_patcher.prepare_output_dir
+  keeps that one folder when it refreshes a modded folder. Evidence:
+  tests/test_unicode_font.py - the DLL under unicorn with real GDI (every GDI
+  call forwarded) over the real executable: DrawString places, widths and
+  alpha and GetWidth equal the preview in all four fonts for Segoe UI, Comic
+  Sans MS and Arial loaded from a file; the fitted sizes are within a step of
+  the game's widths; the tool's files, window and the refresh.
 - Live check needed: type accented, Turkish and other letters, a dead-key accent, an Alt code, an IME
   word and an emoji into a family member's name and a player name; see them in
   the house, the Details screen, the Family Tree, a Random Event and the store;

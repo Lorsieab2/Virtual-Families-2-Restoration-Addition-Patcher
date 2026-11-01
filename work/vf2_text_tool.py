@@ -130,10 +130,13 @@ def counts(font: T.GameFont | None, text: str) -> dict:
     return out
 
 
-def status_text(c: dict, fonts_loaded: bool = True) -> str:
+def status_text(c: dict, fonts_loaded: bool = True, override: tuple | None = None) -> str:
     words = (f"{c['characters']} character{'' if c['characters'] == 1 else 's'}; "
              f"stored size {c['bytes']} byte{'' if c['bytes'] == 1 else 's'}.")
-    if fonts_loaded:
+    if fonts_loaded and override is not None:
+        words += (f" As Use Unicode Font draws it: {override[0]} at {override[1]} px. Drawn by Windows: "
+                  f"{c['patcher']}. Missing (drawn as a box): {c['missing']}.")
+    elif fonts_loaded:
         words += (f" From the game font: {c['game']}. Patcher-made: {c['patcher']}. "
                   f"Missing (drawn as a box): {c['missing']}.")
     return words
@@ -303,6 +306,9 @@ class TextTool:
         self.status_var = tk.StringVar(master=v)
         self.folder_status_var = tk.StringVar(master=v)
         self.hover_var = tk.StringVar(master=v)
+        self.unicode_var = tk.BooleanVar(master=v, value=False)
+        self.unicode_face_var = tk.StringVar(master=v, value=T.DEFAULT_UNICODE_FACE)
+        self._overrides: dict = {}
         self.custom_rgb = (255, 255, 255)
         self.fonts: dict = {}
         self.image: pi.Image | None = None           # the picture shown, at the game's size, clear
@@ -396,6 +402,14 @@ class TextTool:
                             values=[name for name, _c in BACKGROUNDS])
         back.pack(side="left", padx=(4, 0))
         back.bind("<<ComboboxSelected>>", lambda _e: self._show())
+        override = ttk.Frame(left)                 # as VF1's Game Text: the Use Unicode Font preview
+        override.pack(fill="x", pady=(0, 2))
+        ttk.Checkbutton(override, text="As Use Unicode Font draws it, with:", variable=self.unicode_var,
+                        command=self.refresh).pack(side="left")
+        faces = ttk.Combobox(override, textvariable=self.unicode_face_var, width=30, values=self._faces())
+        faces.pack(side="left", padx=4)
+        faces.bind("<<ComboboxSelected>>", lambda _e: self.refresh())
+        faces.bind("<Return>", lambda _e: self.refresh())
         self.status = ttk.Label(left, textvariable=self.status_var, wraplength=600, justify="left")
         self.status.pack(side="bottom", anchor="w", pady=(6, 0))     # before the preview: it never gives way
         holder = ttk.Frame(left)
@@ -559,8 +573,24 @@ class TextTool:
         return T.FONT_NAMES[index] if 0 <= index < len(T.FONT_NAMES) else T.FONT_NAMES[0]
 
     def current_font(self):
-        """(GameFont, sheet) of the chosen font, or (None, None) without a game folder."""
-        return self.fonts.get(self.font_name(), (None, None))
+        """(GameFont, sheet) of the chosen font, or (None, None) without a game folder; with "As Use Unicode Font
+        draws it" ticked, that font as Use Unicode Font draws it in the chosen face (vf2_game_text.with_unicode_font)."""
+        font, sheet = self.fonts.get(self.font_name(), (None, None))
+        if font is not None and self.unicode_var.get():
+            face = self.unicode_face_var.get().strip() or T.DEFAULT_UNICODE_FACE
+            key = (font.name, face)
+            if key not in self._overrides:
+                self._overrides[key] = T.with_unicode_font(font, face)
+            return self._overrides[key], sheet
+        return font, sheet
+
+    @staticmethod
+    def _faces() -> list[str]:
+        try:
+            import vf2_unicode_font
+            return vf2_unicode_font.installed_faces()
+        except Exception:                    # no Tk font list: the default alone
+            return [T.DEFAULT_UNICODE_FACE]
 
     def _font_changed(self) -> None:
         font, _sheet = self.current_font()
@@ -633,7 +663,7 @@ class TextTool:
         text = self.get_text()
         font, sheet = self.current_font()
         c = counts(font, text)
-        said = status_text(c, font is not None)
+        said = status_text(c, font is not None, font.override if font is not None else None)
         wrap = self.wrap_width()
         self.image = None
         if font is None:

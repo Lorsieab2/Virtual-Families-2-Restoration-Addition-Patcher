@@ -81,6 +81,7 @@ REQUIRED_RUNNERS = {
     "vf2_glyph_maker.py",        # Game Font Text: the patcher-made letters
     "vf2_game_fonts.json",       # Game Font Text: the four game fonts' metrics (numbers only, no game art)
     "vf2_text_tool.py",          # Game Font Text: the window
+    "vf2_unicode_font.py",       # Unicode Font: the window that picks Use Unicode Font's font
     "vf2_genealogy.py",
     "vf2_family_history.py",
     "vf2_tree_memory.py",
