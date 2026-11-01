@@ -57,7 +57,9 @@ def test_the_store_corner_and_the_codes():
     for needle in ("x 972 to 1,024 and y 0 to 51", "more than 5 seconds of game time", "never while paused"):
         assert needle in corner.text
     codes = _line("The code is sent to LDW's server")
-    assert "no code is kept in the game" in codes.text and "has not been traced" in codes.text
+    # LDW's server now answers with its scripts' source (the owner's crash dumps, 2026-10-31), so the page no
+    # longer says it was not traced; tests/test_server_reply_guard.py covers the startup lines.
+    assert "no code is kept in the game" in codes.text and "no longer runs its scripts" in codes.text
     none = _line("The store scenes handle no hidden keys.")      # VF2's store has no redraw key (only Esc)
     assert "No key or key combination redraws the On Sale items or the Flea Market's goods" in none.text
 

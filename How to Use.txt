@@ -43,6 +43,12 @@ https://github.com/Lorsieab2/Virtual-Families-2-Restoration-Addition-Patcher/
      picks 5 new goods, but only while All 36 Flea Market goods is unticked.
      R does nothing anywhere else, and nothing while a box is open.
 
+   Fix Vanilla Game Bugs (on by default) also stops a crash of the original
+   game: at every start the game asks LDW's server to log in (login.php), and
+   the server now sends back about 3 KB of text, more than the game has room
+   for, so the game closed by itself about 20 seconds after it started. That
+   answer is now read safely and ignored, as if the server had not answered.
+
 7. Optional but recommended: click Dry Run (Validate Only).
    Dry Run validates that the patcher's working. It does not actually
    change/write files.
