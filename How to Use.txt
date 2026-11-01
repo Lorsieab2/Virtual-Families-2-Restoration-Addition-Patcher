@@ -37,7 +37,8 @@ https://github.com/Lorsieab2/Virtual-Families-2-Restoration-Addition-Patcher/
      on; the cheats are off (see below), and so are Up to 28 Children and
      the transparent invisible-furniture swap (place the furniture first).
    - Owner's Defaults: every patch except Up to 28 Children, the cheats and
-     both invisible-furniture patches included.
+     both invisible-furniture patches included; of the two text settings it
+     ticks Render Unicode with In-Game Fonts (Use Unicode Font stays off).
    - Deselect All Patches: clears every tick.
    Patch Selection Settings... opens a window with a search box and every
    patch: tick the ones you want there, then press Tick These or Untick

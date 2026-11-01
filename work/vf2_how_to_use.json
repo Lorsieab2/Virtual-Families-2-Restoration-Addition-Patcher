@@ -91,7 +91,7 @@
       "guide": [
         "Ticks the set the patcher's owner plays with: every patch except Up to 28 Children (Experimental).",
         "That includes every cheat, and both invisible-furniture patches: the transparent graphics replace the visible ones, so the invisible furniture really is invisible.",
-        "Of the two text patches it ticks Use Unicode Font (overrides in-game fonts); only one can be on.",
+        "Of the two text patches it ticks Render Unicode with In-Game Fonts and leaves Use Unicode Font (overrides in-game fonts) off; only one can be on.",
         "Then click Dry Run and Enable/Disable Patches to build it."
       ]
     },

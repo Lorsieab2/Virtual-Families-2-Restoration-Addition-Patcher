@@ -444,7 +444,7 @@ Changelog
   Both bytes are read by the store page hooks the Flea Market already used;
   nothing is written to a save. The patcher's buttons are now Select All
   Patches, Default Patches, Owner's Defaults (everything except Up to 28
-  Children) and Deselect All Patches, each with a ?, plus a Patch Selection
+  Children; Render Unicode with In-Game Fonts on, Use Unicode Font off) and Deselect All Patches, each with a ?, plus a Patch Selection
   Settings window (search, Tick These, Untick These). No AI Icons keeps its
   default but takes effect only with Cheat Upgrades, and the GUI ticks it
   again when Cheat Upgrades is ticked. Also fixed: in executables built

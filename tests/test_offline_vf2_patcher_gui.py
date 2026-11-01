@@ -1621,12 +1621,12 @@ class PresetButtonAndSelectionWindowTests(unittest.TestCase):
         self.app.clear_all_settings()
         self.app.select_owners_default_settings()
         self.root.update()
-        # of the two exclusive text settings: Use Unicode Font on, Render Unicode with In-Game Fonts off
-        owners = self.ids - {"up_to_28_children", "render_unicode_in_game_fonts"}
+        # of the two exclusive text settings: Render Unicode with In-Game Fonts on, Use Unicode Font off
+        owners = self.ids - {"up_to_28_children", "use_unicode_font"}
         self.assertEqual(self.ticked(), owners)
         for setting_id in self.CHEATS | {"no_ai_icons", "invisible_furniture_visible_graphics",
                                          "invisible_furniture_transparent_graphics", "time_controls",
-                                         "use_unicode_font"}:
+                                         "render_unicode_in_game_fonts"}:
             self.assertIn(setting_id, self.ticked())
         self.assertEqual(gui.owners_default_selection(self.app.settings), owners)
 
