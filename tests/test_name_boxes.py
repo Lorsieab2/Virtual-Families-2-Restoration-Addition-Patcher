@@ -112,6 +112,7 @@ class SceneWorld:
             for wr in writes:
                 e.write(wr["va"], wr["bytes"])
         self.villagers = {}
+        self.seamed = set()
         self.changed = []
         self.gs = e.alloc(0x26000)
         funcs = {}
@@ -128,7 +129,10 @@ class SceneWorld:
         self.scene = e.alloc(0x200)
         e.w32(self.scene + 0xE4, DONE_ID)
         self.impl = e.alloc(0x80)
-        e.write(self.impl + 0x24, b"\x01")                 # editable
+        e.write(self.impl + 0x24, b"\x01\x01")             # editable, being edited
+        owner = e.alloc(0x20)
+        e.write(owner + 8, b"\x01")                         # its scene is the active one
+        e.w32(self.impl + 0x1C, owner)
         e.w32(self.impl + 0x28, 0x12)                      # SetCanEdit(1, 12h)
         ctl = e.alloc(0x20)
         e.w32(ctl + 0x10, self.impl)
@@ -136,6 +140,8 @@ class SceneWorld:
 
     def _seam(self, sym, at):
         e = self.e
+        if at in self.seamed:                               # identical functions folded into one by the linker
+            return
         if "SetText@ldwTextControl" in sym or "GetText@ldwTextControl" in sym or "security_check_cookie" in sym \
                 or "SetText@ldwTextControlImpl" in sym or sym == "_strncpy":
             return                                          # the game's own (hooked by the DLL's plan when written)
@@ -157,6 +163,7 @@ class SceneWorld:
             fn = (lambda em: (0, 4))
         else:                                               # PopulateVillagerList, SortVillagers, SetNoFocus
             fn = (lambda em: (0, 0))
+        self.seamed.add(at)
         e.seam_live(at, fn)
 
     def villager(self, vid: int, name: bytes) -> int:

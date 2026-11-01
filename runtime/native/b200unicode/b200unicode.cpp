@@ -118,7 +118,11 @@ static void Log(const char *) {}
 static bool LogStarted;
 static void Log(const char *line) {
     wchar_t path[MAX_PATH];
+#ifdef B200UNICODE_CLIP
+    if (!InFolder(L"vf2clip.log", path)) return;
+#else
     if (!InFolder(L"vf2unicode.log", path)) return;
+#endif
     HANDLE f = CreateFileW(path, LogStarted ? FILE_APPEND_DATA : GENERIC_WRITE, FILE_SHARE_READ, 0,
                            LogStarted ? OPEN_ALWAYS : CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
     if (f == INVALID_HANDLE_VALUE) return;
@@ -1120,6 +1124,25 @@ static void __fastcall UniSetText(void *impl, void *, const char *text) {
     ((SetTextFn)(void *)SetTextTrampoline)(impl, text);
 }
 
+// A typed name is never wider than the widest name the stock game allows in that box: the box's limit in its font's
+// widest plain letter (W). A wide character (a Cuneiform sign is up to five W wide) that would draw the name past
+// that is refused, so a name always fits the places the game draws names (tests/test_b200_unicode_dll.py).
+static bool FitsWidth(unsigned font, unsigned char *text, int n, int max) {
+    if (!font || n <= 0 || max <= 0) return true;
+    unsigned impl = *(unsigned *)(font + 4);
+    if (!impl || !IMPL_FIELD(impl, 0x0C) || !IMPL_FIELD(impl, 0x10)) return true;
+    int kerning = IMPL_FIELD(impl, 0x08), widest = 0;
+    for (unsigned b = 0x20; b < 0x7F; ++b) {
+        Rect r = StockRect(impl, b);
+        if (r.r - r.l > widest) widest = r.r - r.l;
+    }
+    unsigned char keep = text[n];
+    text[n] = 0;
+    int width = UniGetWidth((void *)font, 0, (const char *)text, 1.0f);
+    text[n] = keep;
+    return width <= max * (widest + kerning) - kerning;
+}
+
 // ================================================================ typing
 static bool __fastcall UniHandleKey(void *ctl, void *, int type, int code, int sym) {
     unsigned c = (unsigned)ctl;
@@ -1148,12 +1171,25 @@ static bool __fastcall UniHandleKey(void *ctl, void *, int type, int code, int s
         }
         int k = ut::Encode(cps, count, next, (unsigned)max < sizeof(next) ? (unsigned)max : sizeof(next) - 1);
         if (k < 0) { ++B200Unicode_Status.refused; return true; }
+        if (sym != 8 && !FitsWidth(*(unsigned *)(c + 0x3C), next, k, max)) { ++B200Unicode_Status.refused; return true; }
         for (int i = 0; i < k; ++i) buf[i] = (char)next[i];
         buf[k] = 0;
         if (sym != 8) ++B200Unicode_Status.typed;
         void *events = ((EventsGetFn)SITE(EVENTS_GET))();
         ((PostMessageFn)SITE(POST_MESSAGE))(events, 0x0C, *(long *)(c + 4));
         return true;
+    }
+    if (type == UNI_KEY_TYPE_CHARACTER && editing && code == 0 && sym >= 0x20 && sym < 0x7F && !*(unsigned char *)(c + 0x2D)) {
+        // a plain letter (the stock code adds it): refused when it would draw the name wider than the cap
+        const char *buf = *(const char **)(c + 0x30);
+        int max = *(int *)(c + 0x28);
+        static unsigned char with[1300];
+        unsigned n = buf ? ut::Length((const unsigned char *)buf) : 0;
+        if (buf && n + 1 < sizeof(with) && (int)n < max) {
+            for (unsigned i = 0; i < n; ++i) with[i] = (unsigned char)buf[i];
+            with[n] = (unsigned char)sym;
+            if (!FitsWidth(*(unsigned *)(c + 0x3C), with, (int)n + 1, max)) { ++B200Unicode_Status.refused; return true; }
+        }
     }
     return ((HandleKeyFn)SITE(TEXT_HANDLE_KEY))(ctl, type, code, sym);
 }
@@ -1245,6 +1281,10 @@ static int __cdecl UniPollEvent(void *event) {
     return r;
 }
 
+#ifdef B200UNICODE_CLIP
+#include "b200clip.inc"       // Copy and Paste in Text Boxes: built as vf2clip_b200.dll (build_b200unicode.bat clip)
+#endif
+
 // ================================================================ plan and install
 static const unsigned kMaxWrites = 10;
 struct HookWrite { unsigned va, len; bool data; unsigned char bytes[12], original[12]; };
@@ -1269,6 +1309,11 @@ static void PlanSlot(Plan &p, unsigned va, const void *to) {
 static int BuildPlan(unsigned mode, Plan &plan) {
     plan.count = 0;
     plan.ok = true;
+#ifdef B200UNICODE_CLIP
+    if (mode != 3) return 0;
+    if (!Resolve()) return -1;
+    PlanSlot(plan, PollSlot, (const void *)&ClipPollEvent);              // the clipboard keys: nothing else
+#else
     if (mode != 1 && mode != 2) return 0;
     if (!Resolve()) return -1;
     // the trampoline: DrawStringJustified's first 9 bytes, then a jump back after them
@@ -1290,6 +1335,7 @@ static int BuildPlan(unsigned mode, Plan &plan) {
     PlanSlot(plan, FontVtable + 4 * UNI_FONT_VSLOT_CHAR_RECT, (const void *)&UniCharRect);
     PlanSlot(plan, TextVtable + 4 * UNI_TEXT_VSLOT_HANDLE_KEY, (const void *)&UniHandleKey);
     PlanSlot(plan, PollSlot, (const void *)&UniPollEvent);
+#endif
     return plan.ok ? 1 : -1;
 }
 
@@ -1333,6 +1379,11 @@ static bool Apply(Plan &plan) {
 static unsigned ReadSettings() {
     wchar_t path[MAX_PATH];
     unsigned mode = 0;
+#ifdef B200UNICODE_CLIP
+    // Copy and Paste in Text Boxes: its own ini, [Patches] Mode=3
+    (void)mode;
+    return InFolder(L"vf2clip.ini", path) && GetPrivateProfileIntW(L"Patches", L"Mode", 0, path) == 3 ? 3u : 0u;
+#else
     if (InFolder(L"vf2unicodefont.ini", path) && GetPrivateProfileIntW(L"Patches", L"Mode", 0, path) == 2) mode = 2;
     else if (InFolder(L"vf2unicode.ini", path)) mode = GetPrivateProfileIntW(L"Patches", L"Mode", 0, path) == 1 ? 1u : 0u;
     OverrideFace[0] = 0;
@@ -1364,6 +1415,7 @@ static unsigned ReadSettings() {
         }
     }
     return mode;
+#endif
 }
 
 extern "C" __declspec(dllexport) void __cdecl B200Unicode_Startup() {
@@ -1379,7 +1431,11 @@ extern "C" __declspec(dllexport) void __cdecl B200Unicode_Startup() {
     Log("vf2unicode_b200 started");
     Mode = ReadSettings();
     B200Unicode_Status.mode = Mode;
+#ifdef B200UNICODE_CLIP
+    if (Mode != 3) { Log("Copy and Paste in Text Boxes is off: the game is stock"); return; }
+#else
     if (Mode != 1 && Mode != 2) { Log("Unicode text is off: the game is stock"); return; }
+#endif
     if (!LoadSdl()) { Log("SDL2.dll's functions were not found: installing nothing"); return; }
     static Plan plan;
     int built = BuildPlan(Mode, plan);
@@ -1387,7 +1443,8 @@ extern "C" __declspec(dllexport) void __cdecl B200Unicode_Startup() {
     B200Unicode_Status.resolved = 1;
     if (Apply(plan)) {
         B200Unicode_Status.installed = 1;
-        Log(Mode == 2 ? "Use Unicode Font installed" : "Render Unicode with In-Game Fonts installed");
+        Log(Mode == 3 ? "Copy and Paste in Text Boxes installed" :
+            Mode == 2 ? "Use Unicode Font installed" : "Render Unicode with In-Game Fonts installed");
     }
 }
 
@@ -1443,5 +1500,10 @@ extern "C" __declspec(dllexport) void __cdecl B200Unicode_TestHooks(unsigned *ou
     out[3] = (unsigned)&UniNextLine; out[4] = (unsigned)&UniGetText; out[5] = (unsigned)&UniDrawJustified;
     out[6] = (unsigned)&UniCharRect; out[7] = (unsigned)&UniHandleKey; out[8] = (unsigned)&UniPollEvent;
     out[9] = (unsigned)&UniSetText;
+#ifdef B200UNICODE_CLIP
+    out[10] = (unsigned)&ClipPollEvent;
+#else
+    out[10] = 0;
+#endif
 }
 #endif

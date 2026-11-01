@@ -88,14 +88,16 @@ def _vcvars():
 
 
 @pytest.fixture(scope="module")
-def dlls():
+def dlls(tmp_path_factory):
     if not _vcvars():
         pytest.skip("VF2_VCVARS32 is not set")
     bat = RUNTIME / "native" / "build_b200unicode.bat"
+    out = tmp_path_factory.mktemp("unicode_build")       # its own copy: another module may hold one open
     for kind in ("", "test"):
-        r = subprocess.run(["cmd.exe", "/c", str(bat)] + ([kind] if kind else []), capture_output=True, text=True)
+        r = subprocess.run(["cmd.exe", "/c", str(bat)] + ([kind] if kind else []), capture_output=True, text=True,
+                           env=dict(os.environ, VF2_UNICODE_BUILD_DIR=str(out)))
         assert r.returncode == 0, r.stdout + r.stderr
-    return RUNTIME / "build" / "vf2unicode_b200.dll", RUNTIME / "build" / "vf2unicode_b200_test.dll"
+    return out / "vf2unicode_b200.dll", out / "vf2unicode_b200_test.dll"
 
 
 def test_the_shipped_dll_has_no_test_entry_points(dlls):
