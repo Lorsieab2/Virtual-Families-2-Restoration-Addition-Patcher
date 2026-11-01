@@ -4,6 +4,8 @@ Virtual Families 2 draws a family member as a body cell and a head cell (CVillag
 CVillagerManager::DrawVillager, CVillager::DrawEventVillager, CFamilyTreeScene::DrawPeep). Where each goes is
 given by CAnimManager's link tables: for every body frame, sex and body row a "next" point (where the body is
 anchored) and a "prev" point (its neck), and for every head direction, sex and head row the same two points.
+It also keeps CAnimManager::GetAnimFrame's answer for every body position (the frame and direction
+CVillager::StartWaiting takes from it), which CVillagerManager::DrawCarriedItems' height rule depends on.
 CAnimManager::LoadAssets builds the tables from constants in its code and from the game's Assets\\animpts.dat.
 
 This runs LoadAssets itself, from the B200 desktop object files (unicorn; tests/vf2_people_emu.py), over a
@@ -39,7 +41,7 @@ def build(objects: Path, game: Path) -> dict:
                       "objects over the game's Assets\\anims.dat and Assets\\animpts.dat",
            "animpts_sha256": hashlib.sha256((game / "Assets" / "animpts.dat").read_bytes()).hexdigest(),
            "anims_sha256": hashlib.sha256((game / "Assets" / "anims.dat").read_bytes()).hexdigest(),
-           "facing": tables["facing"], "body": {}, "head": {}}
+           "facing": tables["facing"], "positions": rig.body_positions(), "body": {}, "head": {}}
     for part in ("body", "head"):
         for key, entry in tables[part].items():
             out[part][key] = {"image": entry["image"], "cell": entry["cell"], "prev": _rows(entry["prev"]),
@@ -53,6 +55,7 @@ def render(data: dict) -> str:
     lines.append(f'  "animpts_sha256": "{data["animpts_sha256"]}",')
     lines.append(f'  "anims_sha256": "{data["anims_sha256"]}",')
     lines.append(f'  "facing": {json.dumps(data["facing"], separators=(",", ":"))},')
+    lines.append(f'  "positions": {json.dumps(data["positions"], separators=(",", ":"))},')
     for n, part in enumerate(("body", "head")):
         lines.append(f'  "{part}": {{')
         keys = list(data[part])

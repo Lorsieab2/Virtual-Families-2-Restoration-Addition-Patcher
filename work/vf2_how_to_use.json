@@ -238,9 +238,10 @@
       "title": "Picture Maker",
       "guide": [
         "Draws your family members exactly as the game draws them and saves them as PNG pictures with a clear background.",
-        "From my save: choose the save folder and the family. Everyone at home can be shown in the house (any body frame and head turn), on the Details screen, on an event screen or in the Family Tree.",
+        "From my save: choose the save folder and the family. Everyone at home can be drawn in the house, on the Details screen, on an event screen or in the Family Tree.",
         "Family members who left home or died, and earlier generations, are drawn in the Family Tree, as the game does. The outfits in the tool tray are listed too.",
         "Make your own: pick the sex, age, head (hairstyle), outfit and how it is drawn. Children are drawn smaller and heads turn old at 45, as in the game.",
+        "Carrying (in the house): pick any item a family member can hold, even ones the game never shows (marked). Saves do not keep what anyone carries.",
         "Pick the game folder: the pictures come from it. A patched game shows the patcher's expansion outfits; Patched look off shows the original game's.",
         "Save PNG: at the game's size, 2x or 4x (crisp), or your own size (smooth). Your saves and game folders are only read."
       ]

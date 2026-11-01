@@ -373,6 +373,7 @@ PEOPLE_IMAGES = {
     21: ("bigheads", 12, 50, 2, 1),
     22: ("highrez_bodies_final2.png", 2, 50, 1, 1),
     478: ("carrying.png", 13, 7, 1, 1),
+    493: ("collectables_small.png", 6, 16, 1, 1),
     576: ("female_heads", 24, 50, 2, 1),
     577: ("female_bodies00.png", 32, 50, 1, 1),
     578: ("female_actions00.png", 15, 50, 1, 1),
@@ -463,6 +464,20 @@ class PeopleRig:
             value = e.call("?GetDirection@CAnimManager@@QAE?AW4EDirection@@W4EAnimFrame@@@Z", [frame], ecx=a)
             facing[str(frame)] = value - (1 << 32) if value & 0x80000000 else value
         return {"body": body, "head": head, "facing": facing}
+
+    def body_positions(self, count: int = 24) -> list:
+        """CAnimManager::GetAnimFrame(position) for every body position (StartWaiting takes the frame and the
+        direction from it): [frame, direction] each, -2 for "the direction it already has"."""
+        self.load_assets()
+        e, out = self.e, []
+        frame, direction = self.block("position_frame", 4), self.block("position_direction", 4)
+        for position in range(count):
+            e.w32(frame, 0xEEEE)
+            e.w32(direction, 0xEEEE)
+            e.call("?GetAnimFrame@CAnimManager@@QAEXW4EBodyPosition@@AAW4EAnimFrame@@AAW4EDirection@@@Z",
+                   [position, frame, direction], ecx=self.anim)
+            out.append([e.s32(frame), e.s32(direction)])
+        return out
 
     def scaled_link(self, which: str, key: int, sex: int, row: int, scale: float) -> tuple:
         """The game's own GetScaledLinkTo{Next,Prev}Pt answer (which: body_next, body_prev, head_next, head_prev)."""
@@ -584,9 +599,11 @@ class PeopleRig:
                [at[0], at[1], 0, float(scale), 1 if facing_you else 0], ecx=villager)
         return self.draws
 
-    def house(self, sex, head, body, age, frame, turn, direction=0, babies=0, at=(0, 0)) -> list:
+    def house(self, sex, head, body, age, frame, turn, direction=0, babies=0, at=(0, 0), carrying=-1,
+              position=0) -> list:
         """CVillagerManager::DrawVillager(0, 1.0) for a villager at place `at` in body frame `frame`, head turn
-        `turn`, facing `direction`, not lifted, not fading, on no water."""
+        `turn`, facing `direction`, in body position `position`, carrying `carrying` (ECarrying; -1 nothing), not
+        lifted, not fading, on no water."""
         e = self.e
         self.record_draws()
         manager = self.block("manager", 0x40000)
@@ -595,15 +612,15 @@ class PeopleRig:
         e.w32(manager + 4, self.shadow)
         e.w32(manager + 0x20, self.block("image", 0x20))
         e.w32(manager + 0x24, self.grids[478])
-        e.w32(manager + 0x28, self.block("grid", 0x40))
+        e.w32(manager + 0x28, self.grids[493])
         e.w32(manager + 0x387C4, at[0])                 # CVillager+1BB54, +1BB58: its place
         e.w32(manager + 0x387C8, at[1])
         e.w32(manager + 0x387E0, frame)
         e.w32(manager + 0x387E8, 0)
         e.w32(manager + 0x38800, direction)
         e.w32(manager + 0x38804, turn)
-        e.w32(manager + 0x38808, 0)                     # CVillager+1BB98: what it is doing (not sitting)
-        e.w32(manager + 0x3880C, 0xFFFFFFFF)            # CVillager+1BB9C: nothing carried
+        e.w32(manager + 0x38808, position)              # CVillager+1BB98: its body position (EBodyPosition)
+        e.w32(manager + 0x3880C, carrying & 0xFFFFFFFF)  # CVillager+1BB9C: what it carries (ECarrying)
         self.draws = []
         e.call("?DrawVillager@CVillagerManager@@QAEXHM@Z", [0, 1.0], ecx=manager)
         return self.draws

@@ -51,6 +51,7 @@ GUI_TOOL_FILES = (
     "vf2_picture_maker.py",
     "vf2_people_pictures.py",
     "vf2_people_links.json",
+    "vf2_carried_items.json",
     "vf2_picture_image.py",
 ) + tuple(f"family_tree_backgrounds/{name}" for name in (
     "blue-board-on-wood.png",
