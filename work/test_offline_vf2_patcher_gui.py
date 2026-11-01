@@ -1536,22 +1536,25 @@ class PresetButtonAndSelectionWindowTests(unittest.TestCase):
     everything except Up to 28 Children, both invisible-furniture settings included.
     """
 
-    def setUp(self):
+    # One window for the whole class: a full settings list is dozens of widgets, and building it per test
+    # used up the CI runner's window resources for the tests that run after this class.
+    @classmethod
+    def setUpClass(cls):
         try:
             import tkinter as tk
         except ImportError:  # pragma: no cover
-            self.skipTest("tkinter is not available")
+            raise unittest.SkipTest("tkinter is not available")
         try:
-            self.root = tk.Tk()
+            cls.root = tk.Tk()
         except Exception:
-            self.skipTest("no display available for Tk")
-        self.root.withdraw()
-        sys.path.insert(0, str(ROOT / "work"))
+            raise unittest.SkipTest("no display available for Tk")
+        cls.root.withdraw()
+        sys.path.insert(0, str(ROOT.joinpath("work")))   # the exporter lives in work/ only
         import export_offline_patch_bundle as exporter
-        self.rows = [dict(row) for row in exporter.SETTINGS]
-        self.ids = {row["id"] for row in self.rows}
-        self.app = gui.VF2PatcherGUI(self.root)
-        self.tmp = tempfile.TemporaryDirectory()
+        cls.rows = [dict(row) for row in exporter.SETTINGS]
+        cls.ids = {row["id"] for row in cls.rows}
+        cls.app = gui.VF2PatcherGUI(cls.root)
+        cls.tmp = tempfile.TemporaryDirectory()
 
         def asset(path, *requires):
             return {"file_path": path, "source_path": "payload/x", "source_sha256": "0" * 64, "requires": list(requires)}
@@ -1564,22 +1567,25 @@ class PresetButtonAndSelectionWindowTests(unittest.TestCase):
             "invisible_furniture_transparent_graphics": ("invisible_furniture_visible_graphics",),
         }
         records = [asset("Virtual Families 2.exe", "core_executable")]
-        for row in self.rows:
+        for row in cls.rows:
             if row["id"] != "core_executable":
                 records.append(asset(f"Images/{row['id']}.png", *extra.get(row["id"], ()), row["id"]))
-        manifest = {"manifest_version": 1, "settings": self.rows, "asset_patches": records}
-        path = Path(self.tmp.name) / "manifest.json"
+        manifest = {"manifest_version": 1, "settings": cls.rows, "asset_patches": records}
+        path = Path(cls.tmp.name) / "manifest.json"
         path.write_text(json.dumps(manifest), encoding="utf-8")
-        self.app.manifest_var.set(str(path))
-        self.assertTrue(self.app.load_manifest_settings())
-        self.root.update()
+        cls.app.manifest_var.set(str(path))
+        assert cls.app.load_manifest_settings()
+        cls.root.update()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tmp.cleanup()
+        cls.root.destroy()
 
     def tearDown(self):
         dialog = getattr(self.app, "_patch_selection_dialog", None)
         if dialog is not None and dialog.winfo_exists():
             dialog.destroy()
-        self.tmp.cleanup()
-        self.root.destroy()
 
     def ticked(self):
         return {setting_id for setting_id, var in self.app.setting_vars.items() if var.get()}

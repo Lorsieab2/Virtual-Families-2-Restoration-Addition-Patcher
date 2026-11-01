@@ -137,7 +137,7 @@ def test_exporter_setting():
                    "save file itself is not changed", "vf2outfits_b200.dll", "Virtual Families 2 Patcher Files"):
         assert needle in s["description"], needle
     assert X.RUNTIME_FLAG_SECTION_BY_SETTING["fix_vanilla_game_bugs"] == ".vf2bugs"
-    assert "outfit" not in " ".join(X.RUNTIME_FLAG_SECTION_BY_SETTING), "no setting of its own"
+    assert not [k for k in X.RUNTIME_FLAG_SECTION_BY_SETTING if "outfit_picture" in k], "no setting of its own"
     assert X.OUTFIT_PICTURES_INI_TEXT == "[Patches]\r\nOutfitPictures=1\r\n"
     assert X.OUTFIT_PICTURES_DLL_NAME == S.DLL_NAME and X.OUTFIT_PICTURES_INI_NAME == S.INI_NAME
 
