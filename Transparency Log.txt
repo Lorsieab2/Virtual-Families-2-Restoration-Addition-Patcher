@@ -415,6 +415,20 @@ Changelog
   is written to disk. Checked under emulation; never tested in a running
   game.
 
+- Fix Vanilla Game Bugs, rain crash (after B205; found 1 November 2026 by the
+  divide-by-zero audit that followed Virtual Families 1's bank crash; the
+  owner approved fixing this kind of crash): the rain draws each raindrop as
+  a line from its head to its last position, and the line drawing divides by
+  the line's length. When rain starts the drops get new heads but keep their
+  old tails until the next update, and that frame is drawn first, so a head
+  that lands exactly on its tail made a zero-length line and the game closed
+  (a division by zero; very rare). Now a zero-length line draws its one
+  pixel; every other line is exactly as before. One small stub in the line
+  drawing, behind the .vf2bugs byte; nothing is written to disk. The audit
+  checked all 185 integer divisions in the game's code and found no other
+  one the running game can reach with a zero. Checked under emulation; never
+  tested in a running game.
+
 - Time Controls, Time Warp price (after B205; owner decision 1 November
   2026): the Time Warp button (+3 years) in the Time Controls window now costs
   the same as the store's own Time Warp. The Time Controls DLL asks the game

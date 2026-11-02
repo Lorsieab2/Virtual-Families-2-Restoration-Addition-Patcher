@@ -26411,6 +26411,92 @@ def patch_server_error_text_bounded(manifest):
     }
 
 
+# 6. A zero-length rain streak divides by zero (found by the divide-by-zero
+#    audit after VF1's bank crash, 2026-11-01; owner-approved class). The
+#    colour overload of ldwGameWindowImpl::DrawLine fades the line's alpha
+#    along its longer axis: (alpha difference << 8) / (2 * max(|dx|, |dy|)).
+#    A line whose two ends are the same point divides by 0, an unhandled
+#    integer divide-by-zero. Its only caller is CRain::Draw, which draws each
+#    raindrop from its head to the head's last position. CWeather::Update
+#    updates the rain, then may call SetCurrent(rain), whose CRain::Reset
+#    gives every drop a new random head but keeps the old tail; the same
+#    frame's CWeather::Draw then draws the drops (as many as the current
+#    intensity: 0.5 after a game start with a weather change pending; The
+#    Neighbor's Weather event and Bottled Tropical Rain set the weather from
+#    any weather), and a new head that lands exactly on its old tail is a
+#    point (very rare; the first rain of a session has every tail at (0,0)).
+#    Fixed: with the .vf2bugs byte 1 a zero-length line skips the division,
+#    as if it divided by 1 (the quotient is only the per-step fade, which a
+#    one-pixel line never uses), and draws its one pixel as a line's first
+#    pixel is always drawn. Every other line divides exactly as before.
+ZERO_LINE_FUNCTION = "?DrawLine@ldwGameWindowImpl@@QAEXHHHHUldwColor@@MM@Z"
+ZERO_LINE_SIZE = 0x377
+ZERO_LINE_DIVIDE_OFFSET = 0x199     # cmp edx,ebx; cdq; jle; idiv [ebp-0Ch]; jmp; idiv ebx
+ZERO_LINE_STOCK = bytes.fromhex("3BD3" "99" "7E05" "F77DF4" "EB02" "F7FB")
+ZERO_LINE_RESUME_OFFSET = 0x1A5     # mov ecx,eax: the quotient
+ZERO_LINE_STUB_SIZE = 0x21
+
+
+def patch_zero_length_line_guard(manifest):
+    obj_path = PATCHED / "ldwGameWindow.obj"
+    obj = CoffObject(obj_path)
+    sec = _check_function_layout(
+        obj, ZERO_LINE_FUNCTION, ZERO_LINE_SIZE,
+        {
+            # edx = 2|dx| ([ebp-0Ch]), ebx = 2|dy| ([ebp+0Ch]); eax = alpha difference << 8
+            0x135: bytes.fromhex("03D2" "895D0C"),
+            0x13E: bytes.fromhex("8955F4"),
+            0x197: bytes.fromhex("8BC1"),
+            ZERO_LINE_DIVIDE_OFFSET: ZERO_LINE_STOCK,
+            ZERO_LINE_RESUME_OFFSET: bytes.fromhex("8BC8" "BAFF000000"),
+            # the first pixel is drawn before either loop; a loop ends when its axis reaches the far end
+            0x22C: bytes.fromhex("0F842E010000"),
+            0x2D0: bytes.fromhex("0F848A000000"),
+        },
+        {
+            0xA6: ("_SDL_LockSurface", IMAGE_REL_I386_REL32),
+            0x367: ("_SDL_UnlockSurface", IMAGE_REL_I386_REL32),
+        },
+    )
+    stub_off = sec.raw_size
+    resume = lambda at: struct.pack("<i", ZERO_LINE_RESUME_OFFSET - (stub_off + at + 5))
+    stub = bytearray()
+    stub += b"\x3B\xD3"                                   # +00 cmp edx,ebx (stock)
+    stub += b"\x99"                                       # +02 cdq
+    stub += b"\x7E\x08"                                   # +03 jle +0D
+    stub += b"\xF7\x7D\xF4"                               # +05 idiv dword [ebp-0Ch] (x is the longer axis)
+    stub += b"\xE9" + resume(0x08)                        # +08 jmp +1A5
+    stub += b"\x80\x3D\0\0\0\0\x00"                       # +0D cmp byte [flag],0
+    stub += b"\x74\x04"                                   # +14 je +1A (fix off: stock)
+    stub += b"\x85\xDB"                                   # +16 test ebx,ebx
+    stub += b"\x74\x02"                                   # +18 je +1C: both ends one point, no division
+    stub += b"\xF7\xFB"                                   # +1A idiv ebx (stock)
+    stub += b"\xE9" + resume(0x1C)                        # +1C jmp +1A5
+    assert len(stub) == ZERO_LINE_STUB_SIZE
+    _install_detour(
+        obj, sec.index, ZERO_LINE_DIVIDE_OFFSET, len(ZERO_LINE_STOCK), stub_off, stub,
+        ((0x0F, VANILLA_BUGS_FLAG_SYMBOL, IMAGE_REL_I386_DIR32),),
+    )
+    obj.write(obj_path)
+    manifest["ZeroLengthLineGuard"] = {
+        "status": "installed",
+        "offline_patcher_setting": VANILLA_BUGS_SETTING,
+        "function": ZERO_LINE_FUNCTION,
+        "branch": hex(ZERO_LINE_DIVIDE_OFFSET),
+        "stub_offset": hex(stub_off),
+        "rule": (
+            "a line whose ends are one point (2*max(|dx|,|dy|) == 0) skips the idiv (quotient = numerator, "
+            "as divided by 1; unused by a one-pixel line); every other line divides as before"
+        ),
+        "caller": "CRain::Draw (the only caller of this overload)",
+        "flag_off": "the stock division",
+        "stock_defect": (
+            "a zero-length raindrop (a new random head on its old tail, drawn between CRain::Reset and "
+            "CRain::Update) divided by zero: an unhandled integer divide-by-zero"
+        ),
+    }
+
+
 def patch_fix_vanilla_game_bugs(manifest):
     """Every stock-game menu fix, behind the one .vf2bugs byte."""
     patch_title_menu_start_over_confirms(manifest)
@@ -26419,6 +26505,7 @@ def patch_fix_vanilla_game_bugs(manifest):
     patch_title_menu_refresh_on_activate(manifest)
     patch_server_reply_guard(manifest)
     patch_server_error_text_bounded(manifest)
+    patch_zero_length_line_guard(manifest)
     manifest["FixVanillaGameBugs"] = {
         "status": "dormant native hooks installed in every executable",
         "offline_patcher_setting": VANILLA_BUGS_SETTING,
@@ -26439,6 +26526,7 @@ def patch_fix_vanilla_game_bugs(manifest):
             "TitleMenuRefresh",
             "ServerReplyGuard",
             "ServerErrorTextBounded",
+            "ZeroLengthLineGuard",
         ],
         "flag_off": "every site runs the stock instructions it displaced",
     }

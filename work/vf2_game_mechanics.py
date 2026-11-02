@@ -1066,6 +1066,24 @@ def facts() -> list[Fact]:
                     "dividing by 6, in the order of the names above): a 4 or 5 moves on one kind half the time "
                     "(50.05%; after Snowing comes Normal), and a Normal result moves on to Sunny.", C,
            "CWeather::Reset, called only by theGameState::Init; CWeather::Random(previous)"))
+    add(_f(WEATHER, "Rain is drawn as up to 512 short streaks, each from a drop's head to where the head was a "
+                    "moment before. When rain starts every drop gets a new head but keeps its old tail until the "
+                    "next update, and that frame is drawn first (the first rain after the game starts draws "
+                    "streaks to the top-left corner for that one frame).", C,
+           "CWeather::Update: CRain::Update, then SetCurrent(rain) -> CRain::Reset (new head, speed 10-11 across "
+           "and 20-59 down, tail kept); CWeather::Draw -> CRain::Draw -> ldwGameWindow::DrawLine(colour) for "
+           "intensity x 512 drops; Reset sets the intensity to 0.5 when a change is pending at a game start"))
+    add(_f(WEATHER, WITH_PATCHER + "a rain drop whose new head lands exactly on its old tail (a streak of zero "
+                    "length) is drawn as one pixel. "
+                    "Every other streak is drawn exactly as before (part of Fix Vanilla Game Bugs).", C,
+           "patch_zero_length_line_guard: ldwGameWindowImpl::DrawLine (colour) +0x199 -> a stub that skips "
+           "idiv ebx when ebx (2 x max(|dx|, |dy|)) is 0, behind .vf2bugs; run in "
+           "tests/test_divide_by_zero_audit.py", sub=True))
+    add(_f(WEATHER, UNPATCHED + "a rain drop whose new head lands exactly on its old tail is a streak of zero length, "
+                    "and drawing it divides by zero: the game closes (very rare).", C,
+           "stock exe sha256 1582d9e8: ldwGameWindowImpl::DrawLine (colour) fades alpha by (difference << 8) / "
+           "(2 x max(|dx|, |dy|)): cmp edi,ebx at 0x404CE1, idiv ebx at 0x404CF2 with ebx 0 for a point (the "
+           "rebuilt code's idiv ebx at +0x1A3 faults under emulation for (0,0)-(0,0))", sub=True))
 
     # ------------------------------------------------------------------ Messes and malfunctions (spec 13)
     add(_f(MESSES, "Messes appear every 5 hours of game time (2.5 hours with 4 or more in the family), not "
