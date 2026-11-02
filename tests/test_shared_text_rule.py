@@ -231,26 +231,25 @@ class RenameFamilyTests(SlotFolder):
         rf.rename_family(self.folder, 1, "日本", processes=NoGame(), now=WHEN)
         self.assertEqual(fh.read(self.folder, 1).renames, [(OLD_TEXT, "日本")])
 
-    def test_the_limit_is_19_bytes_counted_in_whole_characters(self):
+    def test_the_limit_is_300_characters_and_longer_names_are_short_forms(self):
+        # The one name limit (docs/UNICODE_TEXT.md): 300 characters, 1,200 bytes. A name over the save's 19 bytes is
+        # written as its short form, never cut: the whole name goes into the slot's Names file (vf2_names).
+        import vf2_names as names
         self.assertIsNone(rf.name_problem("A" * 19))
-        self.assertIsNone(rf.name_problem("é" * 19))                    # Latin-1: one byte each
-        self.assertIsNone(rf.name_problem("Ł" * 9 + "a"))               # 19 bytes
-        problem = rf.name_problem("Ł" * 10)                             # 20 bytes
-        self.assertIn("10 characters is too long", problem)
-        self.assertIn("The first 9 characters fit", problem)
-        self.assertIn("at most 19", rf.name_problem("A" * 20))
-        self.assertIsNotNone(rf.name_problem("Zoë 👩🏽‍💻"))       # 20 bytes
-        before = self.saved_name(1)
-        with self.assertRaises(rf.RenameError):
-            rf.rename_family(self.folder, 1, "Ł" * 10, processes=NoGame(), now=WHEN)
-        self.assertEqual(self.saved_name(1), before, "a name over the limit is refused, never cut")
+        self.assertIsNone(rf.name_problem("Ł" * 10))                    # 20 bytes: a short form
+        self.assertIsNone(rf.name_problem("A" * 300))
+        self.assertIn("at most 300", rf.name_problem("A" * 301))
+        rf.rename_family(self.folder, 1, "Ł" * 10, processes=NoGame(), now=WHEN)
+        short = names.short_form("Ł" * 10, names.FAMILY_ROOM, {})
+        self.assertEqual(self.saved_name(1).split(b"\0")[0], T.encode(short))
+        self.assertEqual(names.Book(self.folder).full(1, short), "Ł" * 10)
 
     def test_the_counter_shows_characters(self):
-        self.assertEqual(rf.name_counter(""), ("0 / 19 characters", False))
-        self.assertEqual(rf.name_counter("Zoë"), ("3 / 19 characters", False))
-        self.assertEqual(rf.name_counter("日本"), ("2 characters (6 / 19 bytes)", False))
-        self.assertEqual(rf.name_counter("Zoë 👩🏽‍💻"), ("5 characters (20 / 19 bytes)", True))
-        self.assertEqual(rf.name_counter("A" * 20), ("20 / 19 characters", True))
+        self.assertEqual(rf.name_counter(""), ("0 / 300 characters", False))
+        self.assertEqual(rf.name_counter("Zoë"), ("3 / 300 characters", False))
+        text, too_long = rf.name_counter("A" * 20)
+        self.assertTrue(text.startswith("20 / 300 characters (longer than the save") and not too_long)
+        self.assertEqual(rf.name_counter("A" * 301), ("301 / 300 characters", True))
 
     def test_with_name_never_cuts(self):
         data = bytes(64)
