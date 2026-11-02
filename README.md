@@ -138,9 +138,10 @@ actions, as before. **Tools** holds:
   surname: the slot is shown under the player name typed when it was started (main menu `Player:`, Change
   Player, the daily email). The tool writes that name (gs+0x25ABC) in the slot's save, its entry in the slot
   menu (`Virtual Families 20.ldw`) and the previous save at slot + 20 when it still holds the old name. The
-  rule is the game's own: at most 19 characters (the box takes 20 keys but the game keeps 19), never empty or
-  only spaces, never `NEW PLAYER` (the game's text for an empty slot); only printable ASCII is accepted, since
-  whether other keys reach the box is UNCONFIRMED. It refuses while the game runs, backs up first as
+  rule is the one name limit (`docs/UNICODE_TEXT.md`): up to 300 characters (1,200 bytes), never empty or
+  only spaces, never `NEW PLAYER` (the game's text for an empty slot). A name longer than the save's 19 bytes is
+  written as its short form (its start + `...`) and the whole name goes into the slot's Names file
+  (`Virtual Families 2 Patcher Data\Names`), which the game shows with either Unicode setting on. It refuses while the game runs, backs up first as
   `Backup <date> (before rename)`, reads every file back and puts everything back if one fails. The slot's
   Children and Outfits files that matched the renamed saves are re-keyed to them (as Copy Player Slot re-keys a
   copy's), so the game keeps every extra child (7 to 28) and the outfit pictures on the next load; one that did
@@ -525,8 +526,21 @@ release bundle, like almost everything else)
     the game set and the player has not changed that does not fit is never cut (GetText gives an empty text, which
     those callers skip). Every screen with an editable box was checked (`tests/test_name_boxes.py`: the game's own
     screen code under emulation; player names, char[20], and the Family Tree note always fit).
-  - **wide scripts fit**: a typed name is never wider than the widest name the stock game allows in that box (its
+  - **wide scripts fit**: a typed text is never wider than the widest text the stock game allows in that box (its
     limit in the font's widest plain letter); a wider character (a Cuneiform sign is up to five W wide) is refused.
+    Name boxes scroll instead (below).
+  - **names up to 300 characters** (`docs/UNICODE_TEXT.md`, "One character limit for every name box"): every name
+    box (the slot menu's five names and New Player, the new family's name, a family member's name, adoption,
+    dating) takes up to 300 characters, the limit shared with the other Fun Patchers (`NAME_LETTERS` in
+    `src/vf2_game_text.py`); the box's bytes stop at the engine's own 1,200 (`SetCanEdit` clamps to `4B0h`). The
+    save format is unchanged: a name that fits its field is stored as before, a longer one as a unique short form
+    (its start + `...`, or `2...`, `3...`) and the whole name in
+    `Virtual Families 2 Patcher Data\Names\Virtual Families 2<N>.ldw.txt`. The game draws the whole name wherever
+    it draws the short form (fitted with `…` where it would not fit); with both settings off the save loads and shows
+    the short form. Rename Family, Copy Player Slot, Back Up / Restore Saves, the Family Tree Maker and the Family
+    History reader use the Names file. Every `GetText` copy into a fixed buffer still gets at most the field's bytes
+    (`tests/test_name_limit.py`: the game's own copy code under emulation with guard bytes, at 300 characters and
+    1,200 bytes).
 - **Copy and Paste in Text Boxes** (`.vf2clip`, Optional, **on by default**; new after B206, needs the B207
   executables) - while you type in one of the game's text boxes: **Ctrl+V** or **Shift+Insert** pastes the
   clipboard at the end of the text, **Ctrl+C** or **Ctrl+Insert** copies the box's whole text, **Ctrl+X** cuts it.

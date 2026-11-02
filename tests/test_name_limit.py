@@ -190,6 +190,50 @@ def _locate(exe_path: Path, obj: str, func: str):
     return va, targets
 
 
+def _locate_range(exe_path: Path, obj: str, func: str, start: int, end: int) -> int:
+    """Where the function's bytes [start, end) are in the executable (exactly once): the run starts there. A matrix
+    build can change other parts of a scene's function (CDatingScene::HandleMessage is not the stock one), so the
+    copy site is found by its own instructions, relocated fields masked."""
+    import gen_b200_unicode_sites as G
+    x = G.Exe(exe_path)
+    data, mask, _calls, _abs = G.Coff(OBJS / f"{obj}.obj").function(func)
+    hits = G.find(x.code(), data[start:end], mask[start:end])
+    assert len(hits) == 1, (func, hex(start), len(hits))
+    return hits[0] - start
+
+
+def test_the_executable_calls_settext_and_gettext_only_from_the_audited_sites(exe):
+    """Every call in the executable's code to ldwTextControl::GetText and ::SetCanEdit (a rel32 call whose target is
+    the function) is one of the AUDIT's calls, found by its own instructions (the 12 bytes before the call, relocated
+    fields masked): no build-added code copies a box's text unaudited. (The core executable links 14 of the 15
+    audited GetText calls: one developers' dialog is not linked.)"""
+    if not (OBJS / "ldwTextControl.obj").is_file():
+        pytest.skip("no desktop objects (work/desktop_obj_files)")
+    import gen_b200_unicode_sites as G
+    x = G.Exe(exe)
+    get_text = G.resolve(x, G.load_pins(OBJS))["sites"]["GET_TEXT"]
+    set_can_edit = G.resolve_names(x, G.load_name_pins(OBJS))["sites"]["SET_CAN_EDIT"]
+    calls = {get_text: set(), set_can_edit: set()}
+    for _n, va, raw, _c in x.code():
+        for m in re.finditer(rb"\xE8", raw):
+            k = m.start()
+            if k + 5 <= len(raw):
+                target = (va + k + 5 + struct.unpack_from("<i", raw, k + 1)[0]) & 0xFFFFFFFF
+                if target in calls:
+                    calls[target].add(va + k)
+    audited = set()
+    for obj, func, _what, _s, _w, _count in AUDIT:
+        data, mask, fcalls, _abs = G.Coff(OBJS / f"{obj}.obj").function(func)
+        for off, sym in fcalls:
+            if sym in ("?GetText@ldwTextControl@@QAEXPADH@Z", S.SET_CAN_EDIT):
+                lo = max(0, off - 13)
+                hits = G.find(x.code(), data[lo:off + 4], mask[lo:off + 4])
+                audited |= {h + (off - 1 - lo) for h in hits}
+    found = calls[get_text] | calls[set_can_edit]
+    assert found and found <= audited, sorted(hex(a) for a in found - audited)
+    assert len(calls[set_can_edit]) == sum(max(a[5], 1) for a in AUDIT if a[2] == "SetCanEdit")
+
+
 class NamesWorld(DrawWorld):
     """DrawWorld (the fonts, SDL and files seams) with the plan's writes in place, a game state whose save files
     are C:\\Saves\\Virtual Families 2<N>.ldw, and the DLL's ANSI file calls over an in-memory folder."""
@@ -418,7 +462,8 @@ def test_member_name_sites_never_overrun(world, site, name):
     w, _fonts = world
     e = w.e
     obj, func, start, end, how = site
-    va, targets = _locate(w.exe_path, obj, func)
+    va = _locate_range(w.exe_path, obj, func, start, end)
+    targets = _locate(w.exe_path, obj, func)[1] if obj == "theVillagerScene" else {}
     assert e.read(va + start, 1)[0] in (0x8B, 0x8D, 0x6A)          # the instruction the run starts at
     for sym, at in targets.items():
         if "ChangeName" in sym:

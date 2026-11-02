@@ -66,9 +66,12 @@ class Base(unittest.TestCase):
 
 
 class NameRuleTests(unittest.TestCase):
-    def test_the_game_keeps_19_characters(self):
+    def test_the_one_name_limit_is_300_characters(self):
+        # the save keeps 19 bytes; a longer name is its short form there and whole in the Names file (vf2_names)
         self.assertIsNone(rf.name_problem("A" * 19))
-        self.assertIn("at most 19", rf.name_problem("A" * 20))
+        self.assertIsNone(rf.name_problem("A" * 300))
+        self.assertIn("at most 300", rf.name_problem("A" * 301))
+        self.assertIsNone(rf.name_problem("\U00012000" * 300))          # 1,200 bytes
 
     def test_refused_names(self):
         # "CafÃ©" was refused under the old printable-ASCII rule; any character but a control character is a name
@@ -162,7 +165,7 @@ class RenameTests(Base):
 
     def test_a_bad_name_changes_nothing(self):
         before = self.snapshot()
-        for name in ("A" * 20, "NEW PLAYER", "Lorsieab2"):
+        for name in ("A" * 301, "NEW PLAYER", "Lorsieab2"):
             with self.subTest(name=name), self.assertRaises(rf.RenameError):
                 self.rename(name)
         self.assertEqual(self.snapshot(), before)
@@ -208,6 +211,47 @@ class RenameTests(Base):
         self.rename("The Smiths")
         outside_backups = {p for p in self.snapshot() if p.parts[0] != sb.BACKUPS_FOLDER}
         self.assertEqual(outside_backups, {Path("Virtual Families 20.ldw"), Path("Virtual Families 21.ldw")})
+
+
+class LongNameTests(Base):
+    """Names up to 300 characters (docs/UNICODE_TEXT.md): the short form in the save and the slot menu, the whole
+    name in the slot's Names file."""
+
+    def test_a_long_name_is_its_short_form_and_a_names_line(self):
+        import vf2_names as names
+        whole = "The Magnificent Fitzgerald-Montgomery Family of Wielkopolska"
+        result = self.rename(whole)
+        short = names.short_form(whole, names.FAMILY_ROOM, {})
+        self.assertEqual(short, "The Magnificent...")
+        self.assertEqual(r.parse_family_save(self.save.read_bytes()).nickname, short)
+        self.assertEqual(r.parse_settings(self.settings.read_bytes()).player_names[0], short)
+        self.assertEqual(names.read_slot(self.folder, 1), [names.Entry(short, names.FAMILY_ROOM, whole)])
+        self.assertEqual(result.new_name, whole)
+        self.assertEqual(names.Book(self.folder).full(1, short), whole)
+        # renamed again: the old whole name is reported, and two names that start alike get "2..."
+        other = "The Magnificent Fitzroys"
+        result = self.rename(other)
+        self.assertEqual(result.old_name, whole)
+        self.assertEqual(r.parse_family_save(self.save.read_bytes()).nickname, "The Magnificent2...")
+        self.assertEqual([e.full for e in names.read_slot(self.folder, 1)], [whole, other])
+
+    def test_a_failed_long_rename_removes_the_names_file_it_made(self):
+        import vf2_names as names
+        before = self.snapshot()
+        real = rf._write_atomically
+        calls = []
+
+        def failing(path, data):
+            calls.append(path)
+            if path == self.settings:
+                raise OSError("disk full")
+            real(path, data)
+        with mock.patch.object(rf, "_write_atomically", failing):
+            with self.assertRaises(rf.RenameError):
+                self.rename("A" * 120)
+        self.assertFalse(names.names_path(self.folder, 1).exists())
+        after = {k: v for k, v in self.snapshot().items() if "Backups" not in k.parts}
+        self.assertEqual(after, before)
 
 
 class FamilyHistoryLineTests(Base):
