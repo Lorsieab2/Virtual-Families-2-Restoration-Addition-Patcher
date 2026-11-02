@@ -300,7 +300,7 @@
         "From my save: pick the save folder and family. Everyone at home can be drawn in the house, on the Details screen, an event screen or the Family Tree; others in the Family Tree.",
         "Make your own: pick the sex, age, head, outfit and how it is drawn. Children are smaller and heads turn old at 45, as in the game.",
         "Carrying (in the house): any item a family member can hold, even ones the game never shows (marked).",
-        "All game pictures: every sprite, frame, button, bar and background, the unused ones and the patcher's too. Search, then Save all shown (a folder per category).",
+        "Every picture: every sprite, frame, button state, dialog, meter at its levels, font, room and screen, by category. Find searches; Show picks used, unused, not-checked or the patcher's pictures; (unused) says why the game never shows it. Save all saves a group or everything shown (a folder per category).",
         "Pick the game folder: the pictures come from it. Patched look off shows the original game's outfits.",
         "Save PNG: game size, 2x or 4x (crisp), or your own size (smooth). Saves and game folders are only read."
       ]

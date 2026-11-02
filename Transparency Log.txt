@@ -406,6 +406,23 @@ Changelog
   emulation; JPEG pixels and the files the code loads by name are not checked
   against the game. Never tested in a running game.
 
+- Picture Maker, Every picture (after B206; replaces All game pictures): the
+  same tab as the Virtual Families 1 patcher's. About 16,700 pictures in 16
+  categories: every file whole and every cell, and the pictures the game
+  assembles (bars at their levels on their trough, buttons in their states,
+  dialogs, tips, message boxes, fonts, the house and yard, renovations,
+  weather and night, pets in motion, animals, effects, furniture with its
+  animations, the store, collections and screens). Find; Show (used, unused,
+  not checked, the patcher's); Save PNG and Save all (a group or everything
+  shown, a folder per category, cut or whole size, can be stopped). Unused
+  pictures (737 with the original game) say why, proved from the code. JPEGs
+  are decoded by the patcher's own vf2_jpeg.py, byte for byte as the game's
+  libjpeg-9.dll. Python only; the game folder is only read and nothing is
+  written but the PNGs saved. Every assembled picture is checked against the
+  game's own drawing code under emulation; faded draws can differ by 1-2
+  levels and pictures drawn above their own size are shown at 100%. Never
+  tested in a running game.
+
 - Fix Vanilla Game Bugs, startup crash (after B204; owner-approved 31 October
   2026): at every start the game asks LDW's server to log in
   (ldwsoftware.com/game_backend/login.php; later message.php and poll.php).

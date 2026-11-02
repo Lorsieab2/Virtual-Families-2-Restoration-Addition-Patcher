@@ -1,5 +1,5 @@
 """Run the game's own picture-cutting and meter code from the B200 desktop objects (unicorn), for the Picture
-Maker's "All game pictures" (src/vf2_game_pictures.py).
+Maker's "Every picture" (src/vf2_game_pictures.py).
 
 * theGraphicsManagerImpl::GetImage(id) runs whole over the object's own ImageList: GetImageEntry, the choice of
   ldwImage / ldwImageStrip / ldwImageGrid, and ldwImageGrid's two constructors (sprintf "%s%d%d%s" for a grid over
