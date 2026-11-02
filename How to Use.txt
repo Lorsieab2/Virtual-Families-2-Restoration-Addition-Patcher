@@ -181,6 +181,17 @@ turn old at 45, as in the game. A patched game shows the patcher's Holiday
 outfits; untick Patched look for the original game's look. Save PNG saves at
 the game's size, 2x or 4x (crisp) or your own size (smooth), with a small clear
 margin unless you untick it. Your saves and game folders are only read.
+Every picture (the third tab, as in the Virtual Families 1 patcher): every
+picture the game has, drawn as the game draws it, by category (meters and bars,
+buttons, dialogs, icons, fonts, house and yard, furniture, food, weather and
+night, effects, animals, people, store, collectibles, screens, the patcher's
+own): every picture file whole and every cell and animation frame, buttons in
+each state, the bars empty and at their levels on their trough, dialogs tiled
+at the game's sizes, every font glyph, the house with its renovations, night.
+Find searches; Show picks used, unused, not-checked or the patcher's pictures.
+"(unused)" says why the game never shows it. Save all saves a group or
+everything shown, a folder per category, cut to the drawn pixels or at the
+picture's whole size.
 
 Crash capture QA only (optional):
 The patcher never changes Windows Error Reporting settings or launches the

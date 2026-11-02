@@ -508,10 +508,10 @@ def load_png(path, fast: bool = True) -> Image:
 # ------------------------------------------------------------------ export
 
 
-def export(image: Image, *, scale: int = 1, size=None, margin: int = MARGIN) -> Image:
-    """Crop to the drawn pixels plus `margin` (0: none), then scale: `scale` crisply (nearest neighbour) or
-    `size=(w, h)` smoothly; a 0 in size keeps the shape."""
-    out = image.cropped(max(0, int(margin)))
+def export(image: Image, *, scale: int = 1, size=None, margin: int = MARGIN, crop: bool = True) -> Image:
+    """Crop to the drawn pixels plus `margin` (0: none), unless `crop` is False (the picture keeps its whole size);
+    then scale: `scale` crisply (nearest neighbour) or `size=(w, h)` smoothly; a 0 in size keeps the shape."""
+    out = image.cropped(max(0, int(margin))) if crop else image.copy()
     if size is not None:
         w, h = (int(v or 0) for v in size)
         if w <= 0 and h <= 0:

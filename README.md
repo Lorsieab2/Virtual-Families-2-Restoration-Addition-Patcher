@@ -268,34 +268,51 @@ actions, as before. **Tools** holds:
   `src/vf2_people_pictures.py` (the people as the game draws them), `src/vf2_picture_image.py` (the pictures, the
   PNG reader and writer, the game's scaled draw).
 
-  **All game pictures** (the third tab) offers every picture the game has, by category (people, pets, furniture,
-  upgrades, rooms and the house, weather and nature, effects and animations, work and food props, store and tray
-  icons, collectibles and collections, goals and trophies, buttons and controls, dialogs and panels, meters and
-  bars, meters assembled, screens and backgrounds, fonts, cursors, the patcher's pictures), with a search box:
-  - all 632 entries of the game's image table (`theGraphicsManager`'s `ImageList`), each cut into every cell exactly
-    as `ldwImageGrid`'s constructors and `GetCellRect` cut it (11,922 cells: every animation frame, furniture turned
-    each way, button states, the people's sheets);
-  - every other file in Images: the house map tiles, the fonts and the splash screen the code loads by name, and the
-    unused ones (`main_BG.png`, `VD_BG_2.png`, `MenuBtnCurrency2.png` and the two DRM pictures: nothing in the code
-    names them), marked **(unused)**; the four table entries whose files the game does not have are listed as
-    **(missing)**;
-  - the bars assembled at any level: the Details screen's five bars and the loading bar
-    (`theContinuousVariableMeter`, empty to full), and the two meters the game never calls
-    (`theSlicedVariableMeter`, `theVariableMeter`), marked **(unused)**;
-  - in a patched game, every file that is not the original game's (new or changed), marked **(patcher)**, the new
-    ones in their own category by folder.
-  **Save all shown** saves every frame of everything the search shows, a folder per category. The list comes from
-  `src/vf2_game_pictures.json` (made by `scripts/build_vf2_image_table.py` from the objects and the clean install's
-  file list); the pictures are read from the game folder at run time and no game art is in the repository.
-  Checked (`tests/test_game_pictures.py`): the data file is what the objects give; `GetImage` and `GetCellRect` run
-  under unicorn (`tests/vf2_pictures_emu.py`) for all 628 entries the game folder has and every cell's file and
-  rectangle is the Picture Maker's; the three meters' `DrawPercentMeter` make exactly the Picture Maker's calls at
-  every colour and many levels; `ClipRect` clips as the Picture Maker does; bars match a Pillow composite pixel for
-  pixel. Not checked against the game: JPEG and GIF pixels (decoded by Windows, not the game's libjpeg), how the
-  code draws the files it loads by name (shown whole), the unused percent meter's colour (drawn at 90% on a clear
-  background; the game blends it over the screen). Not assembled: whole screens, dialogs, rooms or the house with
-  furniture placed, pets in motion, weather over the house, day and night; their pieces are all offered as cells.
-  Code: `src/vf2_game_pictures.py`.
+  **Every picture** (the third tab; the same tab as the Virtual Families 1 patcher's) lists every picture the game
+  has (about 16,700 with the original game), in VF1's 16 categories (meters and bars, buttons and controls, dialogs
+  and panels, icons and cursors, fonts, house and yard, furniture and objects, food and cooking, weather, day and
+  night, effects and animations, animals and insects, people, store, collectibles and collections, screens and
+  backgrounds, the patcher's own pictures). **Find** searches; **Show** narrows the list to the pictures the game
+  shows, the unused ones, the ones not checked against the game, or the patcher's own. **Save PNG** saves one;
+  **Save all in this group** / **Save all shown** save into a folder per category (game size, 2x, 4x or custom; cut
+  to the drawn pixels, or kept at the picture's whole size), and saving can be stopped.
+  - **Every picture file**, whole, and every cell the game cuts from it: all 632 entries of `theGraphicsManager`'s
+    image table, cut as `ldwImageGrid` and `GetCellRect` cut them (11,922 cells), every other Images file (the map
+    tiles, fonts and splash screen the code loads by name), icon.bmp; the four table files the game lacks are
+    listed with nothing to draw.
+  - **Assembled pictures**, as the game draws them: the Details screen's five bars and the loading bar empty, full
+    and at the levels where their look changes, on their own trough (the screen behind them); the achievement
+    progress bar; every button strip in its three states, check boxes, choices, the volume slider; 13 dialog
+    backdrops tiled at the sizes the game opens them, message boxes with the life-event pictures, tips and their
+    arrows, the play screen's tool tray, the family tree's frames; mouse pointers and the selected-villager ring;
+    the four fonts with every glyph and sample text in each colour the game uses; the yard and house from the 16
+    map tiles, every renovation, yard hole, leak, door, curtain and home improvement; weather (haze, lightning, a
+    sunbeam, fog) and night at each darkness level with the lamps of `lsmap.dat`; every pet in every animation
+    frame and direction, birds, insects, butterflies, bubbles and every effect frame; every furniture item in every
+    orientation and, where it animates, with its animation joined; the store's boxes, item pictures and menu
+    buttons; every collection page; the game's screens with their fixed overlays.
+  - **(unused)**: a picture, cell or assembled picture no reached code draws carries the label and the reason, proved
+    from the code (737 with the original game), for example LoadColor and the two meters no code calls, the
+    hummingbird, dragonflies and reef fish, the wind leaves and hail, three light masks no lamp uses, the font
+    Segoe24 (loaded but never drawn), the effects no code starts, and the five files nothing names.
+  - **(patcher)**: in a patched game every Images file that is not the original game's (new or changed), and the
+    patcher's own family tree backgrounds.
+  - Anything not proved by emulation says **Not checked against the game**, with the reason.
+  Which pictures the game uses is computed from the objects by `scripts/build_vf2_image_table.py` (a call graph
+  from `WinMain` and the C runtime's start-up tables, every computed image id resolved) into
+  `src/vf2_game_pictures.json`. JPEGs are decoded by `src/vf2_jpeg.py`, byte for byte as the game's own
+  libjpeg-9.dll decodes them for SDL2_image (41 of 41 JPEGs checked; Pillow differs by up to 67 levels on the 4:2:0
+  map tiles); `src/vf2_small_formats.py` reads icon.bmp and the GIF. The pictures are read from the game folder at
+  run time; no game art is in the repository. Code: `src/vf2_game_pictures.py` (catalogue, drawing),
+  `src/vf2_art_sheets.py` (files and cells), `src/vf2_art_meters.py`, `vf2_art_ui.py`, `vf2_art_house.py`,
+  `vf2_art_misc.py`, `vf2_art_screens.py`, `vf2_art_fonts.py`. Checked: `tests/test_game_pictures.py` (the data
+  file is the objects'; `GetImage` and `GetCellRect` run in Unicorn for all 628 entries the game has and cut every
+  cell where the catalogue does; the tab), `tests/test_picture_usage.py` (the usage recomputed from the objects),
+  `tests/test_art_*.py` (each runs the game's own drawing functions in Unicorn and requires every draw of every
+  assembled picture to equal the game's: file, cell, place, scale, fade, fills, clipping; the night fill and masks
+  pixel for pixel), `tests/test_jpeg_decoder.py` (libjpeg-9.dll itself in Unicorn on every JPEG). Not checked:
+  pictures the game draws faded or scaled are placed exactly, but a fade can differ by 1-2 levels from the game's
+  blend and a picture drawn above its own size (birds, bubbles) is shown at 100%; interface text is not drawn.
 - **How to Use...** opens the guide: one short page per control. A small **?** button beside each control
   opens the page for it. The pages are `src/vf2_how_to_use.json`, read by `src/vf2_how_to_use.py`.
 

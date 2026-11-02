@@ -3504,6 +3504,60 @@ Picture Maker: All game pictures (after B205)
   motion, weather over the house, day and night (their pieces are offered).
 
 
+Picture Maker: Every picture (after B206; replaces All game pictures)
+----------------------------------------------------------------------
+
+- What it is: the third tab renamed "Every picture" and brought up to the
+  Virtual Families 1 patcher's (VF1 PRs #56 and #58): VF1's 16 categories,
+  Find, Show (every picture / the game shows / unused / not checked / the
+  patcher's own), Save PNG, Save all in this group, Save all shown (a folder
+  per category, game size, 2x, 4x or custom, cut to the drawn pixels or kept
+  whole, can be stopped). Python only: src/vf2_game_pictures.py (catalogue,
+  layers, drawing), src/vf2_art_sheets.py, src/vf2_art_meters.py,
+  vf2_art_ui.py, vf2_art_house.py, vf2_art_misc.py, vf2_art_screens.py,
+  vf2_art_fonts.py, src/vf2_jpeg.py, src/vf2_small_formats.py. No executable
+  or DLL changes; no game art in the repository.
+- Usage (scripts/build_vf2_image_table.py -> vf2_game_pictures.json
+  "usage"): a call graph over every relocation of the 164 B200 objects from
+  _WinMain@16 and the .CRT$XC/XI/XP/XT start-up entries; every call to
+  theGraphicsManager's image functions is followed to the ids it can pass
+  (immediates, jump tables, the furniture table itemInfo, the collection,
+  store and menu tables, CAnimManager and CPetAnimManager's records read from
+  animpts.dat and petanimpts.dat under emulation, ShowMessageBox's and
+  CStory's EImage arguments); the build stops if a reachable call passes an
+  id it cannot resolve. 608 ids are used, 22 are never asked for. The area
+  modules add finer reasons (loaded but never drawn, effects no code starts,
+  cells and kinds no code uses), each pinned by a test.
+- JPEGs: vf2_jpeg.py, VF1's pure-Python decoder; VF2's libjpeg-9.dll and
+  SDL2_image.dll are byte-identical to VF1's (SHA-256 B55A8087..852C,
+  591FADC4..B00F). tests/test_jpeg_decoder.py runs libjpeg-9.dll itself in
+  Unicorn the way SDL2_image calls it: 41 of 41 JPEGs (37 in Images, the DRM
+  page's, and the patcher's 3) decode byte for byte the same.
+- Evidence: tests/test_game_pictures.py (cells against GetImage and
+  GetCellRect under emulation, the tab), tests/test_picture_usage.py,
+  tests/test_art_meters.py, test_art_ui.py, test_art_house.py,
+  test_art_misc.py, test_art_screens.py, test_art_fonts.py: each runs the
+  game's own drawing functions in Unicorn (theVillagerScene and
+  theLoadingScene DrawScene, DrawPercentMeter, CAchievement::DrawAchievement,
+  ldwButton, ldwRadioButton, ldwTiledBackground, theOptionsDialog,
+  theTipDialog, theMessageBoxDlg, CWorldMap::Draw, CDecal, CWeather,
+  CLightning, CSunBeam, CFog, CNight with lsmap.dat, CPetManager::DrawPet,
+  CBird, CBall, the butterflies, CBubbles, CFloatingAnim, CFurnitureManager,
+  the scenes' DrawScene, CFamilyTreeScene, ldwFontImpl) and requires every
+  draw of every assembled picture to equal the game's. The night fill and
+  light masks are checked pixel for pixel against ldwGameWindowImpl::FillRect
+  and ldwImageImpl::SetTransparencyMask.
+- Not checked against the game: faded draws (BlitRectWithAlpha below
+  opacity 1 can differ by 1-2 levels from the picture's own fade); pictures
+  the game scales above 100% (birds 80-119%, bubbles 81-120%) are shown at
+  100%; interface text; the patcher's own pictures.
+- Vanilla findings (reported, not fixed): hail and the wind's leaves are
+  loaded but never drawn; workshop benches 3 and 4 ask for a third cell of
+  two-cell pictures (clamped to the first); the options dialog's full-screen
+  row sits 5 pixels lower when the right choice is picked; CPetAnimManager::
+  LoadAssets closes petanimpts.dat twice.
+
+
 Startup crash: LDW server reply (Fix Vanilla Game Bugs, after B204)
 --------------------------------------------------------------------
 

@@ -324,6 +324,7 @@ ALLOWED = {
     ("vf2_glyph_render.py", "mac_roman"): "a font file's own name table (Macintosh records)",
     ("vf2_unicode_font.py", "utf-16"): "the Unicode Font tool's own ini (Windows' Unicode ini form)",
     ("vf2_unicode_font.py", "latin-1"): "reading back a hand-edited ini of the tool's",
+    ("vf2_art_fonts.py", "cp1252"): "naming a game font's glyphs and sample text (the Picture Maker's, not save text)",
 }
 CODEC = re.compile(r"""(?:\.(?:decode|encode)\(\s*|encoding\s*=\s*|codecs\.\w+\([^)]*?)["']([A-Za-z0-9_-]+)["']""")
 SAVE_TEXT_MODULES = ("vf2_save_reader.py", "vf2_genealogy.py", "vf2_family_history.py", "vf2_rename_family.py",
