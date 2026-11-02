@@ -922,10 +922,11 @@ def test_rain_and_snow_draw_any_intensity(level):
     assert (len(flakes) > 0) == (level == 1.0)
 
 
-def test_light_source_kinds():
-    """CNight::SetupLightSource, run for every kind 0..12: kinds outside 1..11 set nothing up; lsmap.dat's lights
-    (kinds 6, 8, 9, 11) all get a mask the game ships; the masks with no file (0x258, 0x259, 0x25B) belong to kinds
-    only CLightSourceEditor::HandleKeyCharacter adds, and nothing but its own initializer refers to that editor."""
+MISSING_MASKS = {0x258, 0x259, 0x25B}     # LightSourceMask180x8, 200x10, 300x10: no file in the game
+
+
+def _light_kinds():
+    """CNight::SetupLightSource, run for every kind 0..12: kind -> the mask image it asks for (None: no setup)."""
     em = _emu_mod()
     asked = []
     e = em.Emu(OBJ_DIR, ["Night"])
@@ -946,16 +947,16 @@ def test_light_source_kinds():
         asked.clear()
         e.call("?SetupLightSource@CNight@@AAEXPAUSLightSource@1@@Z", (light,), ecx=e.alloc(0x1000))
         kinds[kind] = asked[0] if asked else None
+    return kinds
+
+
+def test_light_source_kinds():
+    """Kinds outside 1..11 set nothing up; the masks with no file belong to kinds only
+    CLightSourceEditor::HandleKeyCharacter adds, and nothing but its own initializer refers to that editor."""
+    em = _emu_mod()
+    kinds = _light_kinds()
     assert kinds[0] is None and kinds[12] is None and all(kinds[k] for k in range(1, 12))
-    missing = {0x258, 0x259, 0x25B}
-    risky = {k for k, img in kinds.items() if img in missing}
-    path = GAME_DIR / "Assets" / "lsmap.dat"
-    if path.is_file():
-        data = path.read_bytes()
-        used = {struct.unpack_from("<i", data, 0x50 * k)[0] for k in range(26)} - {0}
-        assert used == {6, 8, 9, 11} and not used & risky
-        assert all(list((GAME_DIR / "Images").rglob(f"LightSourceMask{n}.png"))
-                   for n in ("250", "350", "400", "500"))
+    assert {k for k, img in kinds.items() if img in MISSING_MASKS}
     callers = set()
     for p in sorted(OBJ_DIR.glob("*.obj")):
         o = em.CoffObject(p)
@@ -966,6 +967,30 @@ def test_light_source_kinds():
                     callers.add(f"{p.stem}|{fn}")
     assert callers == {"LightSourceEditor|?HandleKeyCharacter@CLightSourceEditor@@UAE?B_ND@Z",
                        "LightSourceEditor|??__ELightSourceEditor@@YAXXZ"}
+
+
+def test_the_game_lights_use_masks_that_exist():
+    """lsmap.dat (the game's 26 light places, 23 used) asks only for kinds 6, 8, 9 and 11, none of them a kind
+    whose mask is missing, and every mask those kinds ask for is a file the game ships. Skipped without the
+    game's files (work/vanilla_runtime_payload or VF2_VANILLA_GAME_DIR); a payload without them fails."""
+    if not GAME_DIR.is_dir():
+        pytest.skip("work/vanilla_runtime_payload (or VF2_VANILLA_GAME_DIR) is not present")
+    path = GAME_DIR / "Assets" / "lsmap.dat"
+    assert path.is_file(), path
+    data = path.read_bytes()
+    assert len(data) == 26 * 0x50
+    used = {struct.unpack_from("<i", data, 0x50 * k)[0] for k in range(26)} - {0}
+    assert used == {6, 8, 9, 11}
+    kinds = _light_kinds()
+    asked = {kinds[k] for k in used}
+    assert not asked & MISSING_MASKS
+    sys.path.insert(0, str(ROOT / "src"))
+    import vf2_game_pictures as gp
+    files = {e["id"]: e["file"] for e in gp.data()["table"]}
+    for image in sorted(asked):
+        assert list(GAME_DIR.rglob(files[image])), (hex(image), files[image])
+    for image in MISSING_MASKS:
+        assert not list(GAME_DIR.rglob(files[image])), (hex(image), files[image])
 
 
 # --------------------------------------------------------------------------------------- docs and wiring
