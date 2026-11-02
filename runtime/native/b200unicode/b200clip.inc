@@ -186,33 +186,31 @@ static void ClipPaste(unsigned box) {
         unsigned before = ut::Length((const unsigned char *)buf);
         if (before >= sizeof(ClipBefore)) break;
         for (unsigned i = 0; i <= before; ++i) ClipBefore[i] = buf[i];
-        bool skip = false;
-        for (unsigned i = start; i < end && !skip; ++i) {
+        for (unsigned i = start; i < end; ++i) {
             unsigned cp = ClipAdd[i];
             if (cp < 0x80) ((EventsHandleKeyFn)SITE(EVENTS_HANDLE_KEY))(events, UNI_KEY_TYPE_CHARACTER, 0, (int)cp);
             else ((EventsHandleKeyFn)SITE(EVENTS_HANDLE_KEY))(events, UNI_KEY_TYPE_CHARACTER, (int)(cp | UNI_KEY_MARK), 0);
         }
         buf = *(char **)(box + 0x30);
-        // taken whole? the text is the one before plus exactly this character
+        // Taken whole? Compared as characters, never by byte growth: the stored form may change (adding a letter
+        // can make a UTF-8 text a shorter single-byte one).
         unsigned now = ut::Length((const unsigned char *)buf);
-        bool whole = !skip && now > before;
-        if (whole) {
-            unsigned n0 = ut::Decode((const unsigned char *)ClipBefore, before, ClipCps, 1290);
-            unsigned n1 = ut::Decode((const unsigned char *)buf, now, ClipCps + 640, 640);
-            whole = n1 == n0 + (end - start);
-        }
+        unsigned n0 = ut::Decode((const unsigned char *)ClipBefore, before, ClipCps, 640);
+        unsigned n1 = ut::Decode((const unsigned char *)buf, now, ClipCps + 640, 640);
+        bool same = n1 == n0, whole = n1 == n0 + (end - start);
+        for (unsigned i = 0; (same || whole) && i < n0; ++i)
+            if (ClipCps[i] != ClipCps[640 + i]) same = whole = false;
+        for (unsigned i = start; whole && i < end; ++i)
+            if (ClipCps[640 + n0 + (i - start)] != ClipAdd[i]) whole = false;
         if (!whole) {
-            bool changed = now != before;
-            for (unsigned i = 0; i <= before; ++i) buf[i] = ClipBefore[i];   // back to the text before it
-            if (changed) Changed(box);
-            dropped += end - start;
-            if (!skip && now <= before && !(*(unsigned char *)(box + 0x2D))) {   // the box is full: stop
-                dropped += add - end;
-                break;
+            if (!same) {                                                   // part of it went in: take it back
+                for (unsigned i = 0; i <= before; ++i) buf[i] = ClipBefore[i];
+                Changed(box);
             }
-            if (changed && !skip) { dropped += add - end; break; }
-            start = end;
-            continue;
+            dropped += end - start;
+            if (same && *(unsigned char *)(box + 0x2D)) { start = end; continue; }   // a letter in a number box
+            dropped += add - end;                                          // the box is full: the paste stops
+            break;
         }
         pasted += end - start;
         start = end;

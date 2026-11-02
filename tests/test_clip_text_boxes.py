@@ -382,3 +382,14 @@ def _renamed(test_dll: Path, tmp: Path) -> Path:
     out = d / "vf2clip_b200.dll"
     out.write_bytes(test_dll.read_bytes())
     return out
+
+
+def test_with_unicode_on_a_shorter_stored_form_is_still_taken(unicode):
+    """Adding a letter can make the stored form shorter (UTF-8 "Ã©" is 4 bytes; with "é" after it the text is 3
+    single bytes): the paste checks characters, not byte growth, and goes on."""
+    start = "Ã©"
+    assert len(T.encode(start)) == 4 and len(T.encode(start + "é")) == 3
+    unicode.box(5, T.encode(start))
+    unicode.clipboard = "éx"
+    unicode.press(ord("v"), CTRL)
+    assert T.decode(unicode.text()) == start + "éx" and unicode.guard()
