@@ -68,6 +68,7 @@ class ClipWorld:
         self.messages = []
         self.clipboard = None                       # the clipboard's text (str) or None
         self.set_text = []
+        self.opened, self.owner = None, 0
         self.unicode_on = unicode_on
         # the game's ldwEventManager: [mgr] -> list -> first node {handler, flags, stop, next}
         self.mgr = e.alloc(0x20)
@@ -98,7 +99,7 @@ class ClipWorld:
         e.write(status_block, struct.pack("<IIIII", S.STATUS_MAGIC, 2, 1, 1, 1))
         self.status_block = status_block
         e.imports.update({
-            "OpenClipboard": lambda em: (1, 4), "CloseClipboard": lambda em: (1, 0),
+            "OpenClipboard": self._open, "CloseClipboard": self._close,
             "EmptyClipboard": self._empty, "GetClipboardData": self._get, "SetClipboardData": self._set,
             "GlobalLock": lambda em: (em.arg(0), 4), "GlobalUnlock": lambda em: (1, 4),
             "GlobalAlloc": lambda em: (em.alloc(em.arg(1) + 8), 8), "GlobalFree": lambda em: (0, 4),
@@ -121,9 +122,21 @@ class ClipWorld:
         e.call(e.dll_export("B200Unicode_TestSetPoll"), (fake_poll,))
         self.ev = e.alloc(0x40)
 
-    # ---- Windows
+    # ---- Windows (as the clipboard documents it: written only when opened with an owner window, emptied first)
+    def _open(self, em):
+        assert self.opened is None, "the clipboard was left open"
+        self.opened = em.arg(0)
+        return 1, 4
+
+    def _close(self, em):
+        assert self.opened is not None
+        self.opened = None
+        return 1, 0
+
     def _empty(self, em):
+        assert self.opened is not None
         self.clipboard = None
+        self.owner = self.opened
         return 1, 0
 
     def _get(self, em):
@@ -136,6 +149,8 @@ class ClipWorld:
 
     def _set(self, em):
         assert em.arg(0) == CF_UNICODETEXT
+        if not self.owner:                                   # OpenClipboard(NULL) + EmptyClipboard: it fails
+            return 0, 8
         p, out = em.arg(1), b""
         while True:
             u = em.read(p + len(out), 2)
@@ -231,6 +246,13 @@ def test_paste_copy_and_cut(stock):
     stock.press(ord("x"), CTRL)
     assert stock.clipboard == "Anne Smith-Jones" and stock.text() == b""
     assert any(m == (0x0C, 77) for m in stock.messages)
+    assert stock.owner == stock.e.active_window              # written with the game's window as the owner
+    # no active window: nothing is copied or cut, and the clipboard is left as it was
+    stock.box(20, b"Keep me")
+    stock.e.active_window = 0
+    stock.clipboard = "old"
+    stock.press(ord("x"), CTRL)
+    assert stock.clipboard == "old" and stock.text() == b"Keep me"
 
 
 def test_nothing_happens_without_a_box_being_edited(stock):

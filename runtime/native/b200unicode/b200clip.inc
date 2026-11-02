@@ -91,7 +91,7 @@ static unsigned Cp1252Char(unsigned char b) {
 static unsigned ClipboardText(unsigned *cps, unsigned cap, unsigned &dropped) {
     unsigned n = 0;
     dropped = 0;
-    if (!OpenClipboard(0)) return 0;
+    if (!OpenClipboard(GetActiveWindow())) return 0;
     HANDLE h = GetClipboardData(CF_UNICODETEXT);
     const wchar_t *w = h ? (const wchar_t *)GlobalLock(h) : 0;
     if (w) {
@@ -114,8 +114,12 @@ static unsigned ClipboardText(unsigned *cps, unsigned cap, unsigned &dropped) {
     return n;
 }
 
+// Writing needs an owner window (OpenClipboard(NULL) + EmptyClipboard leaves no owner and SetClipboardData fails):
+// the game's own window, which is active while a box is typed in. No window: nothing is copied and the clipboard is
+// left as it was.
 static bool SetClipboardText(const unsigned *cps, unsigned n) {
-    if (!OpenClipboard(0)) return false;
+    HWND owner = GetActiveWindow();
+    if (!owner || !OpenClipboard(owner)) return false;
     EmptyClipboard();
     HGLOBAL g = GlobalAlloc(GMEM_MOVEABLE, (n * 2 + 1) * sizeof(wchar_t));
     bool ok = false;
