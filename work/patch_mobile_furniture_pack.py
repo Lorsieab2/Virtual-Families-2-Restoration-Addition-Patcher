@@ -549,6 +549,15 @@ UNICODE_FONT_FLAG_SYMBOL = "_gVF2UnicodeFont"
 UNICODE_FONT_DLL_NAME = "vf2unicodefont_b200.dll"
 UNICODE_FONT_INI_NAME = "vf2unicodefont.ini"
 UNICODE_TEXT_STARTUP = "B200Unicode_Startup"
+# Copy and Paste in Text Boxes (after B206; on by default): Ctrl+V / Shift+Insert, Ctrl+C / Ctrl+Insert and Ctrl+X in
+# the game's own text boxes. The same Unicode text source built as vf2clip_b200.dll (B200UNICODE_CLIP: it installs
+# only the SDL_PollEvent import slot), loaded by its own dormant byte (.vf2clip) before the Unicode text DLL, with or
+# without either Unicode setting; vf2clip.ini says Mode=3. Zero never loads it.
+CLIP_SETTING = "copy_paste_text_boxes"
+CLIP_FLAG_SECTION = ".vf2clip"
+CLIP_FLAG_SYMBOL = "_gVF2Clip"
+CLIP_DLL_NAME = "vf2clip_b200.dll"
+CLIP_INI_NAME = "vf2clip.ini"
 OUTFIT_PICTURES_FLAG_SECTION = VANILLA_BUGS_FLAG_SECTION
 OUTFIT_PICTURES_DLL_NAME = "vf2outfits_b200.dll"
 OUTFIT_PICTURES_INI_NAME = "vf2outfits.ini"
@@ -16435,6 +16444,10 @@ volatile unsigned char gVF2UnicodeText = 0;
 #pragma section(".vf2ufnt", read, write)
 extern "C" __declspec(allocate(".vf2ufnt"))
 volatile unsigned char gVF2UnicodeFont = 0;
+// Copy and Paste in Text Boxes (see CLIP_* in the generator): its own byte and DLL, before the Unicode text DLL.
+#pragma section(".vf2clip", read, write)
+extern "C" __declspec(allocate(".vf2clip"))
+volatile unsigned char gVF2Clip = 0;
 
 static void VF2LoadUnicodeDll(const char *tail) {
     unsigned short path[512];
@@ -16461,6 +16474,7 @@ extern "C" void *__cdecl VF2GameStateGetAfterTimeControlsLoad() {
         if (gVF2FamilyHistory == 1) VF2LoadFamilyHistoryDll();
         if (gVF2StoreRefresh == 1) VF2LoadStoreRefreshDll();
         if (gVF2FixVanillaGameBugs == 1) VF2LoadOutfitPicturesDll();
+        if (gVF2Clip == 1) VF2LoadUnicodeDll("__VF2_CLIP_RELATIVE_PATH__");
         if (gVF2UnicodeText == 1) VF2LoadUnicodeDll("__VF2_UNICODE_TEXT_RELATIVE_PATH__");
         else if (gVF2UnicodeFont == 1) VF2LoadUnicodeDll("__VF2_UNICODE_FONT_RELATIVE_PATH__");
     }
@@ -18954,6 +18968,10 @@ extern "C" void __cdecl VF2ApplyVisibleSpecialUpgrade(int itemId) {
     special_upgrade_helper_cpp = special_upgrade_helper_cpp.replace(
         "__VF2_UNICODE_FONT_RELATIVE_PATH__",
         TIME_CONTROLS_PATCHER_FOLDER + "\\\\" + UNICODE_FONT_DLL_NAME,
+    )
+    special_upgrade_helper_cpp = special_upgrade_helper_cpp.replace(
+        "__VF2_CLIP_RELATIVE_PATH__",
+        TIME_CONTROLS_PATCHER_FOLDER + "\\\\" + CLIP_DLL_NAME,
     )
     special_upgrade_helper_cpp = special_upgrade_helper_cpp.replace(
         "__VF2_TIME_CONTROLS_RELATIVE_PATH__",
@@ -26755,6 +26773,39 @@ def patch_unicode_text_manifest(manifest):
             "save_format": "unchanged: names stay in their own fields, in the patcher's one stored form",
             "flag_off": "the DLL is never loaded: the game is the unmodified build",
         }
+
+
+def patch_clip_manifest(manifest):
+    """Copy and Paste in Text Boxes: one dormant byte (.vf2clip) compiled into every executable; the Time Controls
+    wrapper on theGame::Init's first call loads vf2clip_b200.dll when it is 1, before the Unicode text DLL. Requires
+    patch_time_controls_loader."""
+    if "TimeControls" not in manifest:
+        raise RuntimeError("Copy and Paste in Text Boxes rides the Time Controls loader; patch it first")
+    manifest["ClipBoard"] = {
+        "status": "dormant loader installed in every executable",
+        "offline_patcher_setting": CLIP_SETTING,
+        "label": "Copy and Paste in Text Boxes",
+        "category": "optional",
+        "default": True,
+        "hook": (
+            "theGame::Init's first call (theGameState::Get) -> VF2GameStateGetAfterTimeControlsLoad, which "
+            f"loads {TIME_CONTROLS_PATCHER_FOLDER}\\{CLIP_DLL_NAME} once when the byte is 1, before the Unicode "
+            "text DLL"
+        ),
+        "runtime_flag": {
+            "symbol": CLIP_FLAG_SYMBOL,
+            "source_section": CLIP_FLAG_SECTION,
+            "size": 1,
+            "default": "00",
+            "enabled": "01",
+            "linked_location_status": "pending_link_metadata",
+        },
+        "companion_dll": CLIP_DLL_NAME,
+        "companion_ini": CLIP_INI_NAME,
+        "startup_export": UNICODE_TEXT_STARTUP,
+        "save_format": "unchanged: a pasted name is stored as a typed one",
+        "flag_off": "the DLL is never loaded: the game is the unmodified build",
+    }
 
 
 def patch_outfit_pictures_manifest(manifest):
@@ -42814,6 +42865,8 @@ def main():
     patch_outfit_pictures_manifest(manifest)
     # Unicode text (.vf2utxt / .vf2ufnt; the same loader loads its DLL after every other one).
     patch_unicode_text_manifest(manifest)
+    # Copy and Paste in Text Boxes (.vf2clip; the same loader, before the Unicode text DLL).
+    patch_clip_manifest(manifest)
     # Invisible furniture counts as its stock donor where stock code tests
     # the donor's item id (every executable).
     patch_invisible_furniture_parity(manifest)

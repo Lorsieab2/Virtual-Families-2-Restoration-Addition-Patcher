@@ -57,7 +57,7 @@ def test_the_dll_source_names_every_site_and_writes_nothing_else():
     for site, _pin, _how in S.SITES:
         assert f"UNI_SITE_{site}" in header
     # the only writes: the plan's entry jumps, the two vtable slots and the import slot
-    assert src.count("PlanJump(plan,") == 6 and src.count("PlanSlot(plan,") == 3
+    assert src.count("PlanJump(plan,") == 7 and src.count("PlanSlot(plan,") == 4      # + the clip build's slot
     assert not re.search(r"\b0x4[0-9A-Fa-f]{5}\b", src)                # no game address (the image is relocated)
     assert 'L"vf2unicodefont.ini"' in src and 'L"vf2unicode.ini"' in src
 
@@ -88,14 +88,16 @@ def _vcvars():
 
 
 @pytest.fixture(scope="module")
-def dlls():
+def dlls(tmp_path_factory):
     if not _vcvars():
         pytest.skip("VF2_VCVARS32 is not set")
     bat = RUNTIME / "native" / "build_b200unicode.bat"
+    out = tmp_path_factory.mktemp("unicode_build")       # its own copy: another module may hold one open
     for kind in ("", "test"):
-        r = subprocess.run(["cmd.exe", "/c", str(bat)] + ([kind] if kind else []), capture_output=True, text=True)
+        r = subprocess.run(["cmd.exe", "/c", str(bat)] + ([kind] if kind else []), capture_output=True, text=True,
+                           env=dict(os.environ, VF2_UNICODE_BUILD_DIR=str(out)))
         assert r.returncode == 0, r.stdout + r.stderr
-    return RUNTIME / "build" / "vf2unicode_b200.dll", RUNTIME / "build" / "vf2unicode_b200_test.dll"
+    return out / "vf2unicode_b200.dll", out / "vf2unicode_b200_test.dll"
 
 
 def test_the_shipped_dll_has_no_test_entry_points(dlls):
@@ -174,7 +176,7 @@ class World:
         out = e.alloc(4 * 12)
         e.call(e.dll_export("B200Unicode_TestHooks"), (out,))
         keys = ("draw_string", "draw_chars", "get_width", "next_line", "get_text", "draw_justified", "char_rect",
-                "handle_key", "poll")
+                "handle_key", "poll", "set_text", "clip_poll")
         return {k: e.r32(out + 4 * i) for i, k in enumerate(keys)}
 
     def game_seams(self, sites):
@@ -214,10 +216,11 @@ def test_the_plan_is_the_proved_sites(exe, dlls, delta):
     h = w.hooks()
     jumps = {wr["va"]: wr for wr in writes if not wr["data"]}
     slots = {wr["va"]: wr for wr in writes if wr["data"]}
-    assert len(writes) == 9 and len(jumps) == 6 and len(slots) == 3
+    assert len(writes) == 10 and len(jumps) == 7 and len(slots) == 3
     for site, hook, length in (("DRAW_STRING", "draw_string", 5), ("DRAW_CHARS", "draw_chars", 5),
                                ("GET_WIDTH", "get_width", 5), ("NEXT_LINE", "next_line", 5),
-                               ("GET_TEXT", "get_text", 5), ("DRAW_JUSTIFIED", "draw_justified", 9)):
+                               ("GET_TEXT", "get_text", 5), ("DRAW_JUSTIFIED", "draw_justified", 9),
+                               ("SET_TEXT", "set_text", 5)):
         wr = jumps[s[site]]
         assert wr["len"] == length and wr["bytes"][0] == 0xE9
         assert (s[site] + 5 + struct.unpack("<i", wr["bytes"][1:5])[0]) & 0xFFFFFFFF == h[hook]
@@ -375,6 +378,54 @@ def test_typed_text_reaches_the_game_one_character_at_a_time(typing_world):
     w.keys.clear()
     e.call(w.h["poll"], (ev,))
     assert w.keys == [] and e.r32(ev) == 0x300
+
+    # A character beyond U+FFFF typed with SendInput(KEYEVENTF_UNICODE) / an input method: the game's SDL2.dll 2.0.3
+    # gives two events, one per UTF-16 half, each written as if it were a character (ED A0..AF xx, ED B0..BF xx);
+    # SURROGATE_EVENTS are what the real SDL2.dll gave for SendInput (tests/sdl_surrogate_probe.c). The DLL joins
+    # the halves into the one character and never types them as letters.
+    def run(texts):
+        w.keys.clear()
+        hidden = []
+        for text in texts:
+            events.append((S.SDL_TEXTINPUT, text))
+            assert e.call(w.h["poll"], (ev,)) == 1
+            hidden.append(e.r32(ev) == S.SDL_HIDDEN_EVENT)
+        return list(w.keys), hidden
+    for (high, low), cp in SURROGATE_EVENTS:
+        assert run([high, low]) == ([(5, cp | S.KEY_MARK, 0)], [True, True])
+        assert run([high + low]) == ([(5, cp | S.KEY_MARK, 0)], [True])            # both halves in one text
+        assert run([b"x" + high, low + b"y"]) == ([(5, 0, ord("x")), (5, cp | S.KEY_MARK, 0), (5, 0, ord("y"))],
+                                                  [True, True])
+        assert run([low]) == ([], [True])                                       # a low half alone: nothing
+        assert run([high, b"a"]) == ([(5, 0, ord("a"))], [True, True])          # a high half alone: nothing
+        assert run([high, high, low]) == ([(5, cp | S.KEY_MARK, 0)], [True, True, True])
+    assert run([b"a"]) == ([], [False])                                         # the stock path again
+
+
+SURROGATE_EVENTS = [((b"\xED\xA0\xBD", b"\xED\xB1\x8D"), 0x1F44D),                # U+1F44D thumbs up
+                    ((b"\xED\xA0\x88", b"\xED\xB0\x80"), 0x12000)]                # U+12000 Cuneiform A
+
+
+def test_the_real_sdl_splits_a_character_beyond_ffff(tmp_path):
+    """Opt-in (VF2_SDL_INPUT_PROBE=1, it types into its own small window): SendInput(KEYEVENTF_UNICODE) into the
+    game's own SDL2.dll gives SURROGATE_EVENTS; a character below U+10000 arrives whole."""
+    if os.environ.get("VF2_SDL_INPUT_PROBE") != "1" or not _vcvars():
+        pytest.skip("opt-in: VF2_SDL_INPUT_PROBE=1 and VF2_VCVARS32")
+    sdl = Path(os.environ.get("VF2_VANILLA_GAME_DIR") or ROOT / "work" / "vanilla_runtime_payload") / "SDL2.dll"
+    exe = tmp_path / "probe.exe"
+    bat = tmp_path / "build.bat"
+    bat.write_text(f'@call "{_vcvars()}" >nul\r\n@cl /nologo /Fe"{exe}" /Fo"{tmp_path}\\\\" '
+                   f'"{ROOT / "tests" / "sdl_surrogate_probe.c"}" user32.lib\r\n', encoding="ascii")
+    r = subprocess.run(["cmd.exe", "/c", str(bat)], capture_output=True, text=True)
+    assert r.returncode == 0, r.stdout + r.stderr
+    out = subprocess.run([str(exe), str(sdl)], capture_output=True, text=True, timeout=60).stdout
+
+    def unit(b):
+        return "%04X" % (0xD000 | ((b[1] & 0x3F) << 6) | (b[2] & 0x3F))
+    want = ["case 00E9 0000: [C3A9]", "case 65E5 0000: [E697A5]"]
+    for (high, low), _cp in SURROGATE_EVENTS:
+        want.append(f"case {unit(high)} {unit(low)}: [{high.hex().upper()}] [{low.hex().upper()}]")
+    assert out.splitlines()[:4] == want, out
 
 
 # ---------------------------------------------------------------------------------------------- drawing
@@ -591,3 +642,44 @@ def test_the_games_drawstring_draws_what_the_patcher_draws(draw_world, name):
             # the same alpha everywhere; colour only where the pixel shows (a clear pixel's colour is unseen)
             assert a[3::4] == b[3::4], (text, x)
         assert w.width(name, raw) == T.get_width(font, raw), text
+
+
+WIDE = "\U0001242B"                      # CUNEIFORM NUMERIC SIGN NINE SHAR2: about five W wide
+
+
+@pytest.mark.parametrize("name", ["Segoe24", "Segoe32Bold"])
+def test_a_typed_name_is_never_wider_than_the_widest_stock_name(draw_world, name):
+    """Wide scripts: in an 18-byte family member box a character that would draw the name wider than 18 of the
+    font's widest plain letter is refused (typed, and a plain letter after wide ones too); the name always fits the
+    places the game draws names."""
+    w, fonts = draw_world
+    font_obj, f, _sheet = w.font(name)
+    font, _s = fonts[name]
+    widest = max(f.glyphs[f.charmap[b]][3] - f.glyphs[f.charmap[b]][1] for b in range(0x20, 0x7F))
+    cap = 18 * (widest + f.kerning) - f.kerning
+    if not hasattr(w, "real_gdi"):
+        w.s, w.h = w.sites(), w.hooks()
+        w.game_seams(w.s)                                  # once: two seams on one address would both run
+        # a character no glyph file has is drawn by Windows: the DLL's GDI calls on this machine's real GDI
+        from test_unicode_font import RealGdi, _kernel_seams
+        import vf2_glyph_render as R
+        if not R.available():
+            pytest.skip("needs Windows' GDI")
+        w.real_gdi = RealGdi(w.e, {})
+        _kernel_seams(w.e)
+    ctl, buf = _box(w, 18)
+    w.e.w32(ctl + 0x3C, font_obj)
+    typed = ""
+    for _ in range(4):
+        w.e.call(w.h["handle_key"], (5, ord(WIDE) | S.KEY_MARK, 0), ecx=ctl, edx=0)
+        if T.get_width(font, T.encode(typed + WIDE)) <= cap:
+            typed += WIDE
+        assert w.e.read(buf, 19).split(b"\0")[0] == T.encode(typed)
+    assert typed.count(WIDE) < 4 and T.get_width(font, T.encode(typed)) <= cap    # 4 would fit the 18 bytes
+    assert w.e.read(buf + 19, 16) == b"\xAB" * 16
+    # a plain letter that would pass the cap is refused before the stock code sees it
+    start = typed + "W" * ((cap - T.get_width(font, T.encode(typed))) // (widest + f.kerning))
+    w.e.write(buf, T.encode(start) + b"\0")
+    assert len(T.encode(start)) < 18
+    w.e.call(w.h["handle_key"], (5, 0, ord("W")), ecx=ctl, edx=0)
+    assert w.e.read(buf, 19).split(b"\0")[0] == T.encode(start)

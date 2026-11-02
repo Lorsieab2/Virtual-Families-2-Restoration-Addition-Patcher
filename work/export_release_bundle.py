@@ -104,6 +104,10 @@ def main() -> int:
     parser.add_argument("--unicode-text-dll",
                         default=str(ROOT / "runtime" / "build" / "vf2unicode_b200.dll"),
                         help="Built vf2unicode_b200.dll shipped behind render_unicode_in_game_fonts / use_unicode_font")
+    # Copy and Paste in Text Boxes: the same source built as vf2clip_b200.dll (build_b200unicode.bat clip).
+    parser.add_argument("--clip-dll",
+                        default=str(ROOT / "runtime" / "build" / "vf2clip_b200.dll"),
+                        help="Built vf2clip_b200.dll shipped behind copy_paste_text_boxes")
     args = parser.parse_args()
 
     outputs = ROOT / "outputs"
@@ -178,7 +182,8 @@ def main() -> int:
                         ("--family-history-dll", args.family_history_dll),
                         ("--store-refresh-dll", args.store_refresh_dll),
                         ("--outfit-pictures-dll", args.outfit_pictures_dll),
-                        ("--unicode-text-dll", args.unicode_text_dll)):
+                        ("--unicode-text-dll", args.unicode_text_dll),
+                        ("--clip-dll", args.clip_dll)):
         if flag not in flags:
             print(f"exporter has no {flag}; the companion DLL would be absent", file=sys.stderr)
             return 1

@@ -221,6 +221,8 @@ def resolve(exe: Exe, pins: list) -> dict:
     head = exe.read(sites["DRAW_JUSTIFIED"], S.JUSTIFIED_STEAL)
     if head != bytes.fromhex("558BEC81EC50050000"):
         raise SiteError("DrawStringJustified does not start with push ebp; mov ebp,esp; sub esp,550h")
+    if exe.read(sites["SET_TEXT"], S.SET_TEXT_STEAL) != bytes.fromhex("558BEC5657"):
+        raise SiteError("ldwTextControlImpl::SetText does not start with push ebp; mov ebp,esp; push esi; push edi")
     return {"pins": loc, "sites": sites, "font_vtable": fvt, "text_vtable": tvt, "poll_slot": slot}
 
 
@@ -258,7 +260,8 @@ def render_header(pins: list) -> str:
            f"#define UNI_TEXT_VSLOT_HANDLE_KEY {S.TEXT_VSLOT_HANDLE_KEY}u",
            f'#define UNI_FONT_TYPE_NAME "{S.FONT_TYPE_NAME}"',
            f'#define UNI_TEXT_TYPE_NAME "{S.TEXT_TYPE_NAME}"',
-           f"#define UNI_JUSTIFIED_STEAL {S.JUSTIFIED_STEAL}u", "",
+           f"#define UNI_JUSTIFIED_STEAL {S.JUSTIFIED_STEAL}u",
+           f"#define UNI_SET_TEXT_STEAL {S.SET_TEXT_STEAL}u", "",
            "enum UniSite {"]
     out += [f"    UNI_SITE_{n}," for n in site_names] + ["    UNI_SITE_COUNT", "};", "", "enum UniPinId {"]
     out += [f"    UNI_PIN_{p['name'].upper()}," for p in pins] + ["    UNI_PIN_COUNT", "};", ""]

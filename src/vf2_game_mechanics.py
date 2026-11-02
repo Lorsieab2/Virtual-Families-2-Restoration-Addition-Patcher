@@ -628,7 +628,8 @@ def _hidden_lines() -> list[Fact]:
            "theAlignPetsScene: no constructor call; ENABLE_DEBUGGER_FEATURES off in every release (docs/discoveries.md "
            "2026-07-13)"),
         # ---- the patcher
-        _f(g, "The patcher adds one key, R in the store, and no hidden click. Its Time Controls (every B201 and "
+        _f(g, "The patcher adds R in the store, the copy and paste keys in text boxes, and no hidden "
+              "click. Its Time Controls (every B201 and "
               "later build, when the Time Controls option is on) is a button on the Settings screen that opens its "
               "own window, where Enter or Esc close it. The Up to 28 Children, Family History and outfit picture "
               "additions add no input.", C,
@@ -648,6 +649,17 @@ def _hidden_lines() -> list[Fact]:
            "[scene+0D4h]; every store box: ldwDialog::DoModal(scene, false) -> SetModal, and "
            "ldwEventManager::HandleKey stops at a modal handler; all emulated (tests/test_b200_store_refresh.py)",
            sub=True),
+        _f(g, "Ctrl+V, Shift+Insert, Ctrl+C, Ctrl+Insert, Ctrl+X (patcher keys, option \"Copy and Paste in Text "
+              "Boxes\", on by default; after B206): only while you type in one of the game's text boxes (a name, "
+              "the Family Tree note). Ctrl+V or Shift+Insert pastes at the end of the text, Ctrl+C or Ctrl+Insert "
+              "copies the whole text, Ctrl+X cuts it. Line breaks and tabs in what you paste become spaces, other "
+              "control characters are left out, and a paste stops at the box's limit, never inside a letter; with "
+              "both Unicode text options off only the original game's letters (Windows-1252) are pasted. Anywhere "
+              "else these keys do nothing, as in the original game, and they never reach the game as letters.", E,
+           "vf2clip_b200.dll (runtime/native/b200unicode built with B200UNICODE_CLIP) replaces only the SDL_PollEvent "
+           "import slot: SDL_KEYDOWN/UP with KMOD_CTRL (0xC0) and 'v' 'c' 'x' / SDLK_INSERT, or KMOD_SHIFT and "
+           "SDLK_INSERT, while the first ldwTextControlImpl in ldwEventManager's key order is editing; the events are "
+           "hidden (SDL_USEREVENT); emulated with the stock HandleKey (tests/test_clip_text_boxes.py)", sub=True),
         _f(g, "Typing a name. Unpatched game: a text box takes only keys that send one plain letter (A-Z, digits, "
               "punctuation); accented keys, dead keys, Alt codes and input methods send nothing. The box holds up "
               "to 20 letters for a player name, 18 for a family member and 80 for the Family Tree note, and the "

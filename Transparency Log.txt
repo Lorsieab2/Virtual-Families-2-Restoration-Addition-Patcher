@@ -317,6 +317,22 @@ Changelog
   Windows in the chosen font (Unicode Font on the Tools tab, Segoe UI if none),
   sized so a reference line is as wide as the game font's, on its baseline; a
   chosen font file is loaded for the game only (never installed in Windows).
+  After B206 the DLL also replaces the start of the text box's SetText (to
+  know a name the game put into a box: such a name is never cut when the box
+  is read back, so viewing a family member never shortens a name), joins the
+  two halves SDL sends for a character beyond U+FFFF (an emoji or Cuneiform
+  from an input method), and refuses a typed character that would draw a name
+  wider than the widest name the original game allows in that box.
+
+- Copy and Paste in Text Boxes (after B206; Optional, on by default): installs
+  vf2clip_b200.dll (the Unicode text DLL's source built a second time, with
+  only this feature) and vf2clip.ini in the Virtual Families 2 Patcher Files
+  folder, only while the setting is on. The DLL replaces only the executable's
+  SDL_PollEvent import: while one of the game's text boxes is being typed in,
+  Ctrl+V / Shift+Insert, Ctrl+C / Ctrl+Insert and Ctrl+X paste, copy and cut
+  through the Windows clipboard; those key events are hidden from the game.
+  It reads and writes only the clipboard and the text box. Needs executables
+  built with the .vf2clip loader byte (B207).
 
 - Game Font Text (Tools tab, after B205): writes text in the game's four fonts
   and saves a PNG. It reads the game's font pictures from the game folder and

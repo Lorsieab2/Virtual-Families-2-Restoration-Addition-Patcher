@@ -150,6 +150,17 @@
         "It is on by default. Unticking it and rebuilding turns it off."
       ]
     },
+    "copy_paste_text_boxes": {
+      "section": "Patching",
+      "title": "Copy and Paste in Text Boxes",
+      "setting": true,
+      "guide": [
+        "While you type in one of the game's text boxes (a name, the Family Tree note): Ctrl+V or Shift+Insert pastes, Ctrl+C or Ctrl+Insert copies the whole text, Ctrl+X cuts it.",
+        "Line breaks and tabs in what you paste become spaces, and a paste stops at the box's limit, never inside a letter.",
+        "With both Unicode text settings off, only the letters the original game can store are pasted.",
+        "The keys do nothing anywhere else. On by default; it works with or without the Unicode text settings."
+      ]
+    },
     "fix_vanilla_game_bugs": {
       "section": "Patching",
       "title": "Fix Vanilla Game Bugs",
