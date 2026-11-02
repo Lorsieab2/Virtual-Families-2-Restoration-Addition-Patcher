@@ -107,6 +107,8 @@ https://github.com/Lorsieab2/Virtual-Families-2-Restoration-Addition-Patcher/
    the server now sends back about 3 KB of text, more than the game has room
    for, so the game closed by itself about 20 seconds after it started. That
    answer is now read safely and ignored, as if the server had not answered.
+   It also stops a rare crash when rain starts (a raindrop drawn as a single
+   point divided by zero).
 
 7. Optional but recommended: click Dry Run (Validate Only).
    Dry Run validates that the patcher's working. It does not actually

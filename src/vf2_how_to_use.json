@@ -168,7 +168,7 @@
       "guide": [
         "Fixes bugs that are in the original game. It is on by default.",
         "Menus: Start Over asks first, Pause Game: Yes works while paused, and the title screen shows the right name and buttons.",
-        "Startup: the game no longer closes by itself about 20 seconds after it starts, when LDW's server sends back a long answer. That answer is now ignored.",
+        "Startup: the game no longer closes by itself about 20 seconds after it starts, when LDW's server sends back a long answer. That answer is now ignored. A rare crash when rain starts is fixed too.",
         "Outfits: each Male Outfit and Female Outfit in the tray keeps the outfit it was bought with. In the original game every outfit of a family member's sex showed, and gave, the last one bought.",
         "Your outfits are remembered in a small file beside each save, in Virtual Families 2 Patcher Data\\Outfits. The save itself is not changed.",
         "Outfits bought before this fix look and work as they did before. The outfit fix is not yet tested in a running game.",

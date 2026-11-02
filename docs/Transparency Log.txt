@@ -3609,6 +3609,66 @@ Server error text overflows a reply handler's buffer (Fix Vanilla Game Bugs, B20
   each linked executable must hold six stubs, each reached by exactly one
   call. Static and emulated evidence only; the game was never run.
 
+Divide-by-zero audit; a zero-length rain streak (Fix Vanilla Game Bugs, after B205)
+-----------------------------------------------------------------------------------
+
+- Why: Virtual Families 1's bank dialog (CBankingDlg) divides its 7-day chart
+  by int(v / 5 + v) with no guard, so $0 crashes it; the owner ordered "Make
+  sure the bank crash bug isn't in any game!!!" (2026-11-01).
+- Audit: all 185 integer div/idiv instructions in the 164 desktop object
+  files (84 functions) are pinned in tests/test_divide_by_zero_audit.py with
+  a verdict each: 16 sites have an immediate divisor; 74 are guarded (the
+  code tests or forces the divisor first, e.g. ldwGameState::GetRandom
+  returns 0 for n <= 0 before rand() % n, so every count-of-things caller is
+  safe; the blits' box-filter counts are do-while trip counts); 49 divide by
+  the game's own data, checked to be >= 1 (the 95 achievement targets, the
+  29 built-in and anims.dat's 104 villager animations' frame counts, the 19
+  pet animations, every shipped furniture map's width, the image table's
+  column and row counts) or by fixed image and font sizes; 16 divide by
+  scroll ranges or sizes fixed when a scene is built, used only while a drag
+  that needs them > 0 runs (the store's range is 0 for a short page, but its
+  drag starts only when it is > 0 and every mouse-up ends it); 2 divide by
+  the game speed (every writer stores 1, 2, 5, 10, 20, those + 999, or 10
+  for 0); 16 are in the alignment editor's input and its drop-down (built at
+  load, never shown: nothing sets scene 4); 9 are dead (no caller chain from
+  WinMain); 1 is latent (CCommunityEventDialog: percent = votes * 100 / totalVotes from
+  a poll result of LDW's server; polls are asked only after a login, which
+  the server can no longer give; the instructions fault with totalVotes 0
+  under emulation); 2 were reachable (below). BankDialog.obj and Money.obj
+  hold no integer division: VF2's bank chart divides in floating point, so
+  $0 draws bars of 0x80000000 height (clipped), but never faults.
+- Stock bug: ldwGameWindowImpl::DrawLine (colour overload; its only caller is
+  CRain::Draw) fades alpha along the longer axis with (alpha difference << 8)
+  / (2 x max(|dx|, |dy|)): idiv [ebp-0Ch] at +0x19E or idiv ebx at +0x1A3. A
+  line whose ends are one point divides by 0. CRain::Reset (from
+  CWeather::SetCurrent) gives each drop a random head and a speed of 10-11
+  across but keeps the tail; CRain::Update moves the tail to the head.
+  CWeather::Update updates the rain before it may call SetCurrent(rain), and
+  CWeather::Draw runs after it in the same frame, drawing as many drops as
+  the current intensity (0.5 after a game start with a weather change
+  pending; The Neighbor's Weather island event and Bottled Tropical Rain set
+  the weather from any weather). A new head on its old tail is a point: an
+  unhandled divide-by-zero. The first rain of a session has every tail at
+  (0,0) (the drops' constructor).
+- Fix: patch_zero_length_line_guard in work/patch_mobile_furniture_pack.py
+  replaces DrawLine +0x199..+0x1A4 (cmp edx,ebx; cdq; jle; idiv [ebp-0Ch];
+  jmp; idiv ebx) with a jump to a 0x21-byte stub appended to its section
+  that repeats them, except that with the .vf2bugs byte 1 and ebx 0 (then
+  edx is 0 too: both ends one point) it skips the idiv, as if dividing by 1.
+  The quotient is only the per-step fade; the line's first pixel is drawn
+  before either loop, and both loops end at once for a point, so the
+  zero-length line draws its one pixel. With the byte 0 the stub runs the
+  stock instructions.
+- Evidence: tests/test_divide_by_zero_audit.py runs the stock DrawLine on an
+  800 x 600 surface: (0,0)-(0,0) and (250,120)-(250,120) fault at +0x1A3;
+  the patched one with the byte 1 changes exactly one pixel (the same as a
+  2-pixel line's first) and with the byte 0 faults at the stub's idiv; 11
+  lines x 3 alpha pairs give the stock pixels byte for byte with either
+  byte. CRain's constructor and Reset run under emulation leave drop 0 as
+  (0,0)-(0,0) when its new head is (0,0). With VF2_CORE_EXE the B205 core
+  executable holds every function run there byte for byte (relocations
+  aside). Static and emulated evidence only; the game was never run.
+
 Time Warp costs the store's price (Time Controls, after B205)
 -------------------------------------------------------------
 
