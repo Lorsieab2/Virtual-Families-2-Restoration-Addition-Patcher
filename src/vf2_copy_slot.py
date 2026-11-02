@@ -86,6 +86,7 @@ from datetime import datetime
 from pathlib import Path
 
 import vf2_family_history as family_history
+import vf2_names as names
 import vf2_rename_family as rename
 import vf2_save_backup as save_backup
 import vf2_save_reader as reader
@@ -349,6 +350,7 @@ class CopyPlan:
     notes: list[str] = field(default_factory=list)
     skipped: list[tuple[Path, str]] = field(default_factory=list)
     replaced: bytes | None = None   # the target's own save as it was read, when a family is replaced
+    stored_name: str = ""           # the name as the copy's save stores it: new_name, or its short form (vf2_names)
     aside_folder: Path | None = None    # Backups\Replaced by copy <date>, where the target's files go
 
 
@@ -403,6 +405,7 @@ def leftovers(folder: Path, target: int, replace: bool = False) -> list[Path]:
                 prefix = (reader.save_file_name(number) + ".unreadable-").casefold()
                 found += sorted(p for p in where.iterdir()
                                 if p.is_file() and p.name.casefold().startswith(prefix) and p.suffix.casefold() == ".dat")
+    found.append(names.names_path(folder, target))      # the whole names of the family that was there
     found.append(slot_root(folder, target))
     return [path for path in found if path.exists()]
 
@@ -556,7 +559,12 @@ def plan_copy(folder: Path, source: int, target: int, new_name: str, when: datet
     if settings is None or menu_at is None:
         raise CopyError(f"The settings file {settings_file.name} is not one the game can load.")
     plan = CopyPlan(folder, source, target, old, new_name, original=data)
-    copy = rename._with_name(data, at, rename.NAME_FIELD, new_name)
+    # a name longer than the save's field: its short form in the copy, the whole name in the copy's Names file,
+    # which also takes the source's lines (its family members' whole names follow them)
+    book = names.Book(folder)
+    stored, entry = book.store(target, new_name, names.FAMILY_ROOM)
+    plan.stored_name = stored
+    copy = rename._with_name(data, at, rename.NAME_FIELD, stored)
     saves = {source: (data, copy)}
     previous = save_path(folder, source + reader.PREVIOUS_SAVE_OFFSET)
     if previous.is_file():
@@ -564,16 +572,21 @@ def plan_copy(folder: Path, source: int, target: int, new_name: str, when: datet
         older_at = rename._name_offset(older)
         older_copy = older
         if older_at is not None and rename.save_name(older) == old:
-            older_copy = rename._with_name(older, older_at, rename.NAME_FIELD, new_name)
+            older_copy = rename._with_name(older, older_at, rename.NAME_FIELD, stored)
         saves[source + reader.PREVIOUS_SAVE_OFFSET] = (older, older_copy)
         plan.files.append(NewFile(save_path(folder, target + reader.PREVIOUS_SAVE_OFFSET), older_copy, previous,
                                   "the game's previous save" + (" (renamed)" if older_copy != older else "")))
     _plan_sidecars(plan, saves)
+    lines = [e for e in book.slots[source] if entry is None or e.short != entry.short]
+    lines += [entry] if entry is not None else []
+    if lines:
+        plan.files.append(NewFile(names.names_path(folder, target), names.render(lines),
+                                  names.names_path(folder, source), "the Names file (whole names)"))
     _plan_patcher_folder(plan, when)
     # The save itself last of the slot's files, then the settings file: until both are written the game sees no
     # family in the target slot.
     plan.files.append(NewFile(save_path(folder, target), copy, save, "the save (renamed)"))
-    updated = rename._with_name(settings, menu_at, rename.MENU_FIELD, new_name)
+    updated = rename._with_name(settings, menu_at, rename.MENU_FIELD, stored)
     flag = FLAG_FIRST + target - 1
     updated = updated[:flag] + b"\x01" + updated[flag + 1:]
     plan.settings = rename.FileChange(settings_file, settings, updated)
@@ -682,7 +695,7 @@ def verify(plan: CopyPlan) -> None:
     target = save_path(plan.folder, plan.target)
     copy = target.read_bytes()
     source = save_path(plan.folder, plan.source).read_bytes()
-    if not same_but_name(source, copy, plan.new_name):
+    if not same_but_name(source, copy, plan.stored_name or plan.new_name):
         raise CopyError(f"{target.name} does not read back as Save {plan.source} with the new name.")
     previous = save_path(plan.folder, plan.target + reader.PREVIOUS_SAVE_OFFSET)
     copies = {plan.target: copy}
@@ -696,7 +709,8 @@ def verify(plan: CopyPlan) -> None:
         if save is None or sidecar is None or sidecar.save_hash != fnv1a64(save) or sidecar.save_size != len(save):
             raise CopyError(f"{entry.path.name} ({entry.path.parent.name}) does not describe the copied save.")
     settings = reader.parse_settings(rename.settings_path(plan.folder).read_bytes())
-    if settings.player_names[plan.target - 1] != plan.new_name or not settings.slot_in_use[plan.target - 1]:
+    if (settings.player_names[plan.target - 1] != (plan.stored_name or plan.new_name)
+            or not settings.slot_in_use[plan.target - 1]):
         raise CopyError("The settings file does not list the copied family.")
 
 

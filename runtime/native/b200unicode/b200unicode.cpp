@@ -88,13 +88,16 @@ static unsigned char SetTextTrampoline[16];
 // writeMask, fonts (font objects given glyph room), patcherGlyphs (loaded), runtimeGlyphs (drawn with GDI), boxes
 // (missing-glyph boxes), typed (characters added by typing), refused (characters refused: the box was full),
 // fittedCuts (GetText cuts that ended at a character before the field's end), keptNames (GetText calls that kept a
-// set-in name too long for the box instead of cutting it; version 2)
+// set-in name too long for the box instead of cutting it; version 2); version 3, the long names (b200names.inc):
+// names (1: the name boxes take 300 characters), nameBoxes (name boxes made), shortForms (GetText gave a short form),
+// namesWritten (Names files written), expanded (texts drawn or measured with whole names), boxCopies (name boxes
+// drawn from a fitted copy)
 struct UnicodeStatus {
     unsigned magic, version, mode, resolved, installed, writeMask, fonts, patcherGlyphs, runtimeGlyphs, boxes, typed,
-        refused, fittedCuts, keptNames;
+        refused, fittedCuts, keptNames, names, nameBoxes, shortForms, namesWritten, expanded, boxCopies;
 };
 extern "C" __declspec(dllexport) volatile UnicodeStatus B200Unicode_Status = {
-    UNI_STATUS_MAGIC, 2u, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+    UNI_STATUS_MAGIC, 3u, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 
 static HMODULE ThisModule;
 static wchar_t Folder[MAX_PATH];
@@ -891,6 +894,22 @@ static int CtxWidth(void *ctx, const ut::Unit &u) {
     return WidthOf(c->f, c->impl, u, c->raw);
 }
 
+// ================================================================ long names (b200names.inc)
+#ifdef B200UNICODE_CLIP
+static const unsigned char *Expand(unsigned, const unsigned char *, unsigned char *, unsigned, bool) { return 0; }
+static bool NameGetText(unsigned, const unsigned char *, unsigned, char *, int) { return false; }
+static void NameSetText(unsigned, const char **) {}
+static bool IsNameBox(unsigned) { return false; }
+static bool NameLettersOk(const unsigned *, unsigned) { return true; }
+#else
+static const unsigned char *Expand(unsigned impl, const unsigned char *text, unsigned char *out, unsigned cap,
+                                   bool justified);
+static bool NameGetText(unsigned impl, const unsigned char *src, unsigned n, char *dst, int size);
+static void NameSetText(unsigned impl, const char **text);
+static bool IsNameBox(unsigned impl);
+static bool NameLettersOk(const unsigned *cps, unsigned n);
+#endif
+
 // ================================================================ drawing
 static void BlitGlyph(void *window, SDL_Surface *surf, const Rect &g, int x, int y, unsigned color) {
     int rect[4] = { g.l, g.t, g.r, g.b };
@@ -929,6 +948,8 @@ static void __fastcall UniDrawString(void *window, void *, const char *text, int
     unsigned impl = FontOf(window, font);
     if (!impl || !IMPL_FIELD(impl, 0x0C) || !text) return;
     const unsigned char *raw = (const unsigned char *)text;
+    static unsigned char whole[4096];
+    if (const unsigned char *e = Expand(impl, raw, whole, sizeof(whole), false)) raw = e;     // whole names
     if ((color >> 24) == 0) color = *(const unsigned *)SITE(WHITE);
     FontRec *f = Ensure(impl);
     Prepare(f, impl, raw, 0xFFFFFFFF);
@@ -998,6 +1019,9 @@ static int __fastcall UniDrawChars(void *window, void *, const char *text, int c
 static int __fastcall UniGetWidth(void *font, void *, const char *text, float scale) {
     unsigned impl = *(unsigned *)((unsigned)font + 4);
     if (!impl || !IMPL_FIELD(impl, 0x0C) || !text) return 0;
+    static unsigned char whole[4096];
+    if (const unsigned char *e = Expand(impl, (const unsigned char *)text, whole, sizeof(whole), false))
+        text = (const char *)e;                                                     // whole names
     WidthCtx c = { Ensure(impl), impl, (const unsigned char *)text };
     return ut::GetWidth((const unsigned char *)text, scale, IMPL_FIELD(impl, 0x08), &CtxWidth, &c);
 }
@@ -1047,6 +1071,14 @@ static int __fastcall UniDrawJustified(void *self, void *, const char *text, int
                                        void *font, int b1, int b2, int extra) {
     JustifiedFn stock = (JustifiedFn)(void *)JustifiedTrampoline;
     if (!text) return stock(self, 0, text, x, y, width, color, font, b1, b2, extra);
+    static unsigned char whole[4096];
+    {
+        void *w0 = *(void **)self;
+        unsigned fi = FontOf(w0, font);
+        if (const unsigned char *e = fi && IMPL_FIELD(fi, 0x0C) ? Expand(fi, (const unsigned char *)text, whole,
+                                                                          sizeof(whole), true) : 0)
+            text = (const char *)e;                     // whole names, each in its short form's width
+    }
     const unsigned char *raw = (const unsigned char *)text;
     unsigned n = ut::Length(raw);
     bool ascii = true;
@@ -1121,6 +1153,7 @@ typedef void (__thiscall *SetTextFn)(void *impl, const char *text);
 // ldwTextControlImpl::SetText's first 5 bytes jump here; the stock function runs through the trampoline.
 static void __fastcall UniSetText(void *impl, void *, const char *text) {
     MarkSetIn((unsigned)impl, true);
+    NameSetText((unsigned)impl, &text);                  // a name box given a short form opens with the whole name
     ((SetTextFn)(void *)SetTextTrampoline)(impl, text);
 }
 
@@ -1169,9 +1202,12 @@ static bool __fastcall UniHandleKey(void *ctl, void *, int type, int code, int s
             if (cp < 0x20 || cp > 0x10FFFF || (cp >= 0xD800 && cp <= 0xDFFF)) return true;
             cps[count++] = cp;
         }
+        bool name = IsNameBox(c);
+        if (name && sym != 8 && !NameLettersOk(cps, count)) { ++B200Unicode_Status.refused; return true; }   // 300
         int k = ut::Encode(cps, count, next, (unsigned)max < sizeof(next) ? (unsigned)max : sizeof(next) - 1);
         if (k < 0) { ++B200Unicode_Status.refused; return true; }
-        if (sym != 8 && !FitsWidth(*(unsigned *)(c + 0x3C), next, k, max)) { ++B200Unicode_Status.refused; return true; }
+        // a name box scrolls (b200names.inc); another box takes no character that would draw it past its width
+        if (sym != 8 && !name && !FitsWidth(*(unsigned *)(c + 0x3C), next, k, max)) { ++B200Unicode_Status.refused; return true; }
         for (int i = 0; i < k; ++i) buf[i] = (char)next[i];
         buf[k] = 0;
         if (sym != 8) ++B200Unicode_Status.typed;
@@ -1188,7 +1224,14 @@ static bool __fastcall UniHandleKey(void *ctl, void *, int type, int code, int s
         if (buf && n + 1 < sizeof(with) && (int)n < max) {
             for (unsigned i = 0; i < n; ++i) with[i] = (unsigned char)buf[i];
             with[n] = (unsigned char)sym;
-            if (!FitsWidth(*(unsigned *)(c + 0x3C), with, (int)n + 1, max)) { ++B200Unicode_Status.refused; return true; }
+            if (IsNameBox(c)) {
+                static unsigned wc[1300];
+                unsigned count = ut::Decode(with, n + 1, wc, 1290);
+                if (!NameLettersOk(wc, count)) { ++B200Unicode_Status.refused; return true; }     // 300 characters
+            } else if (!FitsWidth(*(unsigned *)(c + 0x3C), with, (int)n + 1, max)) {
+                ++B200Unicode_Status.refused;
+                return true;
+            }
         }
     }
     return ((HandleKeyFn)SITE(TEXT_HANDLE_KEY))(ctl, type, code, sym);
@@ -1209,6 +1252,8 @@ static void __fastcall UniGetText(void *ctl, void *, char *dst, int size) {
     static unsigned cps[1300];
     static unsigned char cut[1300];
     unsigned n = ut::Length((const unsigned char *)src);
+    // a name box: the short form of a longer name, the whole name in the Names file (b200names.inc)
+    if (NameGetText(impl, (const unsigned char *)src, n, dst, size)) return;
     // only the family member name boxes' GetText(buf, 13h): their callers skip an empty text. (The Family Tree note's
     // GetText(record + 86h, 50h) writes straight into the record: there an empty text would erase the note.)
     if (size == kNameGetSize && n > (unsigned)size - 1 && IsSetIn(impl)) { ++B200Unicode_Status.keptNames; return; }
@@ -1286,7 +1331,7 @@ static int __cdecl UniPollEvent(void *event) {
 #endif
 
 // ================================================================ plan and install
-static const unsigned kMaxWrites = 10;
+static const unsigned kMaxWrites = 12;
 struct HookWrite { unsigned va, len; bool data; unsigned char bytes[12], original[12]; };
 struct Plan { HookWrite writes[kMaxWrites]; unsigned count; bool ok; };
 
@@ -1305,6 +1350,10 @@ static void PlanSlot(Plan &p, unsigned va, const void *to) {
     w.va = va; w.len = 4; w.data = true;
     *(unsigned *)w.bytes = (unsigned)to;
 }
+
+#ifndef B200UNICODE_CLIP
+#include "b200names.inc"      // names up to 300 characters: SetCanEdit and the box's Draw (its own pins)
+#endif
 
 static int BuildPlan(unsigned mode, Plan &plan) {
     plan.count = 0;
@@ -1335,6 +1384,7 @@ static int BuildPlan(unsigned mode, Plan &plan) {
     PlanSlot(plan, FontVtable + 4 * UNI_FONT_VSLOT_CHAR_RECT, (const void *)&UniCharRect);
     PlanSlot(plan, TextVtable + 4 * UNI_TEXT_VSLOT_HANDLE_KEY, (const void *)&UniHandleKey);
     PlanSlot(plan, PollSlot, (const void *)&UniPollEvent);
+    if (plan.ok) PlanNames(plan);          // the long names: their own group, never a reason to install nothing
 #endif
     return plan.ok ? 1 : -1;
 }
@@ -1443,6 +1493,9 @@ extern "C" __declspec(dllexport) void __cdecl B200Unicode_Startup() {
     B200Unicode_Status.resolved = 1;
     if (Apply(plan)) {
         B200Unicode_Status.installed = 1;
+#ifndef B200UNICODE_CLIP
+        B200Unicode_Status.names = NamesOn ? 1u : 0u;
+#endif
         Log(Mode == 3 ? "Copy and Paste in Text Boxes installed" :
             Mode == 2 ? "Use Unicode Font installed" : "Render Unicode with In-Game Fonts installed");
     }
@@ -1502,8 +1555,41 @@ extern "C" __declspec(dllexport) void __cdecl B200Unicode_TestHooks(unsigned *ou
     out[9] = (unsigned)&UniSetText;
 #ifdef B200UNICODE_CLIP
     out[10] = (unsigned)&ClipPollEvent;
+    out[11] = out[12] = 0;
 #else
     out[10] = 0;
+    out[11] = (unsigned)&UniSetCanEdit; out[12] = (unsigned)&UniBoxDraw;
 #endif
 }
+#ifndef B200UNICODE_CLIP
+// the long names as the plan proved them: [on, SET_CAN_EDIT, BOX_DRAW, GAME_STATE_INSTANCE, then each name box's
+// return address]
+extern "C" __declspec(dllexport) void __cdecl B200Unicode_TestNames(unsigned *out) {
+    out[0] = NamesOn ? 1u : 0u;
+    for (unsigned i = 0; i < UNI_NSITE_COUNT; ++i) out[1 + i] = NSites[i];
+    for (unsigned i = 0; i < UNI_NAME_BOX_COUNT; ++i) out[1 + UNI_NSITE_COUNT + i] = NameReturns[i];
+}
+// the Names table: forget it (a game started again reads the files anew)
+extern "C" __declspec(dllexport) void __cdecl B200Unicode_TestForgetNames() {
+    for (unsigned i = 0; i < NameCount; ++i) Release(Names[i].whole);
+    NameCount = 0;
+    for (unsigned s = 0; s < 6; ++s) SlotLoaded[s] = false;
+    for (unsigned i = 0; i < kNameBoxes; ++i) Boxes[i].impl = 0;
+}
+// the long names' rule: the short form for the whole name w in a field of room bytes (nothing recorded)
+extern "C" __declspec(dllexport) unsigned __cdecl B200Unicode_TestShortFor(const unsigned char *w, unsigned room,
+                                                                          unsigned char *out) {
+    EnsureNames();
+    unsigned k = ShortFor(w, ut::Length(w), room, out);
+    out[k] = 0;
+    return k;
+}
+// the text drawn for `text` in the font object `font` (0 when unchanged); justified as DrawStringJustified
+extern "C" __declspec(dllexport) const unsigned char *__cdecl B200Unicode_TestExpand(unsigned font,
+                                                                                     const unsigned char *text,
+                                                                                     int justified) {
+    static unsigned char out[4096];
+    return Expand(*(unsigned *)(font + 4), text, out, sizeof(out), justified != 0);
+}
+#endif
 #endif

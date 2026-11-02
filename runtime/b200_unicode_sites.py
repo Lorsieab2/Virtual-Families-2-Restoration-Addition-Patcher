@@ -103,3 +103,49 @@ SITES = (
     ("DRAW_CHARS", "draw_justified",
      ("call", "?DrawChars@ldwGameWindowImpl@@QAEHPBDHHH_NUldwColor@@PAVldwFont@@@Z")),
 )
+
+# ---------------------------------------------------------------------------------------------- long names
+# One character limit for every name box (docs/UNICODE_TEXT.md). A separate group: when any of these pins is not
+# found exactly once, the DLL installs the Unicode text above WITHOUT the long names (B200Unicode_Status.names = 0),
+# never nothing at all.
+SET_CAN_EDIT_STEAL = 7              # ldwTextControl::SetCanEdit: push ebp; mov ebp,esp; push ebx; mov bl,[ebp+8]
+BOX_DRAW_STEAL = 7                  # ldwTextControlImpl::Draw: push ebp; mov ebp,esp; sub esp,38h; push esi
+SET_CAN_EDIT = "?SetCanEdit@ldwTextControl@@QAEX_NH@Z"
+GAME_STATE_INSTANCE = "?mInstance@ldwGameState@@1PAV1@A"
+GAME_STATE_PATH_VSLOT = 0x0C        # ldwGameState vtable +0Ch: MakeGameStatePath(slot), the save file of a slot
+GS_CURRENT_SLOT = 0x25B20           # theGameState: the family slot being played (1..5)
+GS_NICKNAME = 0x25ABC               # theGameState: the new family's name, GetText(.., 14h) (theCreateNickNameDlg)
+GS_PLAYER_NAMES = 0x25B30           # theGameState: the slot menu's five family names, 15h bytes apart
+GS_PLAYER_STRIDE = 0x15
+
+NAME_FUNCTIONS = (
+    ("set_can_edit", "ldwTextControl", SET_CAN_EDIT),
+    ("box_draw", "ldwTextControl", "?Draw@ldwTextControlImpl@@QAEXXZ"),
+    ("gs_get", "theGameState", "?Get@theGameState@@SAPAV1@XZ"),
+    ("change_player_ctor", "theChangePlayerDlg", "??0theChangePlayerDlg@@QAE@H@Z"),
+    ("change_player_msg", "theChangePlayerDlg", "?HandleMessage@theChangePlayerDlg@@UAE_NHJ@Z"),
+    ("nickname_ctor", "theCreateNickNameDlg", "??0theCreateNickNameDlg@@QAE@H@Z"),
+    ("villager_ctor", "theVillagerScene", "??0theVillagerScene@@QAE@XZ"),
+    ("adoption_ctor", "AdoptionScene", "??0CAdoptionScene@@AAE@XZ"),
+    ("dating_ctor", "DatingScene", "??0CDatingScene@@AAE@XZ"),
+)
+
+NAME_SITES = (
+    ("SET_CAN_EDIT", "set_can_edit", "entry"),
+    ("BOX_DRAW", "box_draw", "entry"),
+    ("GAME_STATE_INSTANCE", "gs_get", ("abs", GAME_STATE_INSTANCE)),
+)
+
+# The name boxes: every ldwTextControl::SetCanEdit call that makes a box for a name (found by its return address).
+# Kind F: a family name (its fields keep 19 bytes: GetText(.., 14h)); kind M: a family member's name (18 bytes:
+# GetText(.., 13h), then strncpy(.., 19h) into the member's 25-byte field). (pin, kind, how many SetCanEdit calls)
+NAME_BOXES = (
+    ("change_player_ctor", "F", 5),      # the slot menu's five family names (stock limit 14h)
+    ("change_player_msg", "F", 1),       # New Player (14h)
+    ("nickname_ctor", "F", 1),           # the new family's name (14h)
+    ("villager_ctor", "M", 1),           # the family member screen: renaming a member (12h)
+    ("adoption_ctor", "M", 1),           # adoption: the child's name (12h)
+    ("dating_ctor", "M", 1),             # dating: the partner's name (12h)
+)
+FAMILY_ROOM = 19
+MEMBER_ROOM = 18

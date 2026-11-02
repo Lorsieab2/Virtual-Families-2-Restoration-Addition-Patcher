@@ -91,15 +91,33 @@ class Coff:
         return bytes(data), bytes(mask), calls, absolutes
 
 
-def load_pins(objs: Path) -> list:
+def load_pins(objs: Path, functions=None) -> list:
     cache = {}
     pins = []
-    for name, obj, func in S.FUNCTIONS:
+    for name, obj, func in (S.FUNCTIONS if functions is None else functions):
         if obj not in cache:
             cache[obj] = Coff(Path(objs) / f"{obj}.obj")
         data, mask, calls, absolutes = cache[obj].function(func)
         pins.append({"name": name, "bytes": data, "mask": mask, "calls": calls, "absolutes": absolutes})
     return pins
+
+
+def load_name_pins(objs: Path) -> list:
+    """The long names' pins (S.NAME_FUNCTIONS)."""
+    return load_pins(objs, S.NAME_FUNCTIONS)
+
+
+def name_box_returns(name_pins: list) -> list:
+    """(pin index, kind, offset of the return address) for every name box's SetCanEdit call (S.NAME_BOXES)."""
+    index = {p["name"]: i for i, p in enumerate(name_pins)}
+    by_name = {p["name"]: p for p in name_pins}
+    out = []
+    for pin, kind, count in S.NAME_BOXES:
+        offs = sorted(off for off, sym in by_name[pin]["calls"] if sym == S.SET_CAN_EDIT)
+        if len(offs) != count:
+            raise SiteError(f"{pin}: {len(offs)} SetCanEdit calls, expected {count}")
+        out += [(index[pin], kind, off + 4) for off in offs]
+    return out
 
 
 # ---------------------------------------------------------------------------------------------- executable
@@ -176,7 +194,7 @@ def vtable(exe: Exe, type_name: str) -> int:
     return vts[0]
 
 
-def resolve(exe: Exe, pins: list) -> dict:
+def _derive(exe: Exe, pins: list, table) -> tuple:
     loc = {}
     for p in pins:
         hits = find(exe.code(), p["bytes"], p["mask"])
@@ -185,7 +203,7 @@ def resolve(exe: Exe, pins: list) -> dict:
         loc[p["name"]] = hits[0]
     by_name = {p["name"]: p for p in pins}
     sites = {}
-    for site, pin, how in S.SITES:
+    for site, pin, how in table:
         values = []
         if how == "entry":
             values.append(loc[pin])
@@ -206,6 +224,28 @@ def resolve(exe: Exe, pins: list) -> dict:
             if site in sites and sites[site] != v:
                 raise SiteError(f"{exe.path.name}: {site} derived as {sites[site]:#x} and {v:#x}")
             sites[site] = v
+    return loc, sites
+
+
+def resolve_names(exe: Exe, name_pins: list) -> dict:
+    """The long names' sites: SetCanEdit and the box's Draw (with the bytes the DLL moves to its trampolines), the
+    game state's instance pointer, and each name box's SetCanEdit return address."""
+    loc, sites = _derive(exe, name_pins, S.NAME_SITES)
+    if exe.read(sites["SET_CAN_EDIT"], S.SET_CAN_EDIT_STEAL) != bytes.fromhex("558BEC538A5D08"):
+        raise SiteError("ldwTextControl::SetCanEdit does not start with push ebp; mov ebp,esp; push ebx; mov bl,[ebp+8]")
+    if exe.read(sites["BOX_DRAW"], S.BOX_DRAW_STEAL) != bytes.fromhex("558BEC83EC3856"):
+        raise SiteError("ldwTextControlImpl::Draw does not start with push ebp; mov ebp,esp; sub esp,38h; push esi")
+    returns = []
+    for pin, kind, off in name_box_returns(name_pins):
+        at = loc[name_pins[pin]["name"]] + off
+        if (at + exe.u32(at - 4)) & 0xFFFFFFFF != sites["SET_CAN_EDIT"]:
+            raise SiteError(f"the name box call before {at:#x} is not SetCanEdit")
+        returns.append((kind, at))
+    return {"pins": loc, "sites": sites, "boxes": returns}
+
+
+def resolve(exe: Exe, pins: list) -> dict:
+    loc, sites = _derive(exe, pins, S.SITES)
     fvt = vtable(exe, S.FONT_TYPE_NAME)
     if exe.u32(fvt + 4 * S.FONT_VSLOT_CHAR_RECT) != sites["CHAR_RECT"]:
         raise SiteError("ldwFontImpl's vtable slot 1 is not GetCharSourceRect")
@@ -234,7 +274,49 @@ def _arr(name: str, data: bytes) -> str:
     return f"static const unsigned char {name}[] = {{\n" + "\n".join(rows) + "\n};"
 
 
-def render_header(pins: list) -> str:
+def _render_names(name_pins: list) -> list:
+    names = []
+    for site, _pin, _how in S.NAME_SITES:
+        if site not in names:
+            names.append(site)
+    out = ["// ---- long names (a separate group: not found = the Unicode text without the long names)",
+           f"#define UNI_SET_CAN_EDIT_STEAL {S.SET_CAN_EDIT_STEAL}u",
+           f"#define UNI_BOX_DRAW_STEAL {S.BOX_DRAW_STEAL}u",
+           f"#define UNI_GS_PATH_VSLOT 0x{S.GAME_STATE_PATH_VSLOT:X}u",
+           f"#define UNI_GS_CURRENT_SLOT 0x{S.GS_CURRENT_SLOT:X}u",
+           f"#define UNI_GS_NICKNAME 0x{S.GS_NICKNAME:X}u",
+           f"#define UNI_GS_PLAYER_NAMES 0x{S.GS_PLAYER_NAMES:X}u",
+           f"#define UNI_GS_PLAYER_STRIDE 0x{S.GS_PLAYER_STRIDE:X}u",
+           f"#define UNI_FAMILY_ROOM {S.FAMILY_ROOM}u",
+           f"#define UNI_MEMBER_ROOM {S.MEMBER_ROOM}u", "", "enum UniNameSite {"]
+    out += [f"    UNI_NSITE_{n}," for n in names] + ["    UNI_NSITE_COUNT", "};", "", "enum UniNamePinId {"]
+    out += [f"    UNI_NPIN_{p['name'].upper()}," for p in name_pins] + ["    UNI_NPIN_COUNT", "};", ""]
+    for p in name_pins:
+        out.append(_arr(f"unpin_{p['name']}", p["bytes"]))
+        out.append(_arr(f"unpinmask_{p['name']}", p["mask"]))
+    out += ["", "static const UniPin UNI_NAME_PINS[] = {"]
+    out += [f'    {{ "{p["name"]}", {len(p["bytes"])}u, unpin_{p["name"]}, unpinmask_{p["name"]} }},'
+            for p in name_pins]
+    out += ["};", "", "static const UniEvidence UNI_NAME_EVIDENCE[] = {"]
+    index = {p["name"]: i for i, p in enumerate(name_pins)}
+    by_name = {p["name"]: p for p in name_pins}
+    for site, pin, how in S.NAME_SITES:
+        if how == "entry":
+            out.append(f"    {{ UNI_NSITE_{site}, 'L', {index[pin]}, 0x0u }},")
+        else:
+            for off, name in by_name[pin]["absolutes"]:
+                if name == how[1]:
+                    out.append(f"    {{ UNI_NSITE_{site}, 'A', {index[pin]}, 0x{off:X}u }},")
+    boxes = name_box_returns(name_pins)
+    out += ["};", "", "// every name box's SetCanEdit call: the pin, the kind (F family name, M member) and the offset of",
+            "// its return address in the pin", "struct UniNameBox { unsigned char pin; char kind; unsigned offset; };",
+            "static const UniNameBox UNI_NAME_BOXES[] = {"]
+    out += [f"    {{ {pin}, '{kind}', 0x{off:X}u }}," for pin, kind, off in boxes]
+    out += ["};", f"#define UNI_NAME_BOX_COUNT {len(boxes)}u", ""]
+    return out
+
+
+def render_header(pins: list, name_pins: list) -> str:
     site_names = []
     for site, _pin, _how in S.SITES:
         if site not in site_names:
@@ -298,6 +380,7 @@ def render_header(pins: list) -> str:
                    f'{g["top"]},')
         out.append("      {" + ", ".join(str(v) for v in g["alpha"]) + "} },")
     out += ["};", ""]
+    out += _render_names(name_pins)
     return "\n".join(out)
 
 
@@ -309,10 +392,14 @@ def main(argv=None) -> int:
     ap.add_argument("--write", action="store_true")
     a = ap.parse_args(argv)
     pins = load_pins(a.objs)
+    name_pins = load_name_pins(a.objs)
     for path in [a.exe, *a.also]:
-        r = resolve(Exe(path), pins)
-        print(f"{path.name}: {len(r['pins'])} pins, {len(r['sites'])} sites, poll slot {r['poll_slot']:#x}")
-    text = render_header(pins)
+        x = Exe(path)
+        r = resolve(x, pins)
+        n = resolve_names(x, name_pins)
+        print(f"{path.name}: {len(r['pins'])} pins, {len(r['sites'])} sites, poll slot {r['poll_slot']:#x}; "
+              f"long names: {len(n['pins'])} pins, {len(n['boxes'])} name boxes")
+    text = render_header(pins, name_pins)
     if a.write:
         HEADER.parent.mkdir(parents=True, exist_ok=True)
         HEADER.write_text(text, encoding="utf-8", newline="\n")

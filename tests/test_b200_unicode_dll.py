@@ -51,6 +51,9 @@ def _exe():
 # ---------------------------------------------------------------------------------------------- static
 def test_the_dll_source_names_every_site_and_writes_nothing_else():
     src = (NATIVE / "b200unicode.cpp").read_text(encoding="utf-8")
+    names = (NATIVE / "b200names.inc").read_text(encoding="utf-8")
+    assert not re.search(r"\b0x4[0-9A-Fa-f]{5}\b", names)
+    assert names.count("PlanJump(plan,") == 2 and "PlanSlot(" not in names
     header = (NATIVE / "b200unicode_sites.h").read_text(encoding="utf-8")
     for name, _obj, _fn in S.FUNCTIONS:
         assert f"UNI_PIN_{name.upper()}" in header
@@ -78,7 +81,7 @@ def test_the_header_is_what_the_generator_writes():
         pytest.skip("no B200 desktop object files")
     pytest.importorskip("pefile")
     import gen_b200_unicode_sites as G
-    assert G.render_header(G.load_pins(OBJS)) == (NATIVE / "b200unicode_sites.h").read_text(encoding="utf-8")
+    assert G.render_header(G.load_pins(OBJS), G.load_name_pins(OBJS)) == (NATIVE / "b200unicode_sites.h").read_text(encoding="utf-8")
 
 
 # ---------------------------------------------------------------------------------------------- built DLLs
@@ -173,10 +176,10 @@ class World:
 
     def hooks(self):
         e = self.e
-        out = e.alloc(4 * 12)
+        out = e.alloc(4 * 14)
         e.call(e.dll_export("B200Unicode_TestHooks"), (out,))
         keys = ("draw_string", "draw_chars", "get_width", "next_line", "get_text", "draw_justified", "char_rect",
-                "handle_key", "poll", "set_text", "clip_poll")
+                "handle_key", "poll", "set_text", "clip_poll", "set_can_edit", "box_draw")
         return {k: e.r32(out + 4 * i) for i, k in enumerate(keys)}
 
     def game_seams(self, sites):
@@ -216,7 +219,8 @@ def test_the_plan_is_the_proved_sites(exe, dlls, delta):
     h = w.hooks()
     jumps = {wr["va"]: wr for wr in writes if not wr["data"]}
     slots = {wr["va"]: wr for wr in writes if wr["data"]}
-    assert len(writes) == 10 and len(jumps) == 7 and len(slots) == 3
+    # 7 entry jumps + 3 slots, then the long names' 2 (SetCanEdit, the text box's Draw: tests/test_name_limit.py)
+    assert len(writes) == 12 and len(jumps) == 9 and len(slots) == 3
     for site, hook, length in (("DRAW_STRING", "draw_string", 5), ("DRAW_CHARS", "draw_chars", 5),
                                ("GET_WIDTH", "get_width", 5), ("NEXT_LINE", "next_line", 5),
                                ("GET_TEXT", "get_text", 5), ("DRAW_JUSTIFIED", "draw_justified", 9),
