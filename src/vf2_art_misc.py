@@ -27,8 +27,12 @@ tests/test_art_misc.py runs the drawing code in Unicorn through tests/vf2_misc_e
   GetScaledLinkToNextPt puts it (`PET_LINKS`, made by running DrawPet).
 * The birds: CBird::Draw (bird.png and bird_shadow.png; `BIRD_POSES`); the ball: CBall::Draw (ball_shadow.png and
   InventoryItems.png cell 5).
-* Not assembled here (their files are listed whole and cut by vf2_art_sheets): the butterflies, the pet bowls'
-  own pictures, CBubbles, CDecal's food, work and upgrade props, the fridge, the lights and the air purifier.
+* The butterflies: theButterflyClass::DrawButterflies (the title screen) and CMiniButterflyClass::Draw (the yard)
+  draw butterflygreen.png cell row x 4 + frame (+2 moving right) through ldwGameWindow::DrawScaled, centred, at
+  50-99% and 30-69%. The bubbles: CBubbles::Draw draws bubbles1.png / bubbles2.png frame by frame through
+  DrawScaled, not centred, at 81-120% (shown at 100%).
+* Not assembled here (their files are listed whole and cut by vf2_art_sheets): the pet bowls' own pictures,
+  CDecal's food, work and upgrade props, the fridge, the lights and the air purifier.
 """
 from __future__ import annotations
 
@@ -495,6 +499,88 @@ def animal_arts(files: gp.GameFiles) -> list[gp.Art]:
             "5, CInventoryManager::ImageIndex of the ball) above it by its height.", BALL_CHECK)
     return out
 
+# ------------------------------------------------------------------ butterflies and bubbles
+BUTTERFLY = 596                                    # butterflygreen.png: 4 columns, 5 rows (one colour a row)
+BUTTERFLY_COLOURS = ("yellow", "orange", "gold", "white", "turquoise")   # the sheet's rows, as they look
+TITLE_PERCENTS = (50, 99)                          # theButterflyClass::SpawnButterflies: 50 + GetRandom(50)
+YARD_PERCENTS = (30, 69)                           # CMiniButterflyClass::SpawnButterflies: 30 + GetRandom(40)
+TITLE_SHOWN, YARD_SHOWN = 75, 50                   # the sizes the pictures show (each inside its range)
+BUBBLES = (473, 474)                               # bubbles1.png, bubbles2.png: 10 frames each
+BUBBLE_FRAMES = 10
+BUBBLE_PERCENTS = (81, 120)                        # CBubbles::AddBubble: 120 - GetRandom(40)
+BUTTERFLY_CHECK = CHECKED.format(code="{code} and ldwGameWindow::DrawScaled")
+BUBBLE_CHECK = CHECKED.format(code="CBubbles::Draw and ldwGameWindow::DrawScaled")
+
+
+def butterfly_cell(row: int, frame: int, facing_right: bool) -> int:
+    """theButterflyClass::DrawButterflies / CMiniButterflyClass::Draw: row x 4 + frame (0 or 1), 2 more when it
+    faces right (flying: moving right or straight up or down; landed: every other butterfly)."""
+    return row * 4 + frame + (2 if facing_right else 0)
+
+
+def scaled_place(x: int, y: int, w: int, h: int, percent: int, centre: bool) -> tuple[int, int]:
+    """ldwGameWindow::DrawScaled (ldwGameWindowImpl::ScaledClipRect): a centred draw keeps the scaled picture
+    centred on the cell's full-size box: x less (int)((round(w x s) - w) / 2) (C's division), the same for y."""
+    if percent == 100 or not centre:
+        return x, y
+    s = f32(percent / 100.0)
+    sw, sh = int(f32(f32(f32(w) * s) + 0.5)), int(f32(f32(f32(h) * s) + 0.5))
+    return x + int((w - sw) / 2), y + int((h - sh) / 2)
+
+
+def butterfly_draw(files, row: int, frame: int, facing_right: bool, percent: int, x: int = 0, y: int = 0):
+    cell = butterfly_cell(row, frame, facing_right)
+    base = _cell(files, BUTTERFLY, cell)
+    w, h = base.rect[2] - base.rect[0], base.rect[3] - base.rect[1]
+    px, py = scaled_place(x, y, w, h, percent, True)
+    return gp.Draw(base.file, base.rect, px, py, percent=percent)
+
+
+def insect_arts(files: gp.GameFiles) -> list[gp.Art]:
+    out: list[gp.Art] = []
+    if files.has(_entry(BUTTERFLY).file):
+        for kind, sub, percent, (lo, hi), code, words in (
+                ("title", "Animals and insects/Butterflies on the title screen", TITLE_SHOWN, TITLE_PERCENTS,
+                 "theButterflyClass::DrawButterflies",
+                 "The twelve butterflies of the title screen (theMenuScene: theButterflyClass, spawned when the "
+                 "screen opens and drawn by theMenuScene::DrawSceneFinal)"),
+                ("yard", "Animals and insects/Butterflies in the yard", YARD_SHOWN, YARD_PERCENTS,
+                 "CMiniButterflyClass::Draw",
+                 "The nine small butterflies of the yard (CMiniButterflyClass, drawn by theMainScene::DrawScene in "
+                 "the daytime only)")):
+            for row, colour in enumerate(BUTTERFLY_COLOURS):
+                for right in (False, True):
+                    for frame in (0, 1):
+                        side = "right" if right else "left"
+                        cell = butterfly_cell(row, frame, right)
+                        out.append(gp.Art(
+                            f"misc/butterfly/{kind}/{colour}/{side}/{frame}", sub,
+                            f"{colour.capitalize()} butterfly moving {side}, wing frame {frame + 1} of 2",
+                            (butterfly_draw(files, row, frame, right, percent),), True,
+                            f"{words}: {code} draws butterflygreen.png cell {cell + 1} (row {row + 1}, its colour, "
+                            f"picked at random when it is spawned; the wing frame flips between the row's first two "
+                            "cells, the last two are used while it moves right) with ldwGameWindow::DrawScaled, "
+                            "centred, at the "
+                            f"butterfly's own size, {lo}% to {hi}% (shown at {percent}%). A landed butterfly keeps "
+                            f"its side by its place in the list instead of its flight. {SCALED_NOTE}",
+                            BUTTERFLY_CHECK.format(code=code)))
+    for image in BUBBLES:
+        entry = _entry(image)
+        if not files.has(entry.file):
+            continue
+        stem = _stem(entry.file)
+        for k in range(BUBBLE_FRAMES):
+            out.append(gp.Art(
+                f"misc/bubbles/{stem}/{k}", "Effects and animations/Bubbles", f"Bubble ({stem}), frame {k + 1} of 10",
+                (_cell(files, image, k),), True,
+                "The bubble maker's bubbles: when it is switched on CFurnitureManager::SetOnState starts CBubbles' "
+                "generator, which adds one to three bubbles every tenth of a second (CBubbles::AddBubble picks "
+                "bubbles1.png or bubbles2.png at random, a first frame 0 to 4 and a size of 81% to 120%); "
+                "CBubbles::Update moves each one on a frame now and then until frame 10 ends it, and CBubbles::Draw "
+                f"draws cell {k + 1} with ldwGameWindow::DrawScaled (not centred). Shown at 100%.", BUBBLE_CHECK))
+    return out
+
+
 # ------------------------------------------------------------------ the store's item pictures
 # CInventoryManager::DrawItem(point, item, state, position, shadow): the picture of every EInventoryItem below 0x1AD
 # (the furniture from 0x1AD on goes to CFurnitureManager::DrawItem). The items' names are the game's own enumerators
@@ -710,6 +796,7 @@ def arts(files: gp.GameFiles) -> list[gp.Art]:
                     f"effect {effect:#x} ({_entry(anim_image).file}) {dx}, {dy} from the item's place, "
                     f"looping; CFloatingAnim::Draw draws its frames over the item.", FURNITURE_ON_CHECK)
     out += animal_arts(files)
+    out += insect_arts(files)
     out += store_arts(files)
     return out
 
@@ -740,7 +827,10 @@ def _usage() -> dict:
     usage[594] = (True, "The birds' shadow, drawn by CBird::Draw (loaded by CBird::LoadAssets).")
     usage[635] = (True, "The ball's shadow, drawn by CBall::Draw (and CBall::DrawShadow).")
     usage[596] = (True, "The butterflies: theButterflyClass's and CMiniButterflyClass's constructors load it and "
-                        "their DrawButterflies / Draw draw it. Not assembled here.")
+                        "theButterflyClass::DrawButterflies (the title screen) and CMiniButterflyClass::Draw (the "
+                        "yard) draw it.")
+    for image in BUBBLES:
+        usage[image] = (True, "The bubble maker's bubbles: CBubbles::AddBubble picks it, CBubbles::Draw draws it.")
     usage[595] = (False, "No code asks theGraphicsManager for image 595 (no getter call names it), so the dragonflies "
                          "are never drawn.")
     usage[597] = (False, "Only theHummingbirdClass's constructor asks for image 597, and no code reached from WinMain "
@@ -769,6 +859,13 @@ def _cell_labels() -> dict:
     for kind, name in enumerate(PET_NAMES):
         for frame in range(PET_FRAMES):
             out[(7, kind * PET_FRAMES + frame)] = f"{name}, {pet_frame_words(frame)}"
+    for row, colour in enumerate(BUTTERFLY_COLOURS):
+        for c in range(4):
+            out[(BUTTERFLY, row * 4 + c)] = (f"{colour.capitalize()} butterfly moving {'right' if c >= 2 else 'left'}, "
+                                             f"wing frame {c % 2 + 1} of 2")
+    for image in BUBBLES:
+        for k in range(BUBBLE_FRAMES):
+            out[(image, k)] = f"Bubble, frame {k + 1}"
     for c in range(12):
         side = "left" if c in (0, 1, 4, 5, 6, 7) else "right"
         pose = "standing" if c in (0, 1, 2, 3) else "wings out"

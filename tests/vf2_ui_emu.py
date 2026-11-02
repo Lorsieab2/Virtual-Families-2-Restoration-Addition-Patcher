@@ -161,6 +161,156 @@ class UiRig:
         return self.draws
 
 
+# ====================================================================== tips, the mouse pointer, the focus ring
+def _xmm_seam(fn):
+    """A seam for a C runtime function taking and returning a double in xmm0 (__libm_sse2_*_precise)."""
+    from unicorn.x86_const import UC_X86_REG_XMM0
+
+    def seam(em):
+        raw = em.uc.reg_read(UC_X86_REG_XMM0) & ((1 << 64) - 1)
+        x = struct.unpack("<d", struct.pack("<Q", raw))[0]
+        em.uc.reg_write(UC_X86_REG_XMM0, struct.unpack("<Q", struct.pack("<d", fn(x)))[0])
+        return 0, 0
+    return seam
+
+
+class TipRig:
+    """theTipDialog::Init (with the real ldwButton) and DrawNoFadeScene. The font answers: the text is `text_w`
+    wide on one line, `body_h` high justified, a line `line_h` high; the game window and the world view are
+    `screen_w` wide. SetTiling, SetPos and AddControl are recorded; sin and cos are Python's."""
+
+    def __init__(self, obj_dir: Path, game: Path):
+        import math
+        self.rig = rig = UiRig(obj_dir, game, ["theTipDialog", "ldwButton", "ldwTiledBackground", "ldwHintControl"])
+        self.obj_dir = obj_dir
+        e = self.e = rig.e
+        for name, value in static_writes(obj_dir, "theGame", "?Init@theGame@@UAE_NXZ").items():
+            if "mShadow" in name:
+                e.w32(static_address(e, name), value)
+        self.dialog = e.alloc(0x200)
+        self.font = (400, 60, 20)
+        self.screen_w = 1024
+        self.seen: dict = {"controls": [], "decal": [], "setpos": None, "tiling": None}
+        d = self.dialog
+
+        def tiling(em):
+            self.seen["tiling"] = (rig.objects[em.arg(0)], em.sarg(1), em.sarg(2))
+            for k, v in enumerate((0, 0, em.sarg(1), em.sarg(2))):
+                em.w32(d + 0x14 + 4 * k, v)
+            return 0, 12
+
+        e.seam("?GetFont@theStringManager@@QAEPAVldwFont@@W4FontId@@@Z", lambda em: (0, 4))
+        e.seam("?GetLargeFont@theStringManager@@QAEPAVldwFont@@XZ", lambda em: (0, 0))
+        e.seam("?GetWidth@ldwFont@@QAEHPBDM@Z", lambda em: (self.font[0], 8))
+        e.seam("?GetJustifiedHeight@ldwFont@@QAEHPBDHM@Z", lambda em: (self.font[1], 12))
+        e.seam("?GetHeight@ldwFont@@QAEHPBD@Z", lambda em: (self.font[2], 4))
+        e.seam("?GetWidth@ldwGameWindow@@QAEHXZ", lambda em: (self.screen_w, 0))
+        e.seam("?SetTiling@ldwTiledDialog@@IAEXPAVldwImageGrid@@HH@Z", tiling)
+        e.seam("?GetImageGridForCanvas@theGraphicsManager@@QAEPAVldwImageGrid@@H@Z",
+               lambda em: (rig.picture({1: 352, 2: 350}.get(em.arg(0), 351)), 4))
+        e.seam("?GetTextColorForCanvas@theGraphicsManager@@QAE?AUldwColor@@H@Z", lambda em: (em.arg(0), 8))
+        e.seam("?GetBounds@ldwScene@@QAEXAAUldwRect@@@Z", lambda em: (
+            [em.w32(em.arg(0) + 4 * k, em.r32(d + 0x14 + 4 * k)) for k in range(4)], (0, 4))[1])
+        e.seam("?SetPos@ldwTiledDialog@@IAEXHH@Z", lambda em: (
+            self.seen.__setitem__("setpos", (em.sarg(0), em.sarg(1))), (0, 8))[1])
+        e.seam("?SetSoundFx@ldwButton@@QAEXPAVldwSoundFx@@0@Z", lambda em: (0, 8))
+        e.seam("?SetText@ldwButton@@QAEXPBDUldwColor@@11PAVldwFont@@@Z", lambda em: (0, 20))
+        e.seam("?AddControl@ldwScene@@IAEXPAVldwControl@@@Z", lambda em: (
+            self.seen["controls"].append(em.arg(0)), (0, 4))[1])
+        e.seam("?IsLagging@ldwGameWindow@@QAE_NXZ", lambda em: (0, 0))
+        e.seam("?GetSeconds@ldwEventManager@@SAIXZ", lambda em: (100, 0))
+        e.seam("?GetNextJustifiedLine@ldwFont@@QAEPBDPBDPADHHAA_N_NM@Z", lambda em: (
+            em.write(em.arg(1), b"\0"), (rig.empty, 28))[1])
+        e.seam("?DrawStringJustified@ldwGameWindow@@QAEHPBDHHHUldwColor@@PAVldwFont@@_N3H@Z", lambda em: (0, 36))
+        e.seam("__libm_sse2_sin_precise", _xmm_seam(math.sin))
+        e.seam("__libm_sse2_cos_precise", _xmm_seam(math.cos))
+        e.seam("?ShowArrow@CDecal@@QAEXPAVldwImage@@HH@Z", lambda em: (self.seen["decal"].append(
+            (rig.objects[em.arg(0)], em.sarg(1), em.sarg(2))), (0, 12))[1])
+        self.world_view = e.addr("?WorldView@@3VCWorldView@@A")
+
+    def init(self, direction: int, x: int = 0, y: int = 0, string_id: int = 0x800, scene: int = 1,
+             world: bool = False) -> None:
+        """What the constructor sets, then Init(text, direction, x, y, world): string ids 0x845..0x86D are the
+        tutorial instructions (+4Ch), `scene` the dialog's scene (+38h; 0 the play screen)."""
+        e, d = self.e, self.dialog
+        e.write(d, bytes(0x200))
+        e.w32(d + 0x38, scene)
+        e.write(d + 0x4C, bytes((int(0x845 <= string_id <= 0x86D),)))
+        e.w32(d + 0x54, string_id)
+        e.w32(d + 0x64, 2)
+        e.w32(d + 0x74, 0xFF000000)
+        e.w32(d + 0x7C, direction)
+        e.write(d + 0x90, bytes((int(world),)))
+        e.write(d + 0x9C, struct.pack("<d", -360.0))
+        e.w32(d + 0xAC, 1)
+        e.w32(self.world_view + 0x18, self.screen_w)
+        self.seen.update(controls=[], decal=[], setpos=None, tiling=None)
+        e.call("?Init@theTipDialog@@IAEXPBDW4ArrowDirection@@HH_N@Z", [e.string("Tip"), direction, x, y,
+                                                                       int(world)], ecx=d)
+
+    def arrow(self, phase: float) -> list:
+        """DrawNoFadeScene at bob phase `phase` (degrees): its draws."""
+        self.e.write(self.dialog + 0x9C, struct.pack("<d", phase))
+        return self.rig.run("?DrawNoFadeScene@theTipDialog@@MAEXXZ", ecx=self.dialog)
+
+    def box(self) -> list:
+        """The box's backdrop as ldwTiledDialog makes it from SetTiling (at (0, 0)), then the OK button's draw."""
+        grid, w, h = self.seen["tiling"]
+        bg = self.e.alloc(0x40)
+        self.e.call("??0ldwTiledBackground@@QAE@PAVldwImageGrid@@HH@Z", [self.rig.picture(grid), w, h], ecx=bg)
+        draws = self.rig.run("?Draw@ldwTiledBackground@@UAEXUldwPoint@@M@Z", [0, 0, 1.0], ecx=bg)
+        button = self.seen["controls"][-1]
+        self.e.write(self.e.r32(button + 0x10) + 0x28, b"\x01")           # shown
+        return draws + self.rig.run("?Draw@ldwButton@@UAEXXZ", ecx=button)
+
+
+def pointer_draws(obj_dir: Path, image: object, hot: tuple, mouse: tuple) -> list:
+    """ldwGameWindow::SetCursor(image, hot x, hot y), then ldwGameWindowImpl::Update with the mouse at `mouse`
+    inside the window: the (image, x, y) of every ldwGameWindowImpl::Draw it makes."""
+    e = pe.Emu(obj_dir, ["ldwGameWindow"])
+    draws: list = []
+    window, impl = e.alloc(0x10), e.alloc(0x100)
+    e.w32(window, impl)
+    e.w32(impl + 8, 1024)
+    e.w32(impl + 0xC, 768)
+    e.write(impl + 0x1E, b"\x01\x01\x00")                # the window has the mouse; a drawn pointer
+    e.w32(impl + 0x30, e.alloc(0x40))
+    e.seam("_SDL_ShowCursor", lambda em: (0, 0))
+    e.seam("_SDL_GetMouseState", lambda em: (em.w32(em.arg(0), mouse[0]), em.w32(em.arg(1), mouse[1]), (0, 0))[2])
+    e.seam("?Draw@ldwGameWindowImpl@@QAEXPAVldwImage@@HH@Z", lambda em: (
+        draws.append((em.arg(0), em.sarg(1), em.sarg(2))), (0, 12))[1])
+    for name in ("_SDL_GetTicks", "_SDL_Delay", "_SDL_UpdateTexture", "_SDL_RenderClear", "_SDL_RenderCopy",
+                 "_SDL_RenderPresent", "_SDL_WarpMouseInWindow", "?Sleep@ldwEventManager@@SAXH@Z",
+                 "?CheckForEvents@ldwGameWindowImpl@@AAEXXZ"):
+        e.seam(name, lambda em: (0, 0))
+    e.w32(impl + 0x50, 0xFFFFFFFF)                        # no mouse warp pending
+    e.call("?SetCursor@ldwGameWindow@@QAEXPAVldwImage@@HH@Z", [image, hot[0], hot[1]], ecx=window)
+    e.call("?Update@ldwGameWindowImpl@@QAEXXZ", ecx=impl)
+    return draws
+
+
+def focus_ring_draws(obj_dir: Path, game: Path, sex=0, head=0, body=0, age=30, frame=0, at=(0, 0)) -> list:
+    """CVillagerManager::DrawVillager (vf2_people_emu.PeopleRig.house) for a villager the player has picked
+    (CVillager+1BB85h set): its CSceneManager::Draw(image, point, alpha) draws of the ring, as
+    ("focus_circle.png", x, y, alpha)."""
+    rig = pe.PeopleRig(obj_dir, game)
+    e = rig.e
+    call = e.call
+
+    def picked(name, args=(), ecx=0, floats=None):
+        if isinstance(name, str) and name.startswith("?DrawVillager@CVillagerManager"):
+            e.write(ecx + 0x387F5, b"\x01")
+            rig.image_names[e.r32(ecx + 0x20)] = "focus_circle.png"
+        return call(name, args, ecx, floats)
+
+    e.call = picked
+    try:
+        draws = rig.house(sex, head, body, age, frame, 0, at=at)
+    finally:
+        e.call = call
+    return [d[1:] for d in draws if d[0] == "scene_plain" and d[1] == "focus_circle.png"]
+
+
 def blit(obj_dir: Path, pixels: bytes, width: int, height: int, rect: tuple, alpha: float,
          background: tuple = (40, 90, 160)) -> bytes:
     """ldwGameWindowImpl::BlitRectWithAlpha(source, 0, 0, rect, alpha, 1.0, false) onto an opaque screen as big as

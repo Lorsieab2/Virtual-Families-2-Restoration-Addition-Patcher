@@ -384,6 +384,157 @@ def test_scaled_shadows_match_the_blitter():
         assert sum(1 for a, b in zip(game, ours) if a != b) < len(game) // 4
 
 
+# ---------------------------------------------------------------------- butterflies and bubbles
+@pytest.fixture(scope="module")
+def insects():
+    import vf2_misc_emu as me
+    return me.InsectRig(OBJ_DIR, GAME_DIR)
+
+
+def _drawn_scaled(files, image, x, y, cell, percent, centre):
+    """A recorded ldwGameWindow::DrawScaled as the layer the Picture Maker should have: the game's own DrawScaled
+    run whole decides where BlitRectWithAlpha puts the cell and at what scale."""
+    import vf2_misc_emu as me
+    name, rect = gp.cell_of(files, image, cell)
+    cols = gp.entry_by_id(image).cols or 1
+    (blit,) = me.draw_scaled(OBJ_DIR, rect, cols, x, y, cell, percent, centre)
+    bx, by, brect, alpha, scale = blit
+    assert brect == rect and alpha == 1.0 and int(am.f32(am.f32(scale) * 100) + 0.5) == percent
+    return (name.lower(), tuple(rect), bx, by, percent)
+
+
+def _scaled_art_layer(layer):
+    return (layer.file.lower(), tuple(layer.rect), layer.x, layer.y, layer.percent)
+
+
+@needs_code
+def test_scaled_place_is_the_games():
+    """ScaledClipRect's centring (and none at 100% or uncentred), for the butterflies' cell size and others."""
+    import vf2_misc_emu as me
+    for w, h in ((24, 22), (25, 21), (7, 9), (100, 100)):
+        for percent in (30, 49, 50, 51, 69, 75, 99, 100, 120):
+            for centre in (False, True):
+                (blit,) = me.draw_scaled(OBJ_DIR, (10, 20, 10 + w, 20 + h), 4, 300, 200, 0, percent, centre)
+                assert blit[:2] == am.scaled_place(300, 200, w, h, percent, centre), (w, h, percent, centre)
+
+
+@needs_code
+def test_butterflies_are_drawn_as_the_game_draws_them(insects):
+    files = gp.GameFiles(GAME_DIR)
+    arts = {a.key: a for a in am.arts(files)}
+    keys = [k for k in arts if k.startswith("misc/butterfly/")]
+    assert len(keys) == 2 * 5 * 2 * 2
+    for kind, percent in (("title", am.TITLE_SHOWN), ("yard", am.YARD_SHOWN)):
+        for row, colour in enumerate(am.BUTTERFLY_COLOURS):
+            for right in (False, True):
+                for frame in (0, 1):
+                    art = arts[f"misc/butterfly/{kind}/{colour}/{'right' if right else 'left'}/{frame}"]
+                    vx = 3 if right else -3
+                    if kind == "title":
+                        rec = [insects.butterfly(row, frame, vx, percent)]
+                    else:
+                        rec = insects.mini(row, frame, vx, percent)
+                    got = [_drawn_scaled(files, *d) for d in rec]
+                    assert got == [_scaled_art_layer(la) for la in art.layers], art.key
+    # moving straight up or down counts as right; a landed one (title 3, yard 2) faces by its place in the list
+    assert insects.butterfly(2, 1, 0, 60)[3] == am.butterfly_cell(2, 1, True)
+    for index in (0, 1, 2, 5):
+        assert insects.butterfly(1, 0, -4, 60, state=3, index=index)[3] == am.butterfly_cell(1, 0, index % 2 == 0)
+        (d,) = insects.mini(4, 1, -4, 40, state=2, index=index)
+        assert d[3] == am.butterfly_cell(4, 1, index % 2 == 0)
+
+
+@needs_code
+def test_the_butterflies_ranges_are_the_games():
+    """Colour row GetRandom(5), size 50 + GetRandom(50) (title) / 30 + GetRandom(40) (yard), wing frame 0 or 1:
+    the spawners and updaters run in Unicorn with GetRandom answering its lowest and highest."""
+    import vf2_people_emu as pe
+    assert am.TITLE_PERCENTS[0] <= am.TITLE_SHOWN <= am.TITLE_PERCENTS[1]
+    assert am.YARD_PERCENTS[0] <= am.YARD_SHOWN <= am.YARD_PERCENTS[1]
+    for obj, ctor_this, spawn, update, size, pct_off, row_off, frame_off, step, count in (
+            ("theButterflyClass", 0x288, "?SpawnButterflies@theButterflyClass@@QAEXXZ",
+             "?UpdateButterflies@theButterflyClass@@QAEXUldwPoint@@@Z", 0x34, 0x30, 0x24, 0x28, 0x34, 12),
+            ("theMiniButterflyClass", 0x228, "?SpawnButterflies@CMiniButterflyClass@@QAEXH@Z",
+             "?Update@CMiniButterflyClass@@QAEXXZ", 0x3C, 0x34, 0x28, 0x2C, 0x3C, 9)):
+        for pick in ("low", "high"):
+            e = pe.Emu(OBJ_DIR, [obj])
+            e.seam("?GetRandom@ldwGameState@@SAHH@Z", lambda em, p=pick: (0 if p == "low" else em.sarg(0) - 1, 0))
+            e.seam("?GetCellRect@ldwImageGrid@@QAEXHAAUldwRect@@@Z", lambda em: (
+                [em.w32(em.arg(1) + 4 * k, v) for k, v in enumerate((0, 0, 24, 22))], (0, 8))[1])
+            gs = e.alloc(0x40)
+            vt = e.alloc(0x40)
+            e.w32(gs, vt)
+            e.seam("__gs_w", lambda em: (1024, 0))
+            e.seam("__gs_h", lambda em: (768, 0))
+            e.w32(vt + 0x18, e.thunk_of["__gs_w"])
+            e.w32(vt + 0x1C, e.thunk_of["__gs_h"])
+            this = e.alloc(0x300)
+            e.w32(this + 0x284, gs)
+            for name, pop in (("?AcquireTarget@theButterflyClass@@QAEXH@Z", 4),
+                              ("?AcquireTarget@theButterflyClass@@QAEXHHH@Z", 12),
+                              ("?NewTarget@CMiniButterflyClass@@AAEXH@Z", 4),
+                              ("?LeaveWorld@CMiniButterflyClass@@AAEXH_N@Z", 8),
+                              ("?AcquireTarget@CMiniButterflyClass@@AAEXH@Z", 4),
+                              ("?ChooseNewBehavior@CMiniButterflyClass@@AAEXH@Z", 4)):
+                if name in e.globals:
+                    e.seam(name, lambda em, pop=pop: (0, pop))
+            e.call(spawn, [count] if "Mini" in spawn else [], ecx=this)
+            lo, hi = (am.TITLE_PERCENTS if count == 12 else am.YARD_PERCENTS)
+            rows = {e.s32(this + step * k + row_off) for k in range(count)}
+            pcts = {e.s32(this + step * k + pct_off) for k in range(count)}
+            assert rows == {0 if pick == "low" else 4} and pcts == {lo if pick == "low" else hi}, (obj, pick)
+            for _ in range(60):
+                e.call(update, [0, 0] if count == 12 else [], ecx=this)
+                assert {e.s32(this + step * k + frame_off) for k in range(count)} <= {0, 1}
+
+
+@needs_code
+def test_bubbles_are_drawn_as_the_game_draws_them(insects):
+    files = gp.GameFiles(GAME_DIR)
+    arts = {a.key: a for a in am.arts(files)}
+    for image in am.BUBBLES:
+        stem = am._stem(gp.entry_by_id(image).file)
+        for k in range(am.BUBBLE_FRAMES):
+            got = [_drawn_scaled(files, *d) for d in insects.bubble(image, k, 100)]
+            assert got == [_scaled_art_layer(la) for la in arts[f"misc/bubbles/{stem}/{k}"].layers], (stem, k)
+    # the bubble's float drift is truncated into its place; other sizes are drawn uncentred
+    assert insects.bubble(473, 3, 120, 50, 60, 2.7, -1.5)[0][1:] == (52, 59, 3, 120, 0)
+
+
+@needs_code
+def test_the_bubbles_ranges_are_the_games():
+    """CBubbles::AddBubble: the picture GetRandom(2), first frame GetRandom(5), size 120 - GetRandom(40); Update
+    ends a bubble when its frame reaches 10."""
+    import vf2_people_emu as pe
+    e = pe.Emu(OBJ_DIR, ["Bubbles"])
+    picks = {"mode": "low"}
+    e.seam("?GetRandom@ldwGameState@@SAHH@Z", lambda em: (0 if picks["mode"] == "low" else em.sarg(0) - 1, 0))
+    asked = []
+    e.seam("?Get@theGraphicsManager@@SAPAV1@XZ", lambda em: (0, 0))
+    e.seam("?GetImageGrid@theGraphicsManager@@QAEPAVldwImageGrid@@W4EImage@@@Z", lambda em: (
+        asked.append(em.arg(0)), (em.arg(0), 4))[1])
+    import vf2_ui_emu as ue
+    at = ue.static_address(e, "?bubble@@3PAUSBubbleInstance@@A")
+    bubbles = ue.static_address(e, "?Bubbles@@3VCBubbles@@A")
+    assert (am.BUBBLE_PERCENTS[1], am.BUBBLE_PERCENTS[0]) == (120, 81)
+    for mode, image, frame, percent in (("low", am.BUBBLES[0], 0, 120), ("high", am.BUBBLES[1], 4, 81)):
+        picks["mode"] = mode
+        e.call("?Reset@CBubbles@@QAEXXZ", ecx=bubbles)
+        e.call("?AddBubble@CBubbles@@QAEXUldwPoint@@HMM@Z", [10, 20, 1, 0.0, 0.0], ecx=bubbles)
+        assert (asked[-1], e.s32(at + 0x14), e.s32(at + 0x2C), e.s32(at + 0x18)) == (image, frame, percent, 10)
+    # Update moves the frame on (GetRandom(13) < 3 once the delay is spent) and ends the bubble at 10
+    picks["mode"] = "low"
+    e.call("?Reset@CBubbles@@QAEXXZ", ecx=bubbles)
+    e.call("?AddBubble@CBubbles@@QAEXUldwPoint@@HMM@Z", [10, 20, 1, 0.0, 0.0], ecx=bubbles)
+    seen = set()
+    for _ in range(40):
+        if not e.read(at + 4, 1)[0]:
+            break
+        seen.add(e.s32(at + 0x14))
+        e.call("?Update@CBubbles@@QAEXXZ", ecx=bubbles)
+    assert seen == set(range(am.BUBBLE_FRAMES)) and not e.read(at + 4, 1)[0]
+
+
 # ---------------------------------------------------------------------- the store's item pictures
 @needs_code
 def test_store_items_are_drawn_as_the_game_draws_them(cutter):

@@ -321,9 +321,149 @@ def _play_arts(files: gp.GameFiles) -> list[Art]:
     ]
 
 
+# ------------------------------------------------------------------ tips (theTipDialog)
+TIPS = "Dialogs and panels/Tips"
+TIP_GRID = 351                                # GetImageGridForCanvas(0): orange tiles
+TIP_BUTTON = 296                              # btn_green.png, the OK button (button id 2)
+ARROWS = {1: (376, "up"), 2: (377, "down"), 3: (378, "left"), 4: (379, "right")}   # ArrowDirection -> image
+ARROWS_USED = (1, 2, 3)                       # no code configures a tip with direction 4
+GAME_PI = 3.14159                             # __real@400921f9f01b866e: the game's own (short) pi
+BOB_START = -360.0                            # the constructor's first phase (__real@c076800000000000)
+BOB_FARTHEST = 0.0                            # a phase (reached: it steps 5 or 8 degrees a frame) where the bob is
+BOB_NEAREST = 90.0                            # largest, and where it is smallest (cos(sin(phase)) is cos 1)
+EXAMPLE_TIP = (400, 60, 20)                   # an example tip: text 400 pixels wide, 3 lines of 20 pixels
+SCREEN_W = 1024                               # ldwGameWindow::GetWidth and the world view's width (an example)
+EMU_TIP = ("Checked against the game's own theTipDialog::Init and DrawNoFadeScene, ldwButton and "
+           "ldwTiledBackground run in Unicorn.")
+EMU_ARROW = ("Checked against the game's own theTipDialog::Init and DrawNoFadeScene run in Unicorn (sin and cos "
+             "answered by Python's).")
+
+
+def tip_geometry(files: gp.GameFiles, text_w: int, body_h: int, line_h: int, instruction: bool = False,
+                 window_w: int = SCREEN_W, world_w: int = SCREEN_W) -> dict:
+    """theTipDialog::Init: the box's size and the OK button's place in it. `text_w` is the font's width of the
+    text (one line), `body_h` its justified height, `line_h` one line's height. An instruction tip (string ids
+    0x845..0x86D on the play screen) is as wide as the world view and drawn at the top of it, 26 pixels shorter."""
+    btn = gp.cell_of(files, TIP_BUTTON, 0)[1]
+    btn_w, btn_h = btn[2] - btn[0], btn[3] - btn[1]
+    cap = (window_w // TILE) * TILE - SHADOW_RIGHT - 0x48
+    width = min(text_w, cap)
+    if instruction:
+        width = (world_w // TILE) * TILE - SHADOW_RIGHT - 0x48
+        body_h = body_h - line_h if body_h // line_h > 3 else 2 * line_h
+    height = body_h + 0x24 + 2 * btn_h - (0x1A if instruction else 0)
+    w = width + 0x48
+    return {"size": (w, height), "button": ((w - btn_w) // 2, height - btn_h // 2 - btn_h)}
+
+
+def tip_box_layers(files: gp.GameFiles, text_w: int, body_h: int, line_h: int, instruction: bool = False) -> tuple:
+    """The box (ldwTiledDialog), then the OK button (ldwButton, normal), for a box at (0, 0)."""
+    g = tip_geometry(files, text_w, body_h, line_h, instruction)
+    return tiled_backdrop(files, TIP_GRID, *g["size"]) + (gp.cell(files, TIP_BUTTON, 0, *g["button"]),)
+
+
+def tip_bob(amount: int, phase: float) -> int:
+    """DrawNoFadeScene's bob: (int)(cos(sin(phase x pi / 180)) x amount), pi being the game's 3.14159."""
+    import math
+    return int(math.cos(math.sin(phase * GAME_PI / 180.0)) * amount)
+
+
+def arrow_place(files: gp.GameFiles, direction: int, phase: float) -> tuple:
+    """Where theTipDialog draws its arrow for a tip pointing at (0, 0): Init places the picture against the point
+    (below it, above it, right of it, left of it) and DrawNoFadeScene moves it away from the point by the bob,
+    a quarter of the picture's height (up and down arrows) or width."""
+    image, _way = ARROWS[direction]
+    w, h = files.size(gp.cell_of(files, image, 0)[0])
+    if direction == 1:
+        return -(w // 2), tip_bob(h // 4, phase)
+    if direction == 2:
+        return -(w // 2), -h - tip_bob(h // 4, phase)
+    if direction == 3:
+        return tip_bob(w // 4, phase), -(h // 2)
+    return -w - tip_bob(w // 4, phase), -(h // 2)
+
+
+def _tip_arts(files: gp.GameFiles) -> list[Art]:
+    text_w, body_h, line_h = EXAMPLE_TIP
+    out = []
+    w, h = tip_geometry(files, text_w, body_h, line_h)["size"]
+    out.append(Art(
+        "ui/tip/box", TIPS, f"Tip box ({w} x {h})", tip_box_layers(files, text_w, body_h, line_h), True,
+        "A tip (theTipDialog, opened by CTutorialTip::Display for the tutorial and the game's hints, and by the "
+        "family tree screen): orange tiles as wide as its text plus 72 pixels and as high as its text plus 36 "
+        "and twice the green OK button, the button centred at the bottom. Shown for an example text 400 pixels "
+        "wide and 3 lines (60 pixels) high. The words and the button's label are text. Its arrow, when it has "
+        "one, is drawn on its own beside the thing it points at (below).", EMU_TIP))
+    w, h = tip_geometry(files, text_w, body_h, line_h, True)["size"]
+    out.append(Art(
+        "ui/tip/instruction", TIPS, f"Tutorial instruction tip ({w} x {h})",
+        tip_box_layers(files, text_w, body_h, line_h, True), True,
+        "A tutorial instruction (string ids 0x845 to 0x86D) shown on the play screen: theTipDialog::Init makes it "
+        "as wide as the world view less 84 pixels (here for a 1024 pixel wide view) and puts it at the top; up to "
+        "3 lines of text make it two lines high, and it is 26 pixels shorter than other tips. The words and the "
+        "button's label are text.", EMU_TIP))
+    for direction, (image, way) in ARROWS.items():
+        used = direction in ARROWS_USED
+        name = gp.cell_of(files, image, 0)[0]
+        for phase, key, words in ((BOB_FARTHEST, "far", "farthest from the point"),
+                                  (BOB_NEAREST, "near", "nearest to the point")):
+            x, y = arrow_place(files, direction, phase)
+            why = (f"{name}: theTipDialog::Init picks it for arrow direction {direction} and places it against the "
+                   "point the tip shows; DrawNoFadeScene draws it there moved away from the point by a bob that "
+                   "swings between about half and all of a quarter of the picture's "
+                   f"{'height' if direction < 3 else 'width'} (shown {words}, the point being (0, 0)). ")
+            if used:
+                why += ("The tutorial tips (CTutorialTip::Reset), the adoption and store tips and the family tree "
+                        "tips use directions 1 to 3. The blockage tip (CTutorialTip::ConfigBlockageTip) hands its "
+                        "left arrow to CDecal::ShowArrow instead, which draws it in the world.")
+            else:
+                why += ("But no tip ever has direction 4: every CTutorialTip::ConfigureTip call (CTutorialTip::Reset, "
+                        "ConfigBlockageTip, CAdoptionScene::HandleMessage, theGameState::Load) and the family tree "
+                        "screen's own tip pass directions 1 to 3 (and Reset clears the rest to 0, no arrow), so "
+                        "the right arrow is never drawn.")
+            out.append(Art(f"ui/tip/arrow/{way}/{key}", TIPS, f"Tip arrow pointing {way}, {words}",
+                           (gp.cell(files, image, 0, x, y),), used, why, EMU_ARROW))
+    return out
+
+
+# ------------------------------------------------------------------ mouse pointers and the selected villager ring
+CURSORS = "Icons and cursors/Mouse pointers"
+ICONS = "Icons and cursors/Icons"
+HOT_SPOT = (21, 24)                           # UI_HandCursorHotSpot
+FOCUS_RING = 364                              # focus_circle.png (CVillagerManager +0x20)
+FOCUS_AT = (-19, 11)                          # where DrawVillager puts it for a grown man standing, from his place
+EMU_FOCUS = ("Checked against the game's own CVillagerManager::DrawVillager run in Unicorn (a grown man, standing, "
+             "at 100% zoom).")
+EMU_CURSOR = ("Checked against the game's own ldwGameWindow::SetCursor and ldwGameWindowImpl::Update (which draws "
+              "the pointer) run in Unicorn.")
+
+
+def _pointer_arts(files: gp.GameFiles) -> list[Art]:
+    out = []
+    for image, key, label, why in (
+            (1, "open", "Mouse pointer, open hand",
+             "The game's mouse pointer: theMainScene's constructor and HandleMouseUp set it "
+             "(ldwGameWindow::SetCursor with the hot spot UI_HandCursorHotSpot, 21 in and 24 down); the game "
+             "hides the system pointer and ldwGameWindowImpl::Update draws this picture at the mouse less the hot "
+             "spot every frame. Shown with the mouse at (0, 0)."),
+            (2, "held", "Mouse pointer, closed hand",
+             "The pointer while the mouse button is held down: theMainScene::HandleMouseDown sets it (same hot "
+             "spot), and ldwGameWindowImpl::Update draws it at the mouse less the hot spot. Shown with the mouse at "
+             "(0, 0).")):
+        out.append(Art(f"ui/cursor/{key}", CURSORS, label,
+                       (gp.cell(files, image, 0, -HOT_SPOT[0], -HOT_SPOT[1]),), True, why, EMU_CURSOR))
+    out.append(Art(
+        "ui/icon/focus-ring", ICONS, "Selected villager ring", (gp.cell(files, FOCUS_RING, 0, *FOCUS_AT),), True,
+        "focus_circle.png (CVillagerManager::LoadAssets keeps it): CVillagerManager::DrawVillager draws it on the "
+        "ground under the villager the player has picked, before the villager. Shown for a grown man standing, "
+        "his place being (0, 0); its place moves a little with the villager's size.", EMU_FOCUS))
+    return out
+
+
 def arts(files: gp.GameFiles) -> list[Art]:
     out = []
-    for part in (_button_arts, _toggle_arts, _slider_arts, _dialog_arts, _message_arts, _play_arts):
+    for part in (_button_arts, _toggle_arts, _slider_arts, _dialog_arts, _message_arts, _play_arts, _tip_arts,
+                 _pointer_arts):
         try:
             out += part(files)
         except (gp.pi.PictureError, KeyError):         # a picture this game folder lacks: that part is left out
@@ -331,15 +471,26 @@ def arts(files: gp.GameFiles) -> list[Art]:
     return out
 
 
-USAGE: dict = {}
+USAGE: dict = {
+    1: (True, "The mouse pointer: theMainScene sets it (ldwGameWindow::SetCursor) when it is made and on mouse up; "
+              "ldwGameWindowImpl::Update draws it."),
+    2: (True, "The mouse pointer while the button is held: theMainScene::HandleMouseDown sets it; "
+              "ldwGameWindowImpl::Update draws it."),
+    364: (True, "The selected villager's ring, drawn by CVillagerManager::DrawVillager under the villager."),
+    376: (True, "The tips' up arrow (arrow direction 1), drawn by theTipDialog::DrawNoFadeScene."),
+    377: (True, "The tips' down arrow (arrow direction 2), drawn by theTipDialog::DrawNoFadeScene."),
+    378: (True, "The tips' left arrow (arrow direction 3), drawn by theTipDialog::DrawNoFadeScene (the blockage tip "
+                "hands it to CDecal::ShowArrow)."),
+    379: (False, "theTipDialog::Init would take it for arrow direction 4, but no tip has direction 4: every "
+                 "CTutorialTip::ConfigureTip call and the family tree screen's tip pass 1 to 3, so it is never drawn."),
+}
 
 CELL_LABELS = {(image, state): words for image in BUTTONS for state, _k, words in STATES}
 CELL_LABELS.update({(CHECKBOX, 0): "Not ticked", (CHECKBOX, 1): "Ticked"})
 CELL_LABELS.update({(grid, cell): words for grid in GRIDS for cell, words in TILE_CELLS.items()})
 
 # The mouse pointer (ldwGameWindow::SetCursor, hot spot UI_HandCursorHotSpot (21, 24)): theMainScene sets
-# hand_open.png when it is made and on mouse up, hand.png on mouse down. A system cursor, not drawn by the game's
-# blitter, so there is no assembled picture.
+# hand_open.png when it is made and on mouse up, hand.png on mouse down; ldwGameWindowImpl::Update draws it.
 CELL_LABELS.update({(1, 0): "Mouse pointer (hot spot 21, 24)",
                     (2, 0): "Mouse pointer while the button is held (hot spot 21, 24)"})
 

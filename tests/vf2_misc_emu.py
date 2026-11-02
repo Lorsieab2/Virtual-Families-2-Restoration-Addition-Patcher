@@ -503,6 +503,34 @@ class StoreRig:
         return list(self.draws)
 
 
+# ====================================================================== ldwGameWindow::DrawScaled, whole
+def draw_scaled(obj_dir: Path, cell_rect: tuple, columns: int, x: int, y: int, cell: int, percent: int,
+                centre: bool) -> list:
+    """ldwGameWindow::DrawScaled(grid, x, y, cell, percent, centre) run whole (with the real ClipRect and
+    ScaledClipRect, an unclipped screen) for a grid whose cells are `cell_rect` big (left, top, right, bottom of
+    cell `cell`); its ldwGameWindowImpl::BlitRectWithAlpha calls as (x, y, rect, alpha, scale)."""
+    e = pe.Emu(obj_dir, ["ldwGameWindow"])
+    out: list = []
+    window, impl, grid = e.alloc(0x10), e.alloc(0x100), e.alloc(0x40)
+    e.w32(window, impl)
+    for off, v in ((0x60, -100000), (0x64, -100000), (0x68, 100000), (0x6C, 100000)):
+        e.w32(impl + off, v)
+    e.seam("?GetColumnCount@ldwImageGrid@@QAEHXZ", lambda em: (columns, 0))
+
+    def rect(em):
+        for k, v in enumerate(cell_rect):
+            em.w32(em.arg(2) + 4 * k, v)
+        return 0, 12
+    e.seam("?GetCellRect@ldwImageGrid@@QAEXHHAAUldwRect@@@Z", rect)
+    e.seam("?GetGraphic@ldwImageImpl@@QAEPAUSDL_Surface@@XZ", lambda em: (0x1234, 0))
+    e.seam("?BlitRectWithAlpha@ldwGameWindowImpl@@AAEXPAUSDL_Surface@@HHHHHHMM_N@Z", lambda em: (out.append(
+        (em.sarg(1), em.sarg(2), (em.sarg(3), em.sarg(4), em.sarg(5), em.sarg(6)), round(em.farg(7), 6),
+         round(em.farg(8), 6))), (0, 40))[1])
+    e.call("?DrawScaled@ldwGameWindow@@QAEXPAVldwImageGrid@@HHHH_N@Z", [grid, x, y, cell, percent, int(centre)],
+           ecx=window)
+    return out
+
+
 # ====================================================================== butterflies and bubbles
 class InsectRig:
     """theButterflyClass::DrawButterflies, CMiniButterflyClass::Draw and CBubbles::Draw run whole; their
@@ -542,6 +570,28 @@ class InsectRig:
         self.draws = []
         e.call("?DrawButterflies@theButterflyClass@@QAEXXZ", ecx=this)
         return self.draws[index]
+
+    def bubble(self, image: int, frame: int, percent: int, x: int = 0, y: int = 0, dx: float = 0.0,
+               dy: float = 0.0) -> list:
+        """CBubbles::Draw with one live bubble of `image` at frame `frame`, size `percent`, place (x, y) moved by
+        the float (dx, dy); the world view at (0, 0)."""
+        import vf2_ui_emu as ue
+        e = self.e
+        at = ue.static_address(e, "?bubble@@3PAUSBubbleInstance@@A")        # a static of Bubbles.obj
+        bubbles = ue.static_address(e, "?Bubbles@@3VCBubbles@@A")
+        e.write(at, bytes(0x30))
+        e.w32(at, self.grids.grid(image))
+        e.write(at + 4, b"\x01")
+        e.w32(at + 0xC, x)
+        e.w32(at + 0x10, y)
+        e.w32(at + 0x14, frame)
+        e.wf(at + 0x24, dx)
+        e.wf(at + 0x28, dy)
+        e.w32(at + 0x2C, percent)
+        e.w32(bubbles + 0x10, 1)
+        self.draws = []
+        e.call("?Draw@CBubbles@@QAEXXZ", ecx=bubbles)
+        return self.draws
 
     def mini(self, row: int, frame: int, vx: int, percent: int, state: int = 1, index: int = 0) -> list:
         e = self.e

@@ -40,6 +40,7 @@ def arts(files):
 
 
 def test_the_rules():
+    assert au.tip_bob(25, au.BOB_START) == 24 and au.tip_bob(25, au.BOB_NEAREST) == 13 and au.tip_bob(25, 0.0) == 25
     assert au.tile_grid(640, 498) == (11, 9) and au.tile_grid(10, 10) == (2, 2) and au.tile_grid(53, 47) == (2, 2)
     assert au.tile_grid(54, 47) == (2, 2) and au.tile_grid(117, 110) == (3, 2) and au.tile_grid(117, 111) == (3, 3)
     assert [c for c, _x, _y in au.tiled_draws(200, 120)] == [8, 1, 1, 0, 3, 7, 7, 2, 5, 4, 4, 6]
@@ -49,9 +50,10 @@ def test_the_rules():
 
 @needs_game
 def test_the_catalogue(arts):
-    assert len(arts) == 3 * len(au.BUTTONS) + 4 + len(au.SLIDER_LEVELS) + len(au.DIALOGS) + 1 + 6 + 2
+    assert len(arts) == 3 * len(au.BUTTONS) + 4 + len(au.SLIDER_LEVELS) + len(au.DIALOGS) + 1 + 6 + 2 + 2 + 8 + 3
     for art in arts.values():
-        assert art.used and art.checked and art.key.startswith("ui/")
+        assert art.used == (not art.key.startswith("ui/tip/arrow/right/")), art.key
+        assert art.checked and art.key.startswith("ui/")
         assert art.category.split("/")[0] in gp.CATEGORY_ORDER
     assert arts["ui/button/296/pressed"].layers[0].rect == (290, 0, 435, 34)
     assert arts["ui/dialog/options"].layers[0].rect == (512, 0, 576, 64)          # top left corner first
@@ -340,6 +342,143 @@ def test_the_message_boxes_are_the_games(files, arts):
         draws = _message_draws(rig, dialog, seen, True, image, 2)
         want = au.message_box_layers(files, 350, image, title, body_h)
         assert ue.as_layers(files, draws) == ue.art_layers(gp.Art("x", "x", "x", want, True, "")), (title, body_h)
+
+
+# ------------------------------------------------------------------ tips, mouse pointers, the focus ring
+@pytest.fixture(scope="module")
+def tips():
+    import vf2_ui_emu as ue
+    return ue.TipRig(OBJ_DIR, GAME_DIR)
+
+
+def _moved(layers, dx, dy):
+    return [(d[0], d[1], d[2], d[3] - dx, d[4] - dy, d[5]) for d in layers]
+
+
+@needs_code
+def test_the_tip_boxes_are_the_games(files, arts, tips):
+    import vf2_ui_emu as ue
+    tips.font = au.EXAMPLE_TIP
+    tips.init(1, 500, 300)
+    assert ue.as_layers(files, tips.box()) == ue.art_layers(arts["ui/tip/box"])
+    tips.init(2, 500, 300, string_id=0x851, scene=0)                 # a tutorial instruction on the play screen
+    assert tips.seen["setpos"] == (0, 0)                             # put at the top
+    assert ue.as_layers(files, tips.box()) == ue.art_layers(arts["ui/tip/instruction"])
+    # other sizes follow the same rule (and an instruction off the play screen is an ordinary tip)
+    for font, sid, scene in (((90, 20, 20), 0x800, 1), ((2000, 200, 20), 0x800, 1), ((300, 100, 20), 0x845, 0),
+                             ((300, 100, 25), 0x86D, 0), ((300, 70, 20), 0x845, 0),((300, 100, 20), 0x86E, 0), ((300, 40, 20), 0x845, 3)):
+        tips.font = font
+        tips.init(1, 0, 0, string_id=sid, scene=scene)
+        want = au.tip_box_layers(files, *font, instruction=0x845 <= sid <= 0x86D and scene == 0)
+        assert ue.as_layers(files, tips.box()) == ue.art_layers(gp.Art("x", "x", "x", want, True, "")), (font, sid)
+    tips.font = au.EXAMPLE_TIP
+
+
+@needs_code
+def test_the_tip_arrows_are_the_games(files, arts, tips):
+    import vf2_ui_emu as ue
+    tips.font = au.EXAMPLE_TIP
+    assert not (tips.init(0, 500, 300) or tips.arrow(au.BOB_START))   # direction 0: no arrow
+    for direction, (image, way) in au.ARROWS.items():
+        tips.init(direction, 500, 300)
+        for phase, key in ((au.BOB_FARTHEST, "far"), (au.BOB_NEAREST, "near")):
+            got = _moved(ue.as_layers(files, tips.arrow(phase)), 500, 300)
+            assert got == ue.art_layers(arts[f"ui/tip/arrow/{way}/{key}"]), (way, key)
+        # every phase the bob takes (5 degrees a frame) lies between the two pictures
+        w, h = files.size(gp.cell_of(files, image, 0)[0])
+        amount = (h if direction < 3 else w) // 4
+        near, far = au.tip_bob(amount, au.BOB_NEAREST), au.tip_bob(amount, au.BOB_FARTHEST)
+        for k in range(0, 160, 3):
+            phase = -360.0 + 5 * k
+            x, y = _moved(ue.as_layers(files, tips.arrow(phase)), 500, 300)[0][3:5]
+            assert (x, y) == au.arrow_place(files, direction, phase), (way, phase)
+            assert near <= au.tip_bob(amount, phase) <= far
+    # a blockage tip's arrow goes to CDecal::ShowArrow (the world), not to the screen
+    tips.init(3, 500, 300, string_id=0x879, world=True)
+    assert tips.arrow(au.BOB_START) == [] and tips.seen["decal"] == [(378, 524, 250)]
+
+
+@needs_code
+def test_no_tip_has_a_right_arrow():
+    """The directions every tip is given: CTutorialTip::Reset's table run in Unicorn, and the pushes before every
+    other ConfigureTip call and every theTipDialog made outside CTutorialTip::Display (which passes the table's)."""
+    import vf2_people_emu as pe
+    import vf2_ui_emu as ue
+    callers = {(o, f) for o, f, _s in ue.references(OBJ_DIR, "?ConfigureTip@CTutorialTip@@")
+               if not f.startswith(("__", "?ConfigureTip@"))}
+    assert callers == {("TutorialTip", "?Reset@CTutorialTip@@QAEXXZ"),
+                       ("TutorialTip", "?ConfigBlockageTip@CTutorialTip@@QAEXW4StringId@@UldwPoint@@@Z"),
+                       ("AdoptionScene", "?HandleMessage@CAdoptionScene@@UAE_NHJ@Z"),
+                       ("theGameState", "?Load@theGameState@@UAE_NH@Z")}
+    makers = {(o, f) for o, f, _s in ue.references(OBJ_DIR, "??0theTipDialog@@QAE@W4StringId@@W4ArrowDirection")
+              if not f.startswith("__") and o != "theTipDialog"}
+    assert makers == {("TutorialTip", "?Display@CTutorialTip@@QAEHW4StringId@@PAVldwScene@@@Z"),
+                      ("FamilyTreeScene", "?UpdateScene@CFamilyTreeScene@@MAEXXZ")}
+    e = pe.Emu(OBJ_DIR, ["TutorialTip"])
+    e.seam("?Get@theGameState@@SAPAV1@XZ", lambda em: (em.alloc(0x30000), 0))
+    e.seam("?GetWideScreenOffsetX@theGameState@@QAEHXZ", lambda em: (0, 0))
+    tip = e.addr("?TutorialTip@@3VCTutorialTip@@A")
+    e.write(tip, b"\x55" * 0x720)
+    e.call("?Reset@CTutorialTip@@QAEXXZ", ecx=tip)
+    assert {e.s32(tip + 0x20 * k + 8) for k in range(0x36)} == {0, 1, 2, 3}
+    e.call("?ConfigBlockageTip@CTutorialTip@@QAEXW4StringId@@UldwPoint@@@Z", [0x879, 10, 20], ecx=tip)
+    assert e.s32(tip + 0x20 * (0x879 - 0x844) + 8) == 3
+    for obj, fn in callers | makers:
+        if obj == "TutorialTip":
+            continue
+        code = ue._object(OBJ_DIR, obj)
+        for name, s, start, end, relocs in ue._functions(code):
+            if name != fn:
+                continue
+            ins = ue._disasm(code, s, start, end)
+            for k, i in enumerate(ins):
+                target = next((relocs[a] for a in range(i.address, i.address + i.size) if a in relocs), "")
+                if i.mnemonic == "call" and ("ConfigureTip" in target or "??0theTipDialog" in target):
+                    pushed = {w.op_str for w in ins[max(0, k - 16):k] if w.mnemonic == "push"}
+                    assert "4" not in pushed and pushed & {"1", "2", "3"}, (obj, hex(i.address), pushed)
+
+
+@needs_code
+def test_the_mouse_pointers_are_the_games(files, arts):
+    import vf2_ui_emu as ue
+    rig = ue.UiRig(OBJ_DIR, GAME_DIR, ["theMainScene"])
+    at = ue.static_address(rig.e, "?UI_HandCursorHotSpot@@3UldwPoint@@B")
+    hot = (rig.e.s32(at), rig.e.s32(at + 4))
+    assert hot == au.HOT_SPOT
+    stores = ue.image_stores(OBJ_DIR, "theMainScene", "??0theMainScene@@AAE@XZ")
+    assert stores[0xC8] == 2 and stores[0xCC] == 1
+    for image, key in ((1, "open"), (2, "held")):
+        for mouse in ((300, 200), (5, 7)):
+            draws = ue.pointer_draws(OBJ_DIR, 0x1000 + image, hot, mouse)
+            got = [("draw", gp.cell_of(files, image, 0)[0], gp.cell_of(files, image, 0)[1], x - mouse[0],
+                    y - mouse[1], 1.0) for _i, x, y in draws]
+            assert [d[0] for d in draws] == [0x1000 + image]
+            assert got == ue.art_layers(arts[f"ui/cursor/{key}"]), (key, mouse)
+    # which member each SetCursor call passes: open hand on making and mouse up, closed hand on mouse down
+    for fn, member in (("??0theMainScene@@AAE@XZ", 0xCC), ("?HandleMouseUp@theMainScene@@IAE?B_NUldwPoint@@@Z", 0xCC),
+                       ("?HandleMouseDown@theMainScene@@IAE?B_NUldwPoint@@@Z", 0xC8)):
+        code = ue._object(OBJ_DIR, "theMainScene")
+        for name, s, start, end, relocs in ue._functions(code):
+            if name != fn:
+                continue
+            ins = ue._disasm(code, s, start, end)
+            k = next(k for k, i in enumerate(ins) if any("SetCursor" in relocs.get(a, "")
+                                                          for a in range(i.address, i.address + i.size)))
+            image = ins[k - 1]
+            assert image.mnemonic == "push" and (image.op_str == f"dword ptr [esi + {member:#x}]" or (
+                member == 0xCC and image.op_str == "eax" and "mov dword ptr [edi + 0xcc], eax" in
+                [f"{w.mnemonic} {w.op_str}" for w in ins[k - 6:k]])), (fn, image.op_str)
+
+
+@needs_code
+def test_the_focus_ring_is_the_games(files, arts):
+    import vf2_ui_emu as ue
+    assert {obj for obj, _fn in ue.image_sites(OBJ_DIR, au.FOCUS_RING)} == {"VillagerManager"}
+    assert ue.image_stores(OBJ_DIR, "VillagerManager", "?LoadAssets@CVillagerManager@@QAEXXZ")[0x20] == au.FOCUS_RING
+    draws = ue.focus_ring_draws(OBJ_DIR, GAME_DIR, at=(100, 200))
+    name, rect = gp.cell_of(files, au.FOCUS_RING, 0)
+    assert [("draw", name, rect, x - 100, y - 200, a) for _n, x, y, a in draws] == \
+        ue.art_layers(arts["ui/icon/focus-ring"])
 
 
 @needs_code
