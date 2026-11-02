@@ -435,8 +435,8 @@ def _divide_error(e, target, run):
 
 def test_poll_result_division_faults_on_zero_total_votes():
     """The dialog's own instructions +0x1E5..+0x1F7: percent = votes1 * 100 / totalVotes."""
+    em = _emu_mod()          # skips without the objects or unicorn, before unicorn is imported
     from unicorn.x86_const import UC_X86_REG_EAX, UC_X86_REG_EBP, UC_X86_REG_EBX
-    em = _emu_mod()
     e = em.Emu(OBJ_DIR, ["CommunityEventDialog"])
     entry = e.addr("??0CCommunityEventDialog@@QAE@HHHHHH@Z")
     frame, this = e.alloc(0x100), e.alloc(0x1000)
@@ -501,8 +501,8 @@ def test_the_alignment_editor_is_never_shown(inventory):
 # ------------------------------------------------------------------------------------------ the bank dialog
 
 def _bank_rig(money, history):
+    em = _emu_mod()          # skips without the objects or unicorn, before unicorn is imported
     from unicorn.x86_const import UC_X86_REG_XMM0
-    em = _emu_mod()
     e = em.Emu(OBJ_DIR, ["BankDialog"])
     window, rects = e.alloc(0x100), []
     e.seam("?Get@ldwGameWindow@@SAPAV1@XZ", lambda e: (window, 0))
@@ -726,17 +726,22 @@ def test_the_documents_describe_it():
 
 # --------------------------------------------------------------------------------- the shipped executable
 
-def _pattern(obj_name, fn):
-    code, _relocs = _code_of(obj_name, fn)
+def _pattern(obj_name, fn, obj_dir=None):
+    """The function's bytes (to its section's end, so a patched function's appended stub too), relocations
+    masked."""
     em = _emu_mod()
-    obj = em.CoffObject(OBJ_DIR / f"{obj_name}.obj")
-    masked = set()
+    obj = em.CoffObject(Path(obj_dir or OBJ_DIR) / f"{obj_name}.obj")
     for name, s, start, end in _functions(obj):
         if name == fn:
-            for va, _si, _t in obj.sections[s - 1]["relocs"]:
+            sec = obj.sections[s - 1]
+            code = obj.data[sec["ptr"] + start:sec["ptr"] + end]
+            masked = set()
+            for va, _si, _t in sec["relocs"]:
                 if start <= va < end:
                     masked.update(range(va - start, va - start + 4))
-    return re.compile(b"".join(b"." if k in masked else re.escape(bytes([b])) for k, b in enumerate(code)), re.S)
+            return re.compile(b"".join(b"." if k in masked else re.escape(bytes([b]))
+                                       for k, b in enumerate(code)), re.S)
+    raise KeyError(fn)
 
 
 SHIPPED_SAME = [
@@ -752,17 +757,23 @@ SHIPPED_SAME = [
 ]
 
 
-def test_a_shipped_executable_runs_this_code():
+def test_a_shipped_executable_runs_this_code(patched_line):
     """With VF2_CORE_EXE (path or glob): every function run above is in it exactly once (relocations aside).
-    An executable built with this branch holds the patched DrawLine instead of the stock one."""
+    DrawLine is either the stock one (an executable built before this fix) or, exactly once, the patched one:
+    its detour, the whole 0x21-byte stub and the .vf2bugs reference (a build with this fix); never neither."""
     if not CORE_EXE:
         pytest.skip("VF2_CORE_EXE is not set to a shipped core executable")
     pefile = pytest.importorskip("pefile")
+    out, _manifest = patched_line
+    fixed = _pattern("ldwGameWindow", LINE, out)
     paths = sorted(glob.glob(CORE_EXE)) or [CORE_EXE]
     for path in paths:
         pe = pefile.PE(path, fast_load=True)
         text = next(s.get_data() for s in pe.sections if s.Name.rstrip(b"\0") == b".text")
         for obj_name, fn in SHIPPED_SAME:
             hits = len(_pattern(obj_name, fn).findall(text))
-            # a build with this fix carries DrawLine with its 12 bytes replaced: the stock pattern is gone
-            assert hits == 1 or (fn == LINE and hits == 0), (path, fn, hits)
+            if fn == LINE:
+                patched = len(fixed.findall(text))
+                assert (hits, patched) in ((1, 0), (0, 1)), (path, hits, patched)
+            else:
+                assert hits == 1, (path, fn, hits)
