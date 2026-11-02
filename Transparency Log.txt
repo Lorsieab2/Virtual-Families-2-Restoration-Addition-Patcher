@@ -462,6 +462,14 @@ Changelog
   one the running game can reach with a zero. Checked under emulation; never
   tested in a running game.
 
+- Fix Vanilla Game Bugs, pet animation file closed twice (after B205; owner
+  decision 2 November 2026): at every start the game reads the pets' link
+  points from Assets\petanimpts.dat and closed that file twice, which the C
+  runtime treats as an error on a stream it has already freed. Now it is
+  closed once; the points read are exactly the same. One small stub beside
+  the loading code, behind the .vf2bugs byte; nothing is written to disk.
+  Checked under emulation; never tested in a running game.
+
 - Time Controls, Time Warp price (after B205; owner decision 1 November
   2026): the Time Warp button (+3 years) in the Time Controls window now costs
   the same as the store's own Time Warp. The Time Controls DLL asks the game

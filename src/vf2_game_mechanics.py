@@ -933,6 +933,12 @@ def facts() -> list[Fact]:
     add(_f(CAREERS_GROUP, "A career is picked at random from 132 (38 in the kitchen, 57 in the office, 37 in the "
                           "workshop) and starts at level 0.", C, "spec 7: CVillagerSkills::Reset 0x4CB410"))
     add(_f(CAREERS_GROUP, "Levels: " + ", ".join(LEVELS) + ".", C, "spec 7"))
+    add(_f(CAREERS_GROUP, "The workshop's four benches show work in progress while someone works there. Benches 3 and 4 "
+                          "ask for a third picture of workWork1.png and workdocs.png, which hold two each, so they show "
+                          "the first picture of each instead (an original-game quirk, left as it is).", C,
+           "the WorkshopWorkstation2/3 props draw image 277 (workWork1.png) and 278 (workdocs.png), 2 columns x 1 "
+           "row, at cell 2; ldwImageGrid::GetCellRect(2) lands on cell 0 (the Picture Maker's workshop entries, "
+           "src/vf2_art_house.py)"))
     add(_f(CAREERS_GROUP, "Salary: paid every 3 age units (30 minutes of game time), a quarter of the career's salary each "
                           "time (half the salary per hour of game time), whether or not the person is at work.", E, "spec 2, 7: 0x4C452E"))
     add(_f(CAREERS_GROUP, "Each piece of work succeeds with a chance of 56.25% for a Beginner rising to 100% for a "
