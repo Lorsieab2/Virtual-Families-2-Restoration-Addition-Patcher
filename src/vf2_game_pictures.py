@@ -290,6 +290,11 @@ def decode(path: Path, data_: bytes | None = None) -> pi.Image:
     raise pi.PictureError(f"{path.name} is not a picture the Picture Maker can read")
 
 
+def load_picture(path) -> pi.Image:
+    """A picture file's pixels (see `decode`)."""
+    return decode(Path(path))
+
+
 class GameFiles:
     """The pictures of one game folder, found as Windows finds them (ignoring case), decoded once."""
 
