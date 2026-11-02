@@ -677,3 +677,20 @@ def test_a_long_name_box_draws_a_fitted_copy(world):
             want = _fit(font, whole, avail)
         assert drawn == [T.encode(want)]
         assert w.text(impl) == T.encode(whole)                     # the box keeps its whole text
+
+
+def test_a_changed_long_names_byte_keeps_the_unicode_text(exe, dlls):
+    """The long names are their own group: an executable whose SetCanEdit differs gets the Unicode text's ten writes
+    and not the long names' two (never nothing at all)."""
+    if not (OBJS / "ldwTextControl.obj").is_file():
+        pytest.skip("no desktop objects (work/desktop_obj_files)")
+    import gen_b200_unicode_sites as G
+    from test_b200_unicode_dll import World
+    at = G.resolve_names(G.Exe(exe), G.load_name_pins(OBJS))["sites"]["SET_CAN_EDIT"]
+    w = World(exe, dlls[1])
+    w.e.write(at + 0x45, bytes([w.e.read(at + 0x45, 1)[0] ^ 0x5A]))
+    status, writes = w.plan(1)
+    assert status == 1 and len(writes) == 10
+    out = w.e.alloc(4 * 32)
+    w.e.call(w.e.dll_export("B200Unicode_TestNames"), (out,))
+    assert w.e.r32(out) == 0
