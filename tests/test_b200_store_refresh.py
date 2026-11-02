@@ -193,7 +193,10 @@ def test_exporter_settings():
         assert needle.lower() in f["description"].lower(), needle
     for sid, sec in (("r_refreshes_store", ".vf2rfsh"), ("expanded_flea_market", ".vf2flea")):
         assert X.RUNTIME_FLAG_SECTION_BY_SETTING[sid] == sec
-        assert sid in X.SOURCE_BACKED_OPTIONAL_SETTINGS and sid in X.FINAL_PLAYTEST_DEFAULT_ON_SETTINGS
+        assert sid in X.SOURCE_BACKED_OPTIONAL_SETTINGS
+    # The release profile turns on only what the table turns on (All 36 is off by default since B206).
+    assert "r_refreshes_store" in X.FINAL_PLAYTEST_DEFAULT_ON_SETTINGS
+    assert "expanded_flea_market" not in X.FINAL_PLAYTEST_DEFAULT_ON_SETTINGS
     assert X.STORE_REFRESH_INI_TEXT == "[Patches]\r\nRefreshKey=1\r\n"
     assert X.STORE_REFRESH_DLL_NAME == S.DLL_NAME and X.STORE_REFRESH_INI_NAME == S.INI_NAME
 

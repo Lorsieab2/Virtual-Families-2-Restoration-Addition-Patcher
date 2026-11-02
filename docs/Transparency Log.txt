@@ -3609,6 +3609,87 @@ Server error text overflows a reply handler's buffer (Fix Vanilla Game Bugs, B20
   each linked executable must hold six stubs, each reached by exactly one
   call. Static and emulated evidence only; the game was never run.
 
+Divide-by-zero audit; a zero-length rain streak (Fix Vanilla Game Bugs, after B205)
+-----------------------------------------------------------------------------------
+
+- Why: Virtual Families 1's bank dialog (CBankingDlg) divides its 7-day chart
+  by int(v / 5 + v) with no guard, so $0 crashes it; the owner ordered "Make
+  sure the bank crash bug isn't in any game!!!" (2026-11-01).
+- Audit: all 185 integer div/idiv instructions in the 164 desktop object
+  files (84 functions) are pinned in tests/test_divide_by_zero_audit.py with
+  a verdict each: 16 sites have an immediate divisor; 74 are guarded (the
+  code tests or forces the divisor first, e.g. ldwGameState::GetRandom
+  returns 0 for n <= 0 before rand() % n, so every count-of-things caller is
+  safe; the blits' box-filter counts are do-while trip counts); 49 divide by
+  the game's own data, checked to be >= 1 (the 95 achievement targets, the
+  29 built-in and anims.dat's 104 villager animations' frame counts, the 19
+  pet animations, every shipped furniture map's width, the image table's
+  column and row counts) or by fixed image and font sizes; 16 divide by
+  scroll ranges or sizes fixed when a scene is built, used only while a drag
+  that needs them > 0 runs (the store's range is 0 for a short page, but its
+  drag starts only when it is > 0 and every mouse-up ends it); 2 divide by
+  the game speed (every writer stores 1, 2, 5, 10, 20, those + 999, or 10
+  for 0); 16 are in the alignment editor's input and its drop-down (built at
+  load, never shown: nothing sets scene 4); 9 are dead (no caller chain from
+  WinMain); 1 is latent (CCommunityEventDialog: percent = votes * 100 / totalVotes from
+  a poll result of LDW's server; polls are asked only after a login, which
+  the server can no longer give; the instructions fault with totalVotes 0
+  under emulation); 2 were reachable (below). BankDialog.obj and Money.obj
+  hold no integer division: VF2's bank chart divides in floating point, so
+  $0 draws bars of 0x80000000 height (clipped), but never faults.
+- Stock bug: ldwGameWindowImpl::DrawLine (colour overload; its only caller is
+  CRain::Draw) fades alpha along the longer axis with (alpha difference << 8)
+  / (2 x max(|dx|, |dy|)): idiv [ebp-0Ch] at +0x19E or idiv ebx at +0x1A3. A
+  line whose ends are one point divides by 0. CRain::Reset (from
+  CWeather::SetCurrent) gives each drop a random head and a speed of 10-11
+  across but keeps the tail; CRain::Update moves the tail to the head.
+  CWeather::Update updates the rain before it may call SetCurrent(rain), and
+  CWeather::Draw runs after it in the same frame, drawing as many drops as
+  the current intensity (0.5 after a game start with a weather change
+  pending; The Neighbor's Weather island event and Bottled Tropical Rain set
+  the weather from any weather). A new head on its old tail is a point: an
+  unhandled divide-by-zero. The first rain of a session has every tail at
+  (0,0) (the drops' constructor).
+- Fix: patch_zero_length_line_guard in work/patch_mobile_furniture_pack.py
+  replaces DrawLine +0x199..+0x1A4 (cmp edx,ebx; cdq; jle; idiv [ebp-0Ch];
+  jmp; idiv ebx) with a jump to a 0x21-byte stub appended to its section
+  that repeats them, except that with the .vf2bugs byte 1 and ebx 0 (then
+  edx is 0 too: both ends one point) it skips the idiv, as if dividing by 1.
+  The quotient is only the per-step fade; the line's first pixel is drawn
+  before either loop, and both loops end at once for a point, so the
+  zero-length line draws its one pixel. With the byte 0 the stub runs the
+  stock instructions.
+- Evidence: tests/test_divide_by_zero_audit.py runs the stock DrawLine on an
+  800 x 600 surface: (0,0)-(0,0) and (250,120)-(250,120) fault at +0x1A3;
+  the patched one with the byte 1 changes exactly one pixel (the same as a
+  2-pixel line's first) and with the byte 0 faults at the stub's idiv; 11
+  lines x 3 alpha pairs give the stock pixels byte for byte with either
+  byte. CRain's constructor and Reset run under emulation leave drop 0 as
+  (0,0)-(0,0) when its new head is (0,0). With VF2_CORE_EXE the B205 core
+  executable holds every function run there byte for byte (relocations
+  aside). Static and emulated evidence only; the game was never run.
+- Weather follow-up (owner, 2026-11-01: "check for any weather divide by
+  zero bugs"): every weather object was gone through by name (CRain, CSnow,
+  CHail, CLightning, CFog, CSunBeam, CWind, CNight with its light sources,
+  CEnvironment, CWeather, CFloatingAnim, CDecal, CEnvironmentalSound), table
+  WEATHER in the same test. Their only integer divisions are CWeather::Random
+  (% 6) and CFloatingAnim's grid counts; only CRain draws a line (lightning
+  is a full-screen FillRect flash, so VV's lightning line bug has no VF2
+  counterpart). The other divisions are floating point, and nothing in the
+  objects unmasks a floating-point exception. The one that can divide by 0,
+  CWeather::Update's intensity / duration (duration 0 when a spell's end
+  falls exactly on a frame), gives NaN or +inf for that game second; run
+  under emulation it does not fault, Rain and Snow then draw nothing (NaN
+  fails their count compares), and Fog and SunBeam pass it as a blit alpha,
+  which BlitRectWithAlpha (run with NaN, +inf and -inf) only blends with.
+  Hail is never a weather (EWeather 0-5) and CWind's Update and Draw have no
+  caller. Light sources: SetupLightSource ignores kinds outside 1-11;
+  lsmap.dat's 23 lights are kinds 6, 8, 9 and 11, whose masks exist; the
+  three missing masks (LightSourceMask180x8, 200x10, 300x10) belong to kinds
+  only CLightSourceEditor adds, and nothing refers to that editor object but
+  its own initializer. No weather crash besides the rain streak above; no
+  further change to the executable.
+
 Time Warp costs the store's price (Time Controls, after B205)
 -------------------------------------------------------------
 
@@ -3697,3 +3778,141 @@ Cheats off by default, Free and Guaranteed Cheats, All outfits and hairstyles, p
   tests/test_offline_vf2_patcher_gui.py drives the real GUI class.
 - B206 must be built from this change: every executable gains the two
   sections and the renovation fix.
+
+Unicode text: Render Unicode with In-Game Fonts, Use Unicode Font, Game Font Text (after B205; not live tested)
+---------------------------------------------------------------------------------------------------------------
+
+- Owner requests 2026-11-01: type anything in the game's own fonts with a
+  preview and PNG export, accents and any Unicode character, glyphs made where
+  missing; the game itself shows and accepts them; one text rule for every
+  reader; two exclusive settings, Render Unicode with In-Game Fonts (default
+  on) and Use Unicode Font (overrides in-game fonts) (default off).
+- The exclusion (2026-11-01, as VF1 v1.7): ticking one unticks the other;
+  Patch Selection Settings refuses Tick These with both chosen and changes
+  nothing; the command line refuses --enable of both (resolve_exclusions).
+  tests/test_offline_vf2_patcher_gui.py and tests/test_unicode_settings.py.
+- The fonts (B200 desktop objects, the constructors run under emulation):
+  Segoe24, Segoe24Bold, Segoe32Bold, Segoe36Bold are the only fonts; each is a
+  white sheet (Images\<name>.png, 16 alpha levels) and a glyph table built by
+  ldwFont::Load / ldwFontImpl::Load: line heights 19, 19, 26, 29, kerning 0,
+  190 glyphs (ASCII 21h-7Fh, the space, Latin-1 A2h-FFh) and a 256-entry
+  byte map in which every other byte draws entry 0 ('!'). The sheets are
+  Segoe UI at 17 px (regular / bold), 23 px bold and 26 px bold (GDI advance
+  widths match within 4-7 px over 94 characters; 73-83% of pixels identical).
+  src/vf2_game_fonts.json holds these numbers (no game art).
+- Text pipeline: every string is char*; ldwGameWindowImpl::DrawString /
+  DrawChars, ldwGameWindow::DrawStringJustified and ldwFont::GetWidth /
+  GetNextJustifiedLine step one byte at a time, tint by ANDing each sheet
+  pixel with the colour (ldwFontImpl::GetImage, cached per colour at
+  impl+41Ch) and blit with SDL_UpperBlit (alpha FFh) or BlitRectWithAlpha.
+  Typing: CheckForEvents passes an SDL_TEXTINPUT only when it is exactly one
+  byte (HandleKey(5, 0, char)), so the original game drops every non-ASCII
+  key; ldwTextControlImpl::HandleKey appends bytes 20h-FFh while the length is
+  below its limit (SetCanEdit: 20 for player and nickname names, 18 for
+  family member names, 80 for the Family Tree note) and GetText strncpy's into
+  the field (20, 19, 80 bytes), cutting at a byte.
+- The patch (runtime/native/b200unicode, runtime/b200_unicode_sites.py): the
+  DLL finds 10 whole stock functions by their object-file bytes in all 32
+  B205 executables and B200 (runtime/tools/gen_b200_unicode_sites.py), jumps
+  from DrawString, DrawChars, GetWidth, GetNextJustifiedLine and GetText to
+  its versions (the stock functions with a character in place of a byte;
+  GetText cuts at a character), wraps DrawStringJustified (each character
+  beyond ASCII becomes one byte 80h-FFh for that call and the font's
+  GetCharSourceRect slot answers it), replaces ldwTextControlImpl's HandleKey
+  slot (a typed character is added in the stored form only if the whole text
+  fits; Backspace removes a character) and the SDL_PollEvent import slot (a
+  typed text other than one ASCII byte goes to the game one character at a
+  time as HandleKey(5, cp | 40000000h, 0), then is hidden from the stock
+  code). Glyphs: the font's sheet surface is replaced by a taller copy (stock
+  pixels unchanged), and patcher-made or Windows-drawn glyphs are added to it
+  and to every cached tinted copy when first used.
+- Evidence (emulation, not live): tests/test_vf2_game_text.py (the game's own
+  code: metrics, every byte's rectangle, width, height, DrawString, DrawChars
+  and line breaking for 156 texts x 4 fonts, and the unpatched game over every
+  UTF-8 byte); tests/test_b200_unicode_text.py (the DLL's C++ rules equal the
+  Python for about 3,000 texts); tests/test_b200_unicode_dll.py (the DLL's
+  resolver over the real B205 core, at its base and relocated; its typing,
+  GetText and SDL_PollEvent hooks; its DrawString over the real executable
+  draws the patcher's glyphs, pixel for pixel, in all four fonts).
+- Unicode Font (2026-11-01, as VF1 v1.7, its PR #55): Tools tab -> "Unicode
+  Font..." (src/vf2_unicode_font.py): the modded folder, any installed font or
+  a .ttf/.otf/.ttc file (copied into "Virtual Families 2 Patcher
+  Files\Unicode Font\"), a preview of the four game fonts, Save to
+  "Unicode Font\Unicode Font.ini" [UnicodeFont] Face=/File= (UTF-16 with a
+  BOM, so any font name; Windows' GetPrivateProfileStringW reads it back).
+  The DLL reads it in Mode 2 (else [Font] Face= in vf2unicodefont.ini), loads
+  the file with AddFontResourceExW(FR_PRIVATE), and per game font fits the size
+  (FitOverride = vf2_game_text.fit_unicode_font: the em at which "The quick
+  brown fox jumps over the lazy dog 0123456789" is as wide as the game font's
+  own glyph widths, 60-130% of the fitted Segoe UI px; the px when the face is
+  not installed) and draws every character with TA_BASELINE at the game font's
+  baseline (its top offset + Segoe UI's tmAscent). Game Font Text previews it
+  ("As Use Unicode Font draws it, with:"). offline_vf2_patcher.prepare_output_dir
+  keeps that one folder when it refreshes a modded folder. Evidence:
+  tests/test_unicode_font.py - the DLL under unicorn with real GDI (every GDI
+  call forwarded) over the real executable: DrawString places, widths and
+  alpha and GetWidth equal the preview in all four fonts for Segoe UI, Comic
+  Sans MS and Arial loaded from a file; the fitted sizes are within a step of
+  the game's widths; the tool's files, window and the refresh.
+- VF1 live-test bugs checked in VF2 (2026-11-01):
+  * Characters beyond U+FFFF: the game's SDL2.dll is 2.0.3; its WIN_WindowProc
+    ignores WM_CHAR and WM_UNICHAR and makes text from WM_KEYDOWN with
+    ToUnicode, one UTF-16 unit per key event, each written as if it were a
+    character. tests/sdl_surrogate_probe.c (opt-in, its own window, real
+    SendInput(KEYEVENTF_UNICODE)) shows U+1F44D arriving as two
+    SDL_TEXTINPUT events ED A0 BD and ED B1 8D (U+12000: ED A0 88, ED B0 80);
+    BMP characters arrive whole. The DLL typed each half as three odd letters.
+    Fixed: the poll hook joins a high half with the low half that follows (in
+    the same text or the next), and drops a half without its partner.
+  * Names cut by a smaller box: every object that calls
+    ldwTextControl::SetCanEdit was read. theVillagerScene (the family member
+    screen): Activate SetText(villager+6A64h, char[25]); HandleMessage (Done)
+    and UpdateSelection: GetText(buf, 13h) then CFamilyTree::ChangeName and
+    strncpy(villager+6A64h, buf, 19h) unless empty - a 19-24 byte name is cut
+    to 18 just by viewing it (the stock code too: emulated). Also
+    ldwTextControlImpl::SetText raises the box's limit to the text's length.
+    Fixed: the DLL hooks SetText (5 bytes, a trampoline) to mark a set-in text;
+    any text-changing key unmarks it; GetText(buf, 13h) of a marked text that
+    does not fit gives an empty text, which those callers (and CAdoptionScene /
+    CDatingScene's accept) skip. theChangePlayerDlg / theCreateNickNameDlg:
+    char[20] read with 14h; CFamilyTreeInfoDlg: the note read with 50h into
+    the record: always fit. theAlignVillagerScene is the developers' tool.
+    tests/test_name_boxes.py runs the game's own Activate, HandleMessage,
+    UpdateSelection and SetText under unicorn.
+  * Wide scripts: Cuneiform signs are up to 79 px in Segoe24 (W is 16).
+    The DLL now refuses a typed character (or plain letter) that would draw
+    the name wider than the box's limit times the font's widest plain letter.
+- Copy and Paste in Text Boxes (owner request 2026-11-01; copy_paste_text_boxes,
+  .vf2clip, default on, on in Owner's Defaults): vf2clip_b200.dll is
+  b200unicode.cpp built with B200UNICODE_CLIP (runtime/native/b200unicode/
+  b200clip.inc); its plan is the SDL_PollEvent import slot only (chained like
+  the Unicode DLL's). Focus: the first ldwTextControlImpl (vtable by RTTI)
+  that is editing in ldwEventManager's handler list, before a node that stops
+  the keys. With a Unicode setting on (vf2unicode*_b200.dll loaded and
+  installed) each clipboard cluster goes through ldwEventManager::HandleKey
+  as typing does, and a cluster taken in part is taken back whole; with both
+  off Windows-1252 bytes go straight into the box to its limit (the stock
+  HandleKey takes no byte above 7Fh). tests/test_clip_text_boxes.py.
+- Live check needed: type accented, Turkish and other letters, a dead-key accent, an Alt code, an IME
+  word and an emoji into a family member's name and a player name; see them in
+  the house, the Details screen, the Family Tree, a Random Event and the store;
+  save, quit, restart; open the same save in the B205 game (odd letters, no
+  crash); Use Unicode Font: every screen's text fits.
+
+Release profile shipped two cheats ON (B206's first export; fixed before publishing)
+------------------------------------------------------------------------------------
+
+- Every release bundle is exported with --final-playtest-all-enabled, and
+  apply_final_playtest_defaults sets default True for each setting in
+  FINAL_PLAYTEST_DEFAULT_ON_SETTINGS. That set still listed cheat_upgrades and
+  expanded_flea_market, so B206's first export shipped both ON although the
+  SETTINGS table (the owner's 1 November 2026 rule) has them OFF. A default
+  apply of that zip enabled them; the release gate passed, because it checked
+  which settings ship, never their defaults.
+- Fix: both left the set; the release profile may only turn on what the table
+  turns on (tests/test_export_offline_patch_bundle.py
+  test_the_release_profile_ships_the_tables_defaults), and the release gate now
+  compares every shipped default with the table and quarantines a bundle that
+  differs (work/gate_release_zip.py defaults_differ_from_the_table).
+- No executable changes: B206 was exported again from the same 32 executables.
+

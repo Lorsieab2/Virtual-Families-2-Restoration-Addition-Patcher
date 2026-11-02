@@ -86,7 +86,10 @@ def test_the_house_click_spots():
 
 
 def test_the_patcher_adds_one_key():
-    line = _line("The patcher adds one key, R in the store, and no hidden click")
+    line = _line("The patcher adds R in the store, the copy and paste keys in text boxes, and no hidden click")
+    clip = _line("Ctrl+V, Shift+Insert, Ctrl+C, Ctrl+Insert, Ctrl+X (patcher keys")
+    assert clip.sub and clip.label == gm.VERIFIED_E and "Copy and Paste in Text Boxes" in clip.text
+    assert "Windows-1252" in clip.text and "never reach the game as letters" in clip.text
     assert "Time Controls" in line.text and "Settings screen" in line.text
     r = _line("R (a patcher key")
     assert r.sub and r.label == gm.VERIFIED_E

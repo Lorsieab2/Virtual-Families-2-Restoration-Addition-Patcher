@@ -210,6 +210,17 @@ actions, as before. **Tools** holds:
   `src/family_tree_backgrounds/`; the evidence: `docs/family-tree-maker.md`; tests: `tests/test_family_tree.py`
   and `tests/test_family_tree_memory.py`, `tests/test_relationships.py`, `tests/test_tree_namesakes.py`,
   `tests/test_tree_big_speed.py`.
+- **Game Font Text...** writes any text in the game's own four fonts and saves it as a PNG (Game size, 2x, 4x,
+  a custom size, the Picture Maker's export): a text box, the font, the game's tint colours, a wrap width, a
+  live preview drawn exactly as the game draws text (`src/vf2_game_text.py`, proved against the game's own code),
+  and a character picker (accents by language, and any Unicode character by name or code). Letters the fonts lack
+  are patcher-made in the fonts' own style and labelled "(patcher-made)". Code: `src/vf2_text_tool.py`,
+  `src/vf2_game_text.py`, `src/vf2_glyph_maker.py`, `src/vf2_glyph_render.py`, `src/vf2_game_fonts.json`.
+  "As Use Unicode Font draws it, with:" previews the text in a chosen Windows font as that setting draws it.
+- **Unicode Font...** picks the font **Use Unicode Font (overrides in-game fonts)** draws the game's text with
+  (as VF1 v1.7's): the modded game folder, any installed font (with a search) or a .ttf/.otf/.ttc file, a
+  preview of the game's four fonts drawn as the game will draw them, and Save. Code: `src/vf2_unicode_font.py`;
+  tests: `tests/test_unicode_font.py`.
 - **Picture Maker...** draws family members exactly as Virtual Families 2 draws them and saves them as PNG
   pictures with a clear background: the Fish and Plant Tycoon patcher's Picture Studio made for this game. **From
   my save** lists everyone in a family's save by where they are (at home, left home, died, earlier generations only
@@ -311,19 +322,21 @@ checked against `manifest.json`, the release notes and the owner's confirmed
 play reports; superseded claims are marked rather than deleted.*
 
 The GUI reads its checkboxes from the shipped manifest, so the exact list follows
-the release you downloaded. The next bundle offers 43 settings: B205's 41 plus two new ones.
+the release you downloaded. The next bundle offers 45 settings (B207): B206's 43 plus **Render Unicode
+with In-Game Fonts** and **Use Unicode Font (overrides in-game fonts)** (only one of the two can be on).
+The bundle after it (B207) adds **Copy and Paste in Text Boxes** (on by default): 47 defined - 2 + 1 = 46.
 
 That number is not simply the count of settings the patcher defines, which is
-44. The settings list drops any optional setting that has no packaged source
+46. The settings list drops any optional setting that has no packaged source
 assets -- in B201, as in B180, the two named just below -- and the export adds
 one setting of its own, `core_assets`, which copies the support files and
-generated assets that are not tied to a single feature. So 44 defined, less 2
-without packaged assets, plus 1 generated, is the 43 the GUI shows. (B205 and
-the final B204 rebuild: 42 - 2 + 1 = 41, the 39 of the first B204 bundles plus **All 36 Flea Market
-goods** and **R Refreshes the Store**; the next bundle adds **Free and Guaranteed Cheats** and **All
-outfits and hairstyles always for sale**, both off by default. B205's two website fixes are part of Fix
-Vanilla Game Bugs, not new settings. The first
-B204 bundles: 40 - 2 + 1 = 39. Before
+generated assets that are not tied to a single feature. So 46 defined, less 2
+without packaged assets, plus 1 generated, is the 45 the GUI shows. (The B206 bundle offers 43 settings:
+44 - 2 + 1, B205's 41 plus **Free and Guaranteed Cheats** and **All outfits and hairstyles always for
+sale**, both off by default. B205 and the final B204 rebuild, which added **All 36 Flea Market goods** and
+**R Refreshes the Store**: 42 - 2 + 1 = 41; B205's two website fixes are part of Fix Vanilla Game Bugs, not
+new settings. The first B204 bundles:
+40 - 2 + 1 = 39. Before
 the Family History log it was 39 - 2 + 1: B202's and B203's bundles offered 38 settings;
 before Up to 28 Children existed the same sum was 38 - 2 + 1: B201's bundle offered
 37 settings; before Time Controls the B198 through B200 bundles offered 36,
@@ -378,13 +391,14 @@ verified against the shipped `manifest.json`.
 - **Add VF3 TV assets and recognition** - VF3 TV furniture, private animation strips, and TV fmap recognition.
 - **Behavior Patches** - the behavior-only executable overlay. See [Behavior Patches in detail](#behavior-patches-in-detail).
 - **Text fixes** - miscellaneous string corrections.
-- **Fix Vanilla Game Bugs** (`.vf2bugs`, on) - fixes bugs in the original game's menus, its tool-tray outfits, a startup crash and an overlong server error text. You can untick it to get the stock behaviour back; it is one byte in the patched executable (plus, for the outfits, the companion DLL that byte loads), not a separate build.
+- **Fix Vanilla Game Bugs** (`.vf2bugs`, on) - fixes bugs in the original game's menus, its tool-tray outfits, a startup crash, an overlong server error text and a rare rain crash. You can untick it to get the stock behaviour back; it is one byte in the patched executable (plus, for the outfits, the companion DLL that byte loads), not a separate build.
   - **Start Over** on the title screen asks "Are you sure you want to restart the current game?" before starting a new village, instead of continuing the current one.
   - **Settings > Pause Game: Yes** while the game is already paused no longer leaves it stuck paused after one Space press. The stock game added the pause offset a second time.
   - The invisible **Change Player** click spot a little above and left of the title buttons (the Manage Games button's old position) is removed. Manage Games itself still opens Change Player.
   - The title screen refreshes every time you arrive on it, and again when Manage Games or the new-player name prompt closes. It shows the current player's name, keeps the **Manage Games** button (the stock game dropped it for the rest of the session after the last player was deleted), and labels the first button **Play** or **Continue** according to whether a village exists.
   - **Startup crash** (after B204; executables built after it carry the fix): at every start the game asks LDW's server to log in (`ldwsoftware.com/game_backend/login.php`, later `message.php` and `poll.php`), and its one reply reader reads up to 2,048 bytes into a 2,048-byte buffer and then writes an end marker one past the last byte read. LDW's server now answers with the PHP script's own source (about 3 KB), so the marker landed past the buffer and the game closed itself (error 0xC0000409) about 20 seconds after it started, whenever the reply arrived. Now the reader takes at most 2,047 bytes, so the marker always fits, and a reply that filled the buffer (cut short) or begins with `<` (a script or a web page; the server's real answers are JSON or plain text) is handed on as no reply, the path every reply handler (log in, messages, polls, votes, promo codes) already takes when the server does not answer. A short real answer is handed on unchanged. The callback was run under emulation, with a 3,125-byte PHP reply and with short real-looking answers (`tests/test_server_reply_guard.py`); **not yet tested in a running game.**
   - **Server error text** (B205): when a server answer carries an error, each of the six reply handlers (log in, messages, polls, votes, promo codes, purchases) writes a "Server error" note with that error text into a 256-byte stack buffer with an unbounded `sprintf`, so an error text longer than about 220 characters ran over the stack cookie and the game closed itself (0xC0000409). Now that one call goes through a bounded format (256 bytes, always terminated), so the note is cut to fit; a note that fits is byte for byte the original. LDW's server sends no such answer today. Every handler was run under emulation with a 1,000-character error and with short ones (`tests/test_server_error_text.py`); **not yet tested in a running game.**
+  - **Rain crash** (after B205; found by the divide-by-zero audit that followed Virtual Families 1's bank crash): the rain draws each raindrop as a short line from its head to where the head was a moment before, and the line drawing divides by the line's length. When rain starts, every drop gets a new head but keeps its old tail until the next update, and that same frame is drawn first; a drop whose new head lands exactly on its old tail is a zero-length line, a division by zero, and the game closed (rare: about one rain start in many thousands, most likely the first rain after the game starts, when every tail is at the top-left corner). Now a zero-length line draws its one pixel, as any line's first pixel is drawn; every other line is drawn exactly as before. The audit checked all 185 integer divisions in the game's code; this is the only one the running game can reach with a zero (the bank chart, which crashes Virtual Families 1 at $0, divides in floating point in Virtual Families 2 and cannot crash). The stock and fixed line drawing were run under emulation (`tests/test_divide_by_zero_audit.py`); **not yet tested in a running game.**
   - **Outfit pictures** (B204 in-place update; executables built after it carry the loader): every **Male Outfit** and **Female Outfit** in the tool tray keeps the picture it was bought with. In the original game buying an outfit copies its picture into one field per sex and the tray keeps only the item and its uses, so every outfit of a sex in the tray showed, and put on, the last one bought. A companion DLL (`vf2outfits_b200.dll`, in the Virtual Families 2 Patcher Files folder; its loader rides this setting's `.vf2bugs` byte) keeps each tray place's own picture: set when it is bought, moved with it when you rearrange the tray, used for its picture in the tray and in your hand, and given when you drop it on a family member. Each save's pictures are kept beside it in `Virtual Families 2 Patcher Data\Outfits\<save file>.dat` in the save folder (versioned and checksummed, written after the game saves, used only when it describes the save just loaded; the game's own backup of the previous save keeps its own). The save file itself is not changed. Outfits bought before the fix, or in a save without the file, show and give what they did before; a damaged file is moved aside and a file another program holds is never replaced. The patcher's own expansion outfits and hairstyles work as before. Every step was run on the B200 code under emulation (`tests/test_b200_outfit_pictures.py`); **not yet tested in a running game.**
 - **Add visible mobile version purchases** - Brokerage Account, Food Club, Health Plan, and Lucky Rock rows under Special Upgrades.
 
@@ -393,7 +407,8 @@ verified against the shipped `manifest.json`.
 **Choosing a set.** Above the list are the Virtual Villagers patcher's four buttons, each with a **?**:
 **Select All Patches** (everything but Experimental), **Default Patches** (the defaults below), **Owner's
 Defaults** (everything except Up to 28 Children: every cheat and both invisible-furniture settings, the
-transparent swap overriding the visible graphics) and **Deselect All Patches**. **Patch Selection
+transparent swap overriding the visible graphics; of the two text settings Render Unicode with In-Game
+Fonts, so Use Unicode Font stays off) and **Deselect All Patches**. **Patch Selection
 Settings...** opens a window with a search box and one tick box per patch; **Tick These** / **Untick These**
 apply the chosen patches, ticking what each needs (or unticking what needs it) as a click does.
 
@@ -401,13 +416,13 @@ apply the chosen patches, ticking what each needs (or unticking what needs it) a
 "Anything that makes villagers succeed in skills 100%, no failing, is DEFAULT off"; "Keep off by default: All
 items show in flea market/outfits/hairstyles"): **Cheat Upgrades**, **Free and Guaranteed Cheats**, **All 36
 Flea Market goods** and **All outfits and hairstyles always for sale**. Every content setting and every paid
-upgrade stays on. Next build: 43 settings, 37 on by default; the six off are those four, **Swap Invisible
+upgrade stays on. B206: 43 settings, 37 on by default; the six off are those four, **Swap Invisible
 Furniture Graphics with Transparent Graphics** (place the furniture first) and the Experimental **Up to 28
 Children**. **No AI Icons** keeps its default, but it only reskins Cheat Upgrades rows, so it takes effect
 (and the GUI ticks it) when Cheat Upgrades is ticked.
 **Fixed with it:** in every B205-and-earlier executable built without Cheat Upgrades but with Mobile
 Renovations, the store's House Renovations page listed only 10 of its 30 rows and Special Upgrades listed 30
-rows where it has 10 (20 read past the end of the list). Both pages are right in the next build.
+rows where it has 10 (20 read past the end of the list). Both pages are right in B206.
 
 B205's 41 settings (as in the final B204 rebuild): 39 arrived enabled and two arrived
 off (**Swap Invisible Furniture Graphics with Transparent Graphics**, and the
@@ -428,9 +443,9 @@ rebuild the modded folder without it.
 - **Add mobile-exclusive Random Events** (on) - all 25 authenticated mobile-exclusive Random Event records with their text and choice/result dialogs. Also restores the PC game's unused Virtual Scouts event as a random event: "OK" makes everyone celebrate and gives each villager +5 happiness; "What rats?" costs 100 food. The Power Failure event's "Take a chance" now has a 1 in 4 chance that "The food was not ok.", giving each villager a 15% chance of an upset stomach.
 - **Add mobile room renovations** (on) - 15 verified mobile renovation images (5 Bathroom 1, 3 kitchen, 5 office, 2 workshop) at their exact room-map positions, plus their store icons and the five shower-curtain variants. Bathroom 2's own art is not here: it is AI-generated and ships under **2nd Bathroom Mobile-Style Renovations** instead, so that a player who declines the AI art still gets every genuine mobile renovation.
 - **2nd Bathroom Mobile-Style Renovations (AI-Generated Art Warning)** (on) - AI-generated Bathroom 2 art, hand-edited, based on the Bathroom 1 mobile renovations. Labeled with an art warning in the GUI. **Requires Add mobile room renovations**: the Bathroom 2 renovations exist only in that executable, so the art is not installed while it is off.
-- **Cheat Upgrades** (**off by default** from the next build) - the cheat-only executable overlay, adding 43 Special Upgrade rows. Three of them (Force Successful Pregnancy, Anti-Spam Software Ownership, Rockhound Certificate Ownership) are listed only with **Free and Guaranteed Cheats** ticked too. See [Cheat Upgrades in detail](#cheat-upgrades-in-detail).
-- **Free and Guaranteed Cheats** (`.vf2free`, **off by default**; new after B205) - unlocks exactly: the **Force Successful Pregnancy** row (the next try for a baby always passes its pregnancy roll), the **Anti-Spam Software Ownership** row ($0) and the **Rockhound Certificate Ownership** row ($0), all three on the Special Upgrades page of a Cheat Upgrades executable; and a **free Time Warp** in Time Controls. Unticked, those three rows are not listed and every other row is listed in the same order (the same store-page hooks as All 36 Flea Market goods answer the page; nothing in a save changes, so a Force Successful Pregnancy bought earlier stays armed). Emulated on branch builds (`tests/test_store_page_gates_exe.py`); **not live tested**.
-- **All outfits and hairstyles always for sale** (`.vf2clth`, **off by default**; new after B205) - ticked, the Clothing and Hairstyles page lists every outfit and all 100 hairstyles (214 rows), as every earlier build did. Unticked, it is the original six rotating outfits (which already cover every base body) plus 6 rows drawn from the 100 hairstyles and 8 holiday outfits, keyed to the game's own outfit pick time, so they change when the six outfits do (every 4 game hours, a new family, or R). Items already bought keep working; nothing is saved. Emulated on branch builds; **not live tested**.
+- **Cheat Upgrades** (**off by default** since B206) - the cheat-only executable overlay, adding 43 Special Upgrade rows. Three of them (Force Successful Pregnancy, Anti-Spam Software Ownership, Rockhound Certificate Ownership) are listed only with **Free and Guaranteed Cheats** ticked too. See [Cheat Upgrades in detail](#cheat-upgrades-in-detail).
+- **Free and Guaranteed Cheats** (`.vf2free`, **off by default**; new in B206) - unlocks exactly: the **Force Successful Pregnancy** row (the next try for a baby always passes its pregnancy roll), the **Anti-Spam Software Ownership** row ($0) and the **Rockhound Certificate Ownership** row ($0), all three on the Special Upgrades page of a Cheat Upgrades executable; and a **free Time Warp** in Time Controls. Unticked, those three rows are not listed and every other row is listed in the same order (the same store-page hooks as All 36 Flea Market goods answer the page; nothing in a save changes, so a Force Successful Pregnancy bought earlier stays armed). Emulated on branch builds (`tests/test_store_page_gates_exe.py`); **not live tested**.
+- **All outfits and hairstyles always for sale** (`.vf2clth`, **off by default**; new in B206) - ticked, the Clothing and Hairstyles page lists every outfit and all 100 hairstyles (214 rows), as every earlier build did. Unticked, it is the original six rotating outfits (which already cover every base body) plus 6 rows drawn from the 100 hairstyles and 8 holiday outfits, keyed to the game's own outfit pick time, so they change when the six outfits do (every 4 game hours, a new family, or R). Items already bought keep working; nothing is saved. Emulated on branch builds; **not live tested**.
 
 **Experimental rule changes** (each gated by its own one-byte runtime flag, which stays
 zero until you enable the setting -- note the SETTINGS themselves ship enabled in the
@@ -441,7 +456,7 @@ release bundle, like almost everything else)
 - **Older Villager Mortality Curve** (`.vf2mort`) - replaces only the annual old-age death roll with a calibrated curve that accelerates past effective age 110. Active food groups still subtract 0-4 effective years. No hard maximum age.
 - **Store Scroll Bar** (`.vf2scrl`) (on) - adds a scroll bar to the store.
 - **All 36 Flea Market goods** (`.vf2flea`, an Optional patch; on by default in B204-B205, **off by
-  default** from the next build; new in the final B204 rebuild) - the store's Flea Market lists all 36 of its goods at all times, as every patched build before
+  default** since B206; new in the final B204 rebuild) - the store's Flea Market lists all 36 of its goods at all times, as every patched build before
   it did. This used to be
   built in; it is now one byte in the patched executable read by the two Flea Market hooks
   (`VF2GetExpandedFleaMarketCount` / `VF2GetExpandedFleaMarketItem`). Unticked, both hooks step aside and the
@@ -459,6 +474,70 @@ release bundle, like almost everything else)
   Software (installed) or Rockhound Certificate still shows its owned checkmark while it can be
   bought again. The patcher's `GetNumAvailable` hook answers "in stock" and writes nothing, so the
   save's counts are kept and count again the moment the setting is unticked.
+- **Render Unicode with In-Game Fonts** (`.vf2utxt`, Optional, **on by default**; new in B207, needs the
+  B207 executables) and **Use Unicode Font (overrides in-game fonts)** (`.vf2ufnt`, Optional, **off by default**).
+  The two cannot be on together: ticking one unticks the other in the GUI, Patch Selection Settings refuses Tick
+  These with both chosen, the command line refuses `--enable` of both, and the
+  bundle's settings say so (`"excludes"`). Both install the companion DLL `vf2unicode_b200.dll` (the second under
+  the name `vf2unicodefont_b200.dll`, so each setting removes only its own files):
+  - **what the game can show**: every Unicode character (U+0000..U+10FFFF, beyond U+FFFF too): accents,
+    Latin Extended, Turkish ı İ ğ ş, Vietnamese, Greek, Cyrillic, CJK, Hangul, Cuneiform, symbols and emoji, in
+    every text the game draws (names, dialogs, the store, events, tips): its four fonts (Segoe24, Segoe24Bold,
+    Segoe32Bold, Segoe36Bold: the only fonts the game has) have ASCII and Latin-1; 2,123 more characters per font
+    are **patcher-made** (`Virtual Families 2 Patcher Files\Unicode Text\<font>.png` + `.txt`, made at export
+    from the original game's own font pictures: accented letters composed from the game's own letters and accents,
+    the rest drawn in the fonts' own style), and anything else is drawn when first needed from the first Windows
+    font that has it (Segoe UI, Segoe UI Historic, Segoe UI Symbol, Segoe UI Emoji, the CJK fonts, Nirmala UI,
+    Ebrima ..., Noto if installed) at the game font's fitted size, weight and alpha levels, else a box. Emoji are
+    drawn in one colour (the text's), not in full colour;
+  - **typing**: the game's text boxes take every character the keyboard sends (accented keys, dead keys, Alt
+    codes, an input method); the original game drops all of them (`CheckForEvents` only passes a one-byte
+    `SDL_TEXTINPUT`). A character is added only if the whole name still fits the box; Backspace removes a whole
+    character (an emoji with its skin tone too); copying a name to its save field never cuts inside a character;
+  - **saves**: the names stay in their own fields. Text of ASCII and Latin-1 letters is stored one byte per letter
+    exactly as before (the original game and older tools show it); anything else is UTF-8. The one rule is
+    `src/vf2_game_text.py`, which every patcher reader and writer uses (logs, Family Tree, Rename Family, Copy
+    Player Slot, the tools). The original game shows UTF-8 names as odd letters (Ã© for é) and never crashes
+    (`tests/test_vf2_game_text.py` runs its own drawing code over every byte);
+  - **Use Unicode Font** draws every character, ASCII too, with the font chosen with **Unicode Font...** on the
+    Tools tab (Segoe UI when none), then the same fallback for missing characters. Each game font keeps its line
+    height, baseline (TA_BASELINE at Segoe UI's baseline) and weight; its size is fitted so "The quick brown fox
+    jumps over the lazy dog 0123456789" is as wide as the game font draws it, within 60-130% of the fitted Segoe UI
+    size (as VF1 v1.7), so screens keep their layout. The choice is
+    `Virtual Families 2 Patcher Files\Unicode Font\Unicode Font.ini` `[UnicodeFont] Face=` / `File=` (UTF-16, any
+    font name; a font file is copied into that folder and loaded with `AddFontResourceExW(FR_PRIVATE)`, for the
+    game only); without it, `Face=` in `vf2unicodefont.ini`. Patching the same modded folder again keeps the
+    `Unicode Font` folder.
+  - Evidence: the game's own DrawString / DrawChars / GetWidth / GetHeight / GetNextJustifiedLine run under
+    emulation give exactly what `src/vf2_game_text.py` gives for every single-byte text; the DLL's own C++ text
+    rules equal the Python for thousands of texts; and the DLL's DrawString, run under emulation over the real B205
+    executable, draws the same glyphs at the same places with the same pixels as the patcher; with Use Unicode
+    Font (real GDI under emulation, `tests/test_unicode_font.py`) the same for Segoe UI, Comic Sans MS and Arial
+    loaded from a font file, in all four fonts.
+  - **characters beyond U+FFFF typed the Windows way** (an emoji or Cuneiform from an input method, the touch
+    keyboard or `SendInput(KEYEVENTF_UNICODE)`): the game's SDL2.dll (2.0.3) makes text from each WM_KEYDOWN one
+    UTF-16 unit at a time and sends the two halves as two text events (`ED A0..AF xx`, `ED B0..BF xx`); the DLL
+    joins them into the one character and never types a half (`tests/sdl_surrogate_probe.c` shows the real
+    SDL2.dll's events; `tests/test_b200_unicode_dll.py`).
+  - **viewing never shortens a name**: the family member screen shows a member's name (char[25], up to 24 bytes)
+    in an 18-byte box and on Done or choosing another member copies `GetText(buf, 13h)` (18 bytes) over the name, so
+    the stock game would cut a longer name just by showing it. The DLL hooks `ldwTextControlImpl::SetText`; a text
+    the game set and the player has not changed that does not fit is never cut (GetText gives an empty text, which
+    those callers skip). Every screen with an editable box was checked (`tests/test_name_boxes.py`: the game's own
+    screen code under emulation; player names, char[20], and the Family Tree note always fit).
+  - **wide scripts fit**: a typed name is never wider than the widest name the stock game allows in that box (its
+    limit in the font's widest plain letter); a wider character (a Cuneiform sign is up to five W wide) is refused.
+- **Copy and Paste in Text Boxes** (`.vf2clip`, Optional, **on by default**; new after B206, needs the B207
+  executables) - while you type in one of the game's text boxes: **Ctrl+V** or **Shift+Insert** pastes the
+  clipboard at the end of the text, **Ctrl+C** or **Ctrl+Insert** copies the box's whole text, **Ctrl+X** cuts it.
+  Line breaks and tabs in pasted text become a space each; other control characters and lone surrogates are left
+  out; a paste stops at the box's own limit at whole characters. With either Unicode text setting on any character
+  is pasted (each through the box's own HandleKey, so the stored form and the width cap apply); with both off only
+  Windows-1252 characters, one byte each. The keys do nothing anywhere else and never reach the game as letters.
+  The companion DLL `vf2clip_b200.dll` is the Unicode text source built with `B200UNICODE_CLIP`
+  (`build_b200unicode.bat clip`): it replaces only the SDL_PollEvent import slot. Evidence: `tests/test_clip_text_boxes.py`
+  (the DLL with the game's own event manager and text box code under emulation, at the limit and one past it with
+  guard bytes). Not live tested.
 - **R Refreshes the Store** (`.vf2rfsh`, an Optional patch and a cheat, **on by default**; new in the final
   B204 rebuild) - in the store, press **R** (or Shift+R) to pick the store's random items again, the
   game's own way and with the game's own odds:
@@ -556,8 +635,8 @@ release bundle, like almost everything else)
 - **Add optional song mods** - optional music replacements.
 - **No AI Icons** - requires Cheat Upgrades; swaps the late Special Upgrade icons for non-AI artwork.
 
-**Almost everything in the release bundle is on by default.** From the next
-build, 37 of 43 settings arrive enabled when you pick **Default Patches**; the
+**Almost everything in the release bundle is on by default.** Of B206's 43
+settings, 37 arrive enabled when you pick **Default Patches**; the
 six off are the four cheats above, **Swap Invisible Furniture Graphics with
 Transparent Graphics**, and **Up to 28 Children**, which is Experimental and
 which **Select All Patches** leaves off too (B205: 39 of 41 on). The `(on)` marks below are therefore not an exhaustive index --

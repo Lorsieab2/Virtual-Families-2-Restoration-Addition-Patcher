@@ -14776,7 +14776,7 @@ class HolidayOrnamentGateTests(unittest.TestCase):
             self.assertEqual(set(contract["fixes"]), {
                 "TitleMenuStartOverConfirms", "SettingsPauseYesIdempotent",
                 "TitleMenuStaleHotspot", "TitleMenuRefresh", "ServerReplyGuard",
-                "ServerErrorTextBounded",
+                "ServerErrorTextBounded", "ZeroLengthLineGuard",
             })
             for key in contract["fixes"]:
                 self.assertEqual(manifest[key]["status"], "installed")
@@ -14784,7 +14784,7 @@ class HolidayOrnamentGateTests(unittest.TestCase):
 
         self.with_temp_patched_objs(["theMenuScene.obj", "theOptionsDialog.obj", "WebClientPlatform.obj",
                                      "LogIn.obj", "RetrieveMessage.obj", "Poll.obj", "Vote.obj", "PromoCode.obj",
-                                     "MicroTransaction.obj"], run)
+                                     "MicroTransaction.obj", "ldwGameWindow.obj"], run)
         # The exporter emits a .vf2bugs post-asset record, so every tool that
         # enumerates runtime flags has to know the section (Codex, PR #412).
         import export_offline_patch_bundle as exporter

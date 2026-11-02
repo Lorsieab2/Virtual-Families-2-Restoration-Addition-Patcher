@@ -85,6 +85,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
+import vf2_family_history as family_history
 import vf2_rename_family as rename
 import vf2_save_backup as save_backup
 import vf2_save_reader as reader
@@ -448,7 +449,7 @@ def history_record(old: str, new: str, source: int, when: datetime, number: int)
     """Rename Family's "Family Renamed" record, with the slot the family was copied from."""
     text = (f"[{when:%Y-%m-%d %H:%M:%S}] Family Renamed {number}\r\n"
             f"  Old name: {old or '(no name)'}\r\n  New name: {new}\r\n  Copied from: Save {source}\r\n\r\n")
-    return text.encode("latin-1")
+    return family_history.log_bytes(text)
 
 
 def _plan_patcher_folder(plan: CopyPlan, when: datetime) -> None:
@@ -487,7 +488,7 @@ def _plan_patcher_folder(plan: CopyPlan, when: datetime) -> None:
     if history and old != plan.new_name:
         number = 1
         for entry in history:
-            text = entry.data.decode("cp1252", errors="replace")
+            text = family_history.log_text(entry.data)
             number = max([number] + [int(n) + 1 for n in rename._RENAMED.findall(text)])
         newest = max(history, key=lambda item: _history_number(item.path.relative_to(out)))
         prefix = b"" if not newest.data or newest.data.endswith(b"\n") else b"\r\n"

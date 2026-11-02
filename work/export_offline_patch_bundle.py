@@ -15,6 +15,7 @@ import json
 import re
 import shutil
 import struct
+import sys
 import tempfile
 from pathlib import Path
 from typing import Any, Callable
@@ -34,6 +35,13 @@ GUI_TOOL_FILES = (
     "vf2_game_mechanics.py",
     "vf2_game_mechanics_window.py",
     "vf2_save_reader.py",
+    "vf2_game_text.py",          # the one text rule every save and log reader / writer uses
+    "vf2_unicode_tables.py",     # its Unicode tables (the Unicode text DLL has the same ones)
+    "vf2_glyph_render.py",       # Game Font Text: characters the game fonts lack, drawn in their style (GDI)
+    "vf2_glyph_maker.py",        # Game Font Text: the patcher-made letters
+    "vf2_game_fonts.json",       # Game Font Text: the four game fonts' metrics (numbers only, no game art)
+    "vf2_text_tool.py",          # Game Font Text: the window
+    "vf2_unicode_font.py",       # Unicode Font: the window that picks Use Unicode Font's font
     # The Family Tree Maker (the Tools tab's link): the family, the log and tree file readers, the picture, the
     # editor, and the owner's backgrounds and logos beside them (FAMILY_TREE_ASSETS).
     "vf2_genealogy.py",
@@ -105,13 +113,17 @@ FINAL_PLAYTEST_DEFAULT_ON_SETTINGS = frozenset({
     "mobile_renovations",
     "mobile_sound_assets",
     "mobile_furniture_behaviors",
-    "cheat_upgrades",
     "ai_generated_bathroom2_renovations",
     "time_controls",
     "family_history",
     "r_refreshes_store",
-    "expanded_flea_market",
+    "render_unicode_in_game_fonts",
+    "copy_paste_text_boxes",
 })
+# cheat_upgrades and expanded_flea_market left this set on 1 November 2026: every release bundle is
+# exported with this profile, so listing them shipped both ON although the SETTINGS table had them OFF
+# (the owner's rule: cheats off by default). The profile may only turn on what the table turns on;
+# EveryPatchDefaultsOn pins that, and the release gate compares the shipped defaults with the table.
 # up_to_28_children is Experimental: the final playtest profile leaves it off too, like Enable All.
 # Empty by design. The owner's standing instruction is that a playtest ships
 # with every patch on -- "make sure your playtests ship and compile with every
@@ -358,6 +370,9 @@ SOURCE_BACKED_OPTIONAL_SETTINGS = {
     "expanded_flea_market",
     "free_guaranteed_cheats",
     "all_outfits_hairstyles",
+    "render_unicode_in_game_fonts",
+    "use_unicode_font",
+    "copy_paste_text_boxes",
 }
 EXECUTABLE_OVERLAY_OPTIONAL_SETTINGS = {
     "island_events",
@@ -466,7 +481,7 @@ SETTINGS = [
     {
         "id": "fix_vanilla_game_bugs",
         "label": "Fix Vanilla Game Bugs",
-        "description": "Fixes bugs in the original game. Start Over on the title screen asks before restarting instead of just continuing the current game. Choosing Pause Game: Yes in Settings while already paused no longer leaves the game stuck paused after one Space press. The invisible Change Player click spot above the title buttons is removed. The title screen now always shows the current player's name, keeps the Manage Games button, and labels the first button Play or Continue correctly. The game no longer closes by itself about 20 seconds after it starts: at every start it asks LDW's server to log in, and the server now answers with about 3 KB of text, more than the game's 2 KB reply space; that answer is now read safely and ignored, as if the server had not answered. A long error text in a server answer can no longer crash the game either. Every Male Outfit and Female Outfit in the tool tray keeps the picture it was bought with: in the original game every outfit of a sex in the tray shows, and puts on, the last one bought. The pictures are kept beside each save in Virtual Families 2 Patcher Data\\Outfits; the save file itself is not changed, and outfits bought before this fix show what they showed before. Installs a small companion DLL (vf2outfits_b200.dll) in the Virtual Families 2 Patcher Files folder next to the game; unticking the setting removes it.",
+        "description": "Fixes bugs in the original game. Start Over on the title screen asks before restarting instead of just continuing the current game. Choosing Pause Game: Yes in Settings while already paused no longer leaves the game stuck paused after one Space press. The invisible Change Player click spot above the title buttons is removed. The title screen now always shows the current player's name, keeps the Manage Games button, and labels the first button Play or Continue correctly. The game no longer closes by itself about 20 seconds after it starts: at every start it asks LDW's server to log in, and the server now answers with about 3 KB of text, more than the game's 2 KB reply space; that answer is now read safely and ignored, as if the server had not answered. A long error text in a server answer can no longer crash the game either, and neither can a raindrop drawn as a single point when rain starts (rare). Every Male Outfit and Female Outfit in the tool tray keeps the picture it was bought with: in the original game every outfit of a sex in the tray shows, and puts on, the last one bought. The pictures are kept beside each save in Virtual Families 2 Patcher Data\\Outfits; the save file itself is not changed, and outfits bought before this fix show what they showed before. Installs a small companion DLL (vf2outfits_b200.dll) in the Virtual Families 2 Patcher Files folder next to the game; unticking the setting removes it.",
         "default": True,
         "category": "main",
     },
@@ -629,6 +644,29 @@ SETTINGS = [
         "id": "r_refreshes_store",
         "label": "R Refreshes the Store",
         "description": "Cheat: in the store, press R (or Shift+R) to pick the store's random items again, the game's own way, with the game's own odds. On the Clothing and Hairstyles page R picks the six Discount, Department and Designer outfits again, and with All outfits and hairstyles always for sale unticked the 6 rotating hairstyle and holiday-outfit rows change with them (ticked, every hairstyle is listed, so those stay); outfits you already bought keep their own looks. On the Flea Market page R always picks 5 new goods: R always redraws; with All 36 Flea Market goods on you won't see a change in the Flea Market list. R does nothing on any other page or outside the store, never touches On Sale, and does nothing while a box (the buy box, the bank, a message) is open. Installs a small companion DLL in the Virtual Families 2 Patcher Files folder next to the game; unticking the setting removes it and the game is unmodified again.",
+        "default": True,
+        "category": "optional",
+    },
+    {
+        "id": "render_unicode_in_game_fonts",
+        "label": "Render Unicode with In-Game Fonts",
+        "description": "The game shows and accepts every letter and character: accents (é ñ ş ı İ ğ), other alphabets (Greek, Cyrillic, Japanese, Chinese, Korean ...), symbols and emoji, in names and everywhere text appears. Type them with your keyboard's own keys, dead keys, Alt codes or an input method. Characters the game's own fonts lack are drawn in the same fonts' style: patcher-made letters (accents made from the game's own letters) and, for anything else, Windows' own fonts at the game font's size. A name still fits its field: a letter that would not fit is not added. Saves keep plain bytes: names with only Latin letters (é, ü ...) are stored exactly as before, so the original game shows them too; other names show as odd letters in the original game, never a crash. Cannot be on together with Use Unicode Font (overrides in-game fonts). Installs a small companion DLL and the patcher-made letters in the Virtual Families 2 Patcher Files folder next to the game; unticking the setting removes them and the game is unmodified again.",
+        "default": True,
+        "category": "optional",
+        "excludes": ["use_unicode_font"],
+    },
+    {
+        "id": "use_unicode_font",
+        "label": "Use Unicode Font (overrides in-game fonts)",
+        "description": "Every text in the game is drawn with a Windows font instead of the game's own four fonts, at each font's height and weight, sized so a line is as wide as before and screens keep their layout (Segoe UI unless you pick another with Unicode Font... on the Tools tab: any installed font or a font file), with Windows' other fonts for any character it lacks. Typing, names and saves work as with Render Unicode with In-Game Fonts. Cannot be on together with Render Unicode with In-Game Fonts. Installs a small companion DLL in the Virtual Families 2 Patcher Files folder next to the game; unticking the setting removes it and the game is unmodified again.",
+        "default": False,
+        "category": "optional",
+        "excludes": ["render_unicode_in_game_fonts"],
+    },
+    {
+        "id": "copy_paste_text_boxes",
+        "label": "Copy and Paste in Text Boxes",
+        "description": "While you type in one of the game's text boxes (a name, the Family Tree note): Ctrl+V or Shift+Insert pastes, Ctrl+C or Ctrl+Insert copies the box's whole text, Ctrl+X cuts it. Line breaks and tabs in pasted text become spaces, other control characters are left out, and a paste stops at the box's own limit, never inside a character. With either Unicode text setting on, any character can be pasted; with both off, only the letters the original game can store (Windows-1252). The keys do nothing anywhere else and never reach the game as letters. Works with or without the Unicode text settings. Installs a small companion DLL in the Virtual Families 2 Patcher Files folder next to the game; unticking the setting removes it and the game is unmodified again.",
         "default": True,
         "category": "optional",
     },
@@ -1141,6 +1179,9 @@ RUNTIME_FLAG_SECTION_BY_SETTING = {
     "up_to_28_children": ".vf2kids",
     "family_history": ".vf2hist",
     "r_refreshes_store": ".vf2rfsh",
+    "render_unicode_in_game_fonts": ".vf2utxt",
+    "use_unicode_font": ".vf2ufnt",
+    "copy_paste_text_boxes": ".vf2clip",
     "expanded_flea_market": ".vf2flea",
     "free_guaranteed_cheats": ".vf2free",
     "all_outfits_hairstyles": ".vf2clth",
@@ -1599,6 +1640,196 @@ def store_refresh_asset_patches(
             "remove_when_disabled": True,
             "requires": ["core_executable", "r_refreshes_store"],
             "note": note + " Disabling R Refreshes the Store removes only this exact file.",
+        })
+    return records
+
+
+def unicode_text_post_asset_patches(
+    executable_sources: list[Path],
+    *,
+    output_exe_name: str,
+    build_manifest_data: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """The dormant Unicode text bytes (.vf2utxt, .vf2ufnt) and Copy and Paste in Text Boxes' (.vf2clip), each set
+    by its own setting."""
+    records: list[dict[str, Any]] = []
+    for key, setting_id, label in (
+        ("UnicodeText", "render_unicode_in_game_fonts", "Render Unicode with In-Game Fonts"),
+        ("UnicodeFont", "use_unicode_font", "Use Unicode Font (overrides in-game fonts)"),
+        ("ClipBoard", "copy_paste_text_boxes", "Copy and Paste in Text Boxes"),
+    ):
+        contract = build_manifest_data.get(key)
+        if not isinstance(contract, dict):
+            continue
+        runtime_flag = contract.get("runtime_flag")
+        if not isinstance(runtime_flag, dict):
+            raise ValueError(f"Build manifest has an invalid {key} contract.")
+        records += setting_runtime_flag_post_asset_patches(
+            executable_sources,
+            output_exe_name=output_exe_name,
+            runtime_flag=runtime_flag,
+            section_name=RUNTIME_FLAG_SECTION_BY_SETTING[setting_id],
+            setting_id=setting_id,
+            feature_label=label,
+        )
+    return records
+
+
+UNICODE_TEXT_DLL_NAME = "vf2unicode_b200.dll"
+UNICODE_FONT_DLL_NAME = "vf2unicodefont_b200.dll"
+UNICODE_TEXT_INI_NAME = "vf2unicode.ini"
+UNICODE_FONT_INI_NAME = "vf2unicodefont.ini"
+UNICODE_TEXT_INI_TEXT = "[Patches]\r\nMode=1\r\n"
+UNICODE_FONT_INI_TEXT = "[Patches]\r\nMode=2\r\n[Font]\r\nFace=Segoe UI\r\n"
+UNICODE_GLYPH_FOLDER = "Unicode Text"
+
+
+def unicode_text_asset_patches(
+    bundle_dir: Path,
+    dll_path: Path | None,
+    build_manifest_data: dict[str, Any],
+    images_dir: Path | None = None,
+) -> list[dict[str, Any]]:
+    """The Unicode text companion DLL, under one name per setting, with each setting's ini; and, for Render Unicode
+    with In-Game Fonts, the patcher-made letters ("Unicode Text\\<font>.png" + ".txt" for the four game fonts),
+    made here from the original game's own font pictures (src/vf2_glyph_maker.py: Windows/GDI needed).
+
+    The two settings are exclusive and each removes only its own files, so the same DLL ships twice: the
+    executable's .vf2utxt loader loads vf2unicode_b200.dll, its .vf2ufnt loader vf2unicodefont_b200.dll. A build
+    without the loaders (B205 and earlier) has no UnicodeText contract and gets no records.
+    """
+    text_contract = build_manifest_data.get("UnicodeText")
+    font_contract = build_manifest_data.get("UnicodeFont")
+    if not isinstance(text_contract, dict) and not isinstance(font_contract, dict):
+        return []
+    if dll_path is None:
+        raise ValueError(
+            "This build has the Unicode text loaders; pass --unicode-text-dll with the built "
+            f"{UNICODE_TEXT_DLL_NAME} (runtime\\native\\build_b200unicode.bat) or the settings would do nothing."
+        )
+    if not dll_path.is_file() or dll_path.name != UNICODE_TEXT_DLL_NAME:
+        raise ValueError(f"--unicode-text-dll must be an existing {UNICODE_TEXT_DLL_NAME}: {dll_path}")
+    require_vf2_pe32_x86(dll_path, label="Unicode text DLL")
+    data = dll_path.read_bytes()
+    if b"B200Unicode_Startup" not in data or b"B200Unicode_TestPlan" in data:
+        raise ValueError("The Unicode text DLL must be the shipped build (exports B200Unicode_Startup, no test entry points).")
+    records: list[dict[str, Any]] = []
+
+    def stage(sub: str, name: str, payload: bytes, target: str, setting_id: str, note: str) -> None:
+        folder = bundle_dir / "payload" / sub
+        path = folder / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(payload)
+        records.append({
+            "file_path": f"{TIME_CONTROLS_PATCHER_FOLDER}/{target}",
+            "source_path": relative_posix(path.relative_to(bundle_dir)),
+            "source_sha256": sha256_file(path),
+            "source_size": path.stat().st_size,
+            "overwrite_existing": True,
+            "allow_missing_target": True,
+            "remove_when_disabled": True,
+            "requires": ["core_executable", setting_id],
+            "note": note,
+        })
+
+    if isinstance(text_contract, dict):
+        if (text_contract.get("companion_dll") != UNICODE_TEXT_DLL_NAME
+                or text_contract.get("companion_ini") != UNICODE_TEXT_INI_NAME):
+            raise ValueError("Build manifest's UnicodeText contract names another companion file.")
+        setting = "render_unicode_in_game_fonts"
+        stage("UnicodeText", UNICODE_TEXT_DLL_NAME, data, UNICODE_TEXT_DLL_NAME, setting,
+              "Render Unicode with In-Game Fonts companion DLL, loaded by the executable's dormant .vf2utxt loader. "
+              "Disabling the setting removes only this exact file.")
+        stage("UnicodeText", UNICODE_TEXT_INI_NAME, UNICODE_TEXT_INI_TEXT.encode("ascii"), UNICODE_TEXT_INI_NAME,
+              setting, "Render Unicode with In-Game Fonts switch (Mode=1) read by the companion DLL. Disabling the "
+              "setting removes only this exact file.")
+        images = Path(images_dir) if images_dir else ROOT / "work" / "vanilla_runtime_payload" / "Images"
+        if not (images / "Segoe24.png").is_file():
+            raise ValueError(f"The patcher-made letters are made from the original game's font pictures: {images} "
+                             "has no Segoe24.png.")
+        sys.path.insert(0, str(ROOT / "src"))
+        try:
+            import vf2_glyph_maker
+        finally:
+            sys.path.pop(0)
+        made = bundle_dir / "payload" / "UnicodeText" / UNICODE_GLYPH_FOLDER
+        for path in vf2_glyph_maker.write_sheets(images, made):
+            records.append({
+                "file_path": f"{TIME_CONTROLS_PATCHER_FOLDER}/{UNICODE_GLYPH_FOLDER}/{path.name}",
+                "source_path": relative_posix(path.relative_to(bundle_dir)),
+                "source_sha256": sha256_file(path),
+                "source_size": path.stat().st_size,
+                "overwrite_existing": True,
+                "allow_missing_target": True,
+                "remove_when_disabled": True,
+                "requires": ["core_executable", setting],
+                "note": "Patcher-made letters for the game font (new picture, the game's own font pictures are "
+                        "never changed). Disabling Render Unicode with In-Game Fonts removes only this exact file.",
+            })
+    if isinstance(font_contract, dict):
+        if (font_contract.get("companion_dll") != UNICODE_FONT_DLL_NAME
+                or font_contract.get("companion_ini") != UNICODE_FONT_INI_NAME):
+            raise ValueError("Build manifest's UnicodeFont contract names another companion file.")
+        setting = "use_unicode_font"
+        stage("UnicodeFont", UNICODE_FONT_DLL_NAME, data, UNICODE_FONT_DLL_NAME, setting,
+              "Use Unicode Font companion DLL (the same DLL), loaded by the executable's dormant .vf2ufnt loader. "
+              "Disabling the setting removes only this exact file.")
+        stage("UnicodeFont", UNICODE_FONT_INI_NAME, UNICODE_FONT_INI_TEXT.encode("ascii"), UNICODE_FONT_INI_NAME,
+              setting, "Use Unicode Font switch (Mode=2, Face=Segoe UI) read by the companion DLL. Disabling the "
+              "setting removes only this exact file.")
+    return records
+
+
+CLIP_DLL_NAME = "vf2clip_b200.dll"
+CLIP_INI_NAME = "vf2clip.ini"
+CLIP_INI_TEXT = "[Patches]\r\nMode=3\r\n"
+
+
+def clip_asset_patches(
+    bundle_dir: Path,
+    dll_path: Path | None,
+    build_manifest_data: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Copy and Paste in Text Boxes: vf2clip_b200.dll (runtime\\native\\build_b200unicode.bat clip) and its ini
+    (Mode=3), loaded by the executable's dormant .vf2clip loader. A build without the loader has no ClipBoard
+    contract and gets no records."""
+    contract = build_manifest_data.get("ClipBoard")
+    if not isinstance(contract, dict):
+        return []
+    if dll_path is None:
+        raise ValueError(
+            "This build has the Copy and Paste in Text Boxes loader; pass --clip-dll with the built "
+            f"{CLIP_DLL_NAME} (runtime\\native\\build_b200unicode.bat clip) or the setting would do nothing."
+        )
+    if not dll_path.is_file() or dll_path.name != CLIP_DLL_NAME:
+        raise ValueError(f"--clip-dll must be an existing {CLIP_DLL_NAME}: {dll_path}")
+    if contract.get("companion_dll") != CLIP_DLL_NAME or contract.get("companion_ini") != CLIP_INI_NAME:
+        raise ValueError("Build manifest's ClipBoard contract names another companion file.")
+    require_vf2_pe32_x86(dll_path, label="Copy and Paste DLL")
+    data = dll_path.read_bytes()
+    if b"B200Unicode_Startup" not in data or b"B200Clip_Status" not in data or b"B200Unicode_TestPlan" in data:
+        raise ValueError("The Copy and Paste DLL must be the shipped clip build (exports B200Clip_Status, no test "
+                         "entry points).")
+    records: list[dict[str, Any]] = []
+    for name, payload, note in (
+        (CLIP_DLL_NAME, data, "Copy and Paste in Text Boxes companion DLL, loaded by the executable's dormant .vf2clip "
+                              "loader. Disabling the setting removes only this exact file."),
+        (CLIP_INI_NAME, CLIP_INI_TEXT.encode("ascii"), "Copy and Paste in Text Boxes switch (Mode=3) read by the "
+                                                        "companion DLL. Disabling the setting removes only this exact file."),
+    ):
+        path = bundle_dir / "payload" / "ClipBoard" / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(payload)
+        records.append({
+            "file_path": f"{TIME_CONTROLS_PATCHER_FOLDER}/{name}",
+            "source_path": relative_posix(path.relative_to(bundle_dir)),
+            "source_sha256": sha256_file(path),
+            "source_size": path.stat().st_size,
+            "overwrite_existing": True,
+            "allow_missing_target": True,
+            "remove_when_disabled": True,
+            "requires": ["core_executable", "copy_paste_text_boxes"],
+            "note": note,
         })
     return records
 
@@ -2089,6 +2320,11 @@ def b152_runtime_flag_post_asset_patches(
             build_manifest_data=build_manifest_data,
         ),
         *all_outfits_post_asset_patches(
+            executable_sources,
+            output_exe_name=output_exe_name,
+            build_manifest_data=build_manifest_data,
+        ),
+        *unicode_text_post_asset_patches(
             executable_sources,
             output_exe_name=output_exe_name,
             build_manifest_data=build_manifest_data,
@@ -5252,6 +5488,16 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
             Path(args.store_refresh_dll).resolve() if getattr(args, "store_refresh_dll", None) else None,
             build_manifest_data,
         ))
+        asset_patches.extend(unicode_text_asset_patches(
+            bundle_dir,
+            Path(args.unicode_text_dll).resolve() if getattr(args, "unicode_text_dll", None) else None,
+            build_manifest_data,
+        ))
+        asset_patches.extend(clip_asset_patches(
+            bundle_dir,
+            Path(args.clip_dll).resolve() if getattr(args, "clip_dll", None) else None,
+            build_manifest_data,
+        ))
     # Invisible Workspace Upgrades is emitted AFTER the misc/optional visual
     # records on purpose. Records that share a target with distinct requires
     # are a layered override and the patcher applies them in manifest order,
@@ -5825,6 +6071,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--mobile-sound-assets-dir", help="Folder containing all 67 pinned mobile behavior sound .ogg files to place behind the mobile_sound_assets setting.")
     parser.add_argument("--invisible-upgrades-dir", help="Folder containing invisible upgrade .png files to place in payload/OptionalVisualMods/Invisible Upgrades and target to Images/Upgrades.")
     parser.add_argument("--original-upgrades-dir", help="Folder containing original upgrade .png files to bundle as restore/reference sources for Invisible Upgrades.")
+    parser.add_argument("--clip-dll", help="The built vf2clip_b200.dll (runtime\\native\\build_b200unicode.bat clip) to ship behind the copy_paste_text_boxes setting. Required when the build has its loader.")
+    parser.add_argument("--unicode-text-dll", help="The built vf2unicode_b200.dll (runtime\\native\\build_b200unicode.bat) to ship behind the render_unicode_in_game_fonts and use_unicode_font settings. Required when the build has the Unicode text loaders.")
     parser.add_argument("--store-refresh-dll", help="The built vf2refresh_b200.dll (runtime\\native\\build_b200refresh.bat) to ship behind the r_refreshes_store setting. Required when the build has the R Refreshes the Store loader.")
     parser.add_argument("--outfit-pictures-dll", help="The built vf2outfits_b200.dll (runtime\\native\\build_b200outfits.bat) to ship behind the fix_vanilla_game_bugs setting. Required when the build has the Outfit Pictures loader.")
     parser.add_argument("--family-history-dll", help="The built vf2history_b200.dll (runtime\\native\\build_b200history.bat) to ship behind the family_history setting. Required when the build has the Family History loader.")

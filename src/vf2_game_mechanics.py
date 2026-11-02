@@ -628,7 +628,8 @@ def _hidden_lines() -> list[Fact]:
            "theAlignPetsScene: no constructor call; ENABLE_DEBUGGER_FEATURES off in every release (docs/discoveries.md "
            "2026-07-13)"),
         # ---- the patcher
-        _f(g, "The patcher adds one key, R in the store, and no hidden click. Its Time Controls (every B201 and "
+        _f(g, "The patcher adds R in the store, the copy and paste keys in text boxes, and no hidden "
+              "click. Its Time Controls (every B201 and "
               "later build, when the Time Controls option is on) is a button on the Settings screen that opens its "
               "own window, where Enter or Esc close it. The Up to 28 Children, Family History and outfit picture "
               "additions add no input.", C,
@@ -648,6 +649,46 @@ def _hidden_lines() -> list[Fact]:
            "[scene+0D4h]; every store box: ldwDialog::DoModal(scene, false) -> SetModal, and "
            "ldwEventManager::HandleKey stops at a modal handler; all emulated (tests/test_b200_store_refresh.py)",
            sub=True),
+        _f(g, "Ctrl+V, Shift+Insert, Ctrl+C, Ctrl+Insert, Ctrl+X (patcher keys, option \"Copy and Paste in Text "
+              "Boxes\", on by default; after B206): only while you type in one of the game's text boxes (a name, "
+              "the Family Tree note). Ctrl+V or Shift+Insert pastes at the end of the text, Ctrl+C or Ctrl+Insert "
+              "copies the whole text, Ctrl+X cuts it. Line breaks and tabs in what you paste become spaces, other "
+              "control characters are left out, and a paste stops at the box's limit, never inside a letter; with "
+              "both Unicode text options off only the original game's letters (Windows-1252) are pasted. Anywhere "
+              "else these keys do nothing, as in the original game, and they never reach the game as letters.", E,
+           "vf2clip_b200.dll (runtime/native/b200unicode built with B200UNICODE_CLIP) replaces only the SDL_PollEvent "
+           "import slot: SDL_KEYDOWN/UP with KMOD_CTRL (0xC0) and 'v' 'c' 'x' / SDLK_INSERT, or KMOD_SHIFT and "
+           "SDLK_INSERT, while the first ldwTextControlImpl in ldwEventManager's key order is editing; the events are "
+           "hidden (SDL_USEREVENT); emulated with the stock HandleKey (tests/test_clip_text_boxes.py)", sub=True),
+        _f(g, "Typing a name. Unpatched game: a text box takes only keys that send one plain letter (A-Z, digits, "
+              "punctuation); accented keys, dead keys, Alt codes and input methods send nothing. The box holds up "
+              "to 20 letters for a player name, 18 for a family member and 80 for the Family Tree note, and the "
+              "game keeps 19, 18 and 79 of them. With the patcher (\"Render Unicode with In-Game Fonts\" or \"Use "
+              "Unicode Font (overrides in-game fonts)\", one of the two): every character the keyboard sends is "
+              "taken, accents, other alphabets and emoji too. Letters beyond the game's own Latin letters take "
+              "more room (2 to 4 places each), so fewer of them fit: a letter that would not fit is not added, "
+              "Backspace removes a whole letter, and the name is never cut inside a letter.", C,
+           "CheckForEvents: SDL_TEXTINPUT -> HandleKey(5, 0, char) only when strlen == 1; ldwTextControlImpl::"
+           "HandleKey appends 20h..FFh while length < [+28h]; SetCanEdit(true, 14h / 12h / 50h); GetText strncpy "
+           "14h / 13h / 50h. Patched: vf2unicode_b200.dll's SDL_PollEvent, HandleKey and GetText hooks, emulated "
+           "(tests/test_b200_unicode_dll.py)"),
+        _f(g, "Showing text. Unpatched game: its four fonts have the plain letters and the Western European ones "
+              "(é, ü, ñ, ß ...); any other byte draws as \"!\". With the patcher: every character is drawn, in the "
+              "game's own fonts where they have it, else a letter the patcher made in the same style, else a "
+              "Windows font at the same size; names saved with other alphabets show as odd letters (no crash) if "
+              "the save is opened in the unpatched game.", E,
+           "ldwFont::Load byte map (entry 0 = '!' for bytes without a glyph); DrawString / DrawChars / GetWidth / "
+           "GetNextJustifiedLine emulated against src/vf2_game_text.py (tests/test_vf2_game_text.py); the DLL's "
+           "DrawString emulated over the B205 executable (tests/test_b200_unicode_dll.py)"),
+        _f(g, "Use Unicode Font (overrides in-game fonts): every letter, the plain ones too, is drawn in the font "
+              "picked with Unicode Font... on the Tools tab (Segoe UI if none). Each of the game's four text sizes "
+              "keeps its line height and baseline, and the font is sized so \"The quick brown fox jumps over the "
+              "lazy dog 0123456789\" is as wide as the game's own letters draw it (never under 60% or over 130% "
+              "of the usual size), so screens still fit. A letter the font lacks comes from Segoe UI and the other "
+              "Windows fonts.", E,
+           "vf2unicode_b200.dll FitOverride / RenderRuntime (TA_BASELINE) = vf2_game_text.fit_unicode_font / "
+           "with_unicode_font; DrawString and GetWidth emulated with real GDI for Segoe UI, Comic Sans MS and "
+           "Arial from a file (tests/test_unicode_font.py)"),
     ]
     return out
 
@@ -1037,6 +1078,24 @@ def facts() -> list[Fact]:
                     "dividing by 6, in the order of the names above): a 4 or 5 moves on one kind half the time "
                     "(50.05%; after Snowing comes Normal), and a Normal result moves on to Sunny.", C,
            "CWeather::Reset, called only by theGameState::Init; CWeather::Random(previous)"))
+    add(_f(WEATHER, "Rain is drawn as up to 512 short streaks, each from a drop's head to where the head was a "
+                    "moment before. When rain starts every drop gets a new head but keeps its old tail until the "
+                    "next update, and that frame is drawn first (the first rain after the game starts draws "
+                    "streaks to the top-left corner for that one frame).", C,
+           "CWeather::Update: CRain::Update, then SetCurrent(rain) -> CRain::Reset (new head, speed 10-11 across "
+           "and 20-59 down, tail kept); CWeather::Draw -> CRain::Draw -> ldwGameWindow::DrawLine(colour) for "
+           "intensity x 512 drops; Reset sets the intensity to 0.5 when a change is pending at a game start"))
+    add(_f(WEATHER, WITH_PATCHER + "a rain drop whose new head lands exactly on its old tail (a streak of zero "
+                    "length) is drawn as one pixel. "
+                    "Every other streak is drawn exactly as before (part of Fix Vanilla Game Bugs).", C,
+           "patch_zero_length_line_guard: ldwGameWindowImpl::DrawLine (colour) +0x199 -> a stub that skips "
+           "idiv ebx when ebx (2 x max(|dx|, |dy|)) is 0, behind .vf2bugs; run in "
+           "tests/test_divide_by_zero_audit.py", sub=True))
+    add(_f(WEATHER, UNPATCHED + "a rain drop whose new head lands exactly on its old tail is a streak of zero length, "
+                    "and drawing it divides by zero: the game closes (very rare).", C,
+           "stock exe sha256 1582d9e8: ldwGameWindowImpl::DrawLine (colour) fades alpha by (difference << 8) / "
+           "(2 x max(|dx|, |dy|)): cmp edi,ebx at 0x404CE1, idiv ebx at 0x404CF2 with ebx 0 for a point (the "
+           "rebuilt code's idiv ebx at +0x1A3 faults under emulation for (0,0)-(0,0))", sub=True))
 
     # ------------------------------------------------------------------ Messes and malfunctions (spec 13)
     add(_f(MESSES, "Messes appear every 5 hours of game time (2.5 hours with 4 or more in the family), not "

@@ -71,12 +71,15 @@ class NameRuleTests(unittest.TestCase):
         self.assertIn("at most 19", rf.name_problem("A" * 20))
 
     def test_refused_names(self):
-        for name in ("", "   ", "CafÃ©", "Tab\there", "NEW PLAYER"):
+        # "CafÃ©" was refused under the old printable-ASCII rule; any character but a control character is a name
+        # now (the shared text rule, vf2_game_text), so it moved to test_accepted_names.
+        for name in ("", "   ", "Tab\there", "Line\nbreak", "C1\x85control", "NEW PLAYER", "\ud800half"):
             with self.subTest(name=name):
                 self.assertIsNotNone(rf.name_problem(name))
 
     def test_accepted_names(self):
-        for name in ("Lorsie", "The Smiths 2", "!@#$%^&*()_+-=", "new player", " Spaced "):
+        for name in ("Lorsie", "The Smiths 2", "!@#$%^&*()_+-=", "new player", " Spaced ", "CafÃ©", "Café",
+                     "Łukasz", "日本", "Zoë 💻"):
             with self.subTest(name=name):
                 self.assertIsNone(rf.name_problem(name))
 

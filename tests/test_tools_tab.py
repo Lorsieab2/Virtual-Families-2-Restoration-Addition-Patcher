@@ -111,7 +111,7 @@ class ToolsTabTests(unittest.TestCase):
         self.assertEqual(links, ["Back Up Saves", "Restore Saves...", "Copy Player Slot...", "Rename Family...",
                                  "Game Speed...",
                                  "Family Tree Maker...", "Game Mechanics...", "Picture Maker...",
-                                 "How to Use..."])
+                                 "Game Font Text...", "Unicode Font...", "How to Use..."])
         boxes = [str(w.cget("text")) for w in found if w.winfo_class() == "TLabelframe"]
         self.assertEqual(boxes, ["Virtual Families 2", "How to Use"])
         self.app._refresh_saves_found()
@@ -133,7 +133,7 @@ class ToolsTabTests(unittest.TestCase):
     def test_a_setting_with_a_guide_has_its_question_mark_on_its_row(self):
         import json
         self.assertEqual(guides.setting_keys(), ["family_history", "expanded_flea_market", "r_refreshes_store",
-                                                "fix_vanilla_game_bugs"])
+                                                "copy_paste_text_boxes", "fix_vanilla_game_bugs"])
         rows = [{"id": "family_history", "label": "Family History log", "description": "The log.",
                  "default": False, "category": "experimental"},
                 {"id": "time_controls", "label": "Time Controls", "description": "Speeds.", "default": True,

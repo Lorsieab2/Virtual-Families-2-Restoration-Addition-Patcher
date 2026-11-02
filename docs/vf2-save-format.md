@@ -359,8 +359,10 @@ slot-menu entry equals that slot save's gs+0x25ABC, and every empty slot holds `
 | `NEW PLAYER` | means an empty slot | Change Player compares the box with string 0xA34 (0x41F315..0x41F359) and treats a match as a new slot |
 | In-game rename | none | clicking an existing player only switches to it (0x41F370..0x41F396) |
 
-UNCONFIRMED (not traced): whether keys 0x80..0xFF reach the box from a keyboard, and which of them the
-game's font draws. Rename Family therefore accepts only printable ASCII 0x20..0x7E, 1 to 19 characters, not
-only spaces and never exactly `NEW PLAYER`; a longer name is refused, never cut. It writes the slot save's
+UNCONFIRMED (not traced): whether keys 0x80..0xFF reach the box from a keyboard. Rename Family stores the
+name with the patcher's one text rule (src/vf2_game_text.py: ASCII and Latin-1 one byte a character, anything
+else UTF-8, which the Unicode Text patch draws): any character but control characters, 1 to 19 bytes in that
+stored form (19 characters of ASCII / Latin-1), not only spaces and never exactly `NEW PLAYER`; a longer name
+is refused, never cut. It writes the slot save's
 gs+0x25ABC, the slot's entry in the settings file, and the previous save N+20 only when it still holds the
 old name, after a `Backup <date> (before rename)`.

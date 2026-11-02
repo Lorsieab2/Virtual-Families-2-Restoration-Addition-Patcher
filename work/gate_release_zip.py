@@ -205,6 +205,44 @@ def previous_release_archive(archive: Path) -> Path | None:
 EXPECTED_SETTING_COUNT = 35
 
 
+def shipped_defaults(archive: Path) -> dict[str, bool]:
+    """{setting id: default} as the packaged release's manifest ships it."""
+    try:
+        with zipfile.ZipFile(archive) as bundle:
+            manifests = sorted((n for n in bundle.namelist() if n.endswith("manifest.json")), key=len)
+            if not manifests:
+                raise UnreadableRelease(f"{archive.name} contains no manifest.json")
+            data = json.loads(bundle.read(manifests[0]).decode("utf-8", "replace"))
+        rows = data["settings"]
+        return {str(row["id"]): bool(row.get("default")) for row in rows}
+    except (zipfile.BadZipFile, OSError, ValueError, KeyError, TypeError, AttributeError) as failure:
+        raise UnreadableRelease(f"{archive.name}: {failure}") from failure
+
+
+def defaults_differ_from_the_table(archive: Path) -> str | None:
+    """The shipped defaults must be the SETTINGS table's, or None.
+
+    B206's first export shipped Cheat Upgrades and All 36 Flea Market goods ON although the table had
+    them OFF (owner, 2026-11-01: cheats off by default): every release is exported with the final
+    playtest profile, and its FINAL_PLAYTEST_DEFAULT_ON_SETTINGS forced both back on. The gate checked
+    the settings' presence, never their defaults, so it passed. A setting the table does not define
+    (core_assets, core_native_patch) is not compared.
+    """
+    import export_offline_patch_bundle as exporter
+
+    table = {row["id"]: bool(row["default"]) for row in exporter.SETTINGS}
+    shipped = shipped_defaults(archive)
+    wrong = sorted(sid for sid, default in shipped.items() if sid in table and default != table[sid])
+    if not wrong:
+        return None
+    return (
+        f"{archive.name} ships different defaults from the SETTINGS table: "
+        + ", ".join(f"{sid} ships {'ON' if shipped[sid] else 'OFF'}, the table says "
+                    f"{'ON' if table[sid] else 'OFF'}" for sid in wrong)
+        + ". Fix the export profile (FINAL_PLAYTEST_DEFAULT_ON_SETTINGS) or the table, then export again."
+    )
+
+
 def short_of_expected(archive: Path) -> str | None:
     """Fewer settings than a complete release carries, or None."""
     offered = settings_in_archive(archive)
@@ -490,6 +528,14 @@ def main() -> int:
         return quarantine(archive, f"the packaged archive is unreadable: {failure}")
     if short is not None:
         return quarantine(archive, short)
+
+    try:
+        defaults = defaults_differ_from_the_table(archive)
+    except UnreadableRelease as failure:
+        return quarantine(archive, f"the packaged archive is unreadable: {failure}")
+    if defaults is not None:
+        return quarantine(archive, defaults)
+    print("shipped defaults match the SETTINGS table")
 
     previous = earlier_releases(archive)
     if not previous:

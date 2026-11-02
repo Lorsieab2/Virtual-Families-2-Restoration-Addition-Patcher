@@ -18,6 +18,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 FIX = ROOT / "tests" / "fixtures" / "vf2_saves"
+sys.path.insert(0, str(ROOT / "src"))   # the reader decodes text with vf2_game_text, beside it in src/
 
 _spec = importlib.util.spec_from_file_location("vf2_save_reader", ROOT / "src" / "vf2_save_reader.py")
 r = importlib.util.module_from_spec(_spec)

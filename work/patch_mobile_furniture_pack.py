@@ -531,6 +531,33 @@ OUTFIT_STOCK_NEXT_PICK_OFFSET = 0x470
 # companion DLLs, once, only while .vf2bugs is 1; the DLL installs nothing unless its own pins match and
 # vf2outfits.ini says OutfitPictures=1. No generated code reads anything of it.
 OUTFIT_PICTURES_SETTING = VANILLA_BUGS_SETTING
+# Unicode text (after B205): the companion DLL vf2unicode_b200.dll (runtime/native/b200unicode), shipped under two
+# names, one per setting, because the two settings are mutually exclusive and each removes only its own files:
+# "Render Unicode with In-Game Fonts" (render_unicode_in_game_fonts, on by default: .vf2utxt loads
+# vf2unicode_b200.dll, whose vf2unicode.ini says Mode=1) and "Use Unicode Font (overrides in-game fonts)"
+# (use_unicode_font, off by default: .vf2ufnt loads vf2unicodefont_b200.dll, whose vf2unicodefont.ini says Mode=2).
+# Two dormant bytes; zero never loads the DLL. The same theGame::Init wrapper loads it after every other companion
+# DLL, once. The DLL installs nothing unless its own pins match and its ini says so. No generated code reads it.
+UNICODE_TEXT_SETTING = "render_unicode_in_game_fonts"
+UNICODE_TEXT_FLAG_SECTION = ".vf2utxt"
+UNICODE_TEXT_FLAG_SYMBOL = "_gVF2UnicodeText"
+UNICODE_TEXT_DLL_NAME = "vf2unicode_b200.dll"
+UNICODE_TEXT_INI_NAME = "vf2unicode.ini"
+UNICODE_FONT_SETTING = "use_unicode_font"
+UNICODE_FONT_FLAG_SECTION = ".vf2ufnt"
+UNICODE_FONT_FLAG_SYMBOL = "_gVF2UnicodeFont"
+UNICODE_FONT_DLL_NAME = "vf2unicodefont_b200.dll"
+UNICODE_FONT_INI_NAME = "vf2unicodefont.ini"
+UNICODE_TEXT_STARTUP = "B200Unicode_Startup"
+# Copy and Paste in Text Boxes (after B206; on by default): Ctrl+V / Shift+Insert, Ctrl+C / Ctrl+Insert and Ctrl+X in
+# the game's own text boxes. The same Unicode text source built as vf2clip_b200.dll (B200UNICODE_CLIP: it installs
+# only the SDL_PollEvent import slot), loaded by its own dormant byte (.vf2clip) before the Unicode text DLL, with or
+# without either Unicode setting; vf2clip.ini says Mode=3. Zero never loads it.
+CLIP_SETTING = "copy_paste_text_boxes"
+CLIP_FLAG_SECTION = ".vf2clip"
+CLIP_FLAG_SYMBOL = "_gVF2Clip"
+CLIP_DLL_NAME = "vf2clip_b200.dll"
+CLIP_INI_NAME = "vf2clip.ini"
 OUTFIT_PICTURES_FLAG_SECTION = VANILLA_BUGS_FLAG_SECTION
 OUTFIT_PICTURES_DLL_NAME = "vf2outfits_b200.dll"
 OUTFIT_PICTURES_INI_NAME = "vf2outfits.ini"
@@ -16408,6 +16435,36 @@ static void VF2LoadOutfitPicturesDll() {
     if (startup) startup();
 }
 
+// Unicode text loaders (see UNICODE_TEXT_* / UNICODE_FONT_* in the generator). Zero = never loads the companion
+// DLL. The two settings are exclusive; each has its own byte and its own copy of the DLL. Loaded by the same
+// wrapper, after every other companion DLL, once; nothing else reads the bytes.
+#pragma section(".vf2utxt", read, write)
+extern "C" __declspec(allocate(".vf2utxt"))
+volatile unsigned char gVF2UnicodeText = 0;
+#pragma section(".vf2ufnt", read, write)
+extern "C" __declspec(allocate(".vf2ufnt"))
+volatile unsigned char gVF2UnicodeFont = 0;
+// Copy and Paste in Text Boxes (see CLIP_* in the generator): its own byte and DLL, before the Unicode text DLL.
+#pragma section(".vf2clip", read, write)
+extern "C" __declspec(allocate(".vf2clip"))
+volatile unsigned char gVF2Clip = 0;
+
+static void VF2LoadUnicodeDll(const char *tail) {
+    unsigned short path[512];
+    unsigned long length = GetModuleFileNameW(0, path, 400);
+    if (length == 0 || length >= 400) return;
+    unsigned long cut = length;
+    while (cut > 0 && path[cut - 1] != 92) --cut;
+    if (cut == 0) return;
+    unsigned long out = cut;
+    for (const char *c = tail; *c; ++c) path[out++] = (unsigned short)(unsigned char)*c;
+    path[out] = 0;
+    void *module = LoadLibraryW(path);
+    if (!module) return;
+    void (__cdecl *startup)() = (void (__cdecl *)())GetProcAddress(module, "B200Unicode_Startup");
+    if (startup) startup();
+}
+
 extern "C" void *__cdecl VF2GameStateGetAfterTimeControlsLoad() {
     static bool tried = false;
     if (!tried) {
@@ -16417,6 +16474,9 @@ extern "C" void *__cdecl VF2GameStateGetAfterTimeControlsLoad() {
         if (gVF2FamilyHistory == 1) VF2LoadFamilyHistoryDll();
         if (gVF2StoreRefresh == 1) VF2LoadStoreRefreshDll();
         if (gVF2FixVanillaGameBugs == 1) VF2LoadOutfitPicturesDll();
+        if (gVF2Clip == 1) VF2LoadUnicodeDll("__VF2_CLIP_RELATIVE_PATH__");
+        if (gVF2UnicodeText == 1) VF2LoadUnicodeDll("__VF2_UNICODE_TEXT_RELATIVE_PATH__");
+        else if (gVF2UnicodeFont == 1) VF2LoadUnicodeDll("__VF2_UNICODE_FONT_RELATIVE_PATH__");
     }
     return theGameState::Get();
 }
@@ -18900,6 +18960,18 @@ extern "C" void __cdecl VF2ApplyVisibleSpecialUpgrade(int itemId) {
     special_upgrade_helper_cpp = special_upgrade_helper_cpp.replace(
         "__VF2_OUTFIT_PICTURES_RELATIVE_PATH__",
         TIME_CONTROLS_PATCHER_FOLDER + "\\\\" + OUTFIT_PICTURES_DLL_NAME,
+    )
+    special_upgrade_helper_cpp = special_upgrade_helper_cpp.replace(
+        "__VF2_UNICODE_TEXT_RELATIVE_PATH__",
+        TIME_CONTROLS_PATCHER_FOLDER + "\\\\" + UNICODE_TEXT_DLL_NAME,
+    )
+    special_upgrade_helper_cpp = special_upgrade_helper_cpp.replace(
+        "__VF2_UNICODE_FONT_RELATIVE_PATH__",
+        TIME_CONTROLS_PATCHER_FOLDER + "\\\\" + UNICODE_FONT_DLL_NAME,
+    )
+    special_upgrade_helper_cpp = special_upgrade_helper_cpp.replace(
+        "__VF2_CLIP_RELATIVE_PATH__",
+        TIME_CONTROLS_PATCHER_FOLDER + "\\\\" + CLIP_DLL_NAME,
     )
     special_upgrade_helper_cpp = special_upgrade_helper_cpp.replace(
         "__VF2_TIME_CONTROLS_RELATIVE_PATH__",
@@ -26357,6 +26429,92 @@ def patch_server_error_text_bounded(manifest):
     }
 
 
+# 6. A zero-length rain streak divides by zero (found by the divide-by-zero
+#    audit after VF1's bank crash, 2026-11-01; owner-approved class). The
+#    colour overload of ldwGameWindowImpl::DrawLine fades the line's alpha
+#    along its longer axis: (alpha difference << 8) / (2 * max(|dx|, |dy|)).
+#    A line whose two ends are the same point divides by 0, an unhandled
+#    integer divide-by-zero. Its only caller is CRain::Draw, which draws each
+#    raindrop from its head to the head's last position. CWeather::Update
+#    updates the rain, then may call SetCurrent(rain), whose CRain::Reset
+#    gives every drop a new random head but keeps the old tail; the same
+#    frame's CWeather::Draw then draws the drops (as many as the current
+#    intensity: 0.5 after a game start with a weather change pending; The
+#    Neighbor's Weather event and Bottled Tropical Rain set the weather from
+#    any weather), and a new head that lands exactly on its old tail is a
+#    point (very rare; the first rain of a session has every tail at (0,0)).
+#    Fixed: with the .vf2bugs byte 1 a zero-length line skips the division,
+#    as if it divided by 1 (the quotient is only the per-step fade, which a
+#    one-pixel line never uses), and draws its one pixel as a line's first
+#    pixel is always drawn. Every other line divides exactly as before.
+ZERO_LINE_FUNCTION = "?DrawLine@ldwGameWindowImpl@@QAEXHHHHUldwColor@@MM@Z"
+ZERO_LINE_SIZE = 0x377
+ZERO_LINE_DIVIDE_OFFSET = 0x199     # cmp edx,ebx; cdq; jle; idiv [ebp-0Ch]; jmp; idiv ebx
+ZERO_LINE_STOCK = bytes.fromhex("3BD3" "99" "7E05" "F77DF4" "EB02" "F7FB")
+ZERO_LINE_RESUME_OFFSET = 0x1A5     # mov ecx,eax: the quotient
+ZERO_LINE_STUB_SIZE = 0x21
+
+
+def patch_zero_length_line_guard(manifest):
+    obj_path = PATCHED / "ldwGameWindow.obj"
+    obj = CoffObject(obj_path)
+    sec = _check_function_layout(
+        obj, ZERO_LINE_FUNCTION, ZERO_LINE_SIZE,
+        {
+            # edx = 2|dx| ([ebp-0Ch]), ebx = 2|dy| ([ebp+0Ch]); eax = alpha difference << 8
+            0x135: bytes.fromhex("03D2" "895D0C"),
+            0x13E: bytes.fromhex("8955F4"),
+            0x197: bytes.fromhex("8BC1"),
+            ZERO_LINE_DIVIDE_OFFSET: ZERO_LINE_STOCK,
+            ZERO_LINE_RESUME_OFFSET: bytes.fromhex("8BC8" "BAFF000000"),
+            # the first pixel is drawn before either loop; a loop ends when its axis reaches the far end
+            0x22C: bytes.fromhex("0F842E010000"),
+            0x2D0: bytes.fromhex("0F848A000000"),
+        },
+        {
+            0xA6: ("_SDL_LockSurface", IMAGE_REL_I386_REL32),
+            0x367: ("_SDL_UnlockSurface", IMAGE_REL_I386_REL32),
+        },
+    )
+    stub_off = sec.raw_size
+    resume = lambda at: struct.pack("<i", ZERO_LINE_RESUME_OFFSET - (stub_off + at + 5))
+    stub = bytearray()
+    stub += b"\x3B\xD3"                                   # +00 cmp edx,ebx (stock)
+    stub += b"\x99"                                       # +02 cdq
+    stub += b"\x7E\x08"                                   # +03 jle +0D
+    stub += b"\xF7\x7D\xF4"                               # +05 idiv dword [ebp-0Ch] (x is the longer axis)
+    stub += b"\xE9" + resume(0x08)                        # +08 jmp +1A5
+    stub += b"\x80\x3D\0\0\0\0\x00"                       # +0D cmp byte [flag],0
+    stub += b"\x74\x04"                                   # +14 je +1A (fix off: stock)
+    stub += b"\x85\xDB"                                   # +16 test ebx,ebx
+    stub += b"\x74\x02"                                   # +18 je +1C: both ends one point, no division
+    stub += b"\xF7\xFB"                                   # +1A idiv ebx (stock)
+    stub += b"\xE9" + resume(0x1C)                        # +1C jmp +1A5
+    assert len(stub) == ZERO_LINE_STUB_SIZE
+    _install_detour(
+        obj, sec.index, ZERO_LINE_DIVIDE_OFFSET, len(ZERO_LINE_STOCK), stub_off, stub,
+        ((0x0F, VANILLA_BUGS_FLAG_SYMBOL, IMAGE_REL_I386_DIR32),),
+    )
+    obj.write(obj_path)
+    manifest["ZeroLengthLineGuard"] = {
+        "status": "installed",
+        "offline_patcher_setting": VANILLA_BUGS_SETTING,
+        "function": ZERO_LINE_FUNCTION,
+        "branch": hex(ZERO_LINE_DIVIDE_OFFSET),
+        "stub_offset": hex(stub_off),
+        "rule": (
+            "a line whose ends are one point (2*max(|dx|,|dy|) == 0) skips the idiv (quotient = numerator, "
+            "as divided by 1; unused by a one-pixel line); every other line divides as before"
+        ),
+        "caller": "CRain::Draw (the only caller of this overload)",
+        "flag_off": "the stock division",
+        "stock_defect": (
+            "a zero-length raindrop (a new random head on its old tail, drawn between CRain::Reset and "
+            "CRain::Update) divided by zero: an unhandled integer divide-by-zero"
+        ),
+    }
+
+
 def patch_fix_vanilla_game_bugs(manifest):
     """Every stock-game menu fix, behind the one .vf2bugs byte."""
     patch_title_menu_start_over_confirms(manifest)
@@ -26365,6 +26523,7 @@ def patch_fix_vanilla_game_bugs(manifest):
     patch_title_menu_refresh_on_activate(manifest)
     patch_server_reply_guard(manifest)
     patch_server_error_text_bounded(manifest)
+    patch_zero_length_line_guard(manifest)
     manifest["FixVanillaGameBugs"] = {
         "status": "dormant native hooks installed in every executable",
         "offline_patcher_setting": VANILLA_BUGS_SETTING,
@@ -26385,6 +26544,7 @@ def patch_fix_vanilla_game_bugs(manifest):
             "TitleMenuRefresh",
             "ServerReplyGuard",
             "ServerErrorTextBounded",
+            "ZeroLengthLineGuard",
         ],
         "flag_off": "every site runs the stock instructions it displaced",
     }
@@ -26659,6 +26819,80 @@ def patch_all_outfits_manifest(manifest):
         "flag_off": "the six stock rotating outfit rows plus the rotating extra rows; the expansion outfits for "
                     "bodies 0-49 come round in the stock six",
         "save_format": "unchanged",
+    }
+
+
+def patch_unicode_text_manifest(manifest):
+    """Unicode text: two dormant bytes (.vf2utxt for Render Unicode with In-Game Fonts, .vf2ufnt for Use Unicode
+    Font) are compiled into every executable (special upgrade helper C++); the loader is the Time Controls wrapper
+    on theGame::Init's first call, which loads the companion DLL after every other one. Requires
+    patch_time_controls_loader."""
+    if "TimeControls" not in manifest:
+        raise RuntimeError("Unicode text rides the Time Controls loader; patch it first")
+    for key, setting, section, symbol, dll, ini, default, label in (
+        ("UnicodeText", UNICODE_TEXT_SETTING, UNICODE_TEXT_FLAG_SECTION, UNICODE_TEXT_FLAG_SYMBOL,
+         UNICODE_TEXT_DLL_NAME, UNICODE_TEXT_INI_NAME, True, "Render Unicode with In-Game Fonts"),
+        ("UnicodeFont", UNICODE_FONT_SETTING, UNICODE_FONT_FLAG_SECTION, UNICODE_FONT_FLAG_SYMBOL,
+         UNICODE_FONT_DLL_NAME, UNICODE_FONT_INI_NAME, False, "Use Unicode Font (overrides in-game fonts)"),
+    ):
+        manifest[key] = {
+            "status": "dormant loader installed in every executable",
+            "offline_patcher_setting": setting,
+            "label": label,
+            "category": "optional",
+            "default": default,
+            "excludes": UNICODE_FONT_SETTING if setting == UNICODE_TEXT_SETTING else UNICODE_TEXT_SETTING,
+            "hook": (
+                "theGame::Init's first call (theGameState::Get) -> VF2GameStateGetAfterTimeControlsLoad, which "
+                f"loads {TIME_CONTROLS_PATCHER_FOLDER}\\{dll} once when the byte is 1, after every other "
+                "companion DLL"
+            ),
+            "runtime_flag": {
+                "symbol": symbol,
+                "source_section": section,
+                "size": 1,
+                "default": "00",
+                "enabled": "01",
+                "linked_location_status": "pending_link_metadata",
+            },
+            "companion_dll": dll,
+            "companion_ini": ini,
+            "startup_export": UNICODE_TEXT_STARTUP,
+            "save_format": "unchanged: names stay in their own fields, in the patcher's one stored form",
+            "flag_off": "the DLL is never loaded: the game is the unmodified build",
+        }
+
+
+def patch_clip_manifest(manifest):
+    """Copy and Paste in Text Boxes: one dormant byte (.vf2clip) compiled into every executable; the Time Controls
+    wrapper on theGame::Init's first call loads vf2clip_b200.dll when it is 1, before the Unicode text DLL. Requires
+    patch_time_controls_loader."""
+    if "TimeControls" not in manifest:
+        raise RuntimeError("Copy and Paste in Text Boxes rides the Time Controls loader; patch it first")
+    manifest["ClipBoard"] = {
+        "status": "dormant loader installed in every executable",
+        "offline_patcher_setting": CLIP_SETTING,
+        "label": "Copy and Paste in Text Boxes",
+        "category": "optional",
+        "default": True,
+        "hook": (
+            "theGame::Init's first call (theGameState::Get) -> VF2GameStateGetAfterTimeControlsLoad, which "
+            f"loads {TIME_CONTROLS_PATCHER_FOLDER}\\{CLIP_DLL_NAME} once when the byte is 1, before the Unicode "
+            "text DLL"
+        ),
+        "runtime_flag": {
+            "symbol": CLIP_FLAG_SYMBOL,
+            "source_section": CLIP_FLAG_SECTION,
+            "size": 1,
+            "default": "00",
+            "enabled": "01",
+            "linked_location_status": "pending_link_metadata",
+        },
+        "companion_dll": CLIP_DLL_NAME,
+        "companion_ini": CLIP_INI_NAME,
+        "startup_export": UNICODE_TEXT_STARTUP,
+        "save_format": "unchanged: a pasted name is stored as a typed one",
+        "flag_off": "the DLL is never loaded: the game is the unmodified build",
     }
 
 
@@ -42717,6 +42951,10 @@ def main():
     patch_all_outfits_manifest(manifest)
     # Outfit Pictures (part of Fix Vanilla Game Bugs; the same loader loads its DLL last, on .vf2bugs).
     patch_outfit_pictures_manifest(manifest)
+    # Unicode text (.vf2utxt / .vf2ufnt; the same loader loads its DLL after every other one).
+    patch_unicode_text_manifest(manifest)
+    # Copy and Paste in Text Boxes (.vf2clip; the same loader, before the Unicode text DLL).
+    patch_clip_manifest(manifest)
     # Invisible furniture counts as its stock donor where stock code tests
     # the donor's item id (every executable).
     patch_invisible_furniture_parity(manifest)
