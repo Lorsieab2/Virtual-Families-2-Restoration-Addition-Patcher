@@ -3668,6 +3668,27 @@ Divide-by-zero audit; a zero-length rain streak (Fix Vanilla Game Bugs, after B2
   (0,0)-(0,0) when its new head is (0,0). With VF2_CORE_EXE the B205 core
   executable holds every function run there byte for byte (relocations
   aside). Static and emulated evidence only; the game was never run.
+- Weather follow-up (owner, 2026-11-01: "check for any weather divide by
+  zero bugs"): every weather object was gone through by name (CRain, CSnow,
+  CHail, CLightning, CFog, CSunBeam, CWind, CNight with its light sources,
+  CEnvironment, CWeather, CFloatingAnim, CDecal, CEnvironmentalSound), table
+  WEATHER in the same test. Their only integer divisions are CWeather::Random
+  (% 6) and CFloatingAnim's grid counts; only CRain draws a line (lightning
+  is a full-screen FillRect flash, so VV's lightning line bug has no VF2
+  counterpart). The other divisions are floating point, and nothing in the
+  objects unmasks a floating-point exception. The one that can divide by 0,
+  CWeather::Update's intensity / duration (duration 0 when a spell's end
+  falls exactly on a frame), gives NaN or +inf for that game second; run
+  under emulation it does not fault, Rain and Snow then draw nothing (NaN
+  fails their count compares), and Fog and SunBeam pass it as a blit alpha,
+  which BlitRectWithAlpha (run with NaN, +inf and -inf) only blends with.
+  Hail is never a weather (EWeather 0-5) and CWind's Update and Draw have no
+  caller. Light sources: SetupLightSource ignores kinds outside 1-11;
+  lsmap.dat's 23 lights are kinds 6, 8, 9 and 11, whose masks exist; the
+  three missing masks (LightSourceMask180x8, 200x10, 300x10) belong to kinds
+  only CLightSourceEditor adds, and nothing refers to that editor object but
+  its own initializer. No weather crash besides the rain streak above; no
+  further change to the executable.
 
 Time Warp costs the store's price (Time Controls, after B205)
 -------------------------------------------------------------

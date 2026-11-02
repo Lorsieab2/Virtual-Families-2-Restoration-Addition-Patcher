@@ -705,6 +705,294 @@ def test_rain_is_the_only_caller_and_a_new_drop_keeps_its_old_tail():
     assert {d[4] for d in drops} <= {10, 11} and min(d[5] for d in drops) >= 20
 
 
+# ------------------------------------------------------------------------------------------ every weather path
+# The owner's follow-up ("check for any weather divide by zero bugs", 2026-11-01): every weather object's
+# functions, by name. Their integer divisions are the ones in AUDIT (CWeather::Random's 6 and CFloatingAnim's grid
+# counts); everything else divides in floating point (no fault: nothing in the objects unmasks a floating-point
+# exception), and every float -> int conversion feeds a coordinate, an alpha byte or a compare, never an index or
+# a loop count. Verdicts as in AUDIT; "FLOAT" = a float division that cannot fault.
+WEATHER = {
+    "Rain": {
+        "?Draw@CRain@@QAEXXZ": ("FIXED", "DrawLine colour overload, head to tail: ZeroLengthLineGuard; count = "
+                                         "intensity x 512 by float compare; / 60.0 constant"),
+        "?Reset@CRain@@QAEX_N@Z": ("GUARDED", "GetRandom(width/height/40/2): n <= 0 returns 0"),
+        "?Update@CRain@@QAEXXZ": ("GUARDED", "tail = head, head += speed; splashes counted by a float compare"),
+    },
+    "Snow": {
+        "?Update@CSnow@@QAEXXZ": ("GUARDED", "/ 3.0 and / 60.0 constants; settled-flake slot by a 0..255 search; "
+                                             "flake counts by float compare (NaN: none)"),
+        "?Draw@CSnow@@QAEXXZ": ("FLOAT", "/ 3.0 (a constant in xmm3); cvttss2si only to DrawScaled coordinates"),
+        "?Draw@CSnow@@QAEXH@Z": ("FLOAT", "/ 3.0, / 1600.0 constants; index = the scene list's own slot"),
+        "?LoadAssets@CSnow@@QAEXXZ": ("DATA", "image 'snowflake' present"),
+    },
+    "Hail": {
+        "?Update@CHail@@QAEXXZ": ("DEAD", "no weather type is hail (EWeather 0-5)"),
+        "?Reset@CHail@@QAEX_N@Z": ("DEAD", ""), "?Draw@CHail@@QAEXXZ": ("DEAD", ""),
+        "?Draw@CHail@@QAEXH@Z": ("NOT SHOWN", "scene entries only CHail::Update (dead) adds; / 400.0 constant"),
+    },
+    "Lightning": {
+        "?Update@CLightning@@QAEXXZ": ("GUARDED", "GetRandom; intensity compares"),
+        "?Draw@CLightning@@QAEXXZ": ("CONSTANT", "a full-screen FillRect flash: no line, no division"),
+    },
+    "Fog": {
+        "?Update@CFog@@QAEXXZ": ("FLOAT", "100.0 / (GetRandom(100) + 100), divisor 100..199"),
+        "?Draw@CFog@@QAEXXZ": ("FLOAT", "cvttss2si only to draw coordinates"),
+    },
+    "SunBeam": {
+        "?Update@CSunBeam@@QAEXXZ": ("FLOAT", "100.0 / (GetRandom(100) + 100)"),
+        "?Draw@CSunBeam@@QAEXXZ": ("FLOAT", "/ -120.0 constant"),
+    },
+    "Wind": {
+        "?Update@CWind@@QAEXXZ": ("DEAD", ""), "?Draw@CWind@@QAEXXZ": ("DEAD", "its frame index [+280h] too"),
+        "?Reset@CWind@@QAEXXZ": ("FLOAT", "/ 100.0 constant"),
+    },
+    "Night": {
+        "?Draw@CNight@@QAEXXZ": ("FLOAT", "darkness x alpha -> cvttss2si -> one colour byte; 26 lights by count"),
+        "?GetDarknessLevel@CNight@@QAEMM@Z": ("FLOAT", "/ twilight length (float)"),
+        "?CalcSunriseOrSunset@CNight@@AAEMHMM_N@Z": ("FLOAT", "astronomy: / 360.0, / 15.0 constants"),
+        "?CalcLengthOfDayWithTwilight@CNight@@AAEMHM@Z": ("FLOAT", "/ 180.0 constant"),
+        "?SetupLightSource@CNight@@AAEXPAUSLightSource@1@@Z": (
+            "GUARDED", "kind - 1 > 10 returns (test_light_source_kinds); lsmap.dat uses kinds 6, 8, 9, 11 only, "
+                       "whose masks exist; the 3 missing masks (180x8, 200x10, 300x10) are kinds only the dead "
+                       "CLightSourceEditor adds"),
+        "?DeleteLightSource@CNight@@QAEXH@Z": ("DEAD", "called only by CLightSourceEditor"),
+    },
+    "Weather": {
+        "?Update@CWeather@@QAEXXZ": ("FLOAT", "intensity = start + (target - start) x elapsed / duration; duration "
+                                              "can be 0 (SetTargetIntensity(0, seconds left < 30)): NaN or "
+                                              "clamped 1.0, read only by float compares (test_weather_intensity)"),
+        "?SetCurrent@CWeather@@QAEXW4EWeather@@H@Z": ("GUARDED", "type > 5 skips the switch; / 1000.0 constant"),
+        "?Random@CWeather@@QBE?BW4EWeather@@W42@@Z": ("CONSTANT", "% 6 (AUDIT)"),
+        "?Reset@CWeather@@QAEXXZ": ("GUARDED", "GetRandom(100)"),
+        "?Draw@CWeather@@QAEXXZ": ("GUARDED", "type > 4 skips the switch"),
+    },
+    "FloatingAnim": {
+        "?Draw@CFloatingAnim@@QBEXXZ": ("DATA", "grid row/column counts (AUDIT); rain splashes and ripples"),
+        "?Draw@CFloatingAnim@@QBEXH@Z": ("DATA", "grid row/column counts (AUDIT)"),
+    },
+    "Decal": {
+        "?AddDecal@CDecal@@QAEXPAVldwImageGrid@@HHM@Z": ("GUARDED", "a free slot by search"),
+        "?DrawDecals@CDecal@@QAEXXZ": ("GUARDED", "slots in use only"),
+    },
+    "EnvironmentalSound": {
+        "?Update@CEnvironmentalSound@@QAEXXZ": ("FLOAT", "volume falloff: float only; / 100.0 constant"),
+    },
+}
+
+
+def test_weather_objects_have_no_other_integer_division(inventory):
+    """In the weather objects only CWeather::Random and CFloatingAnim::Draw divide integers (both in AUDIT), and
+    no weather object draws a line except CRain::Draw."""
+    found, _ins = inventory
+    objs = {"Rain", "Snow", "Hail", "Lightning", "Fog", "SunBeam", "Wind", "Night", "Environment", "Weather",
+            "FloatingAnim", "Decal", "EnvironmentalSound", "LightSourceEditor"}
+    assert sorted(k for k in found if k.split("|")[0] in objs) == [
+        "FloatingAnim|?Draw@CFloatingAnim@@QBEXH@Z", "FloatingAnim|?Draw@CFloatingAnim@@QBEXXZ",
+        "Weather|?Random@CWeather@@QBE?BW4EWeather@@W42@@Z"]
+    em = _emu_mod()
+    lines = set()
+    for name in sorted(objs):
+        o = em.CoffObject(OBJ_DIR / f"{name}.obj")
+        for fn, s, start, end in _functions(o):
+            for va, si, _t in o.sections[s - 1]["relocs"]:
+                if start <= va < end and "DrawLine" in o.symbols[si][0]:
+                    lines.add(f"{name}|{fn}")
+    assert lines == {"Rain|?Draw@CRain@@QAEXXZ"}
+    for obj_name, fns in WEATHER.items():
+        o = em.CoffObject(OBJ_DIR / f"{obj_name}.obj")
+        names = {fn for fn, *_r in _functions(o)}
+        assert set(fns) <= names, obj_name
+
+
+def test_nothing_unmasks_floating_point_exceptions():
+    em = _emu_mod()
+    for path in sorted(OBJ_DIR.glob("*.obj")):
+        o = em.CoffObject(path)
+        assert not [n for n, *_r in o.symbols.values()
+                    if any(k in n for k in ("controlfp", "control87", "_clearfp", "_set_SSE2"))], path.stem
+
+
+def test_weather_intensity_divides_by_a_zero_duration_without_a_fault():
+    """CWeather::Update +0x91..+0xF6, the game's own instructions: duration 0 at 0 s elapsed gives NaN, later
+    +inf, which the clamp makes 1.0; every reader of the intensity only multiplies and compares it."""
+    em = _emu_mod()
+    from unicorn.x86_const import UC_X86_REG_EAX, UC_X86_REG_EBP, UC_X86_REG_ESI
+    e = em.Emu(OBJ_DIR, ["Weather"])
+    entry = e.addr("?Update@CWeather@@QAEXXZ")
+    weather, frame = e.alloc(0x100), e.alloc(0x100) + 0x80
+
+    def run(now, start, start_level, target, duration):
+        e.w32(weather + 0x30, start)
+        e.write(weather + 0x2C, struct.pack("<f", start_level))
+        e.write(weather + 0x24, struct.pack("<f", target))
+        e.w32(weather + 0x34, duration)
+        e.uc.reg_write(UC_X86_REG_EAX, now)
+        e.uc.reg_write(UC_X86_REG_ESI, weather)
+        e.uc.reg_write(UC_X86_REG_EBP, frame)
+        assert _divide_error(e, entry, lambda: e.uc.emu_start(entry + 0x91, entry + 0xF6)) is None
+        return struct.unpack("<f", e.read(weather + 0x28, 4))[0]
+    level = run(100, 100, 0.5, 0.0, 0)
+    assert level != level                                    # NaN: 0 x 0 / 0
+    assert run(105, 100, 0.0, 0.3, 0) == 1.0                 # +inf, clamped
+    assert abs(run(115, 100, 0.0, 0.3, 30) - 0.15) < 1e-6    # the normal case
+    readers = set()
+    capstone = pytest.importorskip("capstone")
+    md = capstone.Cs(capstone.CS_ARCH_X86, capstone.CS_MODE_32)
+    for path in sorted(OBJ_DIR.glob("*.obj")):
+        o = em.CoffObject(path)
+        for fn, s, start, end in _functions(o):
+            sec = o.sections[s - 1]
+            rel = {va: o.symbols[si][0] for va, si, _t in sec["relocs"] if start <= va < end}
+            for x in md.disasm(o.data[sec["ptr"] + start:sec["ptr"] + end], start):
+                if any(rel.get(a) == "?Weather@@3VCWeather@@A" for a in range(x.address, x.address + x.size)) \
+                        and "[0x28]" in x.op_str:
+                    readers.add((x.mnemonic, path.stem))
+    assert {m for m, _o in readers} == {"movss", "mulss"}   # loaded or multiplied in xmm, never converted in place
+    # Rain, Snow, Hail and Lightning compare it; Fog and SunBeam multiply it into a draw's alpha (next test)
+    assert {o for _m, o in readers} == {"Rain", "Snow", "Hail", "Lightning", "Fog", "SunBeam"}
+
+
+@pytest.mark.parametrize("alpha", [float("nan"), float("-inf"), float("inf"), 0.0, 0.5])
+def test_a_blit_with_any_alpha_does_not_fault(alpha):
+    """Fog and sun beams draw with alpha = intensity x their own fade (ldwGameWindow::Draw -> BlitRectWithAlpha):
+    a NaN or infinite intensity reaches the blit, which only blends with it (garbage colour for that frame at
+    worst), never indexes or divides by it."""
+    em = _emu_mod()
+    e = em.Emu(OBJ_DIR, ["ldwGameWindow"])
+    for n in ("_SDL_LockSurface", "_SDL_UnlockSurface"):
+        e.seam(n, lambda e: (0, 0))
+    e.seam("_SDL_UpperBlit", lambda e: (0, 0))
+
+    def surface(w, h, alpha_mask):
+        fmt = e.alloc(0x28)
+        for off, v in ((0x0C, 0x00FF0000), (0x10, 0x0000FF00), (0x14, 0x000000FF), (0x18, alpha_mask)):
+            e.w32(fmt + off, v)
+        e.write(fmt + 0x20, bytes((16, 8, 0, 24)))
+        e.write(fmt + 8, bytes((32, 4)))
+        buf = e.alloc(w * h * 4)
+        e.write(buf, b"\x80\x40\x20\xC0" * (w * h))
+        surf = e.alloc(0x40)
+        for off, v in ((4, fmt), (8, w), (0xC, h), (0x10, w * 4), (0x14, buf)):
+            e.w32(surf + off, v)
+        return surf
+    src, dst = surface(16, 16, 0xFF000000), surface(64, 64, 0)
+    impl = e.alloc(0x80)
+    e.w32(impl + 8, 64)
+    e.w32(impl + 0xC, 64)
+    e.w32(impl + 0x30, dst)
+    for scale in (1.0, 0.5):
+        assert _divide_error(e, 0, lambda: e.call(
+            "?BlitRectWithAlpha@ldwGameWindowImpl@@AAEXPAUSDL_Surface@@HHHHHHMM_N@Z",
+            [src, 4, 4, 0, 0, 15, 15, alpha, scale, 0], ecx=impl)) is None
+
+
+def _weather_rig(name, seams):
+    em = _emu_mod()
+    e = em.Emu(OBJ_DIR, [name])
+    window = e.alloc(0x100)
+    e.seam("?Get@ldwGameWindow@@SAPAV1@XZ", lambda e: (window, 0))
+    e.seam("?GetWidth@ldwGameWindow@@QAEHXZ", lambda e: (800, 0))
+    e.seam("?GetHeight@ldwGameWindow@@QAEHXZ", lambda e: (600, 0))
+    e.seam("?GetRandom@ldwGameState@@SAHH@Z", lambda e: (0, 0))
+    e.seam("?Reset@CWorldView@@QAEX_N@Z", lambda e: (0, 4))
+    for n, fn in seams.items():
+        e.seam(n, fn)
+    return e
+
+
+@pytest.mark.parametrize("level", [float("nan"), 0.0, 1.0])
+def test_rain_and_snow_draw_any_intensity(level):
+    """CRain::Draw and CSnow::Draw with the intensity NaN (a zero duration), 0 and 1: no fault; NaN and 0 draw
+    nothing, 1 draws the full count."""
+    lines, flakes = [], []
+    e = _weather_rig("Rain", {"?DrawLine@ldwGameWindow@@QAEXHHHHUldwColor@@MM@Z":
+                              lambda e: (lines.append(e.arg(0)), (0, 0x1C))[1]})
+    e.write(e.addr("?Weather@@3VCWeather@@A") + 0x28, struct.pack("<f", level))
+    rain = e.alloc(0x4000)
+    e.call("??0CRain@@QAE@XZ", (), ecx=rain)
+    for k in range(512):
+        e.write(rain + 0x18 * k, struct.pack("<6i", 100 + k, 100, 90 + k, 80, 10, 20))
+    e.call("?Draw@CRain@@QAEXXZ", (), ecx=rain)
+    assert len(lines) == (512 if level == 1.0 else 0)
+    e = _weather_rig("Snow", {"?DrawScaled@ldwGameWindow@@QAEXPAVldwImage@@HHMH_N@Z":
+                              lambda e: (flakes.append(e.arg(1)), (0, 0x18))[1]})
+    e.write(e.addr("?Weather@@3VCWeather@@A") + 0x28, struct.pack("<f", level))
+    snow = e.alloc(0x4000)
+    e.call("?Draw@CSnow@@QAEXXZ", (), ecx=snow)
+    assert (len(flakes) > 0) == (level == 1.0)
+
+
+MISSING_MASKS = {0x258, 0x259, 0x25B}     # LightSourceMask180x8, 200x10, 300x10: no file in the game
+
+
+def _light_kinds():
+    """CNight::SetupLightSource, run for every kind 0..12: kind -> the mask image it asks for (None: no setup)."""
+    em = _emu_mod()
+    asked = []
+    e = em.Emu(OBJ_DIR, ["Night"])
+    grid = e.alloc(0x100)
+    e.w32(grid + 8, 1)
+    e.seam("?Get@theGraphicsManager@@SAPAV1@XZ", lambda e: (grid, 0))
+    e.seam("?GetImageGrid@theGraphicsManager@@QAEPAVldwImageGrid@@W4EImage@@@Z",
+           lambda e: (asked.append(e.arg(0)), (grid, 4))[1])
+    e.seam("?GetCellRect@ldwImageGrid@@QAEXHAAUldwRect@@@Z",
+           lambda e: (e.write(e.arg(1), struct.pack("<4i", 0, 0, 100, 100)), (0, 8))[1])
+    e.seam("?GetColumnCount@ldwImageGrid@@QAEHXZ", lambda e: (1, 0))
+    e.seam("??2@YAPAXI@Z", lambda e: (e.alloc(e.arg(0)), 0))
+    e.seam("??0ldwImage@@QAE@HH_N@Z", lambda e: (e.ecx, 12))
+    kinds = {}
+    for kind in range(13):
+        light = e.alloc(0x50)
+        e.w32(light, kind)
+        asked.clear()
+        e.call("?SetupLightSource@CNight@@AAEXPAUSLightSource@1@@Z", (light,), ecx=e.alloc(0x1000))
+        kinds[kind] = asked[0] if asked else None
+    return kinds
+
+
+def test_light_source_kinds():
+    """Kinds outside 1..11 set nothing up; the masks with no file belong to kinds only
+    CLightSourceEditor::HandleKeyCharacter adds, and nothing but its own initializer refers to that editor."""
+    em = _emu_mod()
+    kinds = _light_kinds()
+    assert kinds[0] is None and kinds[12] is None and all(kinds[k] for k in range(1, 12))
+    assert {k for k, img in kinds.items() if img in MISSING_MASKS}
+    callers = set()
+    for p in sorted(OBJ_DIR.glob("*.obj")):
+        o = em.CoffObject(p)
+        for fn, s, start, end in _functions(o):
+            for va, si, _t in o.sections[s - 1]["relocs"]:
+                n = o.symbols[si][0]
+                if start <= va < end and (n.startswith("?AddLightSource@CNight") or "LightSourceEditor@@3" in n):
+                    callers.add(f"{p.stem}|{fn}")
+    assert callers == {"LightSourceEditor|?HandleKeyCharacter@CLightSourceEditor@@UAE?B_ND@Z",
+                       "LightSourceEditor|??__ELightSourceEditor@@YAXXZ"}
+
+
+def test_the_game_lights_use_masks_that_exist():
+    """lsmap.dat (the game's 26 light places, 23 used) asks only for kinds 6, 8, 9 and 11, none of them a kind
+    whose mask is missing, and every mask those kinds ask for is a file the game ships. Skipped without the
+    game's files (work/vanilla_runtime_payload or VF2_VANILLA_GAME_DIR); a payload without them fails."""
+    if not GAME_DIR.is_dir():
+        pytest.skip("work/vanilla_runtime_payload (or VF2_VANILLA_GAME_DIR) is not present")
+    path = GAME_DIR / "Assets" / "lsmap.dat"
+    assert path.is_file(), path
+    data = path.read_bytes()
+    assert len(data) == 26 * 0x50
+    used = {struct.unpack_from("<i", data, 0x50 * k)[0] for k in range(26)} - {0}
+    assert used == {6, 8, 9, 11}
+    kinds = _light_kinds()
+    asked = {kinds[k] for k in used}
+    assert not asked & MISSING_MASKS
+    sys.path.insert(0, str(ROOT / "src"))
+    import vf2_game_pictures as gp
+    files = {e["id"]: e["file"] for e in gp.data()["table"]}
+    for image in sorted(asked):
+        assert list(GAME_DIR.rglob(files[image])), (hex(image), files[image])
+    for image in MISSING_MASKS:
+        assert not list(GAME_DIR.rglob(files[image])), (hex(image), files[image])
+
+
 # --------------------------------------------------------------------------------------- docs and wiring
 
 def test_the_fix_is_part_of_fix_vanilla_game_bugs():
