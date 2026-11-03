@@ -340,16 +340,17 @@ checked against `manifest.json`, the release notes and the owner's confirmed
 play reports; superseded claims are marked rather than deleted.*
 
 The GUI reads its checkboxes from the shipped manifest, so the exact list follows
-the release you downloaded. The next bundle offers 47 settings (B207): B206's 43 plus **Render Unicode
-with In-Game Fonts** and **Use Unicode Font (overrides in-game fonts)** (only one of the two can be on),
-**Copy and Paste in Text Boxes** and **Title Screen Player Name Box** (both on by default).
+the release you downloaded. The bundle offers 48 settings (B208): B207's 47 plus **Translations**
+(on by default).
 
 That number is not simply the count of settings the patcher defines, which is
-48. The settings list drops any optional setting that has no packaged source
+49. The settings list drops any optional setting that has no packaged source
 assets -- in B201, as in B180, the two named just below -- and the export adds
 one setting of its own, `core_assets`, which copies the support files and
-generated assets that are not tied to a single feature. So 48 defined, less 2
-without packaged assets, plus 1 generated, is the 47 the GUI shows. (The B206 bundle offers 43 settings:
+generated assets that are not tied to a single feature. So 49 defined, less 2
+without packaged assets, plus 1 generated, is the 48 the GUI shows. (B207 offered 47: 48 - 2 + 1, B206's 43 plus **Render Unicode with In-Game
+Fonts**, **Use Unicode Font (overrides in-game fonts)**, **Copy and Paste in Text Boxes** and **Title Screen
+Player Name Box**. The B206 bundle offers 43 settings:
 44 - 2 + 1, B205's 41 plus **Free and Guaranteed Cheats** and **All outfits and hairstyles always for
 sale**, both off by default. B205 and the final B204 rebuild, which added **All 36 Flea Market goods** and
 **R Refreshes the Store**: 42 - 2 + 1 = 41; B205's two website fixes are part of Fix Vanilla Game Bugs, not
@@ -718,8 +719,8 @@ release bundle, like almost everything else)
 - **Add optional song mods** - optional music replacements.
 - **No AI Icons** - requires Cheat Upgrades; swaps the late Special Upgrade icons for non-AI artwork.
 
-**Almost everything in the release bundle is on by default.** Of B207's 47
-settings, 40 arrive enabled when you pick **Default Patches**; the
+**Almost everything in the release bundle is on by default.** Of B208's 48
+settings, 41 arrive enabled when you pick **Default Patches** (B207: 40 of 47); the
 seven off are the four cheats above, **Swap Invisible Furniture Graphics with
 Transparent Graphics**, **Use Unicode Font (overrides in-game fonts)** (the other
 way to show Unicode; **Render Unicode with In-Game Fonts** is on), and **Up to 28 Children**,
