@@ -10,9 +10,9 @@ Windows' clipboard as seams:
   both Unicode settings off only Windows-1252 characters go in, one byte each; with a Unicode setting on each whole
   character (grapheme cluster) goes through the box's HandleKey and one the box takes only part of is taken back;
 * at the box's limit and one past it: the text stops at the limit and the bytes after the buffer are untouched;
-* a name box (limit NAME_BOX_BYTES, the long names' own) takes at most NAME_LETTERS characters in all, counted as
-  typing counts them (over the box's text and the clipboard, in grapheme clusters), cut at a character's start, and
-  still at most NAME_BOX_BYTES bytes; a paste and typing leave the same text; any other box keeps its own limit;
+* a name box (limit NAME_BOX_BYTES, the long names' own) takes up to NAME_BOX_BYTES bytes as stored, with no
+  separate character cap (up to 1,200 one-byte characters), cut at a character's start; a paste and typing leave the
+  same text; any other box keeps its own limit;
 * the plan writes only the SDL_PollEvent import slot; the setting off plans nothing.
 """
 from __future__ import annotations
@@ -477,15 +477,14 @@ def _paste(unicode, text: bytes, clip: str) -> bytes:
     return unicode.text()
 
 
-def test_a_name_box_paste_is_cut_at_300_characters(unicode):
-    assert _paste(unicode, b"", "a" * 301) == b"a" * 300
+def test_a_name_box_paste_is_cut_at_1200_bytes(unicode):
+    """No character cap: 1,200 one-byte characters go in; the bytes as stored are the limit."""
+    assert _paste(unicode, b"", "a" * 1201) == b"a" * 1200
     unicode.clipboard = "b"                                       # full: nothing more goes in
     unicode.press(ord("v"), CTRL)
-    assert unicode.text() == b"a" * 300 and unicode.guard()
-    assert _paste(unicode, b"x" * 10, "y" * 295) == b"x" * 10 + b"y" * 290      # the box's text counts
-    assert _paste(unicode, b"", "é" * 301) == T.encode("é" * 300)      # 300 two-byte characters: 600 bytes
-    dropped = unicode.e.r32(unicode.e.dll_export("B200Clip_Status") + 24)
-    assert dropped == 1 + 1 + 5 + 1
+    assert unicode.text() == b"a" * 1200 and unicode.guard()
+    assert _paste(unicode, b"x" * 10, "y" * 1195) == b"x" * 10 + b"y" * 1190      # the box's text counts
+    assert _paste(unicode, b"", "\u00e9" * 1201) == T.encode("\u00e9" * 1200) == b"\xe9" * 1200
     unicode.box(1199, b"")                                        # not a name box: its own byte limit only
     unicode.clipboard = "a" * 350
     unicode.press(ord("v"), CTRL)
@@ -496,22 +495,28 @@ def test_a_name_box_paste_is_cut_at_1200_bytes_for_multibyte_text(unicode):
     assert _paste(unicode, b"", CUNEIFORM * 301) == T.encode(CUNEIFORM * 300)     # 300 characters = 1,200 bytes
     got = _paste(unicode, b"", FAMILY * 49)                                       # 48 x 25 bytes: the bytes stop it
     assert got == T.encode(FAMILY * 48) and len(got) == T.NAME_BOX_BYTES
-    assert T.length(T.decode(got)) == 48 < T.NAME_LETTERS
+    assert T.length(T.decode(got)) == 48
 
 
 def test_a_name_box_paste_is_cut_at_whole_characters(unicode):
-    got = _paste(unicode, b"", "é" * 301)                   # a letter and its mark: one character each
-    # the paste is composed (NFC) first, so each e + mark arrives as the one letter é
-    assert T.decode(got) == unicodedata.normalize("NFC", "e\u0301" * 300) and T.length(T.decode(got)) == T.NAME_LETTERS
-    # a mark at the clipboard's start stays with the box's last character: it is not a 301st character
-    got = _paste(unicode, T.encode("e" * 300), "́z")
-    assert T.decode(got) == "e" * 299 + "é"
-    got = _paste(unicode, T.encode("e" * 299), "́ée")     # 298 e, then two e with a mark: 300 in all
-    assert T.clusters(T.decode(got)) == ["e"] * 298 + ["e\u0301", "\u00e9"]   # the clipboard's own e + mark is composed (NFC)
+    # the paste is composed (NFC) first, so each e + mark arrives as the one letter (a single byte)
+    got = _paste(unicode, b"", "e\u0301" * 1201)
+    assert T.decode(got) == "\u00e9" * 1200 and len(got) == 1200
+    # a letter and a mark that does not compose: 3 bytes a character (UTF-8), 400 in all
+    got = _paste(unicode, b"", "q\u0301" * 401)
+    assert T.clusters(T.decode(got)) == ["q\u0301"] * 400 and len(got) == 1200
+    # a character that does not fit whole is not pasted at all (not "q" without its mark)
+    got = _paste(unicode, b"a" * 1198, "q\u0301")
+    assert got == b"a" * 1198
+    # a mark at the clipboard's start stays with the box's last character when its bytes fit
+    got = _paste(unicode, T.encode("e" * 1197), "\u0301z")
+    assert T.decode(got) == "e" * 1196 + "e\u0301" + "z" and len(got) == 1200
+    got = _paste(unicode, T.encode("e" * 1199), "\u0301z")                        # the mark's 2 bytes do not fit
+    assert got == b"e" * 1199
 
 
-@pytest.mark.parametrize("text", ["a" * 301, "é" * 301, CUNEIFORM * 301, "é" * 301, FAMILY * 49,
-                                  "Zoë " * 80, "日本語" * 150])
+@pytest.mark.parametrize("text", ["a" * 1201, "\u00e9" * 1201, CUNEIFORM * 301, "q\u0301" * 401, FAMILY * 49,
+                                  "Zo\u00eb " * 80, "\u65e5\u672c\u8a9e" * 150])
 def test_typing_and_a_paste_agree(world, unicode, text):
     """The same text typed into a real name box (the game's SetCanEdit from a name box's call, the Unicode text
     DLL's HandleKey) and pasted into one: the same stored text."""
@@ -522,7 +527,7 @@ def test_typing_and_a_paste_agree(world, unicode, text):
     text = unicodedata.normalize("NFC", text)
     w.type(impl, text)
     typed = w.text(impl)
-    assert T.length(T.decode(typed)) <= T.NAME_LETTERS and len(typed) <= T.NAME_BOX_BYTES
+    assert len(typed) <= T.NAME_BOX_BYTES
     assert _paste(unicode, b"", text) == typed
 
 

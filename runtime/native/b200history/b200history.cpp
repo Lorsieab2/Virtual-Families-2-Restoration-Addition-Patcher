@@ -38,10 +38,10 @@
 #include <windows.h>
 
 #include "b200history_sites.h"
-#include "b200name_limit.h"      // kNameLetters, kNameBoxBytes: the one name limit (src/vf2_game_text.py)
+#include "b200name_limit.h"      // kNameBoxBytes: the one name limit (src/vf2_game_text.py)
 #include "b200unicode_text.h"    // the stored form and characters, as the Unicode text DLL reads the Names file
 
-// Names (docs/UNICODE_TEXT.md, "Names up to 300 characters"; runtime/native/b200unicode/b200names.inc): with a Unicode
+// Names (docs/UNICODE_TEXT.md, "Names up to 1,200 bytes"; runtime/native/b200unicode/b200names.inc): with a Unicode
 // text setting on, a name longer than its save field is kept in the save as a SHORT FORM ("Maximilianus Fi...",
 // "2...") and whole in the slot's Names file, <save folder>\Virtual Families 2 Patcher Data\Names\<save file>.txt.
 // The log writes WHOLE names, as the Virtual Families 1 Family History does and as the game shows them: a name that
@@ -572,7 +572,7 @@ static bool SaveFolder(char *out, unsigned cap) {
 // ================================================================ whole names (the slot's Names file)
 // The Unicode text DLL's own rule, read the same way (b200names.inc LoadSlot): "VF2 Names 1", then one line per short
 // form, short<TAB>room<TAB>whole name, in UTF-8; a line that is not a valid short form (ends with "...", at most 24
-// bytes stored, fits its room) for a valid name (1..kNameLetters characters, at most kNameBoxBytes bytes stored, no
+// bytes stored, fits its room) for a valid name (at least one character, at most kNameBoxBytes bytes stored, no
 // control characters) is left out; the first line of a short form in a slot's file counts. Each name is kept in the
 // stored form (b200unicode_text.h Encode: the bytes the save would hold), the form every line of the log is in.
 struct WholeEntry { unsigned slot, shortLen, wholeLen; char *shortForm, *whole; };
@@ -616,18 +616,12 @@ static bool NamesPath(int slot, char *out, unsigned cap) {
     return t.n == n + m + 4;
 }
 
-static unsigned Letters(const unsigned *cps, unsigned n) {
-    unsigned count = 0;
-    for (unsigned i = 0; i < n; i = ut::ClusterEnd(cps, n, i)) ++count;
-    return count;
-}
-
 // A whole name the Names file may hold (b200names.inc NameOk).
 static bool NameOk(const unsigned *cps, unsigned n, unsigned storedLen) {
     if (!n || storedLen > kNameBoxBytes) return false;
     for (unsigned i = 0; i < n; ++i)
         if (cps[i] < 0x20 || (cps[i] >= 0x7F && cps[i] < 0xA0) || (cps[i] >= 0xD800 && cps[i] <= 0xDFFF)) return false;
-    return Letters(cps, n) <= kNameLetters;
+    return true;
 }
 
 // UTF-8 text -> the stored form (into out, cap bytes): its length, or -1 when it is not valid (b200names.inc FromUtf8).

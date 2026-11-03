@@ -1,15 +1,17 @@
-"""Names up to 300 characters in every name box (docs/UNICODE_TEXT.md, "One character limit for every name box").
+"""Names up to 1,200 bytes in every name box (docs/UNICODE_TEXT.md, "One limit for every name box").
 
-* static: the one limit (vf2_game_text.NAME_LETTERS = 300, NAME_BOX_BYTES = 1,200) and the DLL's copy of it; the
+* static: the one limit (vf2_game_text.NAME_BOX_BYTES = 1,200, no character cap) and the DLL's header, which
+  runtime/tools/gen_b200_name_limit.py writes from it; the
   ten name boxes in the generated header; the AUDIT of every ldwTextControl::SetCanEdit and ::GetText call in the
   game's desktop objects (which box, its stock limit, where its text is copied); vf2_names' rule;
 * under unicorn, the REAL vf2unicode_b200 test DLL over the REAL executable (built from this repo), with the plan's
   writes in place:
   - the long names' group is proved: SetCanEdit, the text box's Draw, the game state's instance and the ten name
     boxes' return addresses are what runtime/tools/gen_b200_unicode_sites.py derives;
-  - each of the ten boxes, made by the game's own SetCanEdit called from that box's own call site, takes 300
-    characters and refuses the 301st, and 300 four-byte characters (1,200 bytes) and nothing more, with guard bytes
-    after the buffer the game allocates; a SetCanEdit call from anywhere else keeps its stock limit;
+  - each of the ten boxes, made by the game's own SetCanEdit called from that box's own call site, takes 1,200
+    one-byte characters and refuses the 1,201st, 300 four-byte characters (1,200 bytes) and nothing more, with
+    guard bytes after the buffer the game allocates (one past, the byte limit one box holds, and the full 1,200 typed
+    from empty in the first family box and the first member box); a SetCanEdit call from anywhere else keeps its stock limit;
   - every GetText copy site runs: the member names' four sites from the GetText call through the strncpy after it
     (the game's own instructions; ChangeName is a seam that records what it is given), the family names' seven
     straight into their fields; with names that fit exactly, one byte past the field, 300 characters, 300 accented
@@ -138,24 +140,27 @@ def test_the_ten_name_boxes_are_in_the_header():
 
 
 def test_one_limit_in_one_place():
-    """The one C copy of the limit (b200name_limit.h) is the Python definition; no other native source or Python
-    module writes the numbers; every DLL that needs them includes the header."""
-    assert T.NAME_LETTERS == 300 and T.NAME_BOX_BYTES == 1200 == 4 * T.NAME_LETTERS
-    assert T.NAME_BOX_BYTES == T.TEXT_BOX_CEILING_BYTES
-    header = (NATIVE / "b200name_limit.h").read_text(encoding="utf-8")
-    assert re.search(r"^static const unsigned kNameLetters = %d;" % T.NAME_LETTERS, header, re.M)
+    """The one C copy of the limit (b200name_limit.h) is what runtime/tools/gen_b200_name_limit.py writes from the
+    Python definition; no other native source or Python module writes the numbers, and nothing caps characters;
+    every DLL that needs the limit includes the header."""
+    import gen_b200_name_limit as G
+    assert not hasattr(T, "NAME_LETTERS")
+    assert T.NAME_BOX_BYTES == 1200 == T.TEXT_BOX_CEILING_BYTES
+    header = (NATIVE / "b200name_limit.h").read_text(encoding="utf-8").replace("\r\n", "\n")
+    assert header == G.render()
     assert re.search(r"^static const unsigned kNameBoxBytes = %d;" % T.NAME_BOX_BYTES, header, re.M)
+    assert "kNameLetters" not in header
     for path in list(NATIVE.glob("*")) + list((ROOT / "runtime" / "native" / "b200history").glob("*.cpp")):
         if path.name != "b200name_limit.h" and path.is_file():
             text = path.read_text(encoding="utf-8")
             assert not re.search(r"kName(Letters|BoxBytes)\s*=\s*\d", text), path.name
+            assert "kNameLetters" not in text and "NameLettersOk" not in text, path.name
     assert '#include "b200name_limit.h"' in (NATIVE / "b200unicode.cpp").read_text(encoding="utf-8")
     assert '#include "b200name_limit.h"' in (ROOT / "runtime" / "native" / "b200history" / "b200history.cpp").read_text(
         encoding="utf-8")
     for path in (ROOT / "src").glob("*.py"):
         text = path.read_text(encoding="utf-8")
-        if path.name != "vf2_game_text.py":
-            assert not re.search(r"^NAME_LETTERS\s*=\s*\d", text, re.M), path.name
+        assert not re.search(r"\bNAME_LETTERS\b", text), path.name
 
 
 # ---------------------------------------------------------------------------------------------- the rule
@@ -169,8 +174,9 @@ def test_short_forms():
     assert N.short_form("Ab    Cdefghijklmnopqrs", 8, {}) == "Ab..."                      # trailing spaces dropped
     s = N.short_form("Ł" * 300, 18, {})
     assert s == "Ł" * 7 + "..." and N.size(s) <= 18
-    assert N.name_problem("a" * 300) is None and N.name_problem("a" * 301)
-    assert N.name_problem(CUNEIFORM * 300) is None and N.name_problem("a\tb")
+    assert N.name_problem("a" * 1200) is None and N.name_problem("a" * 1201)          # bytes, no character cap
+    assert N.name_problem("é" * 1200) is None and N.name_problem("é" * 1201)
+    assert N.name_problem(CUNEIFORM * 300) is None and N.name_problem(CUNEIFORM * 301) and N.name_problem("a\tb")
 
 
 def test_old_short_form_logs_still_read_back_as_whole_names(tmp_path):
@@ -438,32 +444,54 @@ BOXES = [(i, kind, limit) for i, (kind, limit) in enumerate(
 
 
 @pytest.mark.parametrize("index,kind,stock", BOXES)
-def test_each_name_box_takes_300_characters(world, index, kind, stock):
+def test_each_name_box_takes_1200_bytes(world, index, kind, stock):
+    """No character cap: the bytes as stored are the only limit. Every box is filled with set_text to just under
+    the limit and typed into past it (the whole 1,200 typed from empty is tested in the first box of each kind)."""
     w, _fonts = world
     ret = w.returns[index]
     _ctl, impl = w.box(ret, stock)
     assert w.e.r32(impl + 0x28) == T.NAME_BOX_BYTES
     buf, size = w.buffers[-1]
     assert size == T.NAME_BOX_BYTES + 1
-    w.type(impl, "é" * 301)
-    assert w.text(impl) == T.encode("é" * 300)                    # the 301st refused
-    assert w.e.read(buf + size, 32) == b"\xAB" * 32
-    _ctl, impl = w.box(ret, stock)
-    buf, size = w.buffers[-1]
-    w.type(impl, CUNEIFORM * 301)
-    assert w.text(impl) == T.encode(CUNEIFORM * 300) and len(w.text(impl)) == 1200
+
+    def fresh(raw):
+        _c, i = w.box(ret, stock)
+        b, s = w.buffers[-1]
+        w.set_text(i, raw)
+        assert w.text(i) == raw
+        return i, b, s
+    impl, buf, size = fresh(b"a" * 1190)
+    w.type(impl, "é" * 20)                                        # one byte each: 10 go in, the 11th is refused
+    assert w.text(impl) == b"a" * 1190 + b"\xe9" * 10 and len(w.text(impl)) == 1200
     w.type(impl, "a")                                             # the box's bytes are full
     assert len(w.text(impl)) == 1200
     assert w.e.read(buf + size, 32) == b"\xAB" * 32
-    _ctl, impl = w.box(ret, stock)
-    w.type(impl, "e\u0301" * 301)                                  # a letter and its mark: one character
-    assert T.length(T.decode(w.text(impl))) == 300
-    _ctl, impl = w.box(ret, stock)
-    buf, size = w.buffers[-1]
-    family = "\U0001F468\u200D\U0001F469\u200D\U0001F467\u200D\U0001F466"     # 25 bytes, one character
-    w.type(impl, family * 49)
-    assert w.text(impl) == T.encode(family * 48) and len(w.text(impl)) == 1200    # the bytes stop it first
+    impl, buf, size = fresh(b"a" * 1196)
+    w.type(impl, CUNEIFORM * 2)                                   # four bytes: one goes in, the next is refused
+    assert w.text(impl) == b"a" * 1196 + CUNEIFORM.encode("utf-8")
+    w.type(impl, "b")
+    assert len(w.text(impl)) == 1200
     assert w.e.read(buf + size, 32) == b"\xAB" * 32
+    family = "\U0001F468\u200D\U0001F469\u200D\U0001F467\u200D\U0001F466"     # 25 bytes, one character
+    impl, buf, size = fresh(b"a" * 1175)
+    w.type(impl, family * 2)                                      # 25 bytes left: one family, the next is refused
+    assert w.text(impl) == b"a" * 1175 + family.encode("utf-8") and len(w.text(impl)) == 1200
+    assert w.e.read(buf + size, 32) == b"\xAB" * 32
+    if index in (0, 7):                                           # typed from empty, all 1,200
+        _c, impl = w.box(ret, stock)
+        buf, size = w.buffers[-1]
+        w.type(impl, "é" * 1201)
+        assert w.text(impl) == T.encode("é" * 1200) and T.length(T.decode(w.text(impl))) == 1200
+        assert w.e.read(buf + size, 32) == b"\xAB" * 32
+        _c, impl = w.box(ret, stock)
+        w.type(impl, "a" * 1201)
+        assert w.text(impl) == b"a" * 1200
+        _c, impl = w.box(ret, stock)
+        w.type(impl, CUNEIFORM * 301)
+        assert w.text(impl) == T.encode(CUNEIFORM * 300) and len(w.text(impl)) == 1200
+        _c, impl = w.box(ret, stock)
+        w.type(impl, "e\u0301" * 401)                              # a letter and its mark: one character, 3 bytes
+        assert T.length(T.decode(w.text(impl))) == 400 and len(w.text(impl)) == 1200
 
 
 def test_another_box_keeps_its_stock_limit(world):

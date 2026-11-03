@@ -350,8 +350,8 @@ class RefusalTests(Base):
     def test_bad_names_and_unreadable_saves_are_refused(self):
         before = self.snapshot(backups=True)
         # "Café" was refused under the old printable-ASCII rule; it is a name now (the shared text rule,
-        # vf2_game_text). A control character and a name over the one limit (300 characters) are still refused.
-        for name in ("", "A" * 301, "NEW PLAYER", "Tab\there", "𒀀" * 301):
+        # vf2_game_text). A control character and a name over the one limit (1,200 bytes) are still refused.
+        for name in ("", "A" * 1201, "NEW PLAYER", "Tab\there", "𒀀" * 301):
             with self.subTest(name=name), self.assertRaises(cs.CopyError):
                 self.copy(name)
         with self.assertRaisesRegex(cs.CopyError, "no family"):

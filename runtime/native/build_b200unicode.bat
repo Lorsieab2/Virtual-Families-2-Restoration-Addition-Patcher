@@ -2,7 +2,8 @@
 rem Build runtime\build\vf2unicode_b200.dll (32-bit, static CRT, no runtime DLL dependency): the Unicode text
 rem companion DLL ("Render Unicode with In-Game Fonts" / "Use Unicode Font (overrides in-game fonts)") for the B200
 rem executable. Regenerate runtime\native\b200unicode\b200unicode_sites.h with tools\gen_b200_unicode_sites.py and
-rem b200unicode_tables.h with tools\gen_b200_unicode_tables.py first if their sources changed.
+rem b200unicode_tables.h with tools\gen_b200_unicode_tables.py and b200name_limit.h with tools\gen_b200_name_limit.py first
+rem if their sources changed.
 rem
 rem   build_b200unicode.bat           the shipped DLL
 rem   build_b200unicode.bat test      the harness DLL (exports the planning test entry points,

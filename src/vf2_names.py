@@ -1,7 +1,7 @@
 """Names longer than their save field: the short form in the save, the whole name in the slot's Names file.
 
 With Render Unicode with In-Game Fonts or Use Unicode Font on, every name box takes up to
-``vf2_game_text.NAME_LETTERS`` characters (300; ``NAME_BOX_BYTES`` = 1,200 bytes, the engine's own cap: SetCanEdit
+``vf2_game_text.NAME_BOX_BYTES`` bytes as stored (1,200, the engine's own cap, no separate character cap: SetCanEdit
 clamps every box to 4B0h), but the save keeps each name in a fixed field: a family name 19 bytes (GetText(.., 14h)
 into gs+0x25ABC and the slot menu's gs+0x25B30 + 0x15 x (N-1)), a family member's name 18 bytes as typed
 (GetText(.., 13h), then strncpy(.., 19h) into the member's 25-byte field). The save format is never changed, so (the
@@ -32,7 +32,6 @@ from pathlib import Path
 
 import vf2_game_text as game_text
 
-NAME_LETTERS = game_text.NAME_LETTERS
 NAME_BOX_BYTES = game_text.NAME_BOX_BYTES
 MARK = game_text.NAME_MARK
 PATCHER_DATA = "Virtual Families 2 Patcher Data"
@@ -61,8 +60,8 @@ def size(text: str) -> int:
 
 
 def name_problem(full: str) -> str | None:
-    """Why ``full`` cannot be a name (None when it can): 1..NAME_LETTERS characters, at most NAME_BOX_BYTES bytes
-    stored, no control characters."""
+    """Why ``full`` cannot be a name (None when it can): 1..NAME_BOX_BYTES bytes as stored (no separate
+    character cap), no control characters."""
     if not full:
         return "A name needs at least one character."
     for ch in full:
@@ -71,8 +70,6 @@ def name_problem(full: str) -> str | None:
             return "A name cannot hold control characters (tabs, line breaks)."
         if 0xD800 <= cp <= 0xDFFF:
             return "A name cannot hold a lone surrogate."
-    if game_text.length(full) > NAME_LETTERS:
-        return f"A name can be at most {NAME_LETTERS} characters."
     if size(full) > NAME_BOX_BYTES:
         return (f"A name can be at most {NAME_BOX_BYTES:,} bytes (this one is {size(full):,}); some characters, "
                 "such as joined emoji, take many bytes.")

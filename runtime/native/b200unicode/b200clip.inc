@@ -15,9 +15,8 @@
 // cut to the box's own byte limit at whole characters (grapheme clusters). With a Unicode text setting on the text is
 // stored in the patcher's one stored form (b200unicode_text.h, as typing stores it); with both off only
 // Windows-1252 characters are pasted, one byte each, and the rest are dropped. A number-only box takes digits only.
-// A name box (its limit is kNameBoxBytes, the long names' own, b200names.inc; no stock box has it) takes at most
-// kNameLetters characters in all, counted as typing counts them (b200name_limit.h): the paste is cut there too, at
-// whole characters, and the byte limit still holds. The key events are hidden from the game (it never sees them as
+// A name box (its limit is kNameBoxBytes, the long names' own, b200names.inc; no stock box has it) takes up to those
+// bytes as stored, with no separate character cap (b200name_limit.h): the paste is cut at whole characters. The key events are hidden from the game (it never sees them as
 // letters); anywhere else the keys do nothing new.
 
 static const unsigned kSdlKeyDown = 0x300, kSdlKeyUp = 0x301;
@@ -168,23 +167,9 @@ static void Changed(unsigned box) {
     ((PostMessageFn)SITE(POST_MESSAGE))(events, 0x0C, *(long *)(box + 4));
 }
 
-static unsigned ClipCps[1300], ClipAdd[1300], ClipAll[2600];
+static const unsigned kHalf = 1300;                         // ClipCps holds two decoded texts, each at most 1,290 units
+static unsigned ClipCps[2 * kHalf], ClipAdd[1300];
 static char ClipBefore[1300];
-
-// A name box (limit kNameBoxBytes) takes at most kNameLetters characters: the clipboard's code points (add of them)
-// cut where the box's text + the clipboard reaches that count, counted over the whole text as the Unicode text DLL's
-// HandleKey counts it (b200names.inc Letters: grapheme clusters; a mark at the clipboard's start stays with the box's
-// last character). Returns how many code points stay; the cut is at a character's start.
-static unsigned NameRoom(unsigned box, unsigned add) {
-    if ((unsigned)*(int *)(box + 0x28) != kNameBoxBytes) return add;
-    const unsigned char *buf = *(const unsigned char **)(box + 0x30);
-    unsigned have = ut::Decode(buf, ut::Length(buf), ClipAll, 1300);
-    for (unsigned i = 0; i < add; ++i) ClipAll[have + i] = ClipAdd[i];
-    unsigned total = have + add, letters = 0;
-    for (unsigned i = 0; i < total; i = ut::ClusterEnd(ClipAll, total, i), ++letters)
-        if (letters >= kNameLetters) return i > have ? i - have : 0;
-    return add;
-}
 
 // With a Unicode text setting on, each whole character (grapheme cluster) of the clipboard goes to the box the way
 // typing does: through ldwEventManager::HandleKey, so the box's own rules apply (its byte limit, a number-only box, the
@@ -217,8 +202,6 @@ static void ClipPaste(unsigned box) {
         return;
     }
     void *events = ((EventsGetFn)SITE(EVENTS_GET))();
-    unsigned room = NameRoom(box, add);                                  // a name box: kNameLetters in all
-    if (room < add) { dropped += add - room; add = room; }
     unsigned pasted = 0, start = 0;
     while (start < add) {
         unsigned end = ut::ClusterEnd(ClipAdd, add, start);
@@ -235,13 +218,13 @@ static void ClipPaste(unsigned box) {
         // Taken whole? Compared as characters, never by byte growth: the stored form may change (adding a letter
         // can make a UTF-8 text a shorter single-byte one).
         unsigned now = ut::Length((const unsigned char *)buf);
-        unsigned n0 = ut::Decode((const unsigned char *)ClipBefore, before, ClipCps, 640);
-        unsigned n1 = ut::Decode((const unsigned char *)buf, now, ClipCps + 640, 640);
+        unsigned n0 = ut::Decode((const unsigned char *)ClipBefore, before, ClipCps, 1290);
+        unsigned n1 = ut::Decode((const unsigned char *)buf, now, ClipCps + kHalf, 1290);
         bool same = n1 == n0, whole = n1 == n0 + (end - start);
         for (unsigned i = 0; (same || whole) && i < n0; ++i)
-            if (ClipCps[i] != ClipCps[640 + i]) same = whole = false;
+            if (ClipCps[i] != ClipCps[kHalf + i]) same = whole = false;
         for (unsigned i = start; whole && i < end; ++i)
-            if (ClipCps[640 + n0 + (i - start)] != ClipAdd[i]) whole = false;
+            if (ClipCps[kHalf + n0 + (i - start)] != ClipAdd[i]) whole = false;
         if (!whole) {
             if (!same) {                                                   // part of it went in: take it back
                 for (unsigned i = 0; i <= before; ++i) buf[i] = ClipBefore[i];

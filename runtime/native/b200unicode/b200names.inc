@@ -1,10 +1,10 @@
-// Names up to 300 characters (docs/UNICODE_TEXT.md, "One character limit for every name box"): included by
+// Names up to 1,200 bytes (docs/UNICODE_TEXT.md, "One limit for every name box"): included by
 // b200unicode.cpp in vf2unicode_b200.dll and vf2unicodefont_b200.dll (not in the Copy and Paste DLL).
 //
 // * ldwTextControl::SetCanEdit called from one of the ten name-box calls (its return address, UNI_NAME_BOXES): the
 //   box's limit is NAME_BOX_BYTES (1,200, the engine's own cap: SetCanEdit clamps every limit to 4B0h);
-// * typing counts characters (grapheme clusters) in a name box: at most NAME_LETTERS (300), and the bytes stay
-//   within the box's 1,200;
+// * typing in a name box stops at the box's 1,200 bytes as stored (no separate character cap), a character (grapheme
+//   cluster) going in whole or not at all;
 // * GetText of a name box gives the game only the SHORT FORM of a longer name (at most size - 1 bytes, the stored
 //   form, never more than the stock game could store): its start + "...", or "2...", "3..." when two would start
 //   alike (src/vf2_names.short_form, the same rule); the whole name goes into the slot's Names file,
@@ -18,8 +18,8 @@
 //   text still hold.
 // Nothing else changes: the save keeps its fields; with both Unicode settings off the save shows the short forms.
 
-// kNameLetters (300) and kNameBoxBytes (1,200): b200name_limit.h, the one C copy of src/vf2_game_text.NAME_LETTERS /
-// NAME_BOX_BYTES (the Copy and Paste and Family History DLLs read the same header).
+// kNameBoxBytes (1,200): b200name_limit.h, the one C copy of src/vf2_game_text.NAME_BOX_BYTES, written by
+// runtime/tools/gen_b200_name_limit.py (the Copy and Paste and Family History DLLs read the same header).
 static const unsigned kMaxNames = 1024;
 static const unsigned kMaxShort = 24;
 static const unsigned kNameBoxes = 32;
@@ -100,18 +100,12 @@ static bool NamesPath(unsigned slot, char *out, unsigned cap, char *folder) {
 }
 
 // ---------------------------------------------------------------- the rule (src/vf2_names.py)
-static unsigned Letters(const unsigned *cps, unsigned n) {
-    unsigned count = 0;
-    for (unsigned i = 0; i < n; i = ut::ClusterEnd(cps, n, i)) ++count;
-    return count;
-}
-
-// A whole name the Names file may hold: 1..300 characters, at most 1,200 bytes stored, no control characters.
+// A whole name the Names file may hold: at least one character, at most 1,200 bytes stored, no control characters.
 static bool NameOk(const unsigned *cps, unsigned n, unsigned storedLen) {
     if (!n || storedLen > kNameBoxBytes) return false;
     for (unsigned i = 0; i < n; ++i)
         if (cps[i] < 0x20 || (cps[i] >= 0x7F && cps[i] < 0xA0) || (cps[i] >= 0xD800 && cps[i] <= 0xDFFF)) return false;
-    return Letters(cps, n) <= kNameLetters;
+    return true;
 }
 
 static bool EndsWithMark(const unsigned char *s, unsigned n) {
@@ -500,9 +494,6 @@ static void NameSetText(unsigned impl, const char **text) {
 }
 
 static bool IsNameBox(unsigned impl) { return NamesOn && BoxOf(impl) != 0; }
-
-// A name box takes at most 300 characters.
-static bool NameLettersOk(const unsigned *cps, unsigned n) { return Letters(cps, n) <= kNameLetters; }
 
 extern "C" void *_ReturnAddress(void);
 #pragma intrinsic(_ReturnAddress)

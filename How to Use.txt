@@ -83,7 +83,7 @@ https://github.com/Lorsieab2/Virtual-Families-2-Restoration-Addition-Patcher/
      Cyrillic, Japanese, Chinese, Korean, symbols, emoji. Type them with your
      keyboard's own keys, dead keys, Alt codes or an input method. Letters the
      game's fonts lack are made in the same style ("patcher-made"). Every
-     name box takes up to 300 characters; a name longer than the save's own
+     name box takes up to 1,200 bytes (up to 1,200 plain letters); a name longer than the save's own
      field is saved as its start and "..." and the whole name is kept beside
      the save (in "Virtual Families 2 Patcher Data\Names"), so the game shows
      the whole name. With both text settings off the game shows the short form.
@@ -154,7 +154,7 @@ the Family Tree Maker's tree file). Quit the game first; it asks before it
 copies, never writes a slot in use, and backs up your saves first as
 "Backup <date> (before copy)".Rename Family changes the name a family slot is shown under. Virtual Families 2
 has no family surname: a slot is shown under the player name typed when it was
-started. Quit the game first; the new name can have up to 300 characters (a
+started. Quit the game first; the new name can have up to 1,200 bytes (a
 long one is kept beside the save, as the game's name boxes do), and your saves
 are backed up first as
 "Backup <date> (before rename)".

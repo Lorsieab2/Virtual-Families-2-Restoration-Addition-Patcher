@@ -120,12 +120,13 @@ def name_size(name: str) -> int:
 
 
 def name_counter(name: str) -> tuple[str, bool]:
-    """The counter the Rename Family and Copy Player Slot boxes show, and whether the name is too long. In
-    characters (vf2_game_text.length), up to the one name limit (vf2_names: 300 characters, 1,200 bytes); a name
-    longer than the save's field also says it is kept as a short form with the whole name beside the save."""
+    """The counter the Rename Family and Copy Player Slot boxes show, and whether the name is too long. In bytes
+    as stored, up to the one name limit (vf2_names: 1,200 bytes, no separate character cap), with the character
+    count for information; a name longer than the save's field also says it is kept as a short form with the whole
+    name beside the save."""
     count, size = game_text.length(name), name_size(name)
-    too_long = count > names.NAME_LETTERS or size > names.NAME_BOX_BYTES
-    text = f"{count} / {names.NAME_LETTERS} characters"
+    too_long = size > names.NAME_BOX_BYTES
+    text = f"{size} / {names.NAME_BOX_BYTES} bytes ({count} characters)"
     if size > MAX_BYTES and not too_long:
         text += " (longer than the save's 19 bytes: saved as a short form, the whole name in the Names file)"
     return text, too_long
@@ -139,7 +140,7 @@ def name_problem(name: str) -> str | None:
     if bad:
         shown = " ".join(repr(ch) for ch in bad)
         return f"Virtual Families 2 cannot use these characters in a name: {shown}."
-    problem = names.name_problem(name)          # the one name limit: 300 characters, 1,200 bytes
+    problem = names.name_problem(name)          # the one name limit: 1,200 bytes as stored
     if problem is not None:
         return problem
     if not name.strip(" "):
