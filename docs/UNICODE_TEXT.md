@@ -178,8 +178,8 @@ a word wider than the line:
 * the line ends at the nearest of a space (the stock rule, exactly) or a place UAX #14 allows a break next to a
   letter of a script written without spaces (UAX #14 classes ID, SA, H2, H3, JL, JT, JV, CJ, EB, EM, the CJK
   punctuation blocks, or a zero width space), never next to a space or a line feed;
-* kinsoku: no line starts with a closing mark (`。 、 」`, `)`, small kana in the table) or ends with an opening one
-  (`「`, `(`);
+* kinsoku: no line starts with a closing mark (`。 、 」`, `)`; with the table also the small kana, which ICU's
+  default mode lets start a line) or ends with an opening one (`「`, `(`);
 * where Windows has `icu.dll` (Windows 10 version 1903 and later) the DLL loads it from System32
   (`LOAD_LIBRARY_SEARCH_SYSTEM32`, `b200icu.h`), only when a text has such a letter, and asks `ubrk_open(UBRK_LINE)`,
   which also knows the Thai, Lao, Khmer and Myanmar words; without it the table `FALLBACK_RANGES` of
