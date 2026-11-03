@@ -289,7 +289,8 @@ class Frame:
 
         def draw_string(emu):
             text = emu.cstr(emu.arg(0)).encode("latin-1")
-            x, y, colour, font = emu.arg(1), emu.arg(2), emu.arg(3), emu.arg(4)
+            x, y = (struct.unpack("<i", struct.pack("<I", emu.arg(k)))[0] for k in (1, 2))
+            colour, font = emu.arg(3), emu.arg(4)
             fobj = font or emu.r32(self.window_impl + 0x5C)
             self.events.append(("text", text, x, y, colour, self.font_names.get(fobj, fobj)))
             if self.paint_text:
@@ -419,6 +420,19 @@ class Frame:
         self.clear()
         self.e.call(self.s("SCENE_DRAW"), ecx=self.scene)
         return self.screen()
+
+    def width_of(self, text: bytes, font: str = "Segoe32Bold") -> int:
+        """The game's own ldwFont::GetWidth(text, 1.0)."""
+        e = self.e
+        at = e.alloc(len(text) + 16)
+        e.write(at, text + b"\0")
+        one = struct.unpack("<I", struct.pack("<f", 1.0))[0]
+        return struct.unpack("<i", struct.pack("<I", e.call(self.s("FONT_GET_WIDTH"), (at, one),
+                                                            ecx=self.fonts[font])))[0]
+
+    def line_height(self, font: str = "Segoe32Bold") -> int:
+        """The game's own ldwFont::GetHeight(0)."""
+        return self.e.call(self.s("FONT_GET_HEIGHT"), (0,), ecx=self.fonts[font])
 
     def text_rect(self):
         """Where the stock Draw put the name: (x, y) of its DrawString, and the font's line height."""

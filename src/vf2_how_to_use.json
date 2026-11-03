@@ -161,6 +161,17 @@
         "The keys do nothing anywhere else. On by default; it works with or without the Unicode text settings."
       ]
     },
+    "title_screen_player_name_box": {
+      "section": "Patching",
+      "title": "Title Screen Player Name Box",
+      "setting": true,
+      "guide": [
+        "On the title screen the current player's name is shown on a see-through white box (20% opacity), so it is easy to read on the picture behind it.",
+        "The box is the name's size plus 8 pixels on every side, the margin the game's own tip boxes keep, and it fits long names and every letter with either Unicode text setting or neither.",
+        "It is drawn with the game's own drawing, only while a name is shown; nothing else on the screen changes and nothing is saved.",
+        "On by default. Unticking it and rebuilding gives the original title screen."
+      ]
+    },
     "fix_vanilla_game_bugs": {
       "section": "Patching",
       "title": "Fix Vanilla Game Bugs",
