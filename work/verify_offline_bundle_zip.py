@@ -78,6 +78,7 @@ REQUIRED_RUNNERS = {
     "vf2_game_text.py",
     "vf2_names.py",
     "vf2_unicode_tables.py",     # its Unicode tables (the Unicode text DLL has the same ones)
+    "vf2_line_break.py",         # its line breaking next to scripts written without spaces (UAX #14, the DLL has the table)
     "vf2_glyph_render.py",       # Game Font Text: characters the game fonts lack, drawn in their style (GDI)
     "vf2_glyph_maker.py",        # Game Font Text: the patcher-made letters
     "vf2_game_fonts.json",       # Game Font Text: the four game fonts' metrics (numbers only, no game art)
