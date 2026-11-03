@@ -38,6 +38,14 @@ permissions:
   pull-requests: write
   issues: write
 
+# One run per pull request at a time: a newer push, reopen or label cancels the older run, so a stale
+# run can never scan, check or merge after the pull request moved on. (The accept job's merge also
+# names the commit it checked with --match-head-commit, so GitHub refuses it if the head moved.)
+# Pushes to main and manual runs get their own group and are never cancelled.
+concurrency:
+  group: translations-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request_target' }}
+
 jobs:
   scan:
     name: VirusTotal scan
