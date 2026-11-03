@@ -53,7 +53,7 @@ def test_the_dll_source_names_every_site_and_writes_nothing_else():
     src = (NATIVE / "b200unicode.cpp").read_text(encoding="utf-8")
     names = (NATIVE / "b200names.inc").read_text(encoding="utf-8")
     assert not re.search(r"\b0x4[0-9A-Fa-f]{5}\b", names)
-    assert names.count("PlanJump(plan,") == 2 and "PlanSlot(" not in names
+    assert names.count("PlanJump(plan,") == 2 and names.count("PlanSlot(") == 1        # + theGameState's Save slot
     header = (NATIVE / "b200unicode_sites.h").read_text(encoding="utf-8")
     for name, _obj, _fn in S.FUNCTIONS:
         assert f"UNI_PIN_{name.upper()}" in header
@@ -219,8 +219,9 @@ def test_the_plan_is_the_proved_sites(exe, dlls, delta):
     h = w.hooks()
     jumps = {wr["va"]: wr for wr in writes if not wr["data"]}
     slots = {wr["va"]: wr for wr in writes if wr["data"]}
-    # 7 entry jumps + 3 slots, then the long names' 2 (SetCanEdit, the text box's Draw: tests/test_name_limit.py)
-    assert len(writes) == 12 and len(jumps) == 9 and len(slots) == 3
+    # 7 entry jumps + 3 slots, then the long names' 3 (SetCanEdit, the text box's Draw, theGameState's Save slot:
+    # tests/test_name_limit.py)
+    assert len(writes) == 13 and len(jumps) == 9 and len(slots) == 4
     for site, hook, length in (("DRAW_STRING", "draw_string", 5), ("DRAW_CHARS", "draw_chars", 5),
                                ("GET_WIDTH", "get_width", 5), ("NEXT_LINE", "next_line", 5),
                                ("GET_TEXT", "get_text", 5), ("DRAW_JUSTIFIED", "draw_justified", 9),
