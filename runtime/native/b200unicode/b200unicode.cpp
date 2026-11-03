@@ -1530,6 +1530,17 @@ extern "C" __declspec(dllexport) void __cdecl B200Unicode_Startup() {
     }
 }
 
+#ifndef B200UNICODE_CLIP
+// The Translations <-> Unicode contract (docs/UNICODE_SPEC row 8): nonzero only once Startup has installed every
+// hook of Render Unicode with In-Game Fonts or Use Unicode Font, so the text the game is handed is drawn as UTF-8.
+// The Translations DLL (b200tr.c unicode_text_active) and Copy and Paste (b200clip.inc UnicodeOn) ask it. Exported
+// undecorated (stdcall, no arguments).
+extern "C" int __stdcall B200Unicode_UnicodeTextActive(void) {
+    return B200Unicode_Status.installed && (Mode == 1 || Mode == 2) ? 1 : 0;
+}
+#pragma comment(linker, "/EXPORT:B200Unicode_UnicodeTextActive=_B200Unicode_UnicodeTextActive@0")
+#endif
+
 BOOL WINAPI DllMain(HINSTANCE instance, DWORD reason, LPVOID) {
     if (reason == DLL_PROCESS_ATTACH) {
         ThisModule = instance;

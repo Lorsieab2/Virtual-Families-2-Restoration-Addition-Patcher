@@ -345,6 +345,46 @@ def test_a_line_one_byte_over_the_field_shows_english(world):
     assert world.status()["used"] == 1 and world.status()["refused"] == 1
 
 
+@pytest.mark.parametrize("module, export, installed, want", [
+    ("vf2unicode_b200.dll", 1, 1, 1),           # the Unicode DLL says its hooks are in: UTF-8
+    ("vf2unicodefont_b200.dll", 1, 1, 1),
+    ("vf2unicode_b200.dll", 0, 1, 0),           # it says they are not: Windows-1252 (its status block notwithstanding)
+    ("vf2unicode_b200.dll", None, 1, 1),        # a DLL without the export: its status block's installed flag
+    ("vf2unicode_b200.dll", None, 0, 0),
+    (None, None, 0, 0),                         # no Unicode DLL loaded
+])
+def test_the_translations_dll_asks_unicode_text_active(world, module, export, installed, want):
+    """B200Tr's unicode_text_active() in the DLL's own code: GetModuleHandleW of each Unicode DLL, then its
+    B200Unicode_UnicodeTextActive() (stdcall, no arguments) or, without it, B200Unicode_Status."""
+    import struct
+    e = world.e
+    handle, calls = 0x7300_0000, []
+    fn = e.fake_code(b"\xC3")
+
+    def active(em):
+        calls.append(1)
+        return export, 0
+    e.seam_live(fn, active)
+    status = e.alloc(0x40)
+    e.write(status, struct.pack("<IIIII", 0x54584E55, 3, 1, 1, installed))      # 'UNXT', version, mode, resolved
+
+    def get_module(em):
+        if em.arg(0) == 0:
+            return em.base, 4
+        return (handle if em.wstr(em.arg(0)).lower() == module else 0), 4
+
+    def get_proc(em):
+        assert em.arg(0) == handle
+        name = em.cstr(em.arg(1))
+        if name in ("B200Unicode_UnicodeTextActive", "_B200Unicode_UnicodeTextActive@0"):
+            return (fn if export is not None else 0), 8
+        assert name == "B200Unicode_Status", name
+        return status, 8
+    e.imports.update({"GetModuleHandleW": get_module, "GetProcAddress": get_proc})
+    assert e.call(e.dll_export("B200Tr_TestUnicodeActive")) == want
+    assert len(calls) == (1 if export is not None else 0)
+
+
 def test_the_room_of_an_accented_letter_counts_two_in_utf8(world):
     table = _by_id(world)
     caption = _caption()

@@ -66,7 +66,7 @@ def test_the_shipped_clip_dll_has_no_test_entry_points(clip_dll):
 
 
 class ClipWorld:
-    def __init__(self, exe_path, dll, unicode_on=False):
+    def __init__(self, exe_path, dll, unicode_on=False, contract=True):
         self.w = w = World(exe_path, dll)
         self.e = e = w.e
         status, writes = w.plan(3)
@@ -106,6 +106,15 @@ class ClipWorld:
         status_block = e.alloc(0x40)
         e.write(status_block, struct.pack("<IIIII", S.STATUS_MAGIC, 2, 1, 1, 1))
         self.status_block = status_block
+        # the Unicode DLL's B200Unicode_UnicodeTextActive(): True = exported (it answers unicode_on), a number = it
+        # answers that, None = not exported (a Unicode DLL older than B209: the status block answers)
+        self.contract, self.contract_calls = contract, 0
+        self.active_fn = e.fake_code(b"\xC3")
+
+        def active(em):
+            self.contract_calls += 1
+            return (int(self.unicode_on) if self.contract is True else int(self.contract)), 0
+        e.seam_live(self.active_fn, active)
         e.imports.update({
             "OpenClipboard": self._open, "CloseClipboard": self._close,
             "EmptyClipboard": self._empty, "GetClipboardData": self._get, "SetClipboardData": self._set,
@@ -203,6 +212,8 @@ class ClipWorld:
         return em.base if not name else 0, 4
 
     def _proc(self, em):
+        if em.arg(0) == 0x7100_0000 and em.cstr(em.arg(1)) == "B200Unicode_UnicodeTextActive":
+            return (0 if self.contract is None else self.active_fn), 8
         if em.arg(0) == 0x7100_0000 and em.cstr(em.arg(1)) == "B200Unicode_Status":
             return self.status_block, 8
         raise AssertionError(f"GetProcAddress {em.cstr(em.arg(1))}")
@@ -497,6 +508,24 @@ def _renamed(test_dll: Path, tmp: Path) -> Path:
     out = d / "vf2clip_b200.dll"
     out.write_bytes(test_dll.read_bytes())
     return out
+
+
+# ---------------------------------------------------------------------------------------------- the Unicode contract
+@pytest.mark.parametrize("contract, installed, stored", [
+    (1, 1, True),          # the Unicode DLL says its hooks are in: the stored form (UTF-8 for a Cuneiform sign)
+    (0, 1, False),         # it says they are not (its status block notwithstanding): Windows-1252 bytes only
+    (None, 1, True),       # a DLL without the export: its status block's installed flag answers
+    (None, 0, False),
+])
+def test_copy_and_paste_asks_unicode_text_active(exe, clip_dll, contract, installed, stored):
+    w = ClipWorld(exe, clip_dll[1], unicode_on=True, contract=contract)
+    w.e.write(w.status_block, struct.pack("<IIIII", S.STATUS_MAGIC, 2, 1, 1, installed))
+    w.box(18, b"")
+    w.clipboard = "aé" + CUNEIFORM
+    w.press(ord("v"), CTRL)
+    assert w.text() == (T.encode("aé" + CUNEIFORM) if stored else b"a\xe9")
+    assert w.e.r32(w.e.dll_export("B200Clip_Status") + 28) == (1 if stored else 0)
+    assert w.contract_calls == (0 if contract is None else 1)
 
 
 # ---------------------------------------------------------------------------------------------- name boxes

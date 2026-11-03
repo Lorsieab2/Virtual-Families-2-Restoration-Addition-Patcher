@@ -62,12 +62,17 @@ static unsigned FocusedBox() {
     return 0;
 }
 
-// Is a Unicode text setting on in this game (its DLL loaded and installed)?
+// Is a Unicode text setting on in this game (its DLL loaded and its hooks installed)? The Unicode DLL's
+// B200Unicode_UnicodeTextActive() answers (the contract the Translations DLL uses too); a DLL without it (older
+// than B209), its status block's installed flag.
+typedef int (__stdcall *UnicodeActiveFn)(void);
 static bool UnicodeOn() {
     const wchar_t *names[2] = { L"vf2unicode_b200.dll", L"vf2unicodefont_b200.dll" };
     for (unsigned i = 0; i < 2; ++i) {
         HMODULE m = GetModuleHandleW(names[i]);
         if (!m) continue;
+        UnicodeActiveFn active = (UnicodeActiveFn)GetProcAddress(m, "B200Unicode_UnicodeTextActive");
+        if (active) { if (active()) return true; continue; }
         const UnicodeStatus *s = (const UnicodeStatus *)GetProcAddress(m, "B200Unicode_Status");
         if (s && s->magic == UNI_STATUS_MAGIC && s->installed) return true;
     }
