@@ -21,6 +21,7 @@ import os
 import struct
 import subprocess
 import sys
+import unicodedata
 from pathlib import Path
 
 import pytest
@@ -108,17 +109,23 @@ class ClipWorld:
             "OpenClipboard": self._open, "CloseClipboard": self._close,
             "EmptyClipboard": self._empty, "GetClipboardData": self._get, "SetClipboardData": self._set,
             "GlobalLock": lambda em: (em.arg(0), 4), "GlobalUnlock": lambda em: (1, 4),
-            "GlobalAlloc": lambda em: (em.alloc(em.arg(1) + 8), 8), "GlobalFree": lambda em: (0, 4),
+            "GlobalAlloc": self._alloc, "GlobalFree": lambda em: (0, 4),
+            "GlobalSize": lambda em: (self.sizes.get(em.arg(0), 0), 4), "FoldStringW": self._fold,
             "GetModuleHandleW": self._module, "GetProcAddress": self._proc,
         })
+        self.sizes = {}            # a block's GlobalSize
+        self.fail_alloc = False
+        self.no_nul = False        # the next clipboard block holds no terminating NUL
         self.events = []
 
         def real_poll(em):
             ev = em.arg(0)
             if not self.events:
                 return 0, 0
-            typ, sym, mod = self.events.pop(0)
+            typ, sym, mod, *rest = self.events.pop(0)
             em.write(ev, b"\0" * 0x38)
+            if rest and rest[0]:
+                em.write(ev + 0x0D, b"\x01")                     # SDL_KeyboardEvent.repeat: a held key
             em.w32(ev, typ)
             em.w32(ev + 0x14, sym)
             em.write(ev + 0x18, struct.pack("<H", mod))
@@ -148,10 +155,30 @@ class ClipWorld:
     def _get(self, em):
         if em.arg(0) != CF_UNICODETEXT or self.clipboard is None:
             return 0, 4
-        data = self.clipboard.encode("utf-16-le", "surrogatepass") + b"\0\0"
-        p = em.alloc(len(data) + 8)
-        em.write(p, data)
+        data = self.clipboard.encode("utf-16-le", "surrogatepass") + (b"" if self.no_nul else b"\0\0")
+        # a guard of non-NUL units right after the block: a read past GlobalSize would pick up "!" characters
+        p = em.alloc(len(data) + 64)
+        em.write(p, data + "!".encode("utf-16-le") * 32)
+        self.sizes[p] = len(data)
         return p, 4
+
+    def _alloc(self, em):
+        if self.fail_alloc:
+            return 0, 8
+        p = em.alloc(em.arg(1) + 8)
+        self.sizes[p] = em.arg(1)
+        return p, 8
+
+    def _fold(self, em):
+        # FoldStringW(MAP_PRECOMPOSED, src, cchSrc, dest, cchDest): Windows composes to NFC
+        src, n, dest, cap = em.arg(1), em.arg(2), em.arg(3), em.arg(4)
+        text = em.read(src, n * 2).decode("utf-16-le", "surrogatepass")
+        out = unicodedata.normalize("NFC", text).encode("utf-16-le", "surrogatepass")
+        units = len(out) // 2
+        if units > cap:
+            return 0, 20
+        em.write(dest, out)
+        return units, 20
 
     def _set(self, em):
         assert em.arg(0) == CF_UNICODETEXT
@@ -276,8 +303,59 @@ def test_pasted_text_is_cleaned_and_kept_to_windows_1252(stock):
     stock.box(40)
     stock.clipboard = "a\r\nb\tc\x01d\x7f€Ł\U0001F44D\ud800eé"
     stock.press(ord("v"), CTRL)
-    # CR, LF, Tab: a space each; \x01 \x7f, lone surrogate dropped; L-stroke and the emoji are not Windows-1252
-    assert stock.text() == b"a  b c" + b"d" + b"\x80" + b"e\xe9"
+    # CR LF: one space; Tab: a space; \x01 \x7f, lone surrogate dropped; L-stroke and the emoji are not Windows-1252
+    assert stock.text() == b"a b c" + b"d" + b"\x80" + b"e\xe9"
+
+
+def test_a_lone_cr_or_lf_is_one_space_each(stock):
+    stock.box(40)
+    stock.clipboard = "a\rb\nc\n\rd"
+    stock.press(ord("v"), CTRL)
+    assert stock.text() == b"a b c  d"                            # LF CR is two line ends: two spaces
+
+
+def test_the_read_stops_at_the_clipboard_block_size(stock):
+    # a clipboard block with no NUL: the read ends at its GlobalSize, never in the "!" guard after it
+    stock.box(40)
+    stock.no_nul = True
+    stock.clipboard = "abc"
+    stock.press(ord("v"), CTRL)
+    assert stock.text() == b"abc" and stock.guard()
+
+
+def test_the_read_is_capped_at_8192_units(unicode):
+    unicode.box(1200, b"")
+    unicode.clipboard = "a" * 9000
+    unicode.press(ord("v"), CTRL)
+    assert len(unicode.text()) <= 1200 and unicode.guard()
+
+
+def test_a_failed_copy_leaves_the_clipboard_as_it_was(stock):
+    stock.box(20, b"Ann")
+    stock.clipboard = "keep this"
+    stock.fail_alloc = True
+    stock.press(ord("c"), CTRL)
+    assert stock.clipboard == "keep this" and stock.opened is None
+    stock.press(ord("x"), CTRL)                                   # a failed cut copies nothing and keeps the text
+    assert stock.clipboard == "keep this" and stock.text() == b"Ann"
+
+
+def test_a_decomposed_letter_pastes_composed(stock):
+    stock.box(20, b"")
+    stock.clipboard = "Zoë René"
+    stock.press(ord("v"), CTRL)
+    assert stock.text() == "Zoë René".encode("cp1252")
+
+
+def test_a_held_key_pastes_once(stock):
+    stock.box(40, b"")
+    stock.clipboard = "ab"
+    stock.press(ord("v"), CTRL)
+    for _ in range(3):                                            # the key's auto-repeats: hidden, nothing pasted
+        stock.events.append((KEYDOWN, ord("v"), CTRL, 1))
+        assert stock.e.call(stock.h["clip_poll"], (stock.ev,)) == 1
+        assert stock.e.r32(stock.ev) == S.SDL_HIDDEN_EVENT
+    assert stock.text() == b"ab"
 
 
 @pytest.mark.parametrize("limit", [5, 18])
@@ -423,12 +501,13 @@ def test_a_name_box_paste_is_cut_at_1200_bytes_for_multibyte_text(unicode):
 
 def test_a_name_box_paste_is_cut_at_whole_characters(unicode):
     got = _paste(unicode, b"", "é" * 301)                   # a letter and its mark: one character each
-    assert T.decode(got) == "é" * 300 and T.length(T.decode(got)) == T.NAME_LETTERS
+    # the paste is composed (NFC) first, so each e + mark arrives as the one letter é
+    assert T.decode(got) == unicodedata.normalize("NFC", "e\u0301" * 300) and T.length(T.decode(got)) == T.NAME_LETTERS
     # a mark at the clipboard's start stays with the box's last character: it is not a 301st character
     got = _paste(unicode, T.encode("e" * 300), "́z")
     assert T.decode(got) == "e" * 299 + "é"
     got = _paste(unicode, T.encode("e" * 299), "́ée")     # 298 e, then two e with a mark: 300 in all
-    assert T.clusters(T.decode(got)) == ["e"] * 298 + ["é"] * 2
+    assert T.clusters(T.decode(got)) == ["e"] * 298 + ["e\u0301", "\u00e9"]   # the clipboard's own e + mark is composed (NFC)
 
 
 @pytest.mark.parametrize("text", ["a" * 301, "é" * 301, CUNEIFORM * 301, "é" * 301, FAMILY * 49,

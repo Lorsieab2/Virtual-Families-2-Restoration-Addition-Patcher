@@ -9,7 +9,9 @@
 //   Ctrl+V, Shift+Insert   paste the clipboard (CF_UNICODETEXT) at the caret (the end: the game's box has no other)
 //   Ctrl+C, Ctrl+Insert    copy the box's whole text as Unicode
 //   Ctrl+X                 cut the box's whole text
-// Pasted text: CR, LF and Tab become one space each; other control characters and lone surrogates are dropped; it is
+// The clipboard is read only up to its block's own size and at most 8,192 UTF-16 units, and composed (NFC) first.
+// Pasted text: CR LF, a lone CR or LF, and Tab become one space each; other control characters and lone surrogates are
+// dropped; a held key acts once (its repeats are only hidden); it is
 // cut to the box's own byte limit at whole characters (grapheme clusters). With a Unicode text setting on the text is
 // stored in the patcher's one stored form (b200unicode_text.h, as typing stores it); with both off only
 // Windows-1252 characters are pasted, one byte each, and the rest are dropped. A number-only box takes digits only.
@@ -89,56 +91,74 @@ static unsigned Cp1252Char(unsigned char b) {
     return b;
 }
 
-// The clipboard's text as code points, cleaned: CR / LF / Tab -> a space each, other controls and lone surrogates
-// left out. Returns the count (at most cap).
+// At most this many UTF-16 units of the clipboard are read (the shared Copy and Paste rule).
+static const unsigned kClipReadUnits = 8192;
+static wchar_t ClipRaw[kClipReadUnits + 1], ClipNfc[kClipReadUnits + 1];
+
+// The clipboard's text as code points, cleaned: composed (NFC), CR LF / CR / LF / Tab -> one space each, other
+// controls and lone surrogates left out. The read never goes past the clipboard block's own size (a block need not
+// end in a NUL) or kClipReadUnits. Returns the count (at most cap).
 static unsigned ClipboardText(unsigned *cps, unsigned cap, unsigned &dropped) {
-    unsigned n = 0;
+    unsigned n = 0, len = 0;
     dropped = 0;
     if (!OpenClipboard(GetActiveWindow())) return 0;
     HANDLE h = GetClipboardData(CF_UNICODETEXT);
     const wchar_t *w = h ? (const wchar_t *)GlobalLock(h) : 0;
     if (w) {
-        for (unsigned i = 0; w[i] && n < cap; ++i) {
-            unsigned u = w[i];
-            if (u >= 0xD800 && u <= 0xDBFF) {
-                unsigned lo = w[i + 1];
-                if (lo >= 0xDC00 && lo <= 0xDFFF) { cps[n++] = 0x10000 + ((u - 0xD800) << 10) + (lo - 0xDC00); ++i; }
-                else ++dropped;
-                continue;
-            }
-            if (u >= 0xDC00 && u <= 0xDFFF) { ++dropped; continue; }
-            if (u == 0x0D || u == 0x0A || u == 0x09) { cps[n++] = 0x20; continue; }
-            if (u < 0x20 || u == 0x7F || (u >= 0x80 && u < 0xA0)) { ++dropped; continue; }
-            cps[n++] = u;
-        }
+        SIZE_T units = GlobalSize(h) / sizeof(wchar_t);
+        if (units > kClipReadUnits) units = kClipReadUnits;
+        while (len < units && w[len]) { ClipRaw[len] = w[len]; ++len; }
         GlobalUnlock(h);
     }
     CloseClipboard();
+    ClipRaw[len] = 0;
+    // NFC: a decomposed letter (e + combining acute) pastes as the one composed letter, as typing gives it
+    const wchar_t *src = ClipRaw;
+    if (len) {
+        int k = FoldStringW(MAP_PRECOMPOSED, ClipRaw, (int)len, ClipNfc, (int)kClipReadUnits);
+        if (k > 0) { ClipNfc[k] = 0; src = ClipNfc; len = (unsigned)k; }
+    }
+    for (unsigned i = 0; i < len && n < cap; ++i) {
+        unsigned u = src[i];
+        if (u >= 0xD800 && u <= 0xDBFF) {
+            unsigned lo = i + 1 < len ? src[i + 1] : 0;
+            if (lo >= 0xDC00 && lo <= 0xDFFF) { cps[n++] = 0x10000 + ((u - 0xD800) << 10) + (lo - 0xDC00); ++i; }
+            else ++dropped;
+            continue;
+        }
+        if (u >= 0xDC00 && u <= 0xDFFF) { ++dropped; continue; }
+        if (u == 0x0D && i + 1 < len && src[i + 1] == 0x0A) { cps[n++] = 0x20; ++i; continue; }   // CR LF: one space
+        if (u == 0x0D || u == 0x0A || u == 0x09) { cps[n++] = 0x20; continue; }
+        if (u < 0x20 || u == 0x7F || (u >= 0x80 && u < 0xA0)) { ++dropped; continue; }
+        cps[n++] = u;
+    }
     return n;
 }
 
 // Writing needs an owner window (OpenClipboard(NULL) + EmptyClipboard leaves no owner and SetClipboardData fails):
 // the game's own window, which is active while a box is typed in. No window: nothing is copied and the clipboard is
 // left as it was.
+// The block is made and filled first; only then is the clipboard opened and emptied, so a failed allocation or lock
+// leaves the player's clipboard as it was.
 static bool SetClipboardText(const unsigned *cps, unsigned n) {
     HWND owner = GetActiveWindow();
-    if (!owner || !OpenClipboard(owner)) return false;
-    EmptyClipboard();
+    if (!owner) return false;
     HGLOBAL g = GlobalAlloc(GMEM_MOVEABLE, (n * 2 + 1) * sizeof(wchar_t));
-    bool ok = false;
-    if (g) {
-        wchar_t *w = (wchar_t *)GlobalLock(g);
-        unsigned k = 0;
-        for (unsigned i = 0; i < n; ++i) {
-            unsigned cp = cps[i];
-            if (cp >= 0x10000) { cp -= 0x10000; w[k++] = (wchar_t)(0xD800 + (cp >> 10)); w[k++] = (wchar_t)(0xDC00 + (cp & 0x3FF)); }
-            else w[k++] = (wchar_t)cp;
-        }
-        w[k] = 0;
-        GlobalUnlock(g);
-        ok = SetClipboardData(CF_UNICODETEXT, g) != 0;
-        if (!ok) GlobalFree(g);
+    if (!g) return false;
+    wchar_t *w = (wchar_t *)GlobalLock(g);
+    if (!w) { GlobalFree(g); return false; }
+    unsigned k = 0;
+    for (unsigned i = 0; i < n; ++i) {
+        unsigned cp = cps[i];
+        if (cp >= 0x10000) { cp -= 0x10000; w[k++] = (wchar_t)(0xD800 + (cp >> 10)); w[k++] = (wchar_t)(0xDC00 + (cp & 0x3FF)); }
+        else w[k++] = (wchar_t)cp;
     }
+    w[k] = 0;
+    GlobalUnlock(g);
+    if (!OpenClipboard(owner)) { GlobalFree(g); return false; }
+    EmptyClipboard();
+    bool ok = SetClipboardData(CF_UNICODETEXT, g) != 0;
+    if (!ok) GlobalFree(g);
     CloseClipboard();
     return ok;
 }
@@ -261,7 +281,8 @@ static int __cdecl ClipPollEvent(void *event) {
     if (op == kClipNone) return r;
     unsigned box = FocusedBox();
     if (!box) return r;                                                  // no text box: the keys do nothing new
-    if (type == kSdlKeyDown) {
+    bool repeat = *((unsigned char *)event + 0x0D) != 0;                // SDL_KeyboardEvent.repeat: a held key
+    if (type == kSdlKeyDown && !repeat) {                                // acts once; its repeats are only hidden
         if (op == kClipPaste) ClipPaste(box);
         else if (ClipCopy(box) && op == kClipCut) {
             char *buf = *(char **)(box + 0x30);
