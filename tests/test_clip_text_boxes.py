@@ -517,6 +517,9 @@ def test_typing_and_a_paste_agree(world, unicode, text):
     DLL's HandleKey) and pasted into one: the same stored text."""
     w, _fonts = world
     _ctl, impl = w.box(w.returns[7], 0x12)
+    # a paste is composed (NFC) before it goes in (the shared Copy and Paste rule); typing is compared on the
+    # composed text, so a decomposed e + mark in the clipboard matches typing the one letter
+    text = unicodedata.normalize("NFC", text)
     w.type(impl, text)
     typed = w.text(impl)
     assert T.length(T.decode(typed)) <= T.NAME_LETTERS and len(typed) <= T.NAME_BOX_BYTES

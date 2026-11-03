@@ -683,11 +683,13 @@ release bundle, like almost everything else)
 - **Add optional song mods** - optional music replacements.
 - **No AI Icons** - requires Cheat Upgrades; swaps the late Special Upgrade icons for non-AI artwork.
 
-**Almost everything in the release bundle is on by default.** Of B206's 43
-settings, 37 arrive enabled when you pick **Default Patches**; the
-six off are the four cheats above, **Swap Invisible Furniture Graphics with
-Transparent Graphics**, and **Up to 28 Children**, which is Experimental and
-which **Select All Patches** leaves off too (B205: 39 of 41 on). The `(on)` marks below are therefore not an exhaustive index --
+**Almost everything in the release bundle is on by default.** Of B207's 47
+settings, 40 arrive enabled when you pick **Default Patches**; the
+seven off are the four cheats above, **Swap Invisible Furniture Graphics with
+Transparent Graphics**, **Use Unicode Font (overrides in-game fonts)** (the other
+way to show Unicode; **Render Unicode with In-Game Fonts** is on), and **Up to 28 Children**,
+which is Experimental and which **Select All Patches** leaves off too (B206: 37 of 43 on;
+B205: 39 of 41 on). The `(on)` marks below are therefore not an exhaustive index --
 they were added to entries where the default has surprised people, and an
 entry without one is not thereby off. The shipped `manifest.json` is the
 authority, and the GUI shows each setting's real initial state. Unticking a
