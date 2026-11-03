@@ -334,9 +334,9 @@ class Frame:
     def _paint_text(self, text, x, y, colour, font_name):
         """The preview only: the glyphs of the game's own font sheet, tinted, alpha-blended (src/vf2_game_text)."""
         import vf2_game_text as T
-        from PIL import Image
+        import vf2_picture_image as pi
         font = T.load_font(font_name)
-        sheet = Image.open(GAME_DIR / "Images" / f"{font_name}.png").convert("RGBA")
+        sheet = pi.load_png(GAME_DIR / "Images" / f"{font_name}.png")
         rgb = (colour & 0xFF, colour >> 8 & 0xFF, colour >> 16 & 0xFF)
         for p in T.draw_string(font, text, x, y):
             w, h, rgba = T.glyph_pixels(font, p.glyph, sheet, rgb)
