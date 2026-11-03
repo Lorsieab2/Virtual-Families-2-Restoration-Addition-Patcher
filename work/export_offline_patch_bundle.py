@@ -130,6 +130,7 @@ FINAL_PLAYTEST_DEFAULT_ON_SETTINGS = frozenset({
     "render_unicode_in_game_fonts",
     "copy_paste_text_boxes",
     "title_screen_player_name_box",
+    "translations",
 })
 # cheat_upgrades and expanded_flea_market left this set on 1 November 2026: every release bundle is
 # exported with this profile, so listing them shipped both ON although the SETTINGS table had them OFF
@@ -385,6 +386,7 @@ SOURCE_BACKED_OPTIONAL_SETTINGS = {
     "use_unicode_font",
     "copy_paste_text_boxes",
     "title_screen_player_name_box",
+    "translations",
 }
 EXECUTABLE_OVERLAY_OPTIONAL_SETTINGS = {
     "island_events",
@@ -686,6 +688,13 @@ SETTINGS = [
         "id": "title_screen_player_name_box",
         "label": "Title Screen Player Name Box",
         "description": "On the title screen (Play, Start Over, Manage Games, Quit) the current player's name is shown on a see-through white box (30% opacity), so it is easy to read on the picture behind it. The box is the name's own size plus 8 pixels on every side (the margin the game's own tip boxes keep around their text), and it grows and shrinks with the name: long names, accented letters and any other characters with Render Unicode with In-Game Fonts or Use Unicode Font, or neither. It is drawn behind the name with the game's own drawing, only while a name is shown; nothing else on the screen changes and nothing is saved. Installs a small companion DLL in the Virtual Families 2 Patcher Files folder next to the game; unticking the setting removes it and the title screen is the original game's again.",
+        "default": True,
+        "category": "optional",
+    },
+    {
+        "id": "translations",
+        "label": "Translations",
+        "description": "Play in another language. The Tools tab's Translations window lists the languages (each by its own name) and applies the choice at the next game start, with no new patching; this setting installs the small companion DLL that shows it. Every line of the game's own text (menus, buttons, emails, random events, tips) is replaced by the chosen translation's line when it has one and when it fits the space the game keeps for it; any other line stays in English, and the game never stops because of a translation. Text the patches add is translated too. Characters beyond Windows-1252 (Turkish, Polish, Russian, Japanese, Chinese...) need Render Unicode with In-Game Fonts or Use Unicode Font. English (original) leaves the game exactly as it is; unticking the setting removes the DLL. Installs a companion DLL in the Virtual Families 2 Patcher Files folder next to the game.",
         "default": True,
         "category": "optional",
     },
@@ -1202,6 +1211,7 @@ RUNTIME_FLAG_SECTION_BY_SETTING = {
     "use_unicode_font": ".vf2ufnt",
     "copy_paste_text_boxes": ".vf2clip",
     "title_screen_player_name_box": ".vf2tbox",
+    "translations": ".vf2trns",
     "expanded_flea_market": ".vf2flea",
     "free_guaranteed_cheats": ".vf2free",
     "all_outfits_hairstyles": ".vf2clth",
@@ -1678,6 +1688,7 @@ def unicode_text_post_asset_patches(
         ("UnicodeFont", "use_unicode_font", "Use Unicode Font (overrides in-game fonts)"),
         ("ClipBoard", "copy_paste_text_boxes", "Copy and Paste in Text Boxes"),
         ("TitleBox", "title_screen_player_name_box", "Title Screen Player Name Box"),
+        ("Translations", "translations", "Translations"),
     ):
         contract = build_manifest_data.get(key)
         if not isinstance(contract, dict):
@@ -1905,6 +1916,62 @@ def title_box_asset_patches(
             "allow_missing_target": True,
             "remove_when_disabled": True,
             "requires": ["core_executable", "title_screen_player_name_box"],
+            "note": note,
+        })
+    return records
+
+
+TRANSLATIONS_DLL_NAME = "vf2tr_b200.dll"
+TRANSLATIONS_INI_NAME = "vf2tr.ini"
+TRANSLATIONS_INI_TEXT = "[Patches]\r\nTranslations=1\r\n"
+
+
+def translations_asset_patches(
+    bundle_dir: Path,
+    dll_path: Path | None,
+    build_manifest_data: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Translations: vf2tr_b200.dll (runtime\\native\\build_b200tr.bat) and its ini (Translations=1), loaded by the
+    executable's dormant .vf2trns loader. A build without the loader has no Translations contract and gets no
+    records. The player's choice (Translation.ini and the translation's copy) is written by the Translations window,
+    never shipped."""
+    contract = build_manifest_data.get("Translations")
+    if not isinstance(contract, dict):
+        return []
+    if dll_path is None:
+        raise ValueError(
+            "This build has the Translations loader; pass --translations-dll with the built "
+            f"{TRANSLATIONS_DLL_NAME} (runtime\\native\\build_b200tr.bat) or the setting would do nothing."
+        )
+    if not dll_path.is_file() or dll_path.name != TRANSLATIONS_DLL_NAME:
+        raise ValueError(f"--translations-dll must be an existing {TRANSLATIONS_DLL_NAME}: {dll_path}")
+    if contract.get("companion_dll") != TRANSLATIONS_DLL_NAME or contract.get("companion_ini") != TRANSLATIONS_INI_NAME:
+        raise ValueError("Build manifest's Translations contract names another companion file.")
+    require_vf2_pe32_x86(dll_path, label="Translations DLL")
+    data = dll_path.read_bytes()
+    if b"B200Tr_Startup" not in data or b"B200Tr_TestInstall" in data:
+        raise ValueError("The Translations DLL must be the shipped build (exports B200Tr_Startup, no test entry "
+                         "points).")
+    records: list[dict[str, Any]] = []
+    for name, payload, note in (
+        (TRANSLATIONS_DLL_NAME, data, "Translations companion DLL, loaded by the executable's dormant .vf2trns "
+                                      "loader. Disabling the setting removes only this exact file."),
+        (TRANSLATIONS_INI_NAME, TRANSLATIONS_INI_TEXT.encode("ascii"), "Translations switch (Translations=1) read by "
+                                                                       "the companion DLL. Disabling the setting "
+                                                                       "removes only this exact file."),
+    ):
+        path = bundle_dir / "payload" / "Translations" / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(payload)
+        records.append({
+            "file_path": f"{TIME_CONTROLS_PATCHER_FOLDER}/{name}",
+            "source_path": relative_posix(path.relative_to(bundle_dir)),
+            "source_sha256": sha256_file(path),
+            "source_size": path.stat().st_size,
+            "overwrite_existing": True,
+            "allow_missing_target": True,
+            "remove_when_disabled": True,
+            "requires": ["core_executable", "translations"],
             "note": note,
         })
     return records
@@ -5579,6 +5646,11 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
             Path(args.title_box_dll).resolve() if getattr(args, "title_box_dll", None) else None,
             build_manifest_data,
         ))
+        asset_patches.extend(translations_asset_patches(
+            bundle_dir,
+            Path(args.translations_dll).resolve() if getattr(args, "translations_dll", None) else None,
+            build_manifest_data,
+        ))
     # Invisible Workspace Upgrades is emitted AFTER the misc/optional visual
     # records on purpose. Records that share a target with distinct requires
     # are a layered override and the patcher applies them in manifest order,
@@ -6153,6 +6225,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--invisible-upgrades-dir", help="Folder containing invisible upgrade .png files to place in payload/OptionalVisualMods/Invisible Upgrades and target to Images/Upgrades.")
     parser.add_argument("--original-upgrades-dir", help="Folder containing original upgrade .png files to bundle as restore/reference sources for Invisible Upgrades.")
     parser.add_argument("--clip-dll", help="The built vf2clip_b200.dll (runtime\\native\\build_b200unicode.bat clip) to ship behind the copy_paste_text_boxes setting. Required when the build has its loader.")
+    parser.add_argument("--translations-dll", help="The built vf2tr_b200.dll (runtime\\native\\build_b200tr.bat) to ship behind the translations setting. Required when the build has its loader.")
     parser.add_argument("--title-box-dll", help="The built vf2titlebox_b200.dll (runtime\\native\\build_b200titlebox.bat) to ship behind the title_screen_player_name_box setting. Required when the build has its loader.")
     parser.add_argument("--unicode-text-dll", help="The built vf2unicode_b200.dll (runtime\\native\\build_b200unicode.bat) to ship behind the render_unicode_in_game_fonts and use_unicode_font settings. Required when the build has the Unicode text loaders.")
     parser.add_argument("--store-refresh-dll", help="The built vf2refresh_b200.dll (runtime\\native\\build_b200refresh.bat) to ship behind the r_refreshes_store setting. Required when the build has the R Refreshes the Store loader.")

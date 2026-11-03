@@ -32,3 +32,18 @@ def test_the_long_names_trampolines_are_not_protected_in_the_clip_build():
     block = block[:block.index("\n}\n")]
     guarded = re.search(r"#ifndef B200UNICODE_CLIP\s+if \(!VirtualProtect\(SetCanEditTrampoline.*?BoxDrawTrampoline.*?#endif", block, re.S)
     assert guarded, "the two long-names trampolines must be protected inside #ifndef B200UNICODE_CLIP"
+
+
+def test_the_translations_dll_makes_its_trampolines_executable_before_writing_an_entry():
+    """vf2tr_b200.dll (runtime/native/b200tr/b200tr.c, C): every static `XTrampoline[..]` array is built by
+    make_trampoline(), which VirtualProtects it PAGE_EXECUTE_READWRITE before it copies a byte; install_guards() makes
+    every trampoline before it writes any entry jmp (tests/test_b200_translations_dll.py states it in full)."""
+    text = (NATIVE.parent / "b200tr" / "b200tr.c").read_text(encoding="utf-8-sig")
+    declared = set(re.findall(r"static\s+unsigned\s+char\s+(\w*Trampoline)\s*\[", text))
+    assert declared == {"StrncpyTrampoline", "SprintfTrampoline"}, declared
+    made = re.findall(r"trampolines\[\d\] = (\w*Trampoline)", text)
+    assert set(made) == declared
+    body = text[text.index("static int make_trampoline("):]
+    body = body[:body.index("\n}\n")]
+    assert re.search(r"VirtualProtect\(\s*tramp\s*,[^;]*PAGE_EXECUTE_READWRITE", body)
+    assert body.index("VirtualProtect(") < body.index("tramp[k] = original[k]")

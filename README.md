@@ -587,6 +587,26 @@ release bundle, like almost everything else)
   `tests/test_b200_title_name_box.py` (the real DLL and the game's own scene, text control, font and FillRect code
   drawing a title screen frame under emulation: only the box's pixels change, each exactly the game's 30% white
   blend; the name is drawn after it, unchanged; setting off = the stock frame). Not live tested.
+- **Translations** (`.vf2trns`, Optional, **on by default**; new after B207) - play in another language.
+  `vf2tr_b200.dll` (`runtime/native/b200tr`; one feature, one DLL) is loaded last, after the Unicode text DLLs.
+  Every line of the game is a static record `{id, key*, text*, override*}` of one table that theStringManager's
+  constructor indexes by id; the game's own `GetString` and its template filler `GetStringFromNameGenderTemplate`
+  return a record's **override** when it is not 0, else its text (the game's own localisation hook, fed by an
+  `sm.xml` it does not ship). The DLL sets the override of each translated line, so no code of the lookup changes.
+  It holds no game address: it searches the live image for pinned runs (`runtime/b200_translations_sites.py`,
+  proved by `runtime/tools/gen_b200_translations_sites.py`) and reads the table, its size and the index from them.
+  It calls `theStringManager::Get()` first, because the constructor's last loop clears every override it did not
+  fill itself. **Room:** a translation longer than the space the game copies it into is refused (English stays):
+  `data/vf2_translation_limits.json` / `b200tr_limits.h` list, from the code of the 32 matrix executables, each line
+  a `strncpy` copies (its count less one), each a `sprintf`, `strncat` or byte loop copies (its English length),
+  and the lines handed to `sprintf` as a format (a plain `%` of a translation is handed on as `%%`); every line at
+  most 1000 bytes. Whatever the scan could not tell is guarded at run time: the entries of the C runtime's `strncpy`
+  and `sprintf` are replaced by a jmp to a guard (the stolen instructions run from a trampoline that is made
+  `PAGE_EXECUTE_READWRITE` before any entry is written: a trampoline in a data section crashed B207 on the real game
+  under DEP although emulation passed; `tests/test_b200_translations_dll.py` and
+  `tests/test_trampolines_executable.py` read the source for it). Text is Windows-1252, or UTF-8 when the Unicode
+  text DLL has installed its hooks (`B200Unicode_UnicodeTextActive()`, else its status block). Not yet seen in a
+  running game.
 - **R Refreshes the Store** (`.vf2rfsh`, an Optional patch and a cheat, **on by default**; new in the final
   B204 rebuild) - in the store, press **R** (or Shift+R) to pick the store's random items again, the
   game's own way and with the game's own odds:

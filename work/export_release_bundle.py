@@ -108,6 +108,10 @@ def main() -> int:
     parser.add_argument("--clip-dll",
                         default=str(ROOT / "runtime" / "build" / "vf2clip_b200.dll"),
                         help="Built vf2clip_b200.dll shipped behind copy_paste_text_boxes")
+    # Translations (build_b200tr.bat).
+    parser.add_argument("--translations-dll",
+                        default=str(ROOT / "runtime" / "build" / "vf2tr_b200.dll"),
+                        help="Built vf2tr_b200.dll shipped behind translations")
     # Title Screen Player Name Box (build_b200titlebox.bat).
     parser.add_argument("--title-box-dll",
                         default=str(ROOT / "runtime" / "build" / "vf2titlebox_b200.dll"),
@@ -188,7 +192,8 @@ def main() -> int:
                         ("--outfit-pictures-dll", args.outfit_pictures_dll),
                         ("--unicode-text-dll", args.unicode_text_dll),
                         ("--clip-dll", args.clip_dll),
-                        ("--title-box-dll", args.title_box_dll)):
+                        ("--title-box-dll", args.title_box_dll),
+                        ("--translations-dll", args.translations_dll)):
         if flag not in flags:
             print(f"exporter has no {flag}; the companion DLL would be absent", file=sys.stderr)
             return 1

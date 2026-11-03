@@ -568,6 +568,17 @@ TITLE_BOX_FLAG_SYMBOL = "_gVF2TitleBox"
 TITLE_BOX_DLL_NAME = "vf2titlebox_b200.dll"
 TITLE_BOX_INI_NAME = "vf2titlebox.ini"
 TITLE_BOX_STARTUP = "B200TitleBox_Startup"
+# Translations (after B207; on by default): the companion DLL vf2tr_b200.dll (runtime/native/b200tr) shows the
+# player's chosen translation: it sets the "override" of each translated line of the game's own string table (the
+# game's own localisation hook) and guards the C runtime's strncpy and sprintf. One dormant byte (.vf2trns); zero never
+# loads the DLL. It is loaded last, after the Unicode text DLLs, because it asks them whether they draw UTF-8. The DLL
+# installs nothing unless its own pins match and vf2tr.ini says Translations=1 and the Translations window chose a file.
+TRANSLATIONS_SETTING = "translations"
+TRANSLATIONS_FLAG_SECTION = ".vf2trns"
+TRANSLATIONS_FLAG_SYMBOL = "_gVF2Translations"
+TRANSLATIONS_DLL_NAME = "vf2tr_b200.dll"
+TRANSLATIONS_INI_NAME = "vf2tr.ini"
+TRANSLATIONS_STARTUP = "B200Tr_Startup"
 OUTFIT_PICTURES_FLAG_SECTION = VANILLA_BUGS_FLAG_SECTION
 OUTFIT_PICTURES_DLL_NAME = "vf2outfits_b200.dll"
 OUTFIT_PICTURES_INI_NAME = "vf2outfits.ini"
@@ -16468,6 +16479,29 @@ static void VF2LoadTitleBoxDll() {
     if (startup) startup();
 }
 
+// Translations loader (see TRANSLATIONS_* in the generator). Zero = never loads the companion DLL. It is loaded by
+// the same wrapper, after the Unicode text DLLs (it asks them whether they draw UTF-8), once; nothing else reads the byte.
+#pragma section(".vf2trns", read, write)
+extern "C" __declspec(allocate(".vf2trns"))
+volatile unsigned char gVF2Translations = 0;
+
+static void VF2LoadTranslationsDll() {
+    unsigned short path[512];
+    unsigned long length = GetModuleFileNameW(0, path, 400);
+    if (length == 0 || length >= 400) return;
+    unsigned long cut = length;
+    while (cut > 0 && path[cut - 1] != 92) --cut;
+    if (cut == 0) return;
+    const char *tail = "__VF2_TRANSLATIONS_RELATIVE_PATH__";
+    unsigned long out = cut;
+    for (const char *c = tail; *c; ++c) path[out++] = (unsigned short)(unsigned char)*c;
+    path[out] = 0;
+    void *module = LoadLibraryW(path);
+    if (!module) return;
+    void (__cdecl *startup)() = (void (__cdecl *)())GetProcAddress(module, "B200Tr_Startup");
+    if (startup) startup();
+}
+
 // Unicode text loaders (see UNICODE_TEXT_* / UNICODE_FONT_* in the generator). Zero = never loads the companion
 // DLL. The two settings are exclusive; each has its own byte and its own copy of the DLL. Loaded by the same
 // wrapper, after every other companion DLL, once; nothing else reads the bytes.
@@ -16511,6 +16545,7 @@ extern "C" void *__cdecl VF2GameStateGetAfterTimeControlsLoad() {
         if (gVF2Clip == 1) VF2LoadUnicodeDll("__VF2_CLIP_RELATIVE_PATH__");
         if (gVF2UnicodeText == 1) VF2LoadUnicodeDll("__VF2_UNICODE_TEXT_RELATIVE_PATH__");
         else if (gVF2UnicodeFont == 1) VF2LoadUnicodeDll("__VF2_UNICODE_FONT_RELATIVE_PATH__");
+        if (gVF2Translations == 1) VF2LoadTranslationsDll();
     }
     return theGameState::Get();
 }
@@ -19010,6 +19045,10 @@ extern "C" void __cdecl VF2ApplyVisibleSpecialUpgrade(int itemId) {
     special_upgrade_helper_cpp = special_upgrade_helper_cpp.replace(
         "__VF2_TITLE_BOX_RELATIVE_PATH__",
         TIME_CONTROLS_PATCHER_FOLDER + "\\\\" + TITLE_BOX_DLL_NAME,
+    )
+    special_upgrade_helper_cpp = special_upgrade_helper_cpp.replace(
+        "__VF2_TRANSLATIONS_RELATIVE_PATH__",
+        TIME_CONTROLS_PATCHER_FOLDER + "\\\\" + TRANSLATIONS_DLL_NAME,
     )
     special_upgrade_helper_cpp = special_upgrade_helper_cpp.replace(
         "__VF2_TIME_CONTROLS_RELATIVE_PATH__",
@@ -27043,6 +27082,44 @@ def patch_title_box_manifest(manifest):
             "rectangle + 8 px, white at alpha 4Dh = 30%) while the name control is in the scene"
         ),
         "save_format": "unchanged: the box is drawn, never saved",
+        "flag_off": "the DLL is never loaded: the game is the unmodified build",
+    }
+
+
+def patch_translations_manifest(manifest):
+    """Translations: one dormant byte (.vf2trns) compiled into every executable; the Time Controls wrapper on
+    theGame::Init's first call loads vf2tr_b200.dll when it is 1, after the Unicode text DLLs. Requires
+    patch_time_controls_loader."""
+    if "TimeControls" not in manifest:
+        raise RuntimeError("Translations rides the Time Controls loader; patch it first")
+    manifest["Translations"] = {
+        "status": "dormant loader installed in every executable",
+        "offline_patcher_setting": TRANSLATIONS_SETTING,
+        "label": "Translations",
+        "category": "optional",
+        "default": True,
+        "hook": (
+            "theGame::Init's first call (theGameState::Get) -> VF2GameStateGetAfterTimeControlsLoad, which "
+            f"loads {TIME_CONTROLS_PATCHER_FOLDER}\\{TRANSLATIONS_DLL_NAME} once when the byte is 1, after the Unicode "
+            "text DLLs"
+        ),
+        "runtime_flag": {
+            "symbol": TRANSLATIONS_FLAG_SYMBOL,
+            "source_section": TRANSLATIONS_FLAG_SECTION,
+            "size": 1,
+            "default": "00",
+            "enabled": "01",
+            "linked_location_status": "pending_link_metadata",
+        },
+        "companion_dll": TRANSLATIONS_DLL_NAME,
+        "companion_ini": TRANSLATIONS_INI_NAME,
+        "startup_export": TRANSLATIONS_STARTUP,
+        "changes": (
+            "the override pointer of each translated record of the game's string table (the record the game's own "
+            "GetString and template filler already read), and the entries of the C runtime's strncpy and sprintf "
+            "(a jmp to a guard; the stolen instructions run from a trampoline made executable first)"
+        ),
+        "save_format": "unchanged: a translation is shown, never saved",
         "flag_off": "the DLL is never loaded: the game is the unmodified build",
     }
 
@@ -43108,6 +43185,8 @@ def main():
     patch_clip_manifest(manifest)
     # Title Screen Player Name Box (.vf2tbox; the same loader, before the clip and Unicode text DLLs).
     patch_title_box_manifest(manifest)
+    # Translations (.vf2trns; the same loader, after the Unicode text DLLs).
+    patch_translations_manifest(manifest)
     # Invisible furniture counts as its stock donor where stock code tests
     # the donor's item id (every executable).
     patch_invisible_furniture_parity(manifest)

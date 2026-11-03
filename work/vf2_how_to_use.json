@@ -172,6 +172,19 @@
         "On by default. Unticking it and rebuilding gives the original title screen."
       ]
     },
+    "translations": {
+      "section": "Patching",
+      "title": "Translations",
+      "setting": true,
+      "guide": [
+        "Play Virtual Families 2 in your own language. This setting lets the game show a translation. The Tools tab's Translations window lists the languages by their own names.",
+        "The choice applies from the next game start; there is no need to patch again.",
+        "Each line of the game's text (menus, buttons, emails, random events, tips) shows in the translation when it has one that fits; any other line stays in English. The game never stops because of one.",
+        "French, German, Spanish, Portuguese, Italian, Dutch and the Nordic languages need no other setting.",
+        "For Turkish, Polish, Russian, Japanese or Chinese, also tick a Unicode text setting (Render Unicode with In-Game Fonts or Use Unicode Font).",
+        "On by default. English (original) leaves the game exactly as it is. Unticking it and rebuilding removes the translations."
+      ]
+    },
     "fix_vanilla_game_bugs": {
       "section": "Patching",
       "title": "Fix Vanilla Game Bugs",
