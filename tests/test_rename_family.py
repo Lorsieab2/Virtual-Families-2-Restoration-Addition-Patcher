@@ -66,12 +66,13 @@ class Base(unittest.TestCase):
 
 
 class NameRuleTests(unittest.TestCase):
-    def test_the_one_name_limit_is_300_characters(self):
+    def test_the_one_name_limit_is_1200_bytes(self):
         # the save keeps 19 bytes; a longer name is its short form there and whole in the Names file (vf2_names)
         self.assertIsNone(rf.name_problem("A" * 19))
-        self.assertIsNone(rf.name_problem("A" * 300))
-        self.assertIn("at most 300", rf.name_problem("A" * 301))
+        self.assertIsNone(rf.name_problem("A" * 1200))                  # 1,200 bytes, no character cap
+        self.assertIn("at most 1,200 bytes", rf.name_problem("A" * 1201))
         self.assertIsNone(rf.name_problem("\U00012000" * 300))          # 1,200 bytes
+        self.assertIn("at most 1,200 bytes", rf.name_problem("\U00012000" * 301))
 
     def test_refused_names(self):
         # "CafÃ©" was refused under the old printable-ASCII rule; any character but a control character is a name
@@ -165,7 +166,7 @@ class RenameTests(Base):
 
     def test_a_bad_name_changes_nothing(self):
         before = self.snapshot()
-        for name in ("A" * 301, "NEW PLAYER", "Lorsieab2"):
+        for name in ("A" * 1201, "NEW PLAYER", "Lorsieab2"):
             with self.subTest(name=name), self.assertRaises(rf.RenameError):
                 self.rename(name)
         self.assertEqual(self.snapshot(), before)
@@ -214,7 +215,7 @@ class RenameTests(Base):
 
 
 class LongNameTests(Base):
-    """Names up to 300 characters (docs/UNICODE_TEXT.md): the short form in the save and the slot menu, the whole
+    """Names up to 1,200 bytes (docs/UNICODE_TEXT.md): the short form in the save and the slot menu, the whole
     name in the slot's Names file."""
 
     def test_a_long_name_is_its_short_form_and_a_names_line(self):

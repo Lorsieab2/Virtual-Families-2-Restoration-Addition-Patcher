@@ -33,7 +33,7 @@
 
 #include "b200unicode_sites.h"
 #include "b200unicode_text.h"
-#include "b200name_limit.h"     // kNameLetters, kNameBoxBytes: the one name limit (src/vf2_game_text.py)
+#include "b200name_limit.h"     // kNameBoxBytes: the one name limit (src/vf2_game_text.py)
 
 // ================================================================ SDL (SDL2.dll / SDL2_image.dll, as the game links)
 struct SDL_PixelFormat {
@@ -90,7 +90,7 @@ static unsigned char SetTextTrampoline[16];
 // (missing-glyph boxes), typed (characters added by typing), refused (characters refused: the box was full),
 // fittedCuts (GetText cuts that ended at a character before the field's end), keptNames (GetText calls that kept a
 // set-in name too long for the box instead of cutting it; version 2); version 3, the long names (b200names.inc):
-// names (1: the name boxes take 300 characters), nameBoxes (name boxes made), shortForms (GetText gave a short form),
+// names (1: the name boxes take 1,200 bytes), nameBoxes (name boxes made), shortForms (GetText gave a short form),
 // namesWritten (Names files written), expanded (texts drawn or measured with whole names), boxCopies (name boxes
 // drawn from a fitted copy)
 struct UnicodeStatus {
@@ -901,14 +901,12 @@ static const unsigned char *Expand(unsigned, const unsigned char *, unsigned cha
 static bool NameGetText(unsigned, const unsigned char *, unsigned, char *, int) { return false; }
 static void NameSetText(unsigned, const char **) {}
 static bool IsNameBox(unsigned) { return false; }
-static bool NameLettersOk(const unsigned *, unsigned) { return true; }
 #else
 static const unsigned char *Expand(unsigned impl, const unsigned char *text, unsigned char *out, unsigned cap,
                                    bool justified);
 static bool NameGetText(unsigned impl, const unsigned char *src, unsigned n, char *dst, int size);
 static void NameSetText(unsigned impl, const char **text);
 static bool IsNameBox(unsigned impl);
-static bool NameLettersOk(const unsigned *cps, unsigned n);
 #endif
 
 // ================================================================ drawing
@@ -1178,7 +1176,7 @@ static bool FitsWidth(unsigned font, unsigned char *text, int n, int max) {
 }
 
 // ================================================================ typing
-// A name box whose last typed character was refused (its 300 characters or its bytes): a mark typed next (a code
+// A name box whose last typed character was refused (its 1,200 bytes): a mark typed next (a code
 // point that joins the character before it) belongs to the refused character, so it is refused too and never lands
 // on the box's last character. A paste cuts at whole characters the same way (b200clip.inc), so typing and a paste
 // leave the same text (tests/test_clip_text_boxes.py).
@@ -1216,8 +1214,8 @@ static bool __fastcall UniHandleKey(void *ctl, void *, int type, int code, int s
             cps[count++] = cp;
         }
         bool name = IsNameBox(c);
-        if (name && sym != 8 && ((NameRefusedBox == c && JoinsLast(cps, count)) || !NameLettersOk(cps, count))) {
-            NameRefusedBox = c;                                           // 300, or the mark of a refused character
+        if (name && sym != 8 && NameRefusedBox == c && JoinsLast(cps, count)) {
+            NameRefusedBox = c;                                           // the mark of a refused character
             ++B200Unicode_Status.refused;
             return true;
         }
@@ -1244,9 +1242,6 @@ static bool __fastcall UniHandleKey(void *ctl, void *, int type, int code, int s
             for (unsigned i = 0; i < n; ++i) with[i] = (unsigned char)buf[i];
             with[n] = (unsigned char)sym;
             if (IsNameBox(c)) {
-                static unsigned wc[1300];
-                unsigned count = ut::Decode(with, n + 1, wc, 1290);
-                if (!NameLettersOk(wc, count)) { NameRefusedBox = c; ++B200Unicode_Status.refused; return true; }   // 300
                 NameRefusedBox = 0;
             } else if (!FitsWidth(*(unsigned *)(c + 0x3C), with, (int)n + 1, max)) {
                 ++B200Unicode_Status.refused;
@@ -1372,7 +1367,7 @@ static void PlanSlot(Plan &p, unsigned va, const void *to) {
 }
 
 #ifndef B200UNICODE_CLIP
-#include "b200names.inc"      // names up to 300 characters: SetCanEdit and the box's Draw (its own pins)
+#include "b200names.inc"      // names up to 1,200 bytes: SetCanEdit and the box's Draw (its own pins)
 #endif
 
 static int BuildPlan(unsigned mode, Plan &plan) {

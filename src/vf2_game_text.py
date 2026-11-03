@@ -97,17 +97,16 @@ def encode(text: str) -> bytes:
 
 
 # The largest name a Virtual Families 2 text box can hold, in bytes of the stored form: ldwTextControl::SetCanEdit
-# caps every box at 4B0h = 1,200 bytes (300 characters of 4 bytes in the worst case; GetText then cuts to the
-# destination field). The save fields themselves are fixed (player and nickname 20, family member 19 with the stock
+# caps every box at 4B0h = 1,200 bytes (GetText then cuts to the destination field). The save fields themselves are fixed (player and nickname 20, family member 19 with the stock
 # box at 18, Family Tree note 80); a longer name needs a per-save sidecar. One named constant, so the shared limit
 # across the patchers can be set here.
 TEXT_BOX_CEILING_BYTES = 1200
 
-# One character limit for every name box (docs/UNICODE_TEXT.md, "Names up to 300 characters"): the only place the
-# number is written in Python (runtime/native/b200unicode/b200names.inc spells the same 300 as kNameLetters, checked
-# by tests/test_name_limit.py). 300 characters of one code point always fit the 1,200-byte cap; a character of
-# several code points (a joined emoji) can reach the bytes first. NAME_MARK ends every short form (src/vf2_names.py).
-NAME_LETTERS = 300
+# One limit for every name box (docs/UNICODE_TEXT.md, "Names up to 1,200 bytes"): NAME_BOX_BYTES bytes as stored, with
+# no separate character cap, cut at whole characters (grapheme clusters). The only place the number is written:
+# runtime/tools/gen_b200_name_limit.py writes runtime/native/b200unicode/b200name_limit.h from it for the DLLs, and
+# tests/test_name_limit.py checks that the file is what the generator writes. NAME_MARK ends every short form
+# (src/vf2_names.py).
 NAME_BOX_BYTES = TEXT_BOX_CEILING_BYTES
 NAME_MARK = "..."
 

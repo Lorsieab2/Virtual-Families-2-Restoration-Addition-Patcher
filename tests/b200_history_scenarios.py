@@ -1460,15 +1460,15 @@ def _short(whole: str, room: int, taken: dict) -> bytes:
 
 def scenario_whole_names_in_the_log(w: HistoryWorld):
     """Names longer than their save field (the save holds the short form, the slot's Names file the whole name): the
-    log writes the whole names, as the game shows them, a 300-character and a 1,200-byte name among them, through
+    log writes the whole names, as the game shows them, a 1,200-character and a 1,200-byte name among them, through
     the game's own hooks, with nothing written past any heap buffer; a short form the file did not hold when the
     DLL first read it (the Unicode text DLL writes the file as a name is typed) is found when it is next needed;
     the remarriage is seen across the whole names; the patcher's reader reads the log back whole."""
     taken: dict = {}
     player = "Patricia Persephone Prudence Plantagenet-Pomerania"
-    ana, ben = "Anastasia Alexandrovna Arkhangelskaya", "B" * 300
+    ana, ben = "Anastasia Alexandrovna Arkhangelskaya", "B" * 1200
     cal, dan = "\U00012000" * 300, "Daniel Dmitrievich Dolgorukov-Dashkov"           # 1,200 bytes; later
-    assert len(T.encode(cal)) == T.NAME_BOX_BYTES and T.length(ben) == T.NAME_LETTERS
+    assert len(T.encode(cal)) == T.NAME_BOX_BYTES and len(T.encode(ben)) == T.NAME_BOX_BYTES
     short_player = _short(player, N.FAMILY_ROOM, taken)
     short_ana, short_ben, short_cal = (_short(x, N.MEMBER_ROOM, taken) for x in (ana, ben, cal))
     short_dan = _short(dan, N.MEMBER_ROOM, taken)
