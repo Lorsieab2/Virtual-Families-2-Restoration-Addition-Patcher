@@ -218,8 +218,44 @@ def test_names_file_round_trip(tmp_path):
     assert book.full(2, "Maximilianus Fi...") == "Maximilianus Fitzgerald" and book.full(1, "Łukasz...") == "Ł" * 300
     N.names_path(tmp_path, 3).write_bytes(b"\xff\xfe damaged")
     assert N.read_slot(tmp_path, 3) == []
-    bad = N.render(entries).replace(b"\t18\t", b"\t1\t")          # too long for its room: left out
+    bad = ("\n".join([N.HEADER] + [N.record_line(N.Entry(e.short, 1 if e.room == 18 else e.room, e.full))
+                                   for e in entries]) + "\n").encode("utf-8")     # signed, but too long for its room
     assert N.parse(bad) == entries[1:]
+
+
+def test_names_file_version_2_has_a_crc_and_version_1_is_still_read():
+    """"VF2 Names 2": short, room, whole name, then the CRC-32 (zlib) of every byte before the last tab, 8 upper-case
+    hex digits. A record with a wrong checksum, cut short or merged with another is skipped; "VF2 Names 1" has no
+    checksum column and is still read."""
+    import zlib
+    assert N.HEADER == "VF2 Names 2" and N.HEADER_V1 == "VF2 Names 1"
+    assert N.crc_of("abc") == "%08X" % zlib.crc32(b"abc") == "352441C2"
+    a, b, c = (N.Entry("Maximilianus Fi...", 18, "Maximilianus Fitzgerald"), N.Entry("Åukasz...", 19, "Å" * 40),
+               N.Entry("日本...", 19, "日本語のなまえ" * 4))
+    data = N.render([a, b, c])
+    lines = data.decode("utf-8").split("\n")
+    assert lines[0] == "VF2 Names 2" and lines[-1] == "" and len(lines) == 5
+    for line, e in zip(lines[1:], (a, b, c)):
+        body, _tab, crc = line.rpartition("\t")
+        assert body == f"{e.short}\t{e.room}\t{e.full}" and crc == "%08X" % zlib.crc32(body.encode("utf-8"))
+        assert crc == crc.upper() and len(crc) == 8
+    assert N.parse(data) == [a, b, c]
+    # a wrong checksum, a cut record (no checksum, or a short one), two records merged into one line
+    wrong = lines[2].rpartition("\t")[0] + "\t" + "0" * 8
+    cut = lines[2][:-3]
+    nocrc = lines[2].rpartition("\t")[0]
+    merged = lines[1] + lines[3]
+    for bad in (wrong, cut, nocrc, merged):
+        got = N.parse("\n".join([lines[0], lines[1], bad, lines[3], ""]).encode("utf-8"))
+        assert got == [a, c], bad
+    assert N.parse("\n".join([lines[0], lines[1], lines[2], lines[3][:-1]]).encode("utf-8")) == [a, b]
+    # a lower-case checksum is the same number
+    low = lines[1].rpartition("\t")[0] + "\t" + lines[1].rpartition("\t")[2].lower()
+    assert N.parse("\n".join([lines[0], low, ""]).encode("utf-8")) == [a]
+    # version 1: three columns, no checksum; a version 1 line in a version 2 file has no checksum: skipped
+    v1 = ("VF2 Names 1\n" + "\n".join(f"{e.short}\t{e.room}\t{e.full}" for e in (a, b, c)) + "\n").encode("utf-8")
+    assert N.parse(v1) == [a, b, c]
+    assert N.parse(b"VF2 Names 3\n") == [] and N.parse(b"") == []
 
 
 # ---------------------------------------------------------------------------------------------- emulation
@@ -294,6 +330,9 @@ class NamesWorld(DrawWorld):
         for wr in writes:
             e.write(wr["va"], wr["bytes"])
         self.game_seams(self.s)
+        self.tick = 100000                              # GetTickCount (the pending Names records retry every 2 s)
+        self.fail_write = False                         # CreateFileA for writing fails (a Names file that cannot be written)
+        e.imports["GetTickCount"] = lambda em: (self.tick, 0)
         out = e.alloc(4 * 32)
         e.call(e.dll_export("B200Unicode_TestNames"), (out,))
         self.names_on = e.r32(out)
@@ -343,6 +382,8 @@ class NamesWorld(DrawWorld):
         path, access = em.cstr(em.arg(0)), em.arg(1)
         handle = 0x900 + len(self.files) + len(self.writing)
         if access & 0x40000000:                       # GENERIC_WRITE
+            if self.fail_write:
+                return 0xFFFFFFFF, 28
             self.writing[handle] = [path, b""]
             return handle, 28
         if path not in self.fs:
@@ -653,6 +694,130 @@ def test_a_short_form_opens_as_the_whole_name_and_survives_a_restart(world):
     ctl, impl = w.box(w.returns[7], 0x12)
     w.set_text(impl, short)
     assert w.text(impl) == short                                   # a damaged file: the short form shows
+
+
+def _file(w, slot=1):
+    return w.fs.get(f"{SAVES}Virtual Families 2 Patcher Data\\Names\\Virtual Families 2{slot}.ldw.txt")
+
+
+def _set_file(w, data, slot=1):
+    w.fs[f"{SAVES}Virtual Families 2 Patcher Data\\Names\\Virtual Families 2{slot}.ldw.txt"] = data
+
+
+def _short_form_of(w, whole, index=8, room=0x13):
+    """Type ``whole`` into a member-name box and let the game GetText it: the short form it stores."""
+    ctl, _impl = _typed_box(w, index, whole)
+    out = w.e.alloc(0x40, fill=0)
+    w.e.call(w.s["GET_TEXT"], (out, room), ecx=ctl)
+    return w.e.read(out, room).split(b"\0")[0]
+
+
+def _opens_as(w, short: bytes) -> bytes:
+    """What a name box opened with the stored ``short`` holds: the whole name when the DLL knows it, else short."""
+    _ctl, impl = w.box(w.returns[7], 0x12)
+    w.set_text(impl, short)
+    return w.text(impl)
+
+
+def test_the_dll_writes_version_2_with_crcs_the_patcher_reads(world):
+    """The DLL's Names file is byte for byte what vf2_names.render writes: "VF2 Names 2", CRC-32 on each record."""
+    w, _fonts = world
+    w.forget()
+    w.fs.clear()
+    names = ["Maximilianus Fitzgerald the Third", "Åukasz Å»Ã³Å‚Ä‡-Kowalski z Wielkopolski", "日本語のなまえをここに書く", CUNEIFORM * 5]
+    shorts = [_short_form_of(w, n) for n in names]
+    taken = {}
+    entries = []
+    for n, s in zip(names, shorts):
+        assert s == T.encode(N.short_form(n, N.MEMBER_ROOM, taken))
+        taken[T.decode(s)] = n
+        entries.append(N.Entry(T.decode(s), N.MEMBER_ROOM, n))
+    data = _file(w)
+    assert data == N.render(entries) and data.startswith(b"VF2 Names 2\n")
+    assert N.parse(data) == entries
+
+
+def test_the_dll_skips_a_record_whose_crc_fails_and_still_reads_version_1(world):
+    w, _fonts = world
+    w.forget()
+    w.fs.clear()
+    names = ["Maximilianus Fitzgerald the Third", "Bartholomew Cuthbertson Wellington", "Cornelius Dagobert Ellsworth",
+             "Desdemona Evangeline Featherstone"]
+    shorts = [T.encode(N.short_form(n, N.MEMBER_ROOM, {})) for n in names]
+    # each name's own short form is the same here only if they start differently
+    assert len(set(shorts)) == 4
+    entries = [N.Entry(T.decode(s), N.MEMBER_ROOM, n) for s, n in zip(shorts, names)]
+    lines = N.render(entries).decode("utf-8").split("\n")
+    wrong = lines[2].rpartition("\t")[0] + "\t" + "0" * 8
+    # 0: good; 1: wrong checksum; 2: cut short (no line feed after half of it); 3 merged into the line before is
+    # below
+    _set_file(w, "\n".join([lines[0], lines[1], wrong, lines[3], lines[4][:-4]]).encode("utf-8"))
+    w.forget()
+    assert _opens_as(w, shorts[0]) == T.encode(names[0])            # a good record
+    assert _opens_as(w, shorts[1]) == shorts[1]                     # a wrong checksum: skipped, the short form shows
+    assert _opens_as(w, shorts[2]) == T.encode(names[2])            # the next good one
+    assert _opens_as(w, shorts[3]) == shorts[3]                     # a record cut short: skipped
+    # two records on one line
+    _set_file(w, "\n".join([lines[0], lines[1] + lines[2], lines[3], ""]).encode("utf-8"))
+    w.forget()
+    assert _opens_as(w, shorts[0]) == shorts[0] and _opens_as(w, shorts[1]) == shorts[1]
+    assert _opens_as(w, shorts[2]) == T.encode(names[2])
+    # version 1: three columns and no checksum, still read; the next name written makes it version 2
+    v1 = ("VF2 Names 1\n" + "\n".join(f"{e.short}\t{e.room}\t{e.full}" for e in entries[:2]) + "\n").encode("utf-8")
+    _set_file(w, v1)
+    w.forget()
+    assert _opens_as(w, shorts[0]) == T.encode(names[0]) and _opens_as(w, shorts[1]) == T.encode(names[1])
+    short3 = _short_form_of(w, names[2])
+    assert short3 == shorts[2]
+    assert _file(w) == N.render(entries[:3])
+    # a version 2 file whose records lack the checksum column is skipped whole, record by record
+    _set_file(w, ("VF2 Names 2\n" + "\n".join(f"{e.short}\t{e.room}\t{e.full}" for e in entries) + "\n").encode("utf-8"))
+    w.forget()
+    assert _opens_as(w, shorts[0]) == shorts[0]
+
+
+def test_a_record_that_cannot_be_written_stays_pending_and_is_retried(world):
+    w, _fonts = world
+    w.forget()
+    w.fs.clear()
+    whole = "Maximilianus Fitzgerald the Third"
+    w.fail_write = True
+    short = _short_form_of(w, whole)
+    assert short == T.encode(N.short_form(whole, N.MEMBER_ROOM, {})) and _file(w) is None
+    assert _opens_as(w, short) == T.encode(whole)                 # known in memory meanwhile
+    w.draw("Segoe24", b"x")                                       # a draw: the first retry (still failing)
+    w.tick += 1000
+    w.fail_write = False
+    w.draw("Segoe24", b"x")                                       # under 2 seconds since the last try: not yet
+    assert _file(w) is None
+    w.tick += 1500
+    w.draw("Segoe24", b"x")                                       # 2.5 seconds: written whole
+    assert _file(w) == N.render([N.Entry(T.decode(short), N.MEMBER_ROOM, whole)])
+    before = _file(w)
+    w.fs.pop(next(iter(w.fs)))                                    # written; no more tries
+    w.tick += 10000
+    w.draw("Segoe24", b"x")
+    assert not w.fs and before
+
+
+def test_a_record_made_while_no_slot_is_known_waits_for_one(world):
+    w, _fonts = world
+    e = w.e
+    w.forget()
+    w.fs.clear()
+    e.w32(w.gs + S.GS_CURRENT_SLOT, 0xFFFFFFFF)                   # no save slot in play yet
+    whole = "Maximilianus Fitzgerald the Third"
+    short = _short_form_of(w, whole)
+    assert short == T.encode(N.short_form(whole, N.MEMBER_ROOM, {})) and not w.fs
+    assert _opens_as(w, short) == T.encode(whole)
+    w.tick += 3000
+    w.draw("Segoe24", b"x")                                       # still no slot: nothing written
+    assert not w.fs
+    e.w32(w.gs + S.GS_CURRENT_SLOT, 3)                            # the family in slot 3 is being played
+    w.tick += 3000
+    w.draw("Segoe24", b"x")
+    assert _file(w, 3) == N.render([N.Entry(T.decode(short), N.MEMBER_ROOM, whole)]) and len(w.fs) == 1
+    e.w32(w.gs + S.GS_CURRENT_SLOT, 1)
 
 
 def _fit(font, full: str, max_width: int) -> str:

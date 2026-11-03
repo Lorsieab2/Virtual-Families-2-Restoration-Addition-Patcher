@@ -117,9 +117,15 @@ set into a box (SetText) and the player did not change is given back unchanged: 
 `tests/test_name_boxes.py` (a name too long for its box is never cut by viewing it) still holds.
 
 **The Names file**: `<saves>\Virtual Families 2 Patcher Data\Names\Virtual Families 2<N>.ldw.txt` (the save file's
-name + ".txt", from the game's own MakeGameStatePath), UTF-8 lines `VF2 Names 1`, then
-`short<TAB>room<TAB>whole name` (room: the field's bytes it was made for). Written through a temporary file and
-MoveFileEx. A line is never removed: a short form no longer in the save is harmless (a new one is never made equal
+name + ".txt", from the game's own MakeGameStatePath), UTF-8 lines `VF2 Names 2`, then
+`short<TAB>room<TAB>whole name<TAB>CRC` (room: the field's bytes it was made for; CRC: the CRC-32 (zlib) of every
+byte of the line before its last tab, 8 upper-case hex digits). A line whose CRC does not match, or that is cut short
+or merged with another, is skipped; B207's `VF2 Names 1` (three columns, no CRC) is still read, and the next name
+written makes the file version 2. Written through a temporary file and MoveFileEx, at once when a name leaves its
+box; a record that could not be written, or that was made while no save slot was known, stays pending and is tried
+again at a later draw (at most every 2 seconds; a record with no slot goes to the slot being played once there is
+one). The one rule for reading it is `runtime/native/b200unicode/b200names_file.h`, shared by the Unicode text DLL
+and the Family History DLL, and `src/vf2_names.py`. A line is never removed: a short form no longer in the save is harmless (a new one is never made equal
 to it), and the game's previous save `<N+20>` stays readable. A line that is not valid (no mark, too long for its
 room, a control character, more than 1,200 bytes) is left out; a file that cannot be read is
 read as empty, and the save shows its short forms.

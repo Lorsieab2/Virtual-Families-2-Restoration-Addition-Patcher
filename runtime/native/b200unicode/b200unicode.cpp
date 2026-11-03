@@ -34,6 +34,7 @@
 #include "b200unicode_sites.h"
 #include "b200unicode_text.h"
 #include "b200name_limit.h"     // kNameBoxBytes: the one name limit (src/vf2_game_text.py)
+#include "b200names_file.h"     // the Names file: header, CRC-32, one record (also read by the Family History DLL)
 
 // ================================================================ SDL (SDL2.dll / SDL2_image.dll, as the game links)
 struct SDL_PixelFormat {
@@ -901,12 +902,14 @@ static const unsigned char *Expand(unsigned, const unsigned char *, unsigned cha
 static bool NameGetText(unsigned, const unsigned char *, unsigned, char *, int) { return false; }
 static void NameSetText(unsigned, const char **) {}
 static bool IsNameBox(unsigned) { return false; }
+static void FlushNames() {}
 #else
 static const unsigned char *Expand(unsigned impl, const unsigned char *text, unsigned char *out, unsigned cap,
                                    bool justified);
 static bool NameGetText(unsigned impl, const unsigned char *src, unsigned n, char *dst, int size);
 static void NameSetText(unsigned impl, const char **text);
 static bool IsNameBox(unsigned impl);
+static void FlushNames();
 #endif
 
 // ================================================================ drawing
@@ -948,6 +951,7 @@ static void __fastcall UniDrawString(void *window, void *, const char *text, int
     if (!impl || !IMPL_FIELD(impl, 0x0C) || !text) return;
     const unsigned char *raw = (const unsigned char *)text;
     static unsigned char whole[4096];
+    FlushNames();                                                                              // pending Names records
     if (const unsigned char *e = Expand(impl, raw, whole, sizeof(whole), false)) raw = e;     // whole names
     if ((color >> 24) == 0) color = *(const unsigned *)SITE(WHITE);
     FontRec *f = Ensure(impl);
@@ -1593,6 +1597,8 @@ extern "C" __declspec(dllexport) void __cdecl B200Unicode_TestNames(unsigned *ou
 extern "C" __declspec(dllexport) void __cdecl B200Unicode_TestForgetNames() {
     for (unsigned i = 0; i < NameCount; ++i) Release(Names[i].whole);
     NameCount = 0;
+    PendingNames = false;
+    LastFlush = 0;
     for (unsigned s = 0; s < 6; ++s) SlotLoaded[s] = false;
     for (unsigned i = 0; i < kNameBoxes; ++i) Boxes[i].impl = 0;
 }

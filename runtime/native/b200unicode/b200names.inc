@@ -35,10 +35,13 @@ struct NameEntry {
     unsigned slot, room, shortLen, wholeLen;
     unsigned char shortForm[kMaxShort + 1];
     unsigned char *whole;              // the stored form, nul-terminated
+    bool pending;                      // made here and not yet written whole to its slot's file (retried: FlushNames)
 };
 static NameEntry Names[kMaxNames];
 static unsigned NameCount;
 static bool SlotLoaded[6];
+static bool PendingNames;              // some entry is pending
+static unsigned LastFlush;
 
 struct NameBox { unsigned impl; char kind; int expanded; };      // expanded: the entry its text is the whole name of
 static NameBox Boxes[kNameBoxes];
@@ -164,7 +167,8 @@ static unsigned ShortFor(const unsigned char *w, unsigned n, unsigned room, unsi
 }
 
 // ---------------------------------------------------------------- the Names file
-// "VF2 Names 1", then one line per short form: short<TAB>room<TAB>whole name, in UTF-8.
+// "VF2 Names 2", then one line per short form: short<TAB>room<TAB>whole name<TAB>CRC-32, in UTF-8 (b200names_file.h;
+// "VF2 Names 1", with no CRC, is still read).
 static unsigned ToUtf8(const unsigned char *s, unsigned n, unsigned char *out, unsigned cap) {
     static unsigned cps[1300];
     unsigned count = ut::Decode(s, n, cps, 1300), k = 0;
@@ -194,12 +198,13 @@ static int FromUtf8(const unsigned char *s, unsigned n, unsigned char *out, unsi
 }
 
 static bool AddEntry(unsigned slot, unsigned room, const unsigned char *s, unsigned sn, const unsigned char *w,
-                     unsigned wn) {
+                     unsigned wn, bool pending) {
     if (NameCount >= kMaxNames || sn > kMaxShort || wn > kNameBoxBytes) return false;
     unsigned char *copy = (unsigned char *)Alloc(wn + 1);
     if (!copy) return false;
     NameEntry &e = Names[NameCount++];
-    e.slot = slot; e.room = room; e.shortLen = sn; e.wholeLen = wn; e.whole = copy;
+    e.slot = slot; e.room = room; e.shortLen = sn; e.wholeLen = wn; e.whole = copy; e.pending = pending;
+    if (pending) PendingNames = true;
     for (unsigned i = 0; i < sn; ++i) e.shortForm[i] = s[i];
     e.shortForm[sn] = 0;
     for (unsigned i = 0; i < wn; ++i) copy[i] = w[i];
@@ -218,33 +223,23 @@ static void LoadSlot(unsigned slot) {
     bool ok = text && ReadFile(h, text, size, &got, 0) && got == size;
     CloseHandle(h);
     if (!ok) { Release(text); return; }
-    static const char header[] = "VF2 Names 1";
     unsigned at = 0;
-    for (; header[at]; ++at) if (at >= size || text[at] != (unsigned char)header[at]) { Release(text); return; }
-    if (at < size && text[at] == '\r') ++at;
-    if (at >= size || text[at] != '\n') { Release(text); return; }
-    ++at;
+    int version = nf::Header(text, size, &at);
+    if (!version) { Release(text); return; }
     static unsigned char shortForm[64], whole[kNameBoxBytes + 8];
     while (at < size) {
         unsigned end = at;
         while (end < size && text[end] != '\n') ++end;
         unsigned stop = end > at && text[end - 1] == '\r' ? end - 1 : end;
-        unsigned tab1 = at, tab2;
-        while (tab1 < stop && text[tab1] != '\t') ++tab1;
-        tab2 = tab1 + 1;
-        while (tab2 < stop && text[tab2] != '\t') ++tab2;
-        unsigned room = 0;
-        bool digits = tab1 < stop && tab2 < stop && tab2 > tab1 + 1;
-        for (unsigned i = tab1 + 1; digits && i < tab2; ++i) {
-            if (text[i] < '0' || text[i] > '9' || room > 100000) digits = false;
-            else room = room * 10 + (text[i] - '0');
-        }
-        if (digits && room >= 1 && room < kNameBoxBytes) {
+        unsigned tab1, tab2, body, room;
+        // a record cut short, merged with another or with a wrong checksum is skipped
+        if (nf::Split(text, at, stop, version, &tab1, &tab2, &body, &room) && room >= 1 &&
+            room < kNameBoxBytes) {
             int sn = FromUtf8(text + at, tab1 - at, shortForm, room < sizeof(shortForm) ? room : 0, false);
-            int wn = FromUtf8(text + tab2 + 1, stop - tab2 - 1, whole, kNameBoxBytes, true);
+            int wn = FromUtf8(text + tab2 + 1, body - tab2 - 1, whole, kNameBoxBytes, true);
             if (sn > 0 && wn > 0 && (unsigned)sn <= kMaxShort && EndsWithMark(shortForm, (unsigned)sn) &&
                 !InSlot(slot, shortForm, (unsigned)sn))
-                AddEntry(slot, room, shortForm, (unsigned)sn, whole, (unsigned)wn);
+                AddEntry(slot, room, shortForm, (unsigned)sn, whole, (unsigned)wn, false);
         }
         at = end + 1;
     }
@@ -271,14 +266,15 @@ static bool SaveSlot(unsigned slot) {
     char path[MAX_PATH + 64], folder[MAX_PATH + 64], temp[MAX_PATH + 72];
     if (!NamesPath(slot, path, sizeof(path), folder)) return false;
     unsigned size = 16;
-    for (unsigned i = 0; i < NameCount; ++i) if (Names[i].slot == slot) size += 4 * (Names[i].shortLen + Names[i].wholeLen) + 16;
+    for (unsigned i = 0; i < NameCount; ++i) if (Names[i].slot == slot) size += 4 * (Names[i].shortLen + Names[i].wholeLen) + 32;
     unsigned char *buf = (unsigned char *)Alloc(size);
     if (!buf) return false;
-    static const char header[] = "VF2 Names 1\n";
+    static const char header[] = "VF2 Names 2\n";
     unsigned k = 0;
     for (unsigned i = 0; header[i]; ++i) buf[k++] = (unsigned char)header[i];
     for (unsigned i = 0; i < NameCount; ++i) {
         if (Names[i].slot != slot) continue;
+        unsigned record = k;
         k += ToUtf8(Names[i].shortForm, Names[i].shortLen, buf + k, size - k);
         buf[k++] = '\t';
         char digits[8]; unsigned d = 0, v = Names[i].room;
@@ -286,6 +282,10 @@ static bool SaveSlot(unsigned slot) {
         while (d) buf[k++] = (unsigned char)digits[--d];
         buf[k++] = '\t';
         k += ToUtf8(Names[i].whole, Names[i].wholeLen, buf + k, size - k - 1);
+        unsigned crc = nf::Crc32(buf + record, k - record);              // everything before the last tab
+        buf[k++] = '\t';
+        nf::Hex8(crc, buf + k);
+        k += 8;
         buf[k++] = '\n';
     }
     MakeFolders(folder);
@@ -303,9 +303,35 @@ static bool SaveSlot(unsigned slot) {
         if (!ok) DeleteFileA(temp);
     }
     Release(buf);
-    if (ok) ++B200Unicode_Status.namesWritten;
-    else Log("a Names file could not be written");
+    if (ok) {
+        ++B200Unicode_Status.namesWritten;
+        for (unsigned i = 0; i < NameCount; ++i) if (Names[i].slot == slot) Names[i].pending = false;
+    } else {
+        Log("a Names file could not be written");
+    }
     return ok;
+}
+
+// A record made while no slot was known, or whose file could not be written, stays pending and is tried again, at most
+// every 2 seconds, from a draw (UniDrawString): a slot-less record goes to the slot being played once there is one.
+static void FlushNames() {
+    if (!PendingNames || !NamesOn) return;
+    unsigned now = GetTickCount();
+    if (LastFlush && now - LastFlush < 2000) return;
+    LastFlush = now ? now : 1;
+    unsigned current = CurrentSlot();
+    bool want[6] = { false, false, false, false, false, false };
+    bool left = false;
+    for (unsigned i = 0; i < NameCount; ++i) {
+        if (!Names[i].pending) continue;
+        if (!Names[i].slot) {
+            if (!current) { left = true; continue; }
+            Names[i].slot = current;
+        }
+        want[Names[i].slot] = true;
+    }
+    for (unsigned s = 1; s <= 5; ++s) if (want[s] && !SaveSlot(s)) left = true;
+    PendingNames = left;
 }
 
 // The short form a name box gives the game for its text (stored form w, n bytes) into dst's room; records the
@@ -317,8 +343,8 @@ static unsigned StoreName(const unsigned char *w, unsigned n, unsigned room, uns
     if (!k) return 0;
     if (SameBytes(out, k, w, n)) return k;
     ++B200Unicode_Status.shortForms;
-    if (record && slot) {
-        if (!InSlot(slot, out, k) && AddEntry(slot, room, out, k, w, n)) SaveSlot(slot);
+    if (record && !InSlot(slot, out, k) && AddEntry(slot, room, out, k, w, n, true)) {
+        if (slot) SaveSlot(slot);                      // no slot yet: pending until there is one (FlushNames)
     }
     return k;
 }
