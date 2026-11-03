@@ -118,14 +118,31 @@ def _random_text(rng):
     return "".join(rng.choice(pool) for _ in range(rng.randint(0, 30)))
 
 
+# line breaking (UAX #14): kinsoku marks, small kana, Thai, a zero width space, brackets, long words, emoji
+BREAK_SAMPLES = [
+    "\u65e5\u672c\u8a9e\u3002\u65e5\u672c\u8a9e\u3001\u300c\u65e5\u672c\u300d\u3067\u3059", "\u304d\u3083\u3063\u3068\u30fc\u30fc\u30fc\u30fc",
+    "\u0e2a\u0e27\u0e31\u0e2a\u0e14\u0e35\u0e04\u0e23\u0e31\u0e1a \u0e02\u0e2d\u0e1a\u0e04\u0e38\u0e13", "a\u200bb\u200bc\u200bd",
+    "Hello \u65e5\u672c\u8a9e world", "(\u65e5\u672c)(\u8a9e)", "supercalifragilisticexpialidocious",
+    "\U0001f600\U0001f600\U0001f600 \U0001f468\u200d\U0001f469\u200d\U0001f467 x", "\uff08\u65e5\u672c\uff09\u3002\uff01\uff1f",
+    "\u65e5 \u672c  \u8a9e\n\u65e5\u672c\n\n\u8a9e", "\u1000\u1001\u1002 \u1780\u1781\u1782 \u0e81\u0e82", "a\u3001b\u3002",
+]
+
+
+def _random_break_text(rng):
+    pool = (list("abc  XYZ.,!?()\n") + ["\u65e5", "\u672c", "\u8a9e", "\u3002", "\u3001", "\u300c", "\u300d", "\u3083", "\u30fc",
+            "\u304b", "\u0e01", "\u0e32", "\u0e31", "\u200b", "\U0001f600", "\uff08", "\uff09", "\u0301", "word", "words"])
+    return "".join(rng.choice(pool) for _ in range(rng.randint(1, 40)))
+
+
 def _random_bytes(rng):
     return bytes(rng.randrange(1, 256) for _ in range(rng.randint(0, 24)))
 
 
 def _all_raws():
     rng = random.Random(20261101)
-    raws = [T.encode(s) for s in SAMPLES]
+    raws = [T.encode(s) for s in SAMPLES + BREAK_SAMPLES]
     raws += [T.encode(_random_text(rng)) for _ in range(1500)]
+    raws += [T.encode(_random_break_text(rng)) for _ in range(1500)]
     raws += [_random_bytes(rng) for _ in range(1500)]
     return raws
 
@@ -191,6 +208,65 @@ def test_width_and_line_breaking(lib, kerning):
             assert (out.value, used, bool(dbl.value)) == mine, (raw, max_bytes, max_w, keep)
             if max_bytes > 0:
                 assert len(out.value) <= max(max_bytes, max(u.size for u in T.units(raw)) if raw else 0)
+
+
+def _break_flags(lib, raw: bytes):
+    lib.UtBreaks.argtypes = [ctypes.c_char_p, ctypes.c_uint32, ctypes.c_char_p, ctypes.c_uint32]
+    lib.UtBreaks.restype = ctypes.c_uint32
+    flags = ctypes.create_string_buffer(len(raw) + 8)
+    k = lib.UtBreaks(raw, len(raw), flags, len(raw) + 8)
+    return [bool(flags.raw[i]) for i in range(k + 1)]
+
+
+def test_break_places_are_the_same_in_the_dll_without_icu_and_in_python(lib):
+    """UAX #14 with the built-in table (the DLL without icu.dll, the patcher always): the same places."""
+    lib.UtIcu.argtypes = [ctypes.c_int]
+    lib.UtIcu.restype = ctypes.c_int
+    lib.UtIcu(0)
+    import vf2_line_break as LB
+    seen_break = False
+    for raw in _all_raws():
+        raw = raw.split(b"\0", 1)[0]
+        us = T.units(raw)
+        want = LB.break_flags([(ord(u.text[0]), ord(u.text[min(len(u.text), 16) - 1])) for u in us])
+        got = _break_flags(lib, raw)
+        assert got == want[:len(got)] and len(got) == len(want), raw
+        seen_break = seen_break or any(want)
+    assert seen_break
+
+
+def test_the_line_break_table_header_is_what_the_generator_writes():
+    import gen_b200_line_break as G
+    assert (NATIVE / "b200linebreak_table.h").read_text(encoding="utf-8").replace("\r\n", "\n") == G.render()
+
+
+def test_with_windows_icu_the_breaks_follow_uax14_dictionary_and_kinsoku(lib):
+    """The DLL asks Windows' own ICU (icu.dll, Windows 10 1903 and later) when the host has it: Thai breaks only
+    between words (the table breaks between any two characters), and no line starts with a closing mark or ends with
+    an opening one."""
+    lib.UtIcu.argtypes = [ctypes.c_int]
+    lib.UtIcu.restype = ctypes.c_int
+    try:
+        if not lib.UtIcu(1):
+            pytest.skip("this Windows has no icu.dll")
+        thai = "\u0e2a\u0e27\u0e31\u0e2a\u0e14\u0e35\u0e04\u0e23\u0e31\u0e1a\u0e02\u0e2d\u0e1a\u0e04\u0e38\u0e13\u0e21\u0e32\u0e01"
+        raw = T.encode(thai)
+        icu_flags = _break_flags(lib, raw)
+        lib.UtIcu(0)
+        table_flags = _break_flags(lib, raw)
+        lib.UtIcu(1)
+        assert sum(icu_flags) >= 2 and sum(table_flags) > sum(icu_flags)       # words, not letters
+        assert all(t for i, t in enumerate(table_flags) if icu_flags[i])       # ICU's places are among the table's
+        jp = "\u65e5\u672c\u8a9e\u3002\u300c\u65e5\u672c\u300d\u3001\u304d\u3083"
+        flags = _break_flags(lib, T.encode(jp))
+        units = [u.text for u in T.units(T.encode(jp))]
+        for i, text in enumerate(units):
+            if flags[i]:
+                assert text not in "\u3002\u300d\u3001", (i, text)       # no line starts with a closing mark
+                assert units[i - 1] != "\u300c", (i, units[i - 1])               # none ends with an opening one
+        assert any(flags)
+    finally:
+        lib.UtIcu(0)
 
 
 def test_fit_for_the_text_boxes_get_text(lib):

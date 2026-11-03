@@ -212,7 +212,62 @@ def test_line_breaking_matches_the_game(rig, fonts):
             for max_chars, max_w, keep in ((200, 120, True), (200, 60, False), (7, 400, True), (200, 10, True)):
                 mine = T.next_justified_line(f, raw, max_chars, max_w, keep)
                 game = rig.next_line(name, raw, max_chars, max_w, keep)
-                assert mine == game, (name, raw, max_chars, max_w, keep)
+                # The stock function answers a word wider than the line with an empty line and one letter eaten (the
+                # letters of the word are lost one call at a time; it does not hang). Ours cuts the word after its
+                # longest start of whole characters that fits (at least one). Everything else is the stock function
+                # exactly: ASCII and Latin-1 text whose every word fits is laid out pixel for pixel as before.
+                lost = game[0] == b"" and raw[:game[1]].strip(b" \n") != b""
+                if lost:
+                    assert mine[0] and mine[1] >= len(mine[0]) and mine[0] in raw[:mine[1]], (
+                        name, raw, max_chars, max_w, keep)
+                else:
+                    assert mine == game, (name, raw, max_chars, max_w, keep)
+
+
+def test_a_word_wider_than_the_line_is_cut_between_characters_not_lost(fonts):
+    f = fonts["Segoe24"]
+    text = b"supercalifragilistic"
+    rest, got = text, []
+    while rest:
+        line, used, _double = T.next_justified_line(f, rest, 200, 60, False)
+        assert line and used == len(line)
+        assert sum(f.glyph(u).width + f.kerning for u in T.units(line)) <= 60 or len(line) == 1
+        got.append(line)
+        rest = rest[used:]
+    assert b"".join(got) == text and len(got) > 1
+    # one character is the least: a line narrower than any letter still moves on
+    line, used, _ = T.next_justified_line(f, b"WW", 200, 1, False)
+    assert (line, used) == (b"W", 1)
+
+
+def _lines(f, text: str, width: int, max_bytes: int = 0x3FF) -> list[str]:
+    return [T.decode(x) for x in T.wrap(f, T.encode(text), width, max_bytes)]
+
+
+def test_lines_break_in_scripts_written_without_spaces(fonts):
+    """UAX #14 (vf2_line_break): a line may end between two ideographs, kana or Thai characters, but no line starts
+    with a closing mark (kinsoku) or ends with an opening one, a zero width space is a break, and no letter is lost."""
+    f = fonts["Segoe24"]
+    jp = "\u65e5\u672c\u8a9e\u3002\u300c\u65e5\u672c\u300d\u3001\u304d\u3083\u3063\u3068\u30fc\u3067\u3059"
+    one = f.glyph(T.units(T.encode("\u65e5"))[0]).width + f.kerning
+    for width in (3 * one, 4 * one, 5 * one, 7 * one):                  # (one character is the least a line holds)
+        lines = _lines(f, jp, width)
+        assert "".join(lines) == jp and len(lines) > 1, width
+        for line in lines:
+            assert line[0] not in "\u3002\u300d\u3001\u3083\u3063\u30fc", (width, lines)    # no line starts with a closing mark
+            assert line[-1] != "\u300c", (width, lines)                                  # none ends with an opening one
+    thai = "\u0e2a\u0e27\u0e31\u0e2a\u0e14\u0e35\u0e04\u0e23\u0e31\u0e1a"
+    one = f.glyph(T.units(T.encode("\u0e2a"))[0]).width + f.kerning
+    for width in (3 * one, 4 * one, 5 * one):
+        lines = _lines(f, thai, width)
+        assert "".join(lines) == thai and len(lines) > 1
+        assert all(l[0] not in "\u0e31\u0e35\u0e34" for l in lines)                    # never before a combining mark
+    # mixed with spaces: a space still ends a line, kana break
+    mixed = _lines(f, "Hello \u65e5\u672c\u8a9e\u65e5\u672c\u8a9e world", 90)
+    assert "".join(mixed).replace(" ", "") == "Hello\u65e5\u672c\u8a9e\u65e5\u672c\u8a9eworld" and len(mixed) > 1
+    # ASCII text is untouched: the break rule has nothing to say
+    import vf2_line_break as LB
+    assert not any(LB.break_flags([(ord(c), ord(c)) for c in "The quick brown fox, (jumps) over the lazy dog."]))
 
 
 def test_the_unpatched_game_draws_utf8_names_without_leaving_its_font(rig):

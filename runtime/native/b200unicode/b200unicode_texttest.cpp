@@ -1,7 +1,9 @@
 // A test DLL (any bitness) of b200unicode_text.h alone: the rules the Unicode Text DLL uses in the game, called by
 // tests/test_b200_unicode_text.py next to src/vf2_game_text.py. Never shipped.
 //   cl /nologo /O2 /LD /EHsc b200unicode_texttest.cpp /Fe:vf2unicode_texttest.dll
+#include <windows.h>
 #include "b200unicode_text.h"
+#include "b200icu.h"
 
 #define EXPORT extern "C" __declspec(dllexport)
 
@@ -50,12 +52,33 @@ EXPORT int UtGetWidth(const unsigned char *text, float scale, int kerning) {
 
 static ut::LineState State;
 
+// 1: line breaking asks Windows' ICU (when this Windows has icu.dll; returns whether it does), 0: the built-in table
+EXPORT int UtIcu(int on) {
+    if (!on) { ut::Icu() = 0; ut::IcuLoader() = 0; return 0; }
+    icu::Install();
+    ut::IcuLoader() = &icu::Install;
+    return ut::Icu() != 0 ? 1 : 0;
+}
+
 EXPORT unsigned UtNextLine(const unsigned char *src, unsigned char *out, int maxBytes, int maxWidth, int keep,
                            float scale, int kerning, int *doubleBreak) {
     bool dbl = false;
     unsigned used = ut::NextLine(src, out, maxBytes, maxWidth, &dbl, keep != 0, scale, kerning, &TestWidth, 0, State);
     *doubleBreak = dbl ? 1 : 0;
     return used;
+}
+
+// The places a line may break in a text (ut::ComputeBreaks): flags[k], k = 0..units, between unit k - 1 and k. Returns the
+// unit count.
+EXPORT unsigned UtBreaks(const unsigned char *s, unsigned n, unsigned char *flags, unsigned cap) {
+    ut::ComputeBreaks(s, n, State);
+    ut::Units it;
+    it.Init(s, n);
+    ut::Unit u;
+    unsigned k = 0;
+    while (k < ut::kMaxLineUnits && it.Next(u)) ++k;
+    for (unsigned i = 0; i <= k && i < cap; ++i) flags[i] = State.brk[i];
+    return k;
 }
 
 EXPORT unsigned UtFit(const unsigned char *s, unsigned n, unsigned maxBytes, unsigned char *out) {
