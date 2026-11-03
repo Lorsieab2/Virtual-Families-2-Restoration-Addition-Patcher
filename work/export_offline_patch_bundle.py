@@ -678,7 +678,7 @@ SETTINGS = [
     {
         "id": "copy_paste_text_boxes",
         "label": "Copy and Paste in Text Boxes",
-        "description": "While you type in one of the game's text boxes (a name, the Family Tree note): Ctrl+V or Shift+Insert pastes, Ctrl+C or Ctrl+Insert copies the box's whole text, Ctrl+X cuts it. Line breaks and tabs in pasted text become spaces, other control characters are left out, and a paste stops at the box's own limit, never inside a character. With either Unicode text setting on, any character can be pasted; with both off, only the letters the original game can store (Windows-1252). The keys do nothing anywhere else and never reach the game as letters. Works with or without the Unicode text settings. Installs a small companion DLL in the Virtual Families 2 Patcher Files folder next to the game; unticking the setting removes it and the game is unmodified again.",
+        "description": "While you type in one of the game's text boxes (a name, the Family Tree note): Ctrl+V or Shift+Insert pastes, Ctrl+C or Ctrl+Insert copies the box's whole text, Ctrl+X cuts it. Line breaks and tabs in pasted text become spaces, other control characters are left out, and a paste stops at the box's own limit, never inside a character. With either Unicode text setting on, any character can be pasted; with both off, only the letters the original game's fonts can draw (ASCII and Latin-1 from ¢ to ÿ). The keys do nothing anywhere else and never reach the game as letters. Works with or without the Unicode text settings. Installs a small companion DLL in the Virtual Families 2 Patcher Files folder next to the game; unticking the setting removes it and the game is unmodified again.",
         "default": True,
         "category": "optional",
     },

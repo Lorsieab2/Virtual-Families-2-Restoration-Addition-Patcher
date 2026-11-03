@@ -7,7 +7,8 @@ Windows' clipboard as seams:
 * Ctrl+V and Shift+Insert paste at the end of the focused box, Ctrl+C / Ctrl+Insert copy its whole text, Ctrl+X cuts
   it; the key events are hidden from the game; with no box being edited nothing happens and the event goes on;
 * pasted text: CR, LF and Tab become a space each, other control characters and lone surrogates are dropped; with
-  both Unicode settings off only Windows-1252 characters go in, one byte each; with a Unicode setting on each whole
+  both Unicode settings off only the characters the game's stock fonts draw go in, one byte each (ASCII and Latin-1
+  from A2h, derived from the font tables); with a Unicode setting on each whole
   character (grapheme cluster) goes through the box's HandleKey and one the box takes only part of is taken back;
 * at the box's limit and one past it: the text stops at the limit and the bytes after the buffer are untouched;
 * a name box (limit NAME_BOX_BYTES, the long names' own) takes up to NAME_BOX_BYTES bytes as stored, with no
@@ -299,12 +300,42 @@ def test_nothing_happens_without_a_box_being_edited(stock):
     assert stock.text() == b"Ann"
 
 
-def test_pasted_text_is_cleaned_and_kept_to_windows_1252(stock):
+def test_pasted_text_is_cleaned_and_kept_to_what_the_fonts_draw(stock):
     stock.box(40)
-    stock.clipboard = "a\r\nb\tc\x01d\x7f€Ł\U0001F44D\ud800eé"
+    stock.clipboard = "a\r\nb\tc\x01d\x7f\u20ac\u0141\U0001F44D\ud800e\u00e9"
     stock.press(ord("v"), CTRL)
-    # CR LF: one space; Tab: a space; \x01 \x7f, lone surrogate dropped; L-stroke and the emoji are not Windows-1252
-    assert stock.text() == b"a b c" + b"d" + b"\x80" + b"e\xe9"
+    # CR LF: one space; Tab: a space; \x01 \x7f, lone surrogate dropped; the euro (the stock fonts draw nothing at 80h),
+    # the L-stroke and the emoji are not drawn by the stock fonts: dropped, never a blank
+    assert stock.text() == b"a b c" + b"d" + b"e\xe9"
+
+
+def _drawn_bytes() -> set:
+    """The bytes the game's four stock fonts all draw: a byte whose glyph is its own (the font tables of
+    src/vf2_game_fonts.json), not the '!' glyph 0 a missing byte shows."""
+    import json
+    fonts = json.loads((ROOT / "src" / "vf2_game_fonts.json").read_text(encoding="utf-8"))["fonts"]
+    sets = []
+    for name in ("Segoe24", "Segoe24Bold", "Segoe32Bold", "Segoe36Bold"):
+        f = fonts[name]
+        sets.append({b for b in range(0x20, 0x100) if f["glyphs"][f["charmap"][b]][0] == b})
+    assert all(s == sets[0] for s in sets)
+    return sets[0]
+
+
+def test_the_set_with_both_settings_off_is_what_the_stock_fonts_draw(stock):
+    drawn = _drawn_bytes()
+    assert drawn - {0x7F} == set(range(0x20, 0x7F)) | set(range(0xA2, 0x100))        # ASCII and Latin-1 from A2h
+    # every code point the old rule kept or could map (Latin-1, the Windows-1252 extras) and some others
+    cps = [cp for cp in list(range(0x20, 0x180)) + [0x2013, 0x2014, 0x2018, 0x2019, 0x201C, 0x201D, 0x2022, 0x20AC,
+                                                       0x2122, 0x4E2D] if cp != 0x7F and not 0x80 <= cp < 0xA0]
+    stock.box(1000)
+    stock.clipboard = "".join(map(chr, cps))
+    stock.press(ord("v"), CTRL)
+    want = bytes(cp for cp in cps if cp in drawn and cp < 0x100)
+    assert stock.text() == want and stock.guard()
+    assert 0xA0 not in want and 0xA1 not in want and 0xA2 in want and 0xFF in want
+    # each pasted byte is one the fonts draw as itself, none of them the missing '!' of a byte they lack
+    assert set(stock.text()) <= drawn
 
 
 def test_a_lone_cr_or_lf_is_one_space_each(stock):
@@ -441,7 +472,7 @@ def test_the_setting_row_and_its_files(clip_dll, tmp_path):
     rows = {r["id"]: r for r in ex.SETTINGS}
     row = rows["copy_paste_text_boxes"]
     assert row["label"] == "Copy and Paste in Text Boxes" and row["default"] is True and "excludes" not in row
-    for key in ("Ctrl+V", "Shift+Insert", "Ctrl+C", "Ctrl+Insert", "Ctrl+X", "Windows-1252", "do nothing anywhere else"):
+    for key in ("Ctrl+V", "Shift+Insert", "Ctrl+C", "Ctrl+Insert", "Ctrl+X", "fonts can draw", "do nothing anywhere else"):
         assert key in row["description"], key
     assert ex.RUNTIME_FLAG_SECTION_BY_SETTING["copy_paste_text_boxes"] == ".vf2clip"
     contract = {"ClipBoard": {"offline_patcher_setting": "copy_paste_text_boxes", "companion_dll": "vf2clip_b200.dll",

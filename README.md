@@ -571,7 +571,8 @@ release bundle, like almost everything else)
   out; a paste stops at the box's own limit at whole characters (a name box: 1,200 bytes as stored, as
   typing counts them). With either Unicode text setting on any character
   is pasted (each through the box's own HandleKey, so the stored form and the width cap apply); with both off only
-  Windows-1252 characters, one byte each. The keys do nothing anywhere else and never reach the game as letters.
+  the characters the original game's own fonts can draw (ASCII and Latin-1 from `¢` to `ÿ`; not the euro, curly
+  quotes or the no-break space, which those fonts lack), one byte each, the rest left out. The keys do nothing anywhere else and never reach the game as letters.
   The companion DLL `vf2clip_b200.dll` is the Unicode text source built with `B200UNICODE_CLIP`
   (`build_b200unicode.bat clip`): it replaces only the SDL_PollEvent import slot. Evidence: `tests/test_clip_text_boxes.py`
   (the DLL with the game's own event manager and text box code under emulation, at the limit and one past it with

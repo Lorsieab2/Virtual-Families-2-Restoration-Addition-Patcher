@@ -173,7 +173,10 @@ keeps its text. `tests/test_rename_family.py` and `tests/test_copy_slot.py`: lon
   through the game's own hooks, with guard bytes after every heap buffer).
 * Copy and Paste in Text Boxes (vf2clip_b200.dll) cuts a paste into a name box (a box whose limit is the 1,200
   bytes only the long names give) at those bytes as stored, with no character cap, at a character's start. Any
-  other box is cut as before, at its own byte limit. The limit is `runtime/native/b200unicode/b200name_limit.h`, the
+  other box is cut as before, at its own byte limit. With both Unicode settings off a paste keeps only the characters
+  the stock fonts draw, one byte each ("what the fonts draw": ASCII 20h..7Eh and Latin-1 A2h..FFh, derived from the
+  font tables in `src/vf2_game_fonts.json` by `tests/test_clip_text_boxes.py`; the stock fonts have nothing in
+  80h..A1h, so the euro, curly quotes and the no-break space are left out, never turned into a blank). The limit is `runtime/native/b200unicode/b200name_limit.h`, the
   one C copy of `NAME_BOX_BYTES`, written by `runtime/tools/gen_b200_name_limit.py` from `src/vf2_game_text.py` and
   checked by `tests/test_name_limit.py`.
 * Typing in a name box agrees with a paste: a mark typed right after a character the box refused (its
