@@ -687,3 +687,118 @@ def test_a_typed_name_is_never_wider_than_the_widest_stock_name(draw_world, name
     assert len(T.encode(start)) < 18
     w.e.call(w.h["handle_key"], (5, 0, ord("W")), ecx=ctl, edx=0)
     assert w.e.read(buf, 19).split(b"\0")[0] == T.encode(start)
+
+
+# ---------------------------------------------------------------------------------------------- the Unicode contract
+class StartupWorld(World):
+    """B200Unicode_Startup run whole, in the DLL's own code under unicorn: the settings read, SDL2.dll's functions
+    found, every site resolved and every hook written (VirtualProtect, the writes, FlushInstructionCache)."""
+
+    def __init__(self, exe, dll, mode=1, fail_protect_at=None):
+        super().__init__(exe, dll)
+        e = self.e
+        self.mode, self.fail_protect_at, self.protects = mode, fail_protect_at, []
+        self.sdl = 0x7200_0000
+        self.sdl_fn = e.fake_code(b"\xC3")
+        e.imports.update({
+            "GetModuleFileNameW": self._module_file, "CreateFileW": lambda em: (0xFFFFFFFF, 28),
+            "GetPrivateProfileIntW": self._profile_int, "GetPrivateProfileStringW": self._profile_str,
+            "GetModuleHandleW": self._module,
+            "GetProcAddress": self._proc, "VirtualProtect": self._protect,
+            "FlushInstructionCache": lambda em: (1, 12), "GetCurrentProcess": lambda em: (0xFFFFFFFF, 0),
+            "GetProcessHeap": lambda em: (1, 0), "HeapAlloc": lambda em: (em.alloc(em.arg(2) + 16), 12),
+        })
+
+    def _module_file(self, em):
+        path = "C:\\Game\\Virtual Families 2 Patcher Files\\vf2unicode_b200.dll\0".encode("utf-16-le")
+        em.write(em.arg(1), path)
+        return len(path) // 2 - 1, 12
+
+    def _profile_int(self, em):
+        f = em.wstr(em.arg(3)).lower()
+        if f.endswith("\\vf2unicode.ini"):
+            return (1 if self.mode == 1 else 0), 16
+        if f.endswith("\\vf2unicodefont.ini"):
+            return (2 if self.mode == 2 else 0), 16
+        return em.arg(2), 16
+
+    def _profile_str(self, em):
+        # no Unicode Font.ini, no [Font] File=: every value its default ("Segoe UI" for Face)
+        default = em.wstr(em.arg(2)) if em.arg(2) else ""
+        em.write(em.arg(3), (default + "\0").encode("utf-16-le"))
+        return len(default), 24
+
+    def _module(self, em):
+        if em.arg(0) == 0:
+            return em.base, 4
+        return (self.sdl if em.wstr(em.arg(0)).lower() == "sdl2.dll" else 0), 4
+
+    def _proc(self, em):
+        assert em.arg(0) == self.sdl, em.cstr(em.arg(1))
+        return self.sdl_fn, 8
+
+    def _protect(self, em):
+        self.protects.append((em.arg(0), em.arg(1), em.arg(2)))
+        if self.fail_protect_at is not None and len(self.protects) == self.fail_protect_at:
+            return 0, 16
+        if em.arg(3):
+            em.w32(em.arg(3), 0x20)
+        return 1, 16
+
+    def active(self):
+        return self.e.call(self.e.dll_export("B200Unicode_UnicodeTextActive"))
+
+    def startup(self):
+        self.e.call(self.e.dll_export("B200Unicode_Startup"))
+
+    def status(self):
+        st = self.e.dll_export("B200Unicode_Status")
+        return [self.e.r32(st + 4 * i) for i in range(6)]          # magic, version, mode, resolved, installed, mask
+
+
+def _proved_sites(exe, dlls):
+    w = World(exe, dlls[1])
+    assert w.plan(1)[0] == 1
+    return w.sites()
+
+
+def test_the_shipped_dll_exports_the_unicode_contract_undecorated(dlls):
+    pefile = pytest.importorskip("pefile")
+    for dll in dlls:
+        names = {s.name for s in pefile.PE(str(dll)).DIRECTORY_ENTRY_EXPORT.symbols}
+        assert b"B200Unicode_UnicodeTextActive" in names and b"_B200Unicode_UnicodeTextActive@0" not in names
+
+
+@pytest.mark.parametrize("mode", [1, 2])
+def test_unicode_text_active_is_nonzero_only_once_the_hooks_are_installed(exe, dlls, mode):
+    sites = _proved_sites(exe, dlls)
+    w = StartupWorld(exe, dlls[1], mode=mode)
+    assert w.active() == 0                                     # loaded, not started
+    before = w.e.read(sites["DRAW_STRING"], 5)
+    w.startup()
+    st = w.status()
+    assert st[2] == mode and st[3] == 1 and st[4] == 1
+    assert w.active() == 1
+    assert w.e.read(sites["DRAW_STRING"], 1) == b"\xE9" and before[0] != 0xE9
+    # every trampoline the hooks call was made executable before it could run (DEP)
+    assert sum(1 for _a, _n, prot in w.protects if prot == 0x40) >= 4
+
+
+def test_unicode_text_active_is_zero_with_the_settings_off(exe, dlls):
+    w = StartupWorld(exe, dlls[1], mode=0)
+    w.startup()
+    assert w.status()[4] == 0 and w.active() == 0 and not w.protects
+
+
+@pytest.mark.parametrize("fail_at", [1, 5, 9])
+def test_unicode_text_active_is_zero_when_a_hook_could_not_be_written(exe, dlls, fail_at):
+    """A refused VirtualProtect (a trampoline's, or a hook write's) installs nothing: the status block and the
+    contract both say so, and every byte already written is put back."""
+    s = _proved_sites(exe, dlls)
+    sites = [s[k] for k in ("DRAW_STRING", "DRAW_CHARS", "GET_WIDTH", "NEXT_LINE", "GET_TEXT", "DRAW_JUSTIFIED",
+                            "SET_TEXT")]
+    original = [StartupWorld(exe, dlls[1]).e.read(a, 9) for a in sites]
+    w = StartupWorld(exe, dlls[1], mode=1, fail_protect_at=fail_at)
+    w.startup()
+    assert w.status()[4] == 0 and w.active() == 0
+    assert [w.e.read(a, 9) for a in sites] == original

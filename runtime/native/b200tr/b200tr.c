@@ -1072,6 +1072,8 @@ __declspec(dllexport) int __cdecl B200Tr_TestInstall(const char *text, int n, in
 }
 __declspec(dllexport) const char *__cdecl B200Tr_TestLog(void) { return log_text; }
 __declspec(dllexport) void *__cdecl B200Tr_TestScanAddress(void) { return (void *)ScanPattern; }
+/* the Unicode contract's answer as the install asks it (1 UTF-8, 0 Windows-1252) */
+__declspec(dllexport) int __cdecl B200Tr_TestUnicodeActive(void) { return unicode_text_active(); }
 #endif
 
 /* The line's override for a string id now (tests and other DLLs): the translation, or NULL (English). */
