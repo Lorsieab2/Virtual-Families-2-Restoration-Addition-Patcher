@@ -26515,6 +26515,80 @@ def patch_zero_length_line_guard(manifest):
     }
 
 
+# 7. petanimpts.dat is closed twice (owner-approved 2026-11-02). At every
+#    start CPetAnimManager::LoadAssets opens petanimpts.dat, reads its size,
+#    and when the size fits (<= 0x8AF0) reads the pet link points and calls
+#    fclose at +0x31C; then it falls through to the fclose at +0x325, which
+#    the too-big path jumps to, and closes the same FILE* a second time (the
+#    UCRT's invalid-parameter path for a stream already freed; a crash on a
+#    debug CRT). Fixed: with the .vf2bugs byte 1 the first call (+0x31C, the
+#    success branch's own close) returns without closing, so the common close
+#    at +0x325 closes the file exactly once on both paths; nothing is read
+#    between the two calls, so the loaded data is the same. With the byte 0
+#    the stub jumps to the stock fclose (two calls).
+PET_POINTS_FUNCTION = "?LoadAssets@CPetAnimManager@@QAEXXZ"
+PET_POINTS_SIZE = 0x367
+PET_POINTS_FIRST_CLOSE = 0x31C     # call _fclose (REL32 at +0x31D)
+PET_POINTS_STUB_SIZE = 0x10
+
+
+def patch_pet_points_single_close(manifest):
+    obj_path = PATCHED / "PetAnimManager.obj"
+    obj = CoffObject(obj_path)
+    sec = _check_function_layout(
+        obj, PET_POINTS_FUNCTION, PET_POINTS_SIZE,
+        {
+            # fopen("petanimpts.dat"); fread(&size, 4, 1); size > 8AF0h -> +0x324
+            0x2E4: bytes.fromhex("8BF0" "5B" "85F6" "7442"),
+            0x305: bytes.fromhex("3DF08A0000" "7718"),
+            # fread(points, size, 1, f); fclose(f); add esp,14h
+            0x30C: bytes.fromhex("56" "6A01" "50" "FFB54CFFFFFF" "E800000000"),
+            0x31B: bytes.fromhex("56" "E800000000" "83C414"),
+            # +0x324: fclose(f); add esp,4 (the too-big path's only close; the fit path's second)
+            0x324: bytes.fromhex("56" "E800000000" "83C404"),
+        },
+        {
+            0x2DD: ("_fopen", IMAGE_REL_I386_REL32),
+            0x317: ("_fread", IMAGE_REL_I386_REL32),
+            0x31D: ("_fclose", IMAGE_REL_I386_REL32),
+            0x326: ("_fclose", IMAGE_REL_I386_REL32),
+        },
+    )
+    stub_off = sec.raw_size
+    stub = bytearray()
+    stub += b"\x80\x3D\0\0\0\0\x00"                      # +00 cmp byte [flag],0
+    stub += b"\x0F\x84\0\0\0\0"                          # +07 je _fclose (stock: close here too)
+    stub += b"\x33\xC0"                                  # +0D xor eax,eax (fclose's success)
+    stub += b"\xC3"                                      # +0F ret: the close at +0x325 closes it once
+    assert len(stub) == PET_POINTS_STUB_SIZE
+    obj.insert_section_bytes(sec.index, stub_off, bytes(stub))
+    for at, name, rtype in (
+        (0x02, VANILLA_BUGS_FLAG_SYMBOL, IMAGE_REL_I386_DIR32),
+        (0x09, "_fclose", IMAGE_REL_I386_REL32),
+    ):
+        obj.append_relocation(sec.index, stub_off + at, obj.append_undefined_symbol(name), rtype)
+    # the success branch's call now lands on the stub: the same REL32, to the function's own symbol (its
+    # section start) plus the stub's offset
+    sec = obj.section(sec.index)
+    call = PET_POINTS_FIRST_CLOSE + 1
+    obj.retarget_relocation(sec.index, call, obj.symbol(PET_POINTS_FUNCTION).index, IMAGE_REL_I386_REL32)
+    struct.pack_into("<i", obj.buf, sec.raw_ptr + call, stub_off)
+    obj.write(obj_path)
+    manifest["PetPointsSingleClose"] = {
+        "status": "installed",
+        "offline_patcher_setting": VANILLA_BUGS_SETTING,
+        "function": PET_POINTS_FUNCTION,
+        "call": hex(PET_POINTS_FIRST_CLOSE),
+        "stub_offset": hex(stub_off),
+        "rule": (
+            "the fit branch's fclose (+0x31C) returns 0 without closing; the common fclose at +0x325 "
+            "closes petanimpts.dat once on both paths"
+        ),
+        "flag_off": "the stock fclose at +0x31C (the file closed twice)",
+        "stock_defect": "petanimpts.dat closed twice when its size fits (every start): fclose on a freed stream",
+    }
+
+
 def patch_fix_vanilla_game_bugs(manifest):
     """Every stock-game menu fix, behind the one .vf2bugs byte."""
     patch_title_menu_start_over_confirms(manifest)
@@ -26524,6 +26598,7 @@ def patch_fix_vanilla_game_bugs(manifest):
     patch_server_reply_guard(manifest)
     patch_server_error_text_bounded(manifest)
     patch_zero_length_line_guard(manifest)
+    patch_pet_points_single_close(manifest)
     manifest["FixVanillaGameBugs"] = {
         "status": "dormant native hooks installed in every executable",
         "offline_patcher_setting": VANILLA_BUGS_SETTING,
@@ -26545,6 +26620,7 @@ def patch_fix_vanilla_game_bugs(manifest):
             "ServerReplyGuard",
             "ServerErrorTextBounded",
             "ZeroLengthLineGuard",
+            "PetPointsSingleClose",
         ],
         "flag_off": "every site runs the stock instructions it displaced",
     }

@@ -3744,6 +3744,33 @@ Divide-by-zero audit; a zero-length rain streak (Fix Vanilla Game Bugs, after B2
   its own initializer. No weather crash besides the rain streak above; no
   further change to the executable.
 
+petanimpts.dat closed twice (Fix Vanilla Game Bugs, after B205)
+---------------------------------------------------------------
+
+- Stock bug (owner decision 2026-11-02 to fix it): CPetAnimManager::LoadAssets
+  opens petanimpts.dat, reads its 4-byte size and, when it fits (<= 0x8AF0;
+  the shipped file holds 0x8AF0), reads the pet link points into
+  this+0xC6F8 and calls fclose at +0x31C; it then falls through to the
+  fclose at +0x325 that the too-big path jumps to, and closes the same FILE*
+  again at every start. The UCRT frees the stream on the first close, so
+  the second is a call on freed memory (its invalid-parameter path; a
+  debug CRT asserts).
+- Fix: patch_pet_points_single_close in work/patch_mobile_furniture_pack.py
+  retargets the call at +0x31C (its REL32 to the function's own symbol plus
+  the stub offset, as the server error text fix does) to a 0x10-byte stub
+  appended to the section: with the .vf2bugs byte 1 it returns 0 without
+  closing, so the common fclose at +0x325 closes the file exactly once on
+  both paths; with the byte 0 it jumps to the stock fclose. Nothing is read
+  between the two calls, so the loaded data cannot differ.
+- Evidence: tests/test_pet_points_single_close.py links PetAnimManager.obj
+  and runs LoadAssets under unicorn with the shipped petanimpts.dat: stock,
+  fclose is called twice with the same FILE*; patched with the byte 1, once,
+  with that FILE*, and the whole manager (0x14F80 bytes, past the points
+  block) is byte for byte the stock result; with the byte 0 the calls and
+  bytes are the stock ones; a too-big file is closed once either way. With
+  VF2_CORE_EXE the B205 core executable holds the stock function. Static
+  and emulated evidence only; the game was never run.
+
 Time Warp costs the store's price (Time Controls, after B205)
 -------------------------------------------------------------
 
