@@ -1,0 +1,167 @@
+name: Translations
+
+# Checks every translation shared to the public translations/ folder (translations/README.md).
+#
+#   scan      every changed file goes through VirusTotal first (scripts/virustotal_scan.py); ANY
+#             engine reporting it malicious or suspicious fails the check, and so does a scan that
+#             could not run (no key, VirusTotal unreachable or too slow): never a pass by default.
+#   validate  needs scan: the very files that were scanned are checked against the shared format
+#             (scripts/validate_translation.py, src/vf2_translation_format.py): keys, placeholders,
+#             gender and plural choices, and no email address anywhere (the line is named).
+#   refuse    a failed check takes the "accept-translation" label off again.
+#   accept    the owner's "accept-translation" label on a pull request that passed both: merged at
+#             exactly the commit that was scanned, then main is scanned again.
+#
+# SECURITY. pull_request_target runs this file as it is on the BASE branch, with a token that can
+# comment, so a pull request from a fork gets its report. The pull request's code is therefore
+# NEVER checked out or run: the checkout below is the base branch, and the changed files are
+# fetched through the GitHub API as data (at most 2 MB each, UTF-8 .tsv under translations/ only)
+# and read by the base branch's own Python. No pull-request text (title, branch name, file names)
+# is ever written into a shell command: the scripts read the event file, and the shell sees only
+# numbers through environment variables. The VirusTotal key comes only from the VT_API_KEY secret,
+# reaches only the scan step, and is never printed. No step commits anything, so no identity or
+# email address is configured.
+#
+# Merged files are scanned again on push to main (and by a manual run, which scans the whole folder).
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, labeled]
+    paths: ["translations/**"]
+  push:
+    branches: [main]
+    paths: ["translations/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  scan:
+    name: VirusTotal scan
+    # A label other than accept-translation changes nothing; skip it.
+    if: github.event_name != 'pull_request_target' || github.event.action != 'labeled' || github.event.label.name == 'accept-translation'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    outputs:
+      hashes: ${{ steps.scan.outputs.hashes }}
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+    steps:
+      - name: Check out the base branch (never the pull request)
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Fetch the changed translation files (as data, at most 2 MB each)
+        run: python -I scripts/translation_pr_files.py "$GITHUB_EVENT_PATH" "$RUNNER_TEMP/translations"
+
+      - name: Scan every file with VirusTotal
+        id: scan
+        env:
+          VT_API_KEY: ${{ secrets.VT_API_KEY }}
+        run: python -I scripts/virustotal_scan.py "$RUNNER_TEMP/translations"
+
+      - name: Report the scan on the pull request
+        if: always() && github.event_name == 'pull_request_target'
+        run: |
+          report="$RUNNER_TEMP/translations/scan-comment.md"
+          if [ ! -f "$report" ]; then
+            printf '### VirusTotal scan: FAILED\n\nThe files could not be collected, so nothing was scanned (not scanned).\n' > "$report"
+          fi
+          gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body-file "$report"
+
+      - name: Summary
+        if: always()
+        run: cat "$RUNNER_TEMP/translations/scan-comment.md" >> "$GITHUB_STEP_SUMMARY" || true
+
+  validate:
+    name: Translation format check
+    needs: scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      SCANNED: ${{ needs.scan.outputs.hashes }}
+    steps:
+      - name: Check out the base branch (never the pull request)
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Fetch the changed translation files (as data, at most 2 MB each)
+        run: python -I scripts/translation_pr_files.py "$GITHUB_EVENT_PATH" "$RUNNER_TEMP/translations"
+
+      - name: Check the files (only the ones VirusTotal scanned)
+        run: python -I scripts/validate_translation.py "$RUNNER_TEMP/translations"
+
+      - name: Report the check on the pull request
+        if: always() && github.event_name == 'pull_request_target'
+        run: |
+          report="$RUNNER_TEMP/translations/validate-comment.md"
+          if [ -f "$report" ]; then
+            gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body-file "$report"
+          fi
+
+      - name: Summary
+        if: always()
+        run: cat "$RUNNER_TEMP/translations/validate-comment.md" >> "$GITHUB_STEP_SUMMARY" || true
+
+  refuse:
+    name: Refuse the accept-translation label
+    needs: [scan, validate]
+    if: >-
+      always()
+      && github.event_name == 'pull_request_target'
+      && contains(github.event.pull_request.labels.*.name, 'accept-translation')
+      && (needs.scan.result == 'failure' || needs.validate.result == 'failure')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+    steps:
+      - name: Take the label off and say why
+        run: |
+          gh pr edit "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --remove-label accept-translation
+          gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body "The accept-translation label was refused: the VirusTotal scan or the format check failed (see the reports above). Nothing is accepted until both pass."
+
+  accept:
+    name: Accept (owner's label)
+    needs: [scan, validate]
+    if: >-
+      github.event_name == 'pull_request_target'
+      && github.event.action == 'labeled'
+      && github.event.label.name == 'accept-translation'
+      && github.event.sender.login == github.repository_owner
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # The only job that may write: merge the checked pull request, then start the scan of main.
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - name: Merge exactly the commit that was scanned and checked
+        run: gh pr merge "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --merge --match-head-commit "$HEAD_SHA"
+
+      - name: Scan main again (a merge by this workflow does not start a push run)
+        run: gh workflow run translations.yml --repo "$GITHUB_REPOSITORY" --ref main
