@@ -8,14 +8,14 @@ Emulated on all 32 in the B207 run: Special Upgrades lists 53 rows (50 with `.vf
 
 Release DLLs, built fresh from main `cbdb06e` (the bundle is exported from it; #490 to #492 changed DLL code, the README and tests only) and shipped in the bundle:
 
-- `vf2time_b200.dll`: SHA-256 `8f42d0d368e0765e918aa1f408afd94fcee7cba323a12abdbb437a690c9189ef`.
-- `vf2kids_b200.dll`: SHA-256 `518ee831e858bd74280185dd13701773858aa3575c552c4af5c702f182df13d9`.
-- `vf2history_b200.dll`: SHA-256 `a2a67abfb393d13be23b7375a72d48e2be64bc96a474db404d78869abba8a84a`.
-- `vf2outfits_b200.dll`: SHA-256 `37d1a22a04f4b188b7cba3ce442a2ab00167ef29884a9a64583f775e4b9e45a2`.
-- `vf2refresh_b200.dll`: SHA-256 `e4d5090944119f9c79bab083d64dc255fc07828c2851b9aeaf0346f9b5f51640`.
-- `vf2unicode_b200.dll`: SHA-256 `4007c0399f3d2e953902b93ec215179a5afd76a30a0a8e15de14d161b6aece84`.
-- `vf2clip_b200.dll`: SHA-256 `22407dae55be8b86efd194a6c5ffe8b65f886af20c0a4ccbe4697a2f35f64fc1`.
-- `vf2titlebox_b200.dll`: SHA-256 `c5bcd3634a596fadc062aa4e45750c676d5d50c76eb83a04a6b8d286b29f098e`.
+- `vf2time_b200.dll`: SHA-256 `3fafd99ca34b6d3e365d4114b44dcd96576c49cdd7f34efacd2f4bf22ac64eb7`.
+- `vf2kids_b200.dll`: SHA-256 `deb29e0bd4e982a03801c271eb7ce4a8360ea81690eab49822583384875802b0`.
+- `vf2history_b200.dll`: SHA-256 `4c6ff9b88532bac8df51a5e081954da615d6461100fa0b027a7f69ca8812ec30`.
+- `vf2outfits_b200.dll`: SHA-256 `dc92c3b3d34037765f5e6296678ca66d3aaff9dd9826fc3ba5bda5c20e380b31`.
+- `vf2refresh_b200.dll`: SHA-256 `e73ba0320c2745287fd3607f5faa26c95199f778191473c5add3d2733af02b84`.
+- `vf2unicode_b200.dll`: SHA-256 `10ea432d6418b56521b1f7673f0c78333b6ffea578a7f8dae7b88befd36eaea2`.
+- `vf2clip_b200.dll`: SHA-256 `a89ac0f47c9bfafc176d2f5303e525784e6894b2f694fbe6cf957149b5f3dc1f`.
+- `vf2titlebox_b200.dll`: SHA-256 `95c0b06344c65a27e9d8ac885293fca3f1ab59a9ec19a32d5e5f77f6b4c3ef03`.
 
 | Variant | Size (bytes) | SHA-256 |
 |---|---|---|

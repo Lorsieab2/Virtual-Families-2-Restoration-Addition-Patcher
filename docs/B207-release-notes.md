@@ -1,6 +1,6 @@
 # VF2 B207 release notes
 
-**The patcher bundle.** The 32 executables are built from `main` at `e32fe0f` (PR #488; the release config was merged after it as #489), seeded from the B206 matrix, in 4 parallel parts. The companion DLLs are built and the bundle is exported from `cbdb06e` (main after the clipboard fixes of #491, which change DLL code, the README and tests only). B207 is a new version, not an in-place update of B206. It carries everything B206 had, plus the changes below.
+**The patcher bundle.** The 32 executables are built from `main` at `e32fe0f` (PR #488; the release config was merged after it as #489), seeded from the B206 matrix, in 4 parallel parts. The companion DLLs are built and the bundle is exported from `f5b8a77` (main after the clipboard fixes of #491, which change DLL code, the README and tests only). B207 is a new version, not an in-place update of B206. It carries everything B206 had, plus the changes below.
 
 B207 offers 47 settings (48 are defined; one is not offered). 40 of the 47 are on by default. All 32 executables are rebuilt: every one gains new setting bytes (the Unicode text settings, Copy and Paste in Text Boxes and the Title Screen Player Name Box) and the Fix Vanilla Game Bugs fixes below.
 
@@ -48,7 +48,7 @@ Copy everything in `Documents\LDW\Virtual Families 2 - Modded B206` except the `
 ## Checks
 
 - All 32 variants are built from `e32fe0f`, with 32 distinct executables. The hashes are in `docs/b207-matrix-manifest.md` and the identities in `data/vf2/release-identities-B207.json`.
-- The companion DLLs are built fresh from `cbdb06e` (main after #491 and #492), and the bundle is exported from it. #490 (the 30% box) and #491 (the clipboard fixes) changed DLL code only, and #492 only the README and tests; no executable byte changed after the 32 were built.
+- The companion DLLs are built fresh from `f5b8a77` (main after #491, #492 and #494), and the bundle is exported from it. #490 (the 30% box) and #491 (the clipboard fixes) changed DLL code only, and #492 only the README and tests, and #494 only the Unicode DLL; no executable byte changed after the 32 were built.
 - The release gate passed: **RELEASE GATE PASSED**, with no features lost against 27 retained releases (B179 to B206), and "shipped defaults match the SETTINGS table".
 - The bundle reproduces the build on a clean install, 8194 of 8194 files.
 - Full test suite with release-only tests, against this matrix and bundle (2 workers): 3,430 tests passed (2 workers) in the full run; six test files had problems in it, and each is explained and now passes: the Family History tests need the B200 core executable named in their setup (rerun with it); the Copy and Paste tests and the README-count tests needed updates for this release's changes, which went in as #492; two tests that check generated source files for freshness pass in the checkout that generated those files. The four files that failed (Family History, Copy and Paste, the README counts and the bundle verifier) pass together, 255 tests, against the final bundle.
@@ -58,7 +58,9 @@ Copy everything in `Documents\LDW\Virtual Families 2 - Modded B206` except the `
   - Everything else is on. No AI Icons waits for Cheat Upgrades.
   - In that executable the Special Upgrades page lists 10 rows, House Renovations 30 and Clothing and Hairstyles 12 (emulated).
 - An Owner's Defaults apply turns on everything except Up to 28 Children and Use Unicode Font (Render Unicode with In-Game Fonts is on). Special Upgrades lists 53 rows, House Renovations 30, Clothing and Hairstyles 214 (emulated).
-- **Everything new in B207 was checked by emulation** (the real DLLs on the real game code), not in a running game.
-- **Not yet tried in a running game:** the Unicode text settings and the Unicode Font... window, typing emoji and accents, Copy and Paste in Text Boxes, long names and their Names file, the Family History log with long names, the Title Screen Player Name Box, the rain fix and the Every picture tab.
-- Asset: `VF2-B207-Release.zip`, 165,712,163 bytes, SHA-256 `ff23bff95ff332af70ed44cc6eabc8d6154caa7b3a8e86054cc2ab147d5acd9f`.
+- **A first live start found a crash, now fixed (#494).** The default-applied game died at start-up in `vf2unicode_b200.dll`: the long names' two hook trampolines (#484) sat in a no-execute data page, so the first call through them was an access violation. Emulation does not enforce that protection, so no test saw it. The trampolines are now made executable, and a new test checks every trampoline in the DLL's source.
+- **Tried in a running game** (this zip, default settings, a windowed test copy): the game starts and shows its title screen; "Zoë 日本👍", typed with the keyboard (the emoji arrives as two halves, joined), is accepted as the player name; the title screen draws it on the 30% white box; a family member named 𒂍𒀀日é💩 (Cuneiform, 日, é, emoji) is adopted and shown in the house's bottom bar.
+- Everything else new in B207 was checked by emulation (the real DLLs on the real game code).
+- **Not yet tried in a running game:** the Unicode Font... window and Use Unicode Font, Copy and Paste in Text Boxes, names near the 300-character limit and their Names file, the Family History log with long names, the rain fix and the Every picture tab.
+- Asset: `VF2-B207-Release.zip`, 165,712,198 bytes, SHA-256 `eeff0a5d5795df965079118c51136256ce7691c04c0a7719e80aae28e2caec96`.
 
