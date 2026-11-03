@@ -172,3 +172,6 @@ keeps its text. `tests/test_rename_family.py` and `tests/test_copy_slot.py`: lon
   typing counts (grapheme clusters), at a character's start; the 1,200-byte limit still holds. Any other box is
   cut as before, at its own byte limit. The limit is `runtime/native/b200unicode/b200name_limit.h`, the one C copy
   of `NAME_LETTERS` / `NAME_BOX_BYTES`, checked against `src/vf2_game_text.py` by `tests/test_name_limit.py`.
+* Typing in a name box agrees with a paste: a mark typed right after a character the box refused (its 300
+  characters or its bytes) belongs to that character and is refused too, so it never lands on the box's last
+  character (`tests/test_clip_text_boxes.py`, `test_typing_and_a_paste_agree`).

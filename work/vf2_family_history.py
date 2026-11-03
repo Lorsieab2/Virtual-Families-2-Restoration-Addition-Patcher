@@ -261,9 +261,16 @@ def whole_names(h: History, book, slot: int) -> None:
             return tuple(whole(v) for v in value)
         if isinstance(value, list):
             return [whole(v) for v in value]
+        if isinstance(value, dict):
+            return {k: whole(v) for k, v in value.items()}
+        if dataclasses.is_dataclass(value) and not isinstance(value, type):    # Marriage, Birth, Event, Entry
+            inside(value)
         return value
-    for f in dataclasses.fields(h):
-        setattr(h, f.name, whole(getattr(h, f.name)))
+
+    def inside(record):
+        for f in dataclasses.fields(record):
+            setattr(record, f.name, whole(getattr(record, f.name)))
+    inside(h)
 
 
 def read(folder: Path, slot: int) -> History | None:

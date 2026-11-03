@@ -1501,16 +1501,16 @@ def scenario_whole_names_in_the_log(w: HistoryWorld):
     w.report_death_timeflow()
     assert w.last()[0] == "Death 2" and w.last()[1][0] == f"  Name: {dan}"
     w.evict()
-    assert w.last() == ("Evict Family", [f"  Family members: {ana}, {_stored(cal)}", "  Generation: 1"])
+    assert w.last() == ("Evict Family 1", [f"  Family members: {ana}, {_stored(cal)}", "  Generation: 1"])
     assert w.fs.guards_intact(), "a heap buffer was written past its end"
     out = w.e.alloc(4 * 12)
     w.e.call(w.e.dll_export("B200History_TestBuffers"), (out,))
     line, body, size = (w.e.r32(out + 4 * i) for i in range(3))
     assert size == 0x10000 and {(line, size), (body, size)} <= set(w.fs.heap), "the record buffers are heap buffers"
-    # the patcher's reader: the whole names, as they are (nothing left to expand)
+    # the patcher's reader: the whole names, as they are (nothing left to expand); after Evict Family nothing is the
+    # family's, so the records before it are read on their own
     h = FH.parse(FH.log_text(w.fs.read(w.history_path(1))))
-    assert [(m.head, m.spouse, m.earlier, m.earlier_how) for m in h.marriages] == [(ana, ben, None, None)]
-    assert h.evictions == 1 and h.entries == []
+    assert h.marriages == [] and h.evictions == 1 and h.entries == []
     raw = w.fs.read(w.history_path(1)).split((STAMP + "Evict Family").encode("ascii"))[0]
     h = FH.parse(FH.log_text(raw))
     assert [(m.head, m.spouse, m.earlier, m.earlier_how) for m in h.marriages] == [(ana, ben, None, None),

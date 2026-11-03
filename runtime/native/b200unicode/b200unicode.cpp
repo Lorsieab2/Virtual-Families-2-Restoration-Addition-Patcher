@@ -1178,6 +1178,18 @@ static bool FitsWidth(unsigned font, unsigned char *text, int n, int max) {
 }
 
 // ================================================================ typing
+// A name box whose last typed character was refused (its 300 characters or its bytes): a mark typed next (a code
+// point that joins the character before it) belongs to the refused character, so it is refused too and never lands
+// on the box's last character. A paste cuts at whole characters the same way (b200clip.inc), so typing and a paste
+// leave the same text (tests/test_clip_text_boxes.py).
+static unsigned NameRefusedBox;
+
+static bool JoinsLast(const unsigned *cps, unsigned n) {     // cps[n - 1] is not the start of a character
+    unsigned start = 0, last = 0;
+    while (start < n) { last = start; start = ut::ClusterEnd(cps, n, start); }
+    return n > 0 && last < n - 1;
+}
+
 static bool __fastcall UniHandleKey(void *ctl, void *, int type, int code, int sym) {
     unsigned c = (unsigned)ctl;
     if (type == UNI_KEY_TYPE_CHARACTER && (((unsigned)code & UNI_KEY_MARK) || sym == 8 || (sym >= 0x20 && sym <= 0xFF)))
@@ -1204,9 +1216,14 @@ static bool __fastcall UniHandleKey(void *ctl, void *, int type, int code, int s
             cps[count++] = cp;
         }
         bool name = IsNameBox(c);
-        if (name && sym != 8 && !NameLettersOk(cps, count)) { ++B200Unicode_Status.refused; return true; }   // 300
+        if (name && sym != 8 && ((NameRefusedBox == c && JoinsLast(cps, count)) || !NameLettersOk(cps, count))) {
+            NameRefusedBox = c;                                           // 300, or the mark of a refused character
+            ++B200Unicode_Status.refused;
+            return true;
+        }
         int k = ut::Encode(cps, count, next, (unsigned)max < sizeof(next) ? (unsigned)max : sizeof(next) - 1);
-        if (k < 0) { ++B200Unicode_Status.refused; return true; }
+        if (k < 0) { if (name && sym != 8) NameRefusedBox = c; ++B200Unicode_Status.refused; return true; }
+        if (name) NameRefusedBox = 0;
         // a name box scrolls (b200names.inc); another box takes no character that would draw it past its width
         if (sym != 8 && !name && !FitsWidth(*(unsigned *)(c + 0x3C), next, k, max)) { ++B200Unicode_Status.refused; return true; }
         for (int i = 0; i < k; ++i) buf[i] = (char)next[i];
@@ -1222,13 +1239,15 @@ static bool __fastcall UniHandleKey(void *ctl, void *, int type, int code, int s
         int max = *(int *)(c + 0x28);
         static unsigned char with[1300];
         unsigned n = buf ? ut::Length((const unsigned char *)buf) : 0;
+        if (IsNameBox(c) && buf && (int)n >= max) NameRefusedBox = c;    // the stock code refuses it: the box is full
         if (buf && n + 1 < sizeof(with) && (int)n < max) {
             for (unsigned i = 0; i < n; ++i) with[i] = (unsigned char)buf[i];
             with[n] = (unsigned char)sym;
             if (IsNameBox(c)) {
                 static unsigned wc[1300];
                 unsigned count = ut::Decode(with, n + 1, wc, 1290);
-                if (!NameLettersOk(wc, count)) { ++B200Unicode_Status.refused; return true; }     // 300 characters
+                if (!NameLettersOk(wc, count)) { NameRefusedBox = c; ++B200Unicode_Status.refused; return true; }   // 300
+                NameRefusedBox = 0;
             } else if (!FitsWidth(*(unsigned *)(c + 0x3C), with, (int)n + 1, max)) {
                 ++B200Unicode_Status.refused;
                 return true;
