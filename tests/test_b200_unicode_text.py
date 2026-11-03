@@ -57,7 +57,6 @@ def lib(tmp_path_factory):
     assert dll.is_file(), r.stdout + r.stderr
     d = ctypes.CDLL(str(dll))
     u32p = ctypes.POINTER(ctypes.c_uint32)
-    d.UtIsUtf8.argtypes = [ctypes.c_char_p, ctypes.c_uint32]
     d.UtUnits.argtypes = [ctypes.c_char_p, ctypes.c_uint32, u32p, u32p, u32p, u32p, ctypes.c_uint32]
     d.UtUnits.restype = ctypes.c_uint32
     d.UtEncode.argtypes = [u32p, ctypes.c_uint32, ctypes.c_char_p, ctypes.c_uint32]
@@ -145,7 +144,6 @@ def test_the_tables_are_the_same_in_python_and_the_dll():
 def test_stored_form_units_and_decode(lib):
     for raw in _all_raws():
         raw = raw.split(b"\0", 1)[0]
-        assert bool(lib.UtIsUtf8(raw, len(raw))) == T.is_utf8(raw), raw
         assert c_units(lib, raw) == py_units(raw), raw
         cap = len(raw) + 1
         cps = (ctypes.c_uint32 * cap)()
@@ -210,7 +208,8 @@ def test_fit_for_the_text_boxes_get_text(lib):
 def test_fit_tries_every_start(lib):
     lib.UtFit.argtypes = [ctypes.c_char_p, ctypes.c_uint32, ctypes.c_uint32, ctypes.c_char_p]
     lib.UtFit.restype = ctypes.c_uint32
-    raw = T.encode("a" * 16 + "Ã©é")
+    raw = T.encode("a" * 16 + "Ã©é")                # UTF-8 as a whole (22 bytes)
     out = ctypes.create_string_buffer(32)
-    k = lib.UtFit(raw, len(raw), 19, out)
-    assert out.raw[:k] == raw
+    for room in (16, 17, 19, 20, 21, 22, 30):
+        k = lib.UtFit(raw, len(raw), room, out)
+        assert out.raw[:k] == T.fit("a" * 16 + "Ã©é", room), room

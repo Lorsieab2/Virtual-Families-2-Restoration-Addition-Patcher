@@ -5,7 +5,6 @@
 
 #define EXPORT extern "C" __declspec(dllexport)
 
-EXPORT int UtIsUtf8(const unsigned char *s, unsigned n) { return ut::IsUtf8(s, n) ? 1 : 0; }
 
 // starts, sizes, counts: one per unit; cps: kMaxClusterCps per unit. Returns the unit count.
 EXPORT unsigned UtUnits(const unsigned char *s, unsigned n, unsigned *starts, unsigned *sizes, unsigned *counts,

@@ -513,8 +513,12 @@ release bundle, like almost everything else)
     codes, an input method); the original game drops all of them (`CheckForEvents` only passes a one-byte
     `SDL_TEXTINPUT`). A character is added only if the whole name still fits the box; Backspace removes a whole
     character (an emoji with its skin tone too); copying a name to its save field never cuts inside a character;
-  - **saves**: the names stay in their own fields. Text of ASCII and Latin-1 letters is stored one byte per letter
-    exactly as before (the original game and older tools show it); anything else is UTF-8. The one rule is
+  - **saves**: the names stay in their own fields. Each character is written by itself: a letter Windows-1252 has
+    (ASCII, Latin-1, the euro and curly quotes) is its one byte, exactly as before (the original game and older tools
+    show it), and any other character is UTF-8, in the same name (a name with an accented letter and a Japanese one
+    keeps the accented letter as one byte); when those bytes would read back as different text, the whole name is
+    UTF-8. Reading takes each valid UTF-8 sequence as its character and every other byte as a Windows-1252 letter,
+    per sequence, so mixed names read right and older saves read as before. The one rule is
     `src/vf2_game_text.py`, which every patcher reader and writer uses (logs, Family Tree, Rename Family, Copy
     Player Slot, the tools). The original game shows UTF-8 names as odd letters (Ã© for é) and never crashes
     (`tests/test_vf2_game_text.py` runs its own drawing code over every byte);

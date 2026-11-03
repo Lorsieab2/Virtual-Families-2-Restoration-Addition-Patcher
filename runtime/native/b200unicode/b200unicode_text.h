@@ -2,10 +2,12 @@
 // the game, and runtime/native/b200unicode/b200unicode_texttest.cpp builds them into a 64-bit test DLL the tests
 // call next to src/vf2_game_text.py (the same rules in Python), text by text.
 //
-// * the stored form: valid UTF-8 with a byte of 80h or more is UTF-8; anything else is one byte per character
-//   (ASCII, Latin-1 for A0h..FFh, Windows-1252 for 80h..9Fh, the five bytes it leaves out as themselves);
-// * encode: ASCII, U+00A0..U+00FF and the Windows-1252 characters are single bytes unless those bytes would read as
-//   UTF-8; anything else is UTF-8;
+// * the stored form, read per sequence: each well-formed, shortest UTF-8 sequence is its character, every other byte
+//   is one character (ASCII, Latin-1 for A0h..FFh, Windows-1252 for 80h..9Fh, the five bytes it leaves out as
+//   themselves), so one string can hold both;
+// * encode, per character: ASCII, U+00A0..U+00FF and the Windows-1252 characters are single bytes, any other
+//   character is UTF-8, in one string; if those bytes would read back as different text, every non-ASCII character
+//   is UTF-8;
 // * characters: a simplified extended grapheme cluster (b200unicode_tables.h EXTEND; ZWJ joins the next; regional
 //   indicators pair; CR LF);
 // * the stock text functions with a character in place of a byte: GetWidth and GetNextJustifiedLine, given each
@@ -77,17 +79,14 @@ inline unsigned Length(const unsigned char *s) {
     return n;
 }
 
-// The stored-form test: valid UTF-8 holding at least one byte of 80h or more.
-inline bool IsUtf8(const unsigned char *s, unsigned n) {
-    bool high = false;
-    unsigned i = 0, cp;
-    while (i < n) {
-        if (s[i] >= 0x80) high = true;
-        unsigned k = Utf8Seq(s + i, n - i, &cp);
-        if (!k) return false;
-        i += k;
-    }
-    return high;
+// The character at s[at] under the per-sequence read rule: a well-formed UTF-8 sequence, else one byte read as
+// Windows-1252. Returns its length (at least 1; 0 when at is past the end).
+inline unsigned ReadChar(const unsigned char *s, unsigned n, unsigned at, unsigned *cp) {
+    if (at >= n) return 0;
+    unsigned k = Utf8Seq(s + at, n - at, cp);
+    if (k) return k;
+    *cp = SingleByteChar(s[at]);
+    return 1;
 }
 
 struct Unit {
@@ -102,27 +101,18 @@ struct Unit {
 struct Units {
     const unsigned char *s;
     unsigned n, pos;
-    bool utf8;
 
     void Init(const unsigned char *text, unsigned length) {
-        s = text; n = length; pos = 0; utf8 = IsUtf8(text, length);
+        s = text; n = length; pos = 0;
     }
     bool Peek(unsigned at, unsigned *cp, unsigned *len) const {
-        if (at >= n) return false;
-        *len = Utf8Seq(s + at, n - at, cp);
+        *len = ReadChar(s, n, at, cp);
         return *len != 0;
     }
     bool Next(Unit &u) {
         if (pos >= n) return false;
         u.start = pos;
         u.ncp = 0;
-        if (!utf8) {
-            u.size = 1;
-            u.cps[0] = SingleByteChar(s[pos]);
-            u.ncp = 1;
-            ++pos;
-            return true;
-        }
         unsigned cp, len;
         Peek(pos, &cp, &len);
         Push(u, cp);
@@ -177,38 +167,51 @@ inline int SingleByteOf(unsigned cp) {
     return -1;
 }
 
-// The stored form of the code points (no terminating 0). Returns the length, or -1 if more than cap bytes.
+// The stored form of the code points (no terminating 0), per character: a Windows-1252 character is its one byte, any
+// other character is UTF-8, in one string. If those bytes would read back as different text (the per-sequence read
+// of Decode), every non-ASCII character is UTF-8 instead. Returns the length, or -1 if more than cap bytes (the
+// mixed form is never longer than the all-UTF-8 one, so it decides).
 inline int Encode(const unsigned *cps, unsigned count, unsigned char *out, unsigned cap) {
-    bool single = true;
-    for (unsigned i = 0; i < count && single; ++i) if (cps[i] == 0 || SingleByteOf(cps[i]) < 0) single = false;
-    if (single) {
-        if (count <= cap) {
-            unsigned n = 0;
-            for (unsigned i = 0; i < count; ++i) if (cps[i]) out[n++] = (unsigned char)SingleByteOf(cps[i]);
-            if (!IsUtf8(out, n)) return (int)n;
-        } else {
-            return -1;
-        }
-    }
     unsigned n = 0;
     unsigned char seq[4];
     for (unsigned i = 0; i < count; ++i) {
         if (!cps[i]) continue;
-        unsigned k = PutUtf8(cps[i], seq);
+        int b = SingleByteOf(cps[i]);
+        unsigned k = 1;
+        if (b >= 0) seq[0] = (unsigned char)b;
+        else k = PutUtf8(cps[i], seq);
         if (n + k > cap) return -1;
         for (unsigned j = 0; j < k; ++j) out[n++] = seq[j];
+    }
+    unsigned at = 0, i = 0, cp;
+    bool same = true;
+    while (same && at < n) {
+        while (i < count && !cps[i]) ++i;
+        unsigned k = ReadChar(out, n, at, &cp);
+        if (i >= count || cps[i] != cp) same = false;
+        at += k;
+        ++i;
+    }
+    while (same && i < count) { if (cps[i]) same = false; ++i; }
+    if (same) return (int)n;
+    n = 0;
+    for (unsigned j = 0; j < count; ++j) {
+        if (!cps[j]) continue;
+        unsigned k = PutUtf8(cps[j], seq);
+        if (n + k > cap) return -1;
+        for (unsigned m = 0; m < k; ++m) out[n++] = seq[m];
     }
     return (int)n;
 }
 
-// Every code point of a stored text (up to cap), in order.
+// Every code point of a stored text (up to cap), in order, read per sequence.
 inline unsigned Decode(const unsigned char *s, unsigned n, unsigned *cps, unsigned cap) {
-    unsigned count = 0;
-    if (IsUtf8(s, n)) {
-        unsigned i = 0, cp;
-        while (i < n && count < cap) { unsigned k = Utf8Seq(s + i, n - i, &cp); if (!k) break; cps[count++] = cp; i += k; }
-    } else {
-        for (unsigned i = 0; i < n && count < cap; ++i) cps[count++] = SingleByteChar(s[i]);
+    unsigned count = 0, i = 0, cp;
+    while (count < cap) {
+        unsigned k = ReadChar(s, n, i, &cp);
+        if (!k) break;
+        cps[count++] = cp;
+        i += k;
     }
     return count;
 }
@@ -319,7 +322,7 @@ inline unsigned NextLine(const unsigned char *src, unsigned char *out, int maxBy
         }
         // re-read a unit already seen: decode again from its offset
         Units again;
-        again.s = src; again.n = it.n; again.pos = st.offs[k]; again.utf8 = it.utf8;
+        again.s = src; again.n = it.n; again.pos = st.offs[k];
         return again.Next(out_u);
     };
     for (;;) {

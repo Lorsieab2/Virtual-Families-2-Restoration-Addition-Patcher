@@ -130,7 +130,7 @@ def test_the_text_is_encoded_before_it_is_drawn(monkeypatch):
     tt.render_text(None, None, "Łódź ☃", (255, 255, 255), 120)
     tt.render_text(None, None, "a😀", (0, 0, 0), -5)
     assert seen[0] == (b"caf\xe9", (1, 2, 3), 0)                       # Latin-1 stays one byte, as a save keeps it
-    assert seen[1] == ("Łódź ☃".encode("utf-8"), (255, 255, 255), 120)
+    assert seen[1] == (b"\xc5\x81\xf3d\xc5\xba \xe2\x98\x83", (255, 255, 255), 120)   # per character: ó is one byte
     assert seen[2] == ("a\U0001F600".encode("utf-8"), (0, 0, 0), 0)
     assert seen[0][0] == T.encode("café") and seen[1][0] == T.encode("Łódź ☃")
 

@@ -4,19 +4,23 @@ THE STORED FORM (every reader and writer of the patcher uses decode / encode / f
 the game uses the same rule, runtime/native/b200unicode/b200unicode_text.h):
 
 * a save's text field holds bytes up to the first 0 byte;
-* if those bytes are valid UTF-8 and hold at least one byte of 80h or more, they are UTF-8;
-* otherwise every byte is one character: ASCII; A0h..FFh are Latin-1 (the game's own fonts have those letters, so
-  the unpatched game shows them); 80h..9Fh are Windows-1252 (the euro, curly quotes ...), and the five bytes
-  Windows-1252 leaves out are their Latin-1 control characters.
-* writing (encode): a text whose every character is ASCII, U+00A0..U+00FF or one of the 27 Windows-1252 characters
-  of 80h..9Fh is written one byte per character, so the unpatched game and older tools show it exactly as before
-  and an old name read and written again keeps its bytes; only if that byte string would itself read as
-  UTF-8 (a deliberately typed "Ã©") or the text has any other character is it written as UTF-8. decode(encode(t))
-  is always t.
+* reading (decode), per sequence, the one shared decoder: each well-formed, shortest UTF-8 sequence (Unicode Table
+  3-7: no overlong form, no surrogate, nothing past U+10FFFF) is its character; every other byte is one Windows-1252
+  character: ASCII; A0h..FFh are Latin-1 (the game's own fonts have those letters, so the unpatched game shows
+  them); 80h..9Fh are Windows-1252 (the euro, curly quotes ...), and the five bytes Windows-1252 leaves out are
+  their Latin-1 control characters. A string can mix both, so a name with a Latin-1 letter and a Japanese one reads
+  right;
+* writing (encode), per character, the Virtual Villagers rule: a character Windows-1252 has (ASCII, U+00A0..U+00FF
+  or one of the 27 Windows-1252 characters of 80h..9Fh) is written as its one byte, any other character as UTF-8, in
+  one string, so the unpatched game and older tools show every Latin-1 letter exactly as before and an old name read
+  and written again keeps its bytes. If those mixed bytes would read back as different text (a deliberately typed
+  "Ã©" has the bytes of UTF-8 "é"), every non-ASCII character of the string is written as UTF-8 instead.
+  decode(encode(t)) is always t.
 
 Where Virtual Families 2 differs from the Virtual Villagers rule (UTF-8 for anything beyond ASCII): VF2's own fonts
-already draw Latin-1 (U+00A2..U+00FF), so Latin-1 names stay single bytes: the unpatched game shows them correctly,
-older patcher tools read them, and they cost one byte of the field instead of two.
+already draw Latin-1 (U+00A2..U+00FF), so Latin-1 names stay single bytes. Strings that earlier builds wrote are read
+unchanged, except one that is not UTF-8 as a whole but holds a valid sequence (the single bytes of "Ã©é", a
+deliberately typed "Ã©" followed by "é"): it now reads as "éé".
 
 CHARACTERS (grapheme clusters): a letter and the marks on it, an emoji with its skin tone or joined emoji, a flag
 (two regional indicators) are one character. Lengths and cuts count bytes in the field but never cut inside one.
@@ -67,32 +71,45 @@ def _single_byte_char(b: int) -> str:
     return chr(b)
 
 
-def is_utf8(raw: bytes) -> bool:
-    """True when the bytes are valid UTF-8 with at least one byte of 80h or more (the stored-form test)."""
-    if all(b < 0x80 for b in raw):
-        return False
-    try:
-        raw.decode("utf-8", "strict")
-    except UnicodeDecodeError:
-        return False
-    return True
+_SEQUENCE_LENGTH = {**{b: 2 for b in range(0xC2, 0xE0)}, **{b: 3 for b in range(0xE0, 0xF0)},
+                    **{b: 4 for b in range(0xF0, 0xF5)}}
+
+
+def _read(raw: bytes) -> list[tuple[str, bytes]]:
+    """The per-sequence read rule: [(character, its bytes)] for the bytes up to the first 0. A well-formed, shortest
+    UTF-8 sequence is its character (Python's strict decoder is Unicode Table 3-7); any other byte is one
+    Windows-1252 character."""
+    raw = bytes(raw).split(b"\0", 1)[0]
+    out: list[tuple[str, bytes]] = []
+    i, n = 0, len(raw)
+    while i < n:
+        b = raw[i]
+        k = _SEQUENCE_LENGTH.get(b, 1) if b >= 0x80 else 1
+        if k > 1 and i + k <= n:
+            try:
+                piece = raw[i:i + k]
+                out.append((piece.decode("utf-8", "strict"), piece))
+                i += k
+                continue
+            except UnicodeDecodeError:
+                pass
+        out.append((_single_byte_char(b), raw[i:i + 1]))
+        i += 1
+    return out
 
 
 def decode(raw: bytes) -> str:
-    """The text a field holds (bytes up to the first 0)."""
-    raw = bytes(raw).split(b"\0", 1)[0]
-    if is_utf8(raw):
-        return raw.decode("utf-8")
-    return "".join(_single_byte_char(b) for b in raw)
+    """The text a field holds (bytes up to the first 0), read per sequence (see the module notes)."""
+    return "".join(c for c, _b in _read(raw))
 
 
 def encode(text: str) -> bytes:
-    """The bytes a field gets for `text` (no terminating 0). See the module notes."""
+    """The bytes a field gets for `text` (no terminating 0), written per character. See the module notes."""
     text = text.replace("\0", "")
-    if all(ord(c) < 0x80 or 0xA0 <= ord(c) <= 0xFF or ord(c) in _CP1252_BYTE for c in text):
-        single = bytes(_CP1252_BYTE.get(ord(c), ord(c)) for c in text)
-        if not is_utf8(single):
-            return single
+    mixed = b"".join(bytes([_CP1252_BYTE.get(ord(c), ord(c))]) if ord(c) < 0x80 or 0xA0 <= ord(c) <= 0xFF
+                     or ord(c) in _CP1252_BYTE else c.encode("utf-8", "surrogatepass") for c in text)
+    if decode(mixed) == text:
+        return mixed
     return text.encode("utf-8", "surrogatepass")
 
 
@@ -199,20 +216,27 @@ class Unit:
 
 
 def units(raw: bytes) -> list[Unit]:
-    """The text's characters with their bytes. Single-byte text: one unit per byte (as the stock code steps)."""
-    raw = bytes(raw).split(b"\0", 1)[0]
-    if is_utf8(raw):
-        out = []
-        for c in clusters(raw.decode("utf-8")):
-            if c.startswith("\r") and len(c) > 1:
-                # CR is a unit of its own (the drawing code steps over CR and LF one at a time, as for single-byte
-                # text: LF is a line break); what follows it is read again as characters
-                out.append(Unit("\r", b"\r"))
-                out += [Unit(d, d.encode("utf-8", "surrogatepass")) for d in clusters(c[1:])]
-            else:
-                out.append(Unit(c, c.encode("utf-8", "surrogatepass")))
-        return out
-    return [Unit(_single_byte_char(b), bytes([b])) for b in raw]
+    """The text's characters with their bytes, read per sequence (a one-byte text: one unit per byte, as the stock
+    code steps; a UTF-8 sequence is one character, and a letter with its marks one unit)."""
+    read = _read(raw)
+    out: list[Unit] = []
+    at = 0
+
+    def take(c: str):
+        nonlocal at
+        out.append(Unit(c, b"".join(b for _c, b in read[at:at + len(c)])))
+        at += len(c)
+
+    for c in clusters("".join(ch for ch, _b in read)):
+        if c.startswith("\r") and len(c) > 1:
+            # CR is a unit of its own (the drawing code steps over CR and LF one at a time, as for single-byte
+            # text: LF is a line break); what follows it is read again as characters
+            take("\r")
+            for d in clusters(c[1:]):
+                take(d)
+        else:
+            take(c)
+    return out
 
 
 # ====================================================================== fonts
