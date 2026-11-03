@@ -558,10 +558,10 @@ CLIP_FLAG_SECTION = ".vf2clip"
 CLIP_FLAG_SYMBOL = "_gVF2Clip"
 CLIP_DLL_NAME = "vf2clip_b200.dll"
 CLIP_INI_NAME = "vf2clip.ini"
-# Title Screen Player Name Box (after B206; on by default): a white box at 20% opacity behind the player's name on
+# Title Screen Player Name Box (after B206; on by default): a white box at 30% opacity behind the player's name on
 # the title screen, drawn by vf2titlebox_b200.dll (runtime/native/b200titlebox: theMenuScene's DrawScene vtable slot,
 # the game's own FillRect), loaded by its own dormant byte (.vf2tbox) before the clip and Unicode text DLLs;
-# vf2titlebox.ini says NameBox=1. Zero never loads it.
+# vf2titlebox.ini says NameBox=1, Opacity=30. Zero never loads it.
 TITLE_BOX_SETTING = "title_screen_player_name_box"
 TITLE_BOX_FLAG_SECTION = ".vf2tbox"
 TITLE_BOX_FLAG_SYMBOL = "_gVF2TitleBox"
@@ -27040,7 +27040,7 @@ def patch_title_box_manifest(manifest):
         "startup_export": TITLE_BOX_STARTUP,
         "draws": (
             "theMenuScene's DrawScene vtable slot: the game's DrawScene, then ldwGameWindow::FillRect(name "
-            "rectangle + 8 px, white at alpha 33h) while the name control is in the scene"
+            "rectangle + 8 px, white at alpha 4Dh = 30%) while the name control is in the scene"
         ),
         "save_format": "unchanged: the box is drawn, never saved",
         "flag_off": "the DLL is never loaded: the game is the unmodified build",

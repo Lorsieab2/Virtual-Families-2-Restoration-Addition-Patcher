@@ -11,7 +11,7 @@ Layers (nothing here starts the game; there is no live test):
 * with Visual Studio as well (VF2_VCVARS32): the DLL builds with /W4 /WX, and the REAL compiled DLL runs inside
   unicorn with the REAL game code drawing a title screen frame (tests/b200_titlebox_scenarios.py), at the link
   address and relocated: the plan is the one vtable slot; the pixels behind the name are blended at exactly the
-  game's 20% white and no other pixel changes; the name is drawn after the box, unchanged; the box follows the
+  game's 30% white and no other pixel changes; the name is drawn after the box, unchanged; the box follows the
   name's width from the game's own GetWidth (long names, Unicode names, a width hook as the Unicode text DLLs
   install); with the setting off, or no name on the screen, the frame is the stock frame.
 """
@@ -73,8 +73,9 @@ def test_header_is_the_sites_module():
     assert re.findall(r"(?m)^    TBOX_SITE_(\w+),$", header) == list(S.ADDRESS_CONSTANTS)
 
 
-def test_the_box_is_white_at_20_percent_with_the_hint_boxes_padding():
-    assert S.BOX_COLOR == 0x33FFFFFF and S.BOX_ALPHA == 0x33 and round(S.BOX_ALPHA / 255, 6) == 0.2
+def test_the_box_is_white_at_30_percent_with_the_hint_boxes_padding():
+    assert S.BOX_COLOR == 0x4DFFFFFF and S.BOX_ALPHA == 0x4D == 77 and S.BOX_OPACITY_PERCENT == 30
+    assert (S.BOX_OPACITY_PERCENT * 255 + 50) // 100 == S.BOX_ALPHA
     assert S.BOX_PADDING == S.HINT_BOX_MARGIN == 8
 
 
@@ -89,7 +90,9 @@ def test_the_source_has_no_hard_coded_game_address():
 def test_the_dll_writes_only_the_one_slot():
     cpp = (SRC / "b200titlebox.cpp").read_text()
     assert cpp.count("plan.Slot(") == 1 and "PlanJump" not in cpp
-    assert "((FillRectFn)SITE(FILL_RECT))(window, &box, TBOX_BOX_COLOR)" in cpp
+    assert "((FillRectFn)SITE(FILL_RECT))(window, &box, BoxColor)" in cpp
+    assert "static unsigned BoxColor = TBOX_BOX_COLOR;" in cpp
+    assert 'GetPrivateProfileIntW(L"Patches", L"Opacity",' in cpp
     assert "((DrawSceneFn)SITE(MENU_DRAW_SCENE))(scene);" in cpp
     # the stock DrawScene first, the box after it
     body = cpp[cpp.index("static void __fastcall TitleDrawScene"):]
@@ -127,7 +130,7 @@ def test_the_setting_row_is_optional_and_on_by_default():
     row = rows[SETTING]
     assert row["label"] == "Title Screen Player Name Box"
     assert row["default"] is True and row["category"] == "optional"
-    for needle in ("20% opacity", "8 pixels on every side", "Render Unicode with In-Game Fonts",
+    for needle in ("30% opacity", "8 pixels on every side", "Render Unicode with In-Game Fonts",
                    "Use Unicode Font", "nothing is saved", "companion DLL", "Virtual Families 2 Patcher Files"):
         assert needle in row["description"], needle
     assert SETTING in X.FINAL_PLAYTEST_DEFAULT_ON_SETTINGS and SETTING in X.SOURCE_BACKED_OPTIONAL_SETTINGS
@@ -163,7 +166,7 @@ def test_the_exporter_records(tmp_path, monkeypatch):
                                                  "Virtual Families 2 Patcher Files/vf2titlebox.ini"]
     for r in records:
         assert r["requires"] == ["core_executable", SETTING] and r["remove_when_disabled"] is True
-    assert (out / "payload" / "TitleBox" / X.TITLE_BOX_INI_NAME).read_bytes() == b"[Patches]\r\nNameBox=1\r\n"
+    assert (out / "payload" / "TitleBox" / X.TITLE_BOX_INI_NAME).read_bytes() == b"[Patches]\r\nNameBox=1\r\nOpacity=30\r\n"
     test_build = tmp_path / "t" / X.TITLE_BOX_DLL_NAME
     test_build.parent.mkdir()
     test_build.write_bytes(b"MZ B200TitleBox_Startup B200TitleBox_TestPlan")
@@ -275,6 +278,16 @@ def test_the_plan_is_the_menu_scenes_draw_scene_slot(dlls, delta):
     assert f.test_plan(False) == (0, [])
 
 
+def test_the_ini_opacity_sets_the_alpha(dlls):
+    """Opacity=30 (the shipped ini, and the default when the key is missing or out of 1..100) is alpha 4Dh."""
+    import b200_titlebox_scenarios as B
+    f = B.Frame(core_exe(), dlls[1], install=False)
+    set_opacity = f.e.dll_export("B200TitleBox_TestSetOpacity")
+    for percent, color in ((30, 0x4DFFFFFF), (20, 0x33FFFFFF), (100, 0xFFFFFFFF), (1, 0x03FFFFFF),
+                           (0, S.BOX_COLOR), (101, S.BOX_COLOR), (-5, S.BOX_COLOR)):
+        assert f.e.call(set_opacity, (percent & 0xFFFFFFFF,)) == color, percent
+
+
 def test_a_changed_pinned_byte_installs_nothing(dlls):
     import b200_titlebox_scenarios as B
     f = B.Frame(core_exe(), dlls[1], install=False)
@@ -291,7 +304,7 @@ def _frames(dlls, delta=0, **kw):
 
 
 def _check_box(stock, before, boxed, after, width=None):
-    """The box is exactly the name's rectangle plus 8, every pixel in it the game's 20% white blend of the stock
+    """The box is exactly the name's rectangle plus 8, every pixel in it the game's 30% white blend of the stock
     pixel, every other pixel unchanged; the name is drawn after the box, the same as without it."""
     import b200_titlebox_scenarios as B
     kinds = [ev[0] for ev in boxed.events]
@@ -322,13 +335,13 @@ def _check_box(stock, before, boxed, after, width=None):
 
 
 @pytest.mark.parametrize("delta", DELTAS)
-def test_the_pixels_behind_the_name_are_20_percent_white_and_nothing_else_changes(dlls, delta):
+def test_the_pixels_behind_the_name_are_30_percent_white_and_nothing_else_changes(dlls, delta):
     stock, before, boxed, after = _frames(dlls, delta)
     assert boxed.e.r32(boxed.slot) == boxed.hook_address()
     rect = _check_box(stock, before, boxed, after)
-    # the game's own blend: a = int(0.2 * 255 + 0.5) = 51, each byte (old * 204 >> 8) + 50
+    # the game's own blend: a = int(77 / 255 * 255 + 0.5) = 77, each byte (old * 178 >> 8) + 76
     import b200_titlebox_scenarios as B
-    assert [B.blend(v) for v in (0, 128, 255)] == [50, 152, 253]
+    assert [B.blend(v) for v in (0, 128, 255)] == [76, 165, 253]
     assert rect[2] - rect[0] > 2 * S.BOX_PADDING
 
 

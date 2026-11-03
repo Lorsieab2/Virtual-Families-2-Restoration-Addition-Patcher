@@ -685,7 +685,7 @@ SETTINGS = [
     {
         "id": "title_screen_player_name_box",
         "label": "Title Screen Player Name Box",
-        "description": "On the title screen (Play, Start Over, Manage Games, Quit) the current player's name is shown on a see-through white box (20% opacity), so it is easy to read on the picture behind it. The box is the name's own size plus 8 pixels on every side (the margin the game's own tip boxes keep around their text), and it grows and shrinks with the name: long names, accented letters and any other characters with Render Unicode with In-Game Fonts or Use Unicode Font, or neither. It is drawn behind the name with the game's own drawing, only while a name is shown; nothing else on the screen changes and nothing is saved. Installs a small companion DLL in the Virtual Families 2 Patcher Files folder next to the game; unticking the setting removes it and the title screen is the original game's again.",
+        "description": "On the title screen (Play, Start Over, Manage Games, Quit) the current player's name is shown on a see-through white box (30% opacity), so it is easy to read on the picture behind it. The box is the name's own size plus 8 pixels on every side (the margin the game's own tip boxes keep around their text), and it grows and shrinks with the name: long names, accented letters and any other characters with Render Unicode with In-Game Fonts or Use Unicode Font, or neither. It is drawn behind the name with the game's own drawing, only while a name is shown; nothing else on the screen changes and nothing is saved. Installs a small companion DLL in the Virtual Families 2 Patcher Files folder next to the game; unticking the setting removes it and the title screen is the original game's again.",
         "default": True,
         "category": "optional",
     },
@@ -1857,7 +1857,7 @@ def clip_asset_patches(
 
 TITLE_BOX_DLL_NAME = "vf2titlebox_b200.dll"
 TITLE_BOX_INI_NAME = "vf2titlebox.ini"
-TITLE_BOX_INI_TEXT = "[Patches]\r\nNameBox=1\r\n"
+TITLE_BOX_INI_TEXT = "[Patches]\r\nNameBox=1\r\nOpacity=30\r\n"
 
 
 def title_box_asset_patches(
@@ -1866,7 +1866,7 @@ def title_box_asset_patches(
     build_manifest_data: dict[str, Any],
 ) -> list[dict[str, Any]]:
     """Title Screen Player Name Box: vf2titlebox_b200.dll (runtime\\native\\build_b200titlebox.bat) and its ini
-    (NameBox=1), loaded by the executable's dormant .vf2tbox loader. A build without the loader has no TitleBox
+    (NameBox=1, Opacity=30), loaded by the executable's dormant .vf2tbox loader. A build without the loader has no TitleBox
     contract and gets no records."""
     contract = build_manifest_data.get("TitleBox")
     if not isinstance(contract, dict):
@@ -1889,7 +1889,7 @@ def title_box_asset_patches(
     for name, payload, note in (
         (TITLE_BOX_DLL_NAME, data, "Title Screen Player Name Box companion DLL, loaded by the executable's dormant "
                                    ".vf2tbox loader. Disabling the setting removes only this exact file."),
-        (TITLE_BOX_INI_NAME, TITLE_BOX_INI_TEXT.encode("ascii"), "Title Screen Player Name Box switch (NameBox=1) "
+        (TITLE_BOX_INI_NAME, TITLE_BOX_INI_TEXT.encode("ascii"), "Title Screen Player Name Box switch (NameBox=1, Opacity=30) "
                                                                  "read by the companion DLL. Disabling the setting "
                                                                  "removes only this exact file."),
     ):

@@ -2,9 +2,10 @@
 // executable. One feature, one DLL: nothing else is installed here.
 //
 // On the title screen (Play / Start Over / Manage Games / Quit) the current player's name is drawn on a white box
-// at 20% opacity, so it reads on any background. The box is drawn every frame the name is drawn, before it, with
-// the game's own ldwGameWindow::FillRect(rect, colour) in white at alpha 33h (51/255 = 20%), whose own blend makes
-// every colour byte (old * 204 >> 8) + 50.
+// at 30% opacity, so it reads on any background. The box is drawn every frame the name is drawn, before it, with
+// the game's own ldwGameWindow::FillRect(rect, colour) in white at alpha 4Dh (77/255 = 30%), whose own blend makes
+// every colour byte (old * 178 >> 8) + 76. vf2titlebox.ini's Opacity= (percent, 1..100, default 30) sets the
+// alpha: (percent * 255 + 50) / 100.
 //
 // The box is the name's own rectangle plus TBOX_BOX_PADDING (8) pixels on every side, the margin the game's hint
 // (tooltip) box keeps around its text. The rectangle is worked out exactly as ldwTextControlImpl::Draw places the
@@ -348,6 +349,16 @@ static bool NameBox(void *scene, void *window, GameRect *box) {
     return true;
 }
 
+// The box's colour: white at the ini's opacity (default TBOX_BOX_OPACITY_PERCENT = 30% -> alpha 4Dh).
+static unsigned BoxColor = TBOX_BOX_COLOR;
+
+// Opacity= percent (1..100) -> white at alpha (percent * 255 + 50) / 100; anything else keeps the default.
+static unsigned ColorForOpacity(int percent) {
+    if (percent < 1 || percent > 100) percent = (int)TBOX_BOX_OPACITY_PERCENT;
+    unsigned alpha = ((unsigned)percent * 255u + 50u) / 100u;
+    return (alpha << 24) | 0xFFFFFFu;
+}
+
 // theMenuScene's DrawScene (thiscall, plain ret: __fastcall with edx unused has the same frame).
 static void __fastcall TitleDrawScene(void *scene, void *) {
     ((DrawSceneFn)SITE(MENU_DRAW_SCENE))(scene);
@@ -356,7 +367,7 @@ static void __fastcall TitleDrawScene(void *scene, void *) {
     if (!window) return;
     GameRect box;
     if (!NameBox(scene, window, &box)) return;
-    ((FillRectFn)SITE(FILL_RECT))(window, &box, TBOX_BOX_COLOR);
+    ((FillRectFn)SITE(FILL_RECT))(window, &box, BoxColor);
     ++B200TitleBox_Status.boxes;
     B200TitleBox_Status.lastLeft = box.left;
     B200TitleBox_Status.lastTop = box.top;
@@ -413,7 +424,10 @@ static bool Apply(Plan &plan) {
 static bool SettingOn() {
     wchar_t path[MAX_PATH];
     if (!InFolder(L"vf2titlebox.ini", path)) return false;
-    return GetPrivateProfileIntW(L"Patches", L"NameBox", 0, path) == 1;
+    if (GetPrivateProfileIntW(L"Patches", L"NameBox", 0, path) != 1) return false;
+    BoxColor = ColorForOpacity((int)GetPrivateProfileIntW(L"Patches", L"Opacity",
+                                                          (int)TBOX_BOX_OPACITY_PERCENT, path));
+    return true;
 }
 
 // Called once by the executable's loader, before the game loop starts.
@@ -494,6 +508,11 @@ extern "C" __declspec(dllexport) void __cdecl B200TitleBox_TestSites(unsigned *o
     out[TBOX_SITE_COUNT] = MenuSlot;
 }
 // The DLL's DrawScene replacement, so a test can tell it from the stock pointer.
+// vf2titlebox.ini's Opacity= as the DLL takes it: sets the box colour and returns it.
+extern "C" __declspec(dllexport) unsigned __cdecl B200TitleBox_TestSetOpacity(int percent) {
+    BoxColor = ColorForOpacity(percent);
+    return BoxColor;
+}
 extern "C" __declspec(dllexport) unsigned __cdecl B200TitleBox_TestHook() {
     return (unsigned)&TitleDrawScene;
 }

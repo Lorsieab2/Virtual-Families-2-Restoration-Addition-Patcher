@@ -4054,4 +4054,13 @@ Title Screen Player Name Box (owner request 2026-11-02; for B207)
   drawn after the box with the same text, place, colour and font; with
   NameBox=0, or no name on the screen, the frame is the stock frame; a changed
   pinned byte installs nothing. Not live tested.
+- 30% (owner, after the first preview, 2026-11-02: "maybe make the box a little
+  bit more opaque, like 30%"): the box is now white at alpha 4Dh (77/255),
+  through the same FillRect: a = int(77/255 * 255 + 0.5) = 77, each colour byte
+  (old * 178 >> 8) + 76 (0 -> 76, 128 -> 165, 255 -> 253). The 20% figures
+  above are superseded. vf2titlebox.ini now reads NameBox=1 and Opacity=30; the
+  DLL takes Opacity= as a percent 1..100 (alpha = (percent * 255 + 50) / 100)
+  and uses 30 when the key is missing or out of range. DLL and ini only: the
+  executable's .vf2tbox loader byte is unchanged. The tests check the exact
+  blend at 77 and the ini mapping (30 -> 4Dh, 20 -> 33h, 100 -> FFh).
 
