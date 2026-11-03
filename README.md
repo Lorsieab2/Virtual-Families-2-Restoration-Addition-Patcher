@@ -340,16 +340,16 @@ checked against `manifest.json`, the release notes and the owner's confirmed
 play reports; superseded claims are marked rather than deleted.*
 
 The GUI reads its checkboxes from the shipped manifest, so the exact list follows
-the release you downloaded. The next bundle offers 46 settings (B207): B206's 43 plus **Render Unicode
-with In-Game Fonts** and **Use Unicode Font (overrides in-game fonts)** (only one of the two can be on)
-and **Copy and Paste in Text Boxes** (on by default).
+the release you downloaded. The next bundle offers 47 settings (B207): B206's 43 plus **Render Unicode
+with In-Game Fonts** and **Use Unicode Font (overrides in-game fonts)** (only one of the two can be on),
+**Copy and Paste in Text Boxes** and **Title Screen Player Name Box** (both on by default).
 
 That number is not simply the count of settings the patcher defines, which is
-47. The settings list drops any optional setting that has no packaged source
+48. The settings list drops any optional setting that has no packaged source
 assets -- in B201, as in B180, the two named just below -- and the export adds
 one setting of its own, `core_assets`, which copies the support files and
-generated assets that are not tied to a single feature. So 47 defined, less 2
-without packaged assets, plus 1 generated, is the 46 the GUI shows. (The B206 bundle offers 43 settings:
+generated assets that are not tied to a single feature. So 48 defined, less 2
+without packaged assets, plus 1 generated, is the 47 the GUI shows. (The B206 bundle offers 43 settings:
 44 - 2 + 1, B205's 41 plus **Free and Guaranteed Cheats** and **All outfits and hairstyles always for
 sale**, both off by default. B205 and the final B204 rebuild, which added **All 36 Flea Market goods** and
 **R Refreshes the Store**: 42 - 2 + 1 = 41; B205's two website fixes are part of Fix Vanilla Game Bugs, not
@@ -571,6 +571,21 @@ release bundle, like almost everything else)
   (`build_b200unicode.bat clip`): it replaces only the SDL_PollEvent import slot. Evidence: `tests/test_clip_text_boxes.py`
   (the DLL with the game's own event manager and text box code under emulation, at the limit and one past it with
   guard bytes). Not live tested.
+- **Title Screen Player Name Box** (`.vf2tbox`, Optional, **on by default**, on in Owner's Defaults; new after
+  B206, needs the B207 executables) - on the title screen (Play / Start Over / Manage Games / Quit) the current
+  player's name is drawn on a white box at **20% opacity**, so it reads on the picture behind it. The box is the
+  name's own rectangle plus **8 pixels on every side**: the margin the game's own hint (tooltip) box keeps
+  (`ldwHintControlImpl::Draw` draws its box 8 pixels out from its text rectangle). It is drawn every frame the name
+  is drawn, before the name, with the game's own `ldwGameWindow::FillRect(rect, colour)` in white at alpha 33h
+  (51/255), whose own blend turns every colour byte into `(old * 204 >> 8) + 50`. Where the text goes is worked out
+  as `ldwTextControlImpl::Draw` does it, and the width comes from the game's own `ldwFont::GetWidth`, the entry both
+  Unicode text settings hook, so long names and any script get a box their own size, with either Unicode setting
+  or neither. The companion DLL `vf2titlebox_b200.dll` (`runtime/native/build_b200titlebox.bat`) replaces one
+  pointer, theMenuScene's DrawScene vtable slot (found through RTTI): the game's DrawScene runs, then the box, then
+  the game draws its controls, the name among them. No box while no name is shown; nothing is saved. Evidence:
+  `tests/test_b200_title_name_box.py` (the real DLL and the game's own scene, text control, font and FillRect code
+  drawing a title screen frame under emulation: only the box's pixels change, each exactly the game's 20% white
+  blend; the name is drawn after it, unchanged; setting off = the stock frame). Not live tested.
 - **R Refreshes the Store** (`.vf2rfsh`, an Optional patch and a cheat, **on by default**; new in the final
   B204 rebuild) - in the store, press **R** (or Shift+R) to pick the store's random items again, the
   game's own way and with the game's own odds:

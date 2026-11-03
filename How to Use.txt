@@ -105,6 +105,12 @@ https://github.com/Lorsieab2/Virtual-Families-2-Restoration-Addition-Patcher/
    only the letters the original game can store are pasted. The keys do
    nothing anywhere else.
 
+   Title Screen Player Name Box (on by default): on the title screen the
+   current player's name is shown on a see-through white box (20% opacity),
+   so it is easy to read. The box is the name's size plus 8 pixels on every
+   side and fits long names and every letter, with either text setting above
+   or neither. Nothing else on the screen changes and nothing is saved.
+
    Fix Vanilla Game Bugs (on by default) also stops a crash of the original
    game: at every start the game asks LDW's server to log in (login.php), and
    the server now sends back about 3 KB of text, more than the game has room
