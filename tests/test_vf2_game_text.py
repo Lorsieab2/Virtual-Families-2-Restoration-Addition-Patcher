@@ -270,6 +270,26 @@ def test_lines_break_in_scripts_written_without_spaces(fonts):
     assert not any(LB.break_flags([(ord(c), ord(c)) for c in "The quick brown fox, (jumps) over the lazy dog."]))
 
 
+def test_as_the_stock_game_shows_it(fonts):
+    """The Game Text tool's "As the stock game shows it": one unit per stored byte, drawn from the sheet by the stock
+    rule (a byte the font lacks shows glyph 0), whatever the bytes mean; the patched reading is untouched."""
+    f = fonts["Segoe24"]
+    stock = T.stock_font(f)
+    raw = T.encode("\u65e5 \u00e9")                                   # UTF-8 for the first, one byte for the second
+    assert [u.raw for u in T.stock_units(raw)] == [bytes([b]) for b in raw] and len(T.stock_units(raw)) == 5
+    placed = T.draw_string(stock, raw, 0, 0)
+    assert [p.glyph.kind for p in placed] == ["game"] * 5
+    assert [p.glyph.rect for p in placed] == [(lambda r: r)(f.stock_rect(b)) for b in raw]
+    assert placed[1].glyph.rect == f.stock_rect(0x97)                 # a byte the font lacks: the stock '!' glyph
+    assert T.get_width(stock, raw) == sum(stock.glyph(u).width + f.kerning for u in T.stock_units(raw)) - f.kerning
+    assert T.get_width(stock, raw) == sum(f.stock_rect(b)[2] - f.stock_rect(b)[0] + f.kerning for b in raw) - f.kerning
+    # the patched reading of the same bytes is 3 characters; the font itself is not changed
+    assert len(T.draw_string(f, raw, 0, 0)) == 3 and not f.stock
+    # wrapping steps by byte too
+    lines = T.wrap(stock, raw, 10_000)
+    assert lines == [raw]
+
+
 def test_the_unpatched_game_draws_utf8_names_without_leaving_its_font(rig):
     """Every byte 80h..FFh (all UTF-8 continuation and lead bytes) and real UTF-8 names at the 24-byte name limit:
     the stock DrawString / GetWidth / GetNextJustifiedLine stay inside the font's own rectangles."""

@@ -1,4 +1,4 @@
-"""Game Font Text (Tools tab -> "Game Font Text..."): type anything and see it drawn in Virtual Families 2's own
+"""Game Text (Tools tab -> "Game Text..."; B207 called it Game Font Text): type anything and see it drawn in Virtual Families 2's own
 fonts, exactly as the game draws text, then save it as a PNG with a clear background.
 
 * The text box takes any character Windows can type or paste: accents, other alphabets, symbols, emoji. A letter
@@ -28,7 +28,7 @@ from tkinter import colorchooser, filedialog, messagebox, ttk
 import vf2_game_text as T
 import vf2_picture_image as pi
 
-TITLE = "Game Font Text"
+TITLE = "Game Text"
 WIDTH, HEIGHT = 1180, 780
 MIN_WIDTH, MIN_HEIGHT = 820, 560
 DEBOUNCE_MS = 250
@@ -122,7 +122,7 @@ def counts(font: T.GameFont | None, text: str) -> dict:
     out = {"characters": T.length(text), "bytes": len(raw), "game": 0, "patcher": 0, "missing": 0}
     if font is None:
         return out
-    for u in T.units(raw):
+    for u in (T.stock_units(raw) if font.stock else T.units(raw)):
         if u.text in ("\n", "\r", "\r\n"):
             continue
         kind = font.glyph(u).kind
@@ -307,6 +307,7 @@ class TextTool:
         self.folder_status_var = tk.StringVar(master=v)
         self.hover_var = tk.StringVar(master=v)
         self.unicode_var = tk.BooleanVar(master=v, value=False)
+        self.stock_var = tk.BooleanVar(master=v, value=False)        # As the stock game shows it
         self.unicode_face_var = tk.StringVar(master=v, value=T.DEFAULT_UNICODE_FACE)
         self._overrides: dict = {}
         self.custom_rgb = (255, 255, 255)
@@ -405,11 +406,13 @@ class TextTool:
         override = ttk.Frame(left)                 # as VF1's Game Text: the Use Unicode Font preview
         override.pack(fill="x", pady=(0, 2))
         ttk.Checkbutton(override, text="As Use Unicode Font draws it, with:", variable=self.unicode_var,
-                        command=self.refresh).pack(side="left")
+                        command=self._unicode_changed).pack(side="left")
         faces = ttk.Combobox(override, textvariable=self.unicode_face_var, width=30, values=self._faces())
         faces.pack(side="left", padx=4)
         faces.bind("<<ComboboxSelected>>", lambda _e: self.refresh())
         faces.bind("<Return>", lambda _e: self.refresh())
+        ttk.Checkbutton(left, text="As the stock game shows it (every stored byte one character; no patcher-made letters)",
+                        variable=self.stock_var, command=self._stock_changed).pack(anchor="w", pady=(0, 2))
         self.status = ttk.Label(left, textvariable=self.status_var, wraplength=600, justify="left")
         self.status.pack(side="bottom", anchor="w", pady=(6, 0))     # before the preview: it never gives way
         holder = ttk.Frame(left)
@@ -576,6 +579,8 @@ class TextTool:
         """(GameFont, sheet) of the chosen font, or (None, None) without a game folder; with "As Use Unicode Font
         draws it" ticked, that font as Use Unicode Font draws it in the chosen face (vf2_game_text.with_unicode_font)."""
         font, sheet = self.fonts.get(self.font_name(), (None, None))
+        if font is not None and self.stock_var.get():
+            return T.stock_font(font), sheet
         if font is not None and self.unicode_var.get():
             face = self.unicode_face_var.get().strip() or T.DEFAULT_UNICODE_FACE
             key = (font.name, face)
@@ -583,6 +588,16 @@ class TextTool:
                 self._overrides[key] = T.with_unicode_font(font, face)
             return self._overrides[key], sheet
         return font, sheet
+
+    def _unicode_changed(self) -> None:
+        if self.unicode_var.get():
+            self.stock_var.set(False)               # one preview at a time
+        self._font_changed()
+
+    def _stock_changed(self) -> None:
+        if self.stock_var.get():
+            self.unicode_var.set(False)             # one preview at a time
+        self._font_changed()
 
     @staticmethod
     def _faces() -> list[str]:

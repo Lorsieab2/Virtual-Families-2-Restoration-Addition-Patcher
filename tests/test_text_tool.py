@@ -233,7 +233,7 @@ def test_the_tools_tab_opens_one_text_tool(tk_root, tmp_path, monkeypatch):
     monkeypatch.setattr(sb, "documents_folder", lambda: tmp_path / "Documents")
     app = gui.VF2PatcherGUI(tk_root)
     tool = app.game_font_text()
-    assert tool.window.title() == "Game Font Text" and "game_font_text" in app.help_keys
+    assert tool.window.title() == "Game Text" and "game_font_text" in app.help_keys
     assert app.game_font_text() is tool                                 # one at a time
     assert [tool.picker.tab(t, "text") for t in tool.picker.tabs()] == ["Accents", "Any character"]
     assert list(tool.font_box.cget("values")) == [T.FONT_TITLES[n] for n in T.FONT_NAMES]

@@ -300,12 +300,15 @@ static bool LoadSdl() {
 }
 
 // ================================================================ GDI: a character in a Windows font
+// The shared fallback chain (docs/UNICODE_TEXT.md, the same list and order as src/vf2_glyph_render.FALLBACK_CHAIN;
+// tests/test_fallback_chain.py checks it): a face that is not installed is skipped.
 static const wchar_t *const kChain[] = {
-    L"Segoe UI", L"Segoe UI Historic", L"Segoe UI Symbol", L"Segoe UI Emoji",
-    L"Microsoft YaHei UI", L"Microsoft JhengHei UI", L"Yu Gothic UI", L"Malgun Gothic", L"SimSun-ExtB",
-    L"Nirmala UI", L"Ebrima", L"Gadugi", L"Leelawadee UI", L"Javanese Text", L"Myanmar Text", L"Mongolian Baiti",
-    L"Microsoft Himalaya", L"Microsoft New Tai Lue", L"Microsoft Tai Le", L"Microsoft Yi Baiti", L"Sylfaen",
-    L"Noto Sans", L"Noto Sans CJK SC", L"Noto Sans Symbols", L"Noto Sans Symbols 2", L"Noto Sans Cuneiform",
+    L"Segoe UI", L"Segoe UI Historic", L"Segoe UI Symbol", L"Segoe UI Emoji", L"Yu Gothic UI", L"Meiryo",
+    L"Microsoft YaHei UI", L"Microsoft JhengHei UI", L"Malgun Gothic", L"SimSun-ExtB", L"Nirmala UI", L"Ebrima",
+    L"Gadugi", L"Leelawadee UI", L"Myanmar Text", L"Javanese Text", L"Mongolian Baiti", L"Microsoft Himalaya",
+    L"Microsoft Yi Baiti", L"Microsoft New Tai Lue", L"Microsoft Tai Le", L"Microsoft PhagsPa", L"Sylfaen",
+    L"Cambria Math", L"Noto Sans", L"Noto Sans Symbols", L"Noto Sans Symbols 2", L"Noto Sans CJK JP",
+    L"Noto Sans CJK SC", L"Noto Sans Math", L"Noto Sans Cuneiform", L"Noto Color Emoji",
 };
 static const unsigned kChainCount = sizeof(kChain) / sizeof(kChain[0]);
 

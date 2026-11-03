@@ -94,6 +94,7 @@ def py_units(raw: bytes):
 class FakeFont:
     """The test DLL's font: width (7 x sum(code points) + 3 x count) % 13, a space 4."""
     kerning = 0
+    stock = False
 
     def __init__(self, kerning=0):
         self.kerning = kerning
