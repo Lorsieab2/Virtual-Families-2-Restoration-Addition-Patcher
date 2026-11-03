@@ -573,18 +573,18 @@ release bundle, like almost everything else)
   guard bytes). Not live tested.
 - **Title Screen Player Name Box** (`.vf2tbox`, Optional, **on by default**, on in Owner's Defaults; new after
   B206, needs the B207 executables) - on the title screen (Play / Start Over / Manage Games / Quit) the current
-  player's name is drawn on a white box at **20% opacity**, so it reads on the picture behind it. The box is the
+  player's name is drawn on a white box at **30% opacity**, so it reads on the picture behind it. The box is the
   name's own rectangle plus **8 pixels on every side**: the margin the game's own hint (tooltip) box keeps
   (`ldwHintControlImpl::Draw` draws its box 8 pixels out from its text rectangle). It is drawn every frame the name
-  is drawn, before the name, with the game's own `ldwGameWindow::FillRect(rect, colour)` in white at alpha 33h
-  (51/255), whose own blend turns every colour byte into `(old * 204 >> 8) + 50`. Where the text goes is worked out
+  is drawn, before the name, with the game's own `ldwGameWindow::FillRect(rect, colour)` in white at alpha 4Dh
+  (77/255; `Opacity=30` in `vf2titlebox.ini`), whose own blend turns every colour byte into `(old * 178 >> 8) + 76`. Where the text goes is worked out
   as `ldwTextControlImpl::Draw` does it, and the width comes from the game's own `ldwFont::GetWidth`, the entry both
   Unicode text settings hook, so long names and any script get a box their own size, with either Unicode setting
   or neither. The companion DLL `vf2titlebox_b200.dll` (`runtime/native/build_b200titlebox.bat`) replaces one
   pointer, theMenuScene's DrawScene vtable slot (found through RTTI): the game's DrawScene runs, then the box, then
   the game draws its controls, the name among them. No box while no name is shown; nothing is saved. Evidence:
   `tests/test_b200_title_name_box.py` (the real DLL and the game's own scene, text control, font and FillRect code
-  drawing a title screen frame under emulation: only the box's pixels change, each exactly the game's 20% white
+  drawing a title screen frame under emulation: only the box's pixels change, each exactly the game's 30% white
   blend; the name is drawn after it, unchanged; setting off = the stock frame). Not live tested.
 - **R Refreshes the Store** (`.vf2rfsh`, an Optional patch and a cheat, **on by default**; new in the final
   B204 rebuild) - in the store, press **R** (or Shift+R) to pick the store's random items again, the

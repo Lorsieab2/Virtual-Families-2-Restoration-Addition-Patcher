@@ -57,7 +57,7 @@ class GuideContentTests(unittest.TestCase):
                                                 "copy_paste_text_boxes", "title_screen_player_name_box",
                                                 "fix_vanilla_game_bugs"])
         box = guides.guide("title_screen_player_name_box").text
-        for needle in ("title screen", "20% opacity", "8 pixels on every side", "On by default",
+        for needle in ("title screen", "30% opacity", "8 pixels on every side", "On by default",
                        "either Unicode text setting or neither", "nothing is saved"):
             self.assertIn(needle, box)
         text = guides.guide("family_history").text

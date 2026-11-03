@@ -13,8 +13,9 @@ struct TboxPin {
 };
 struct TboxEvidence { unsigned char site; char kind; unsigned short pin; unsigned offset; };
 
-#define TBOX_BOX_ALPHA 0x33u
-#define TBOX_BOX_COLOR 0x33FFFFFFu
+#define TBOX_BOX_ALPHA 0x4Du
+#define TBOX_BOX_COLOR 0x4DFFFFFFu
+#define TBOX_BOX_OPACITY_PERCENT 0x1Eu
 #define TBOX_BOX_PADDING 0x8u
 #define TBOX_CONTROL_IMPL_FIELD 0x10u
 #define TBOX_DRAW_SCENE_VSLOT 0x6u

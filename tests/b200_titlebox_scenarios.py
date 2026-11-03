@@ -69,7 +69,7 @@ def rtti_vtable(exe: G.Exe, cls: str) -> int:
 
 
 def blend(byte: int) -> int:
-    """ldwGameWindowImpl::FillRect's blend of one colour byte with white at alpha 33h (a = int(0.2 * 255 + 0.5))."""
+    """ldwGameWindowImpl::FillRect's blend of one colour byte with white at alpha 4Dh (a = int(77 / 255 * 255 + 0.5) = 77)."""
     a = int(S.BOX_ALPHA / 255.0 * 255 + 0.5)
     return ((byte * (255 - a)) >> 8) + ((255 * a) >> 8) & 0xFF
 

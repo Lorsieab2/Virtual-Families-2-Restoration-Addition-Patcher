@@ -25,14 +25,14 @@ What the DLL does (one write at install, a vtable slot):
 * The DLL replaces theMenuScene's DrawScene slot (found through RTTI: ".?AVtheMenuScene@@" -> the complete object
   locator at offset 0 -> the one vtable that points to it). Its function first calls the game's own DrawScene,
   then, only while the name control is in the scene's control list and its Draw would draw text, fills the
-  rectangle behind the name with the game's own ldwGameWindow::FillRect(rect, colour) in white at alpha 33h
-  (51/255 = 20%). The rectangle is the text's own: x and y exactly as ldwTextControlImpl::Draw places the text,
+  rectangle behind the name with the game's own ldwGameWindow::FillRect(rect, colour) in white at alpha 4Dh
+  (77/255 = 30%; vf2titlebox.ini Opacity=30, the owner's choice after the first preview). The rectangle is the text's own: x and y exactly as ldwTextControlImpl::Draw places the text,
   the width from the game's own ldwFont::GetWidth(text, scale) and the height from ldwFont::GetHeight(0) times the
   scale, the very calls Draw makes (so a Unicode text DLL that hooks GetWidth sizes the box as it sizes the
   text), plus BOX_PADDING pixels on every side. The controls, the name included, are drawn after it: the box is
   behind the name.
-* FillRect's own blend (ldwGameWindowImpl::FillRect with alpha below 1): a = int(alpha * 255 + 0.5) = 51, every
-  colour byte of a pixel becomes (old * (255 - a) >> 8) + (255 * a >> 8) = (old * 204 >> 8) + 50.
+* FillRect's own blend (ldwGameWindowImpl::FillRect with alpha below 1): a = int(alpha * 255 + 0.5) = 77, every
+  colour byte of a pixel becomes (old * (255 - a) >> 8) + (255 * a >> 8) = (old * 178 >> 8) + 76.
 * The padding is the game's own for a box behind text: the hint (tooltip) box ldwHintControlImpl::Draw draws its
   outer rectangle 8 pixels out from its text rectangle on each side (its SetText keeps the text rectangle, 2
   pixels larger than the text, and Draw grows it by 8), so the box's edge is 8 pixels from where the text's own
@@ -89,8 +89,9 @@ TEXT_INSET = 0x44
 TEXT_OFFSET_Y = 0x48
 TEXT_SCALE = 0x58                   # float
 WINDOW_IMPL_FIELD = 0x00            # ldwGameWindow -> its impl (FillRect's own mov ecx, [esi])
-BOX_COLOR = 0x33FFFFFF              # ldwColor r | g << 8 | b << 16 | a << 24: white at alpha 33h
-BOX_ALPHA = 0x33                    # 51 / 255 = 20%
+BOX_COLOR = 0x4DFFFFFF              # ldwColor r | g << 8 | b << 16 | a << 24: white at alpha 4Dh (the default)
+BOX_ALPHA = 0x4D                    # 77 / 255 = 30%
+BOX_OPACITY_PERCENT = 30            # vf2titlebox.ini Opacity= (1..100, default 30): alpha = (percent * 255 + 50) / 100
 BOX_PADDING = 8                     # pixels on every side (the hint box's own margin)
 HINT_TEXT_MARGIN = 2                # ldwHintControlImpl::SetText: the text rectangle is the text +- 2
 HINT_BOX_MARGIN = 8                 # ldwHintControlImpl::Draw: the box is the text rectangle +- 8
@@ -194,7 +195,7 @@ PINS = [
         "C00F5BC0F30F5EC1F30F110424FF7508E8070000005E5DC20800",
         "Whole ldwGameWindow::FillRect(ldwRect &, ldwColor) thiscall, ret 8: each byte of the colour (r, g, b, a "
         "from the lowest) divided by 255.0 and passed with the rectangle to ldwGameWindowImpl::FillRect, which "
-        "blends with alpha below 1 (the box: 33h / 255 = 0.2).",
+        "blends with alpha below 1 (the box: 4Dh / 255 = 0.302).",
         dll=False,
     ),
     Pin(
