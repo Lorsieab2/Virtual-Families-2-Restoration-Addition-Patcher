@@ -1542,7 +1542,29 @@ def scenario_a_missing_names_file_logs_the_stored_name(w: HistoryWorld):
     assert w.fs.guards_intact()
 
 
+def scenario_a_names_record_with_a_wrong_checksum_is_skipped(w: HistoryWorld):
+    """"VF2 Names 2" records carry a CRC-32 (b200names_file.h): the log expands a short form from a record whose
+    checksum matches and leaves one whose checksum does not match as the save holds it; a file is read again when a
+    short form is not known, so the corrected file is found at the next record."""
+    whole = "Maximilianus Fitzgerald the Third"
+    short = T.encode(N.short_form(whole, N.MEMBER_ROOM, {}))
+    good = N.render([N.Entry(T.decode(short), N.MEMBER_ROOM, whole)])
+    head, record = good.split(b"\n")[:2]
+    assert head == b"VF2 Names 2" and record.rsplit(b"\t", 1)[1] != b"00000000"
+    w.fs.write(NAMES_FILE.format(slot=1), head + b"\n" + record.rsplit(b"\t", 1)[0] + b"\t00000000\n")
+    w.household((short, FEMALE, 500), ("Ben", MALE, 520))
+    w.set_active(1, 0)
+    w.new_family(0)
+    assert w.last()[1][0] == "  Name: Maximilianus Fi...", "a record with a wrong checksum is skipped"
+    w.fs.write(NAMES_FILE.format(slot=1), good)
+    w.set_active(1, 1)
+    w.marry(0, 1)
+    assert w.last()[1][0] == f"  Family member: {whole}", "a record whose checksum matches is read"
+    assert w.fs.guards_intact()
+
+
 ALL = [scenario_whole_names_in_the_log, scenario_a_missing_names_file_logs_the_stored_name,
+       scenario_a_names_record_with_a_wrong_checksum_is_skipped,
        scenario_rename_in_the_details_box, scenario_same_sex_marriage, scenario_a_loss_the_log_never_saw_is_not_guessed,
        scenario_new_family_and_marriage, scenario_conception_and_birth_single, scenario_the_father_after_a_load,
        scenario_twins, scenario_triplets, scenario_child_dies, scenario_spouse_dies_and_remarriage,
