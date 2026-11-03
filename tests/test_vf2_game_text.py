@@ -46,7 +46,58 @@ def test_other_text_is_utf8_and_round_trips():
     assert T.encode("Ã©") == "Ã©".encode("utf-8")       # its Latin-1 bytes would read as UTF-8 "é"
     assert T.encode("€") == b"\x80"                          # Windows-1252 characters stay one byte
     assert T.encode("Renée “Bo”") == b"Ren\xe9e \x93Bo\x94"
-    assert T.encode("€ Ł") == "€ Ł".encode("utf-8")
+    assert T.encode("€ Ł") == b"\x80 " + "Ł".encode("utf-8")      # per character: the euro one byte, the L-stroke UTF-8
+
+
+def test_a_string_mixes_single_bytes_and_utf8_per_character():
+    """The write rule is per character (the Virtual Villagers rule): a Windows-1252 character is its one byte, any
+    other character is UTF-8, in one string; only when that would read back as different text is every non-ASCII
+    character UTF-8."""
+    assert T.encode("Zoë 日本") == b"Zo\xeb " + "日本".encode("utf-8")
+    assert T.encode("é日") == b"\xe9" + "日".encode("utf-8")
+    assert T.encode("日é") == "日".encode("utf-8") + b"\xe9"
+    assert T.encode("“Bo” 🙂") == b"\x93Bo\x94 " + "🙂".encode("utf-8")
+    assert T.encode("é€Ł") == b"\xe9\x80" + "Ł".encode("utf-8")
+    # a Latin-1 lead byte followed by a one-byte character that is a continuation byte would join into one character
+    assert T.encode("Â€") == "Â€".encode("utf-8")                  # C2 80 would read as U+0080
+    assert T.encode("Ã©") == "Ã©".encode("utf-8")                 # C3 A9 would read as one "é"
+    assert T.encode("Ã©日") == "Ã©日".encode("utf-8")               # the whole string is UTF-8 then
+    assert T.encode("Ã") + T.encode("日") == b"\xc3" + "日".encode("utf-8")      # alone, each part is mixed
+    assert T.decode(T.encode("Ã日©")) == "Ã日©"
+    # a UTF-8 encoding of a Windows-1252 character is rewritten as its byte
+    assert T.encode(T.decode("é".encode("utf-8"))) == b"\xe9"
+    for s in ("Zoë 日本", "é日", "日é", "Ã©日", "ÃÃ©", "€ Ł", "“Bo”", "Ã©é", "ÂÂ©日", "\x81\x80日", "àĀ"):
+        assert T.decode(T.encode(s)) == s, s
+
+
+def test_read_is_per_sequence():
+    """Each well-formed, shortest UTF-8 sequence is its character; every other byte is a Windows-1252 one."""
+    assert T.decode(b"Zo\xeb \xe6\x97\xa5") == "Zoë 日"                  # a lone E9-style byte, then a sequence
+    assert T.decode(b"\xc3\xa9\xe9") == "éé"                              # was "Ã©é" when the string was read whole
+    assert T.decode(b"\xc3") == "Ã" and T.decode(b"\xc3 ") == "Ã "           # a lead byte with no continuation
+    assert T.decode(b"\xc0\x80") == "À€"                               # overlong forms are not sequences
+    assert T.decode(b"\xed\xa0\x80") == "í\xa0€"                       # nor surrogates
+    assert T.decode(b"\xf4\x90\x80\x80") == "ô\x90€€"               # nor anything past U+10FFFF
+    assert T.decode(b"\xf0\x9f\x99\x82x") == "🙂x"
+    assert T.decode(b"\x81\xe2\x82\xac") == "\x81€"                      # byte 81h (not in Windows-1252), then UTF-8 euro
+    u = T.units(b"e\xcc\x81x")                                           # a letter and a UTF-8 mark: one unit
+    assert [(x.text, x.raw) for x in u] == [("e\u0301", b"e\xcc\x81"), ("x", b"x")]
+    u = T.units(b"Zo\xeb\xe6\x97\xa5")
+    assert [(x.text, x.raw) for x in u] == [("Z", b"Z"), ("o", b"o"), ("ë", b"\xeb"), ("日", b"\xe6\x97\xa5")]
+
+
+def test_round_trips_hold_for_random_text_and_bytes():
+    import random
+    rng = random.Random(20261103)
+    pool = list("abcXYZ ") + ["é", "ë", "Ã", "©", "Â", "€", "“", "日", "Ł", "🙂", "\u0301", "\u200d", "\x81", "à", "Ā"]
+    for _ in range(3000):
+        s = "".join(rng.choice(pool) for _ in range(rng.randint(0, 12)))
+        assert T.decode(T.encode(s)) == s, s
+    for _ in range(3000):
+        raw = bytes(rng.randrange(1, 256) for _ in range(rng.randint(0, 10)))
+        text = T.decode(raw)
+        assert T.decode(T.encode(text)) == text, raw          # reading, then writing, then reading again
+        assert len(T.encode(text)) <= len(text.encode("utf-8"))
 
 
 def test_invalid_utf8_reads_one_byte_per_character():
@@ -81,7 +132,7 @@ def test_fit_never_cuts_a_character(text):
 
 def test_field_bytes_is_the_field_size_with_a_terminator():
     f = T.field_bytes("Zoë 👩🏽‍💻 and more", 25)
-    assert len(f) == 25 and f[-1] == 0 and T.decode(f) == "Zoë 👩🏽‍💻 and"[:len(T.decode(f))]
+    assert len(f) == 25 and f[-1] == 0 and T.decode(f) == "Zoë 👩🏽‍💻 and "
 
 
 # ---------------------------------------------------------------------------------------------- the game's code
@@ -116,11 +167,11 @@ def test_every_byte_has_the_games_rectangle(rig, fonts):
 
 
 def _random_single_byte(rng, n):
-    """A text in the single-byte stored form (bytes that would read as UTF-8 are UTF-8 text, drawn otherwise)."""
+    """A text of single bytes only (no byte sequence in it reads as UTF-8: each byte is a character)."""
     pool = [0x20] * 6 + [0x0A] + list(range(0x21, 0x7F)) + list(range(0xA2, 0x100))
     while True:
         raw = bytes(rng.choice(pool) for _ in range(n))
-        if not T.is_utf8(raw):
+        if len(T.decode(raw)) == len(raw):
             return raw
 
 
@@ -196,9 +247,11 @@ def test_crlf_is_a_line_break_in_utf8_text_too():
     assert [p.unit.text for p in placed][-1] == "本" and placed[-1].y == f.line_height and placed[-1].x == 0
 
 
-def test_fit_keeps_a_name_that_fits_after_a_start_that_does_not():
-    """A start of single bytes that reads as UTF-8 must be stored as UTF-8 (longer); the whole name can still fit
-    as single bytes (Codex)."""
+def test_fit_stores_each_start_in_its_own_form():
+    """A start whose single bytes would read as UTF-8 is stored as UTF-8 (longer): the cut text gets its own stored
+    form, and every start is tried."""
     name = "a" * 16 + "Ã©é"
-    assert len(T.encode(name)) == 19
-    assert T.fit(name, 19) == T.encode(name)
+    assert len(T.encode(name)) == 22 and len(T.encode(name[:17])) == 17 and len(T.encode(name[:18])) == 20
+    assert T.fit(name, 19) == T.encode(name[:17])                  # "Ã©" would be UTF-8 (20 bytes): the cut is before it
+    assert T.fit(name, 20) == T.encode(name[:18])
+    assert T.fit(name, 22) == T.encode(name)

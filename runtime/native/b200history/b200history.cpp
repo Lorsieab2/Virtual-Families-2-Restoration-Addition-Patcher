@@ -39,6 +39,7 @@
 
 #include "b200history_sites.h"
 #include "b200name_limit.h"      // kNameBoxBytes: the one name limit (src/vf2_game_text.py)
+#include "b200names_file.h"      // the Names file: header, CRC-32, one record (the Unicode text DLL writes it)
 #include "b200unicode_text.h"    // the stored form and characters, as the Unicode text DLL reads the Names file
 
 // Names (docs/UNICODE_TEXT.md, "Names up to 1,200 bytes"; runtime/native/b200unicode/b200names.inc): with a Unicode
@@ -590,7 +591,7 @@ static bool SaveFolder(char *out, unsigned cap) {
 }
 
 // ================================================================ whole names (the slot's Names file)
-// The Unicode text DLL's own rule, read the same way (b200names.inc LoadSlot): "VF2 Names 1", then one line per short
+// The Unicode text DLL's own rule, read the same way (b200names.inc LoadSlot): "VF2 Names 2" (or 1), then one line per short
 // form, short<TAB>room<TAB>whole name, in UTF-8; a line that is not a valid short form (ends with "...", at most 24
 // bytes stored, fits its room) for a valid name (at least one character, at most kNameBoxBytes bytes stored, no
 // control characters) is left out; the first line of a short form in a slot's file counts. Each name is kept in the
@@ -700,30 +701,20 @@ static void LoadWhole(int slot) {
     bool ok = text && ReadFile(h, text, size, &got, 0) && got == size;
     CloseHandle(h);
     if (!ok) { Release(text); return; }
-    static const char header[] = "VF2 Names 1";
     unsigned at = 0;
-    for (; header[at]; ++at) if (at >= size || text[at] != (unsigned char)header[at]) { Release(text); return; }
-    if (at < size && text[at] == '\r') ++at;
-    if (at >= size || text[at] != '\n') { Release(text); return; }
-    ++at;
+    int version = nf::Header(text, size, &at);
+    if (!version) { Release(text); return; }
     static unsigned char shortForm[64], whole[kNameBoxBytes + 8];
     while (at < size) {
         unsigned end = at;
         while (end < size && text[end] != '\n') ++end;
         unsigned stop = end > at && text[end - 1] == '\r' ? end - 1 : end;
-        unsigned tab1 = at, tab2;
-        while (tab1 < stop && text[tab1] != '\t') ++tab1;
-        tab2 = tab1 + 1;
-        while (tab2 < stop && text[tab2] != '\t') ++tab2;
-        unsigned room = 0;
-        bool digits = tab1 < stop && tab2 < stop && tab2 > tab1 + 1;
-        for (unsigned i = tab1 + 1; digits && i < tab2; ++i) {
-            if (text[i] < '0' || text[i] > '9' || room > 100000) digits = false;
-            else room = room * 10 + (text[i] - '0');
-        }
-        if (digits && room >= 1 && room < kNameBoxBytes) {
+        unsigned tab1, tab2, body, room;
+        // a record cut short, merged with another or with a wrong checksum is skipped (b200names_file.h)
+        if (nf::Split(text, at, stop, version, &tab1, &tab2, &body, &room) && room >= 1 &&
+            room < kNameBoxBytes) {
             int sn = FromUtf8(text + at, tab1 - at, shortForm, room < sizeof(shortForm) ? room : 0, false);
-            int wn = FromUtf8(text + tab2 + 1, stop - tab2 - 1, whole, kNameBoxBytes, true);
+            int wn = FromUtf8(text + tab2 + 1, body - tab2 - 1, whole, kNameBoxBytes, true);
             if (sn > 0 && wn > 0 && sn <= 24 && EndsWithMark((const char *)shortForm, (unsigned)sn) &&
                 !WholeInSlot((unsigned)slot, (const char *)shortForm, (unsigned)sn))
                 AddWhole((unsigned)slot, (const char *)shortForm, (unsigned)sn, (const char *)whole, (unsigned)wn);

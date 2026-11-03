@@ -117,9 +117,15 @@ set into a box (SetText) and the player did not change is given back unchanged: 
 `tests/test_name_boxes.py` (a name too long for its box is never cut by viewing it) still holds.
 
 **The Names file**: `<saves>\Virtual Families 2 Patcher Data\Names\Virtual Families 2<N>.ldw.txt` (the save file's
-name + ".txt", from the game's own MakeGameStatePath), UTF-8 lines `VF2 Names 1`, then
-`short<TAB>room<TAB>whole name` (room: the field's bytes it was made for). Written through a temporary file and
-MoveFileEx. A line is never removed: a short form no longer in the save is harmless (a new one is never made equal
+name + ".txt", from the game's own MakeGameStatePath), UTF-8 lines `VF2 Names 2`, then
+`short<TAB>room<TAB>whole name<TAB>CRC` (room: the field's bytes it was made for; CRC: the CRC-32 (zlib) of every
+byte of the line before its last tab, 8 upper-case hex digits). A line whose CRC does not match, or that is cut short
+or merged with another, is skipped; B207's `VF2 Names 1` (three columns, no CRC) is still read, and the next name
+written makes the file version 2. Written through a temporary file and MoveFileEx, at once when a name leaves its
+box; a record that could not be written, or that was made while no save slot was known, stays pending and is tried
+again at a later draw (at most every 2 seconds; a record with no slot goes to the slot being played once there is
+one). The one rule for reading it is `runtime/native/b200unicode/b200names_file.h`, shared by the Unicode text DLL
+and the Family History DLL, and `src/vf2_names.py`. A line is never removed: a short form no longer in the save is harmless (a new one is never made equal
 to it), and the game's previous save `<N+20>` stays readable. A line that is not valid (no mark, too long for its
 room, a control character, more than 1,200 bytes) is left out; a file that cannot be read is
 read as empty, and the save shows its short forms.
@@ -173,7 +179,10 @@ keeps its text. `tests/test_rename_family.py` and `tests/test_copy_slot.py`: lon
   through the game's own hooks, with guard bytes after every heap buffer).
 * Copy and Paste in Text Boxes (vf2clip_b200.dll) cuts a paste into a name box (a box whose limit is the 1,200
   bytes only the long names give) at those bytes as stored, with no character cap, at a character's start. Any
-  other box is cut as before, at its own byte limit. The limit is `runtime/native/b200unicode/b200name_limit.h`, the
+  other box is cut as before, at its own byte limit. With both Unicode settings off a paste keeps only the characters
+  the stock fonts draw, one byte each ("what the fonts draw": ASCII 20h..7Eh and Latin-1 A2h..FFh, derived from the
+  font tables in `src/vf2_game_fonts.json` by `tests/test_clip_text_boxes.py`; the stock fonts have nothing in
+  80h..A1h, so the euro, curly quotes and the no-break space are left out, never turned into a blank). The limit is `runtime/native/b200unicode/b200name_limit.h`, the
   one C copy of `NAME_BOX_BYTES`, written by `runtime/tools/gen_b200_name_limit.py` from `src/vf2_game_text.py` and
   checked by `tests/test_name_limit.py`.
 * Typing in a name box agrees with a paste: a mark typed right after a character the box refused (its

@@ -513,8 +513,12 @@ release bundle, like almost everything else)
     codes, an input method); the original game drops all of them (`CheckForEvents` only passes a one-byte
     `SDL_TEXTINPUT`). A character is added only if the whole name still fits the box; Backspace removes a whole
     character (an emoji with its skin tone too); copying a name to its save field never cuts inside a character;
-  - **saves**: the names stay in their own fields. Text of ASCII and Latin-1 letters is stored one byte per letter
-    exactly as before (the original game and older tools show it); anything else is UTF-8. The one rule is
+  - **saves**: the names stay in their own fields. Each character is written by itself: a letter Windows-1252 has
+    (ASCII, Latin-1, the euro and curly quotes) is its one byte, exactly as before (the original game and older tools
+    show it), and any other character is UTF-8, in the same name (a name with an accented letter and a Japanese one
+    keeps the accented letter as one byte); when those bytes would read back as different text, the whole name is
+    UTF-8. Reading takes each valid UTF-8 sequence as its character and every other byte as a Windows-1252 letter,
+    per sequence, so mixed names read right and older saves read as before. The one rule is
     `src/vf2_game_text.py`, which every patcher reader and writer uses (logs, Family Tree, Rename Family, Copy
     Player Slot, the tools). The original game shows UTF-8 names as odd letters (Ã© for é) and never crashes
     (`tests/test_vf2_game_text.py` runs its own drawing code over every byte);
@@ -567,7 +571,8 @@ release bundle, like almost everything else)
   out; a paste stops at the box's own limit at whole characters (a name box: 1,200 bytes as stored, as
   typing counts them). With either Unicode text setting on any character
   is pasted (each through the box's own HandleKey, so the stored form and the width cap apply); with both off only
-  Windows-1252 characters, one byte each. The keys do nothing anywhere else and never reach the game as letters.
+  the characters the original game's own fonts can draw (ASCII and Latin-1 from `¢` to `ÿ`; not the euro, curly
+  quotes or the no-break space, which those fonts lack), one byte each, the rest left out. The keys do nothing anywhere else and never reach the game as letters.
   The companion DLL `vf2clip_b200.dll` is the Unicode text source built with `B200UNICODE_CLIP`
   (`build_b200unicode.bat clip`): it replaces only the SDL_PollEvent import slot. Evidence: `tests/test_clip_text_boxes.py`
   (the DLL with the game's own event manager and text box code under emulation, at the limit and one past it with

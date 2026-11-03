@@ -14,8 +14,10 @@ same rule as Virtual Families 1, docs/UNICODE_TEXT.md):
   names of their children, the Family Tree, a death), and the stock game (or both Unicode settings off) loads,
   plays and shows it as it is;
 * the whole name is kept in the slot's Names file, "Virtual Families 2 Patcher Data\\Names\\Virtual Families
-  2<N>.ldw.txt" (N = 1..5, the save file's name + ".txt"): UTF-8 lines, "VF2 Names 1", then
-  ``short<TAB>room<TAB>name`` (room: the field's bytes it was made for). The game itself (vf2unicode_b200.dll /
+  2<N>.ldw.txt" (N = 1..5, the save file's name + ".txt"): UTF-8 lines, "VF2 Names 2", then
+  ``short<TAB>room<TAB>name<TAB>CRC`` (room: the field's bytes it was made for; CRC: the CRC-32, 8 upper-case hex
+  digits, of every byte of the line before its last tab; a line whose CRC does not match, or that is cut short or
+  merged with another, is skipped; "VF2 Names 1", with no CRC column, is still read). The game itself (vf2unicode_b200.dll /
   vf2unicodefont_b200.dll, runtime/native/b200unicode/b200names.inc) writes it when a name is typed, and draws the
   whole name wherever its short form is drawn; the patcher's readers and tools use this module, by the same rule.
 
@@ -26,7 +28,9 @@ still shows its short forms.
 from __future__ import annotations
 
 import os
+import re
 import uuid
+import zlib
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -36,7 +40,8 @@ NAME_BOX_BYTES = game_text.NAME_BOX_BYTES
 MARK = game_text.NAME_MARK
 PATCHER_DATA = "Virtual Families 2 Patcher Data"
 FOLDER = "Names"
-HEADER = "VF2 Names 1"
+HEADER = "VF2 Names 2"          # written; the B207 header below is still read (no CRC column)
+HEADER_V1 = "VF2 Names 1"
 SLOTS = (1, 2, 3, 4, 5)
 
 FAMILY_ROOM = 19          # GetText(.., 0x14): a family name keeps 19 bytes (gs+0x25ABC, the slot menu's names)
@@ -76,19 +81,43 @@ def name_problem(full: str) -> str | None:
     return None
 
 
+_CRC = re.compile(r"[0-9A-Fa-f]{8}")
+
+
+def crc_of(body: str) -> str:
+    """The checksum column of a record: CRC-32 (zlib) of the UTF-8 bytes of ``short<TAB>room<TAB>whole``, as 8
+    upper-case hex digits."""
+    return "%08X" % zlib.crc32(body.encode("utf-8", "surrogatepass"))
+
+
+def record_line(entry: Entry) -> str:
+    """One record of a "VF2 Names 2" file, without its line feed."""
+    body = f"{entry.short}\t{entry.room}\t{entry.full}"
+    return f"{body}\t{crc_of(body)}"
+
+
 def parse(data: bytes) -> list[Entry]:
-    """A Names file's entries (in file order); anything not valid is left out (as the DLL's LoadSlot)."""
+    """A Names file's entries (in file order); anything not valid is left out (as the DLL's LoadSlot): a version 2 line
+    whose CRC-32 does not match, or that is cut short or merged with another, is skipped."""
     try:
         text = data.decode("utf-8")
     except UnicodeDecodeError:
         return []
     lines = text.split("\n")
-    if not lines or lines[0].rstrip("\r") != HEADER:
+    header = lines[0].rstrip("\r") if lines else ""
+    if header not in (HEADER, HEADER_V1):
         return []
+    version = 2 if header == HEADER else 1
     out: list[Entry] = []
     seen: set[str] = set()
     for line in lines[1:]:
-        parts = line.rstrip("\r").split("\t")
+        line = line.rstrip("\r")
+        if version == 2:
+            body, tab, crc = line.rpartition("\t")
+            if not tab or not _CRC.fullmatch(crc) or crc_of(body).lower() != crc.lower():
+                continue
+            line = body
+        parts = line.split("\t")
         if len(parts) != 3 or not parts[1].isdigit() or not parts[1].isascii():
             continue
         short, room, full = parts[0], int(parts[1]), parts[2]
@@ -101,7 +130,7 @@ def parse(data: bytes) -> list[Entry]:
 
 
 def render(entries: list[Entry]) -> bytes:
-    return ("\n".join([HEADER] + [f"{e.short}\t{e.room}\t{e.full}" for e in entries]) + "\n").encode("utf-8")
+    return ("\n".join([HEADER] + [record_line(e) for e in entries]) + "\n").encode("utf-8")
 
 
 def read(path: Path) -> list[Entry]:
