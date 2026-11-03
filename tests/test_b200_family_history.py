@@ -380,24 +380,31 @@ MUTATIONS = [
      '    Field(t, "  ", "Cause of death", CauseWord(cause - cause - 1));', "scenario_child_dies"),
     ("the wrong family role", '    Field(t, "  ", "Family role", RoleText(role));',
      '    Field(t, "  ", "Family role", RoleText(role == 1 ? 0 : role));', "scenario_spouse_dies_and_remarriage"),
-    ("no widowed spouse", '    if (widowed[0]) t.S("  Current spouse of ").Name(widowed, 25).S(": (none)").NL();',
+    ("no widowed spouse", '    if (widowed[0]) t.S("  Current spouse of ").Whole(widowed, 25).S(": (none)").NL();',
      "    (void)widowed;", "scenario_spouse_dies_and_remarriage"),
     ("a death not seen by the remarriage",
-     '            } else if (SameText(kind, "Death", 16) && earlier[0] && SameText(a, earlier, 28)) {',
-     '            } else if (SameText(kind, "Death", 16) && earlier[0] && SameText(a, earlier, 28) && !slot) {',
+     '            } else if (SameText(kind, "Death", 16) && earlier[0] && SameText(a, earlier, kNameBytes)) {',
+     '            } else if (SameText(kind, "Death", 16) && earlier[0] && SameText(a, earlier, kNameBytes) && !slot) {',
      "scenario_spouse_dies_and_remarriage"),
     ("a divorce not seen by the remarriage",
-     '            } else if (SameText(kind, "Divorce", 16) && earlier[0] && SameText(b, earlier, 28)) {',
-     '            } else if (SameText(kind, "Divorce", 16) && earlier[0] && SameText(b, earlier, 28) && !slot) {',
+     '            } else if (SameText(kind, "Divorce", 16) && earlier[0] && SameText(b, earlier, kNameBytes)) {',
+     '            } else if (SameText(kind, "Divorce", 16) && earlier[0] && SameText(b, earlier, kNameBytes) && !slot) {',
      "scenario_divorce_and_remarriage"),
-    ("no remarriage", '                if (SameText(kind, "Marriage", 16) && gn == gen && (SameText(a, head, 28) || '
-     'SameText(b, head, 28))) {',
+    ("no remarriage", '                if (SameText(kind, "Marriage", 16) && gn == gen && (SameText(a, head, kNameBytes) || '
+     'SameText(b, head, kNameBytes))) {',
      '                if (SameText(kind, "Marriage", 16) && gn == gen && !slot) {', "scenario_divorce_and_remarriage"),
-    ("the married-in spouse's remarriage missed", "(SameText(a, head, 28) || SameText(b, head, 28))",
-     "(SameText(a, head, 28))", "scenario_head_dies_and_the_widow_remarries"),
+    ("the married-in spouse's remarriage missed", "(SameText(a, head, kNameBytes) || SameText(b, head, kNameBytes))",
+     "(SameText(a, head, kNameBytes))", "scenario_head_dies_and_the_widow_remarries"),
+    ("short forms logged", "        return w ? Name(w, kNameBoxBytes) : Name(s, max);", "        return Name(s, max);",
+     "scenario_whole_names_in_the_log"),
+    ("a short form not yet known never read again",
+     "        if (slot) { ForgetWhole(slot); LoadWhole(slot); e = FindWhole(stored, n); }", "        (void)slot;",
+     "scenario_whole_names_in_the_log"),
+    ("the remarriage misses a long-named spouse", "    if (whole) head = whole;", "    (void)whole;",
+     "scenario_whole_names_in_the_log"),
     ("a loss the log never saw guessed", "                    how[0] = 0;\n",
      "                    Copy(how, \"died\", 5);\n", "scenario_a_loss_the_log_never_saw_is_not_guessed"),
-    ("no current spouse", '    t.S("  Current spouse of ").Name(head.name, 25).S(": ").Name(spouse.name, 25).NL();',
+    ("no current spouse", '    t.S("  Current spouse of ").Whole(head.name, 25).S(": ").Whole(spouse.name, 25).NL();',
      "    (void)0;", "scenario_new_family_and_marriage"),
     ("the married-in side guessed by order",
      "        if (bIn) OnMarriage(pa, pb, Generations()); else OnMarriage(pb, pa, Generations());",
@@ -453,10 +460,12 @@ def _build_variant(source: str, out_dir: Path) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "b200history.cpp").write_text(source, encoding="utf-8", newline="\n")
     shutil.copyfile(SRC / "b200history_sites.h", out_dir / "b200history_sites.h")
+    include = RUNTIME / "native" / "b200unicode"               # b200unicode_text.h, b200name_limit.h
     (out_dir / "build.bat").write_text(
         "@echo off\r\n"
         f'call "{VCVARS}" >nul || exit /b 1\r\n'
-        "cl /nologo /O2 /MT /EHsc /W4 /WX /DB200HISTORY_TEST /LD /GS b200history.cpp /Fevf2history_b200_test.dll "
+        f'cl /nologo /O2 /MT /EHsc /W4 /WX /DB200HISTORY_TEST /LD /GS /I "{include}" '
+        "b200history.cpp /Fevf2history_b200_test.dll "
         "/link kernel32.lib /DYNAMICBASE /NXCOMPAT /SAFESEH:NO || exit /b 1\r\n", encoding="ascii")
     r = subprocess.run(["cmd.exe", "/c", str(out_dir / "build.bat")], cwd=out_dir, capture_output=True, text=True)
     assert r.returncode == 0, r.stdout + r.stderr

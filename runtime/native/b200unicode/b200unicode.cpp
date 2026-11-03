@@ -33,6 +33,7 @@
 
 #include "b200unicode_sites.h"
 #include "b200unicode_text.h"
+#include "b200name_limit.h"     // kNameLetters, kNameBoxBytes: the one name limit (src/vf2_game_text.py)
 
 // ================================================================ SDL (SDL2.dll / SDL2_image.dll, as the game links)
 struct SDL_PixelFormat {

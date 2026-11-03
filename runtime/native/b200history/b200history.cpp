@@ -38,6 +38,17 @@
 #include <windows.h>
 
 #include "b200history_sites.h"
+#include "b200name_limit.h"      // kNameLetters, kNameBoxBytes: the one name limit (src/vf2_game_text.py)
+#include "b200unicode_text.h"    // the stored form and characters, as the Unicode text DLL reads the Names file
+
+// Names (docs/UNICODE_TEXT.md, "Names up to 300 characters"; runtime/native/b200unicode/b200names.inc): with a Unicode
+// text setting on, a name longer than its save field is kept in the save as a SHORT FORM ("Maximilianus Fi...",
+// "2...") and whole in the slot's Names file, <save folder>\Virtual Families 2 Patcher Data\Names\<save file>.txt.
+// The log writes WHOLE names, as the Virtual Families 1 Family History does and as the game shows them: a name that
+// ends with "..." is looked up in the Names file the way the Unicode text DLL's draw path looks it up (the current
+// slot's file first, then the others'; the file read again when a short form is not yet known, since the Unicode
+// text DLL writes it the moment a name is typed). A name the file does not hold, or no file, is written exactly as
+// the save holds it (the patcher's readers, src/vf2_family_history.py, still expand old short forms themselves).
 
 // ---------------------------------------------------------------- the sites
 static unsigned Sites[HIST_SITE_COUNT];
@@ -63,6 +74,12 @@ extern "C" __declspec(dllexport) volatile HistStatus B200History_Status = { HIST
 
 static HMODULE ThisModule;
 static wchar_t Folder[MAX_PATH];
+
+static void *Alloc(unsigned n) { return HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, n); }
+static void Release(void *p) { if (p) HeapFree(GetProcessHeap(), 0, p); }
+
+// The whole name a stored name (at most `max` bytes) is the short form of, nul-terminated; 0 when it is none.
+static const char *WholeName(const char *stored, unsigned max);
 
 // ================================================================ small helpers (no C runtime)
 static void Copy(void *dst, const void *src, unsigned n) {
@@ -116,6 +133,10 @@ struct Text {
             if (s[i] != '\t' && s[i] != '\r' && s[i] != '\n') buf[n++] = s[i];
         buf[n] = 0;
         return *this;
+    }
+    Text &Whole(const char *s, unsigned max) {  // a name field: the whole name its short form stands for, else itself
+        const char *w = WholeName(s, max);
+        return w ? Name(w, kNameBoxBytes) : Name(s, max);
     }
     Text &U(unsigned v) {
         char d[12];
@@ -443,7 +464,7 @@ static void Member(Text &t, const char *indent, const char *label, const Person 
     Text d;
     d.Init(deeper, sizeof(deeper));
     d.S(indent).S("  ");
-    t.S(indent).S(label).S(": ").Name(p.name, HIST_VILLAGER_NAME_LEN).NL();
+    t.S(indent).S(label).S(": ").Whole(p.name, HIST_VILLAGER_NAME_LEN).NL();
     if (ageLabel) t.S(deeper).S(ageLabel).S(": ").U(Years(p.age)).NL();
     t.S(deeper).S("Sex: ").S(SexWord(p.sex)).NL();
     t.S(deeper).S("Head: ").I(p.head).NL();
@@ -452,7 +473,7 @@ static void Member(Text &t, const char *indent, const char *label, const Person 
 
 // A family member at the top of a record: "  Name: ..", "  <age label>: ..", "  Sex: ..", "  Head: ..", "  Body: ..".
 static void Self(Text &t, const Person &p, const char *ageLabel) {
-    t.S("  Name: ").Name(p.name, HIST_VILLAGER_NAME_LEN).NL();
+    t.S("  Name: ").Whole(p.name, HIST_VILLAGER_NAME_LEN).NL();
     t.S("  ").S(ageLabel).S(": ").U(Years(p.age)).NL();
     t.S("  Sex: ").S(SexWord(p.sex)).NL();
     t.S("  Head: ").I(p.head).NL();
@@ -461,7 +482,7 @@ static void Self(Text &t, const Person &p, const char *ageLabel) {
 
 // A Family Tree record inside a record (it keeps no age): "  <label>: <name>", Sex, Head, Body one step in.
 static void PeepLines(Text &t, const char *label, const unsigned char *peep) {
-    t.S("  ").S(label).S(": ").Name((const char *)peep, 25).NL();
+    t.S("  ").S(label).S(": ").Whole((const char *)peep, 25).NL();
     t.S("    Sex: ").S(SexWord(I32(peep, HIST_PEEP_GENDER))).NL();
     t.S("    Head: ").I(I32(peep, HIST_PEEP_HEAD)).NL().S("    Body: ").I(I32(peep, HIST_PEEP_BODY)).NL();
 }
@@ -470,8 +491,25 @@ static void Generation(Text &t, int g) { t.S("  Generation: ").I(g).NL(); }
 
 // ================================================================ the Family History files
 static char ReadBuffer[0x100000];
-static char Line[0x4000];
-static char Body[0x4000];
+
+// A record's lines and the text appended to the file: heap buffers of kRecordBytes each (every write into them is
+// bounded by Text, so a record that would not fit is cut, never written past the buffer). The largest record is
+// Evict Family's, every household member's whole name (up to 30 of kNameBoxBytes) on one line.
+static const unsigned kRecordBytes = 0x10000;
+static char *Line, *Body;
+
+static bool EnsureBuffers() {
+    if (!Line) Line = (char *)Alloc(kRecordBytes);
+    if (!Body) Body = (char *)Alloc(kRecordBytes);
+    return Line && Body;
+}
+
+// A record's lines begin: t over Body. False (nothing written) when the buffers could not be made.
+static bool Begin(Text &t) {
+    if (!EnsureBuffers()) return false;
+    t.Init(Body, kRecordBytes);
+    return true;
+}
 
 static const unsigned kMaxFiles = 4096;
 
@@ -531,6 +569,184 @@ static bool SaveFolder(char *out, unsigned cap) {
     return true;
 }
 
+// ================================================================ whole names (the slot's Names file)
+// The Unicode text DLL's own rule, read the same way (b200names.inc LoadSlot): "VF2 Names 1", then one line per short
+// form, short<TAB>room<TAB>whole name, in UTF-8; a line that is not a valid short form (ends with "...", at most 24
+// bytes stored, fits its room) for a valid name (1..kNameLetters characters, at most kNameBoxBytes bytes stored, no
+// control characters) is left out; the first line of a short form in a slot's file counts. Each name is kept in the
+// stored form (b200unicode_text.h Encode: the bytes the save would hold), the form every line of the log is in.
+struct WholeEntry { unsigned slot, shortLen, wholeLen; char *shortForm, *whole; };
+static const unsigned kMaxWhole = 1024;
+static WholeEntry Wholes[kMaxWhole];
+static unsigned WholeCount;
+static bool WholeLoaded[6];
+
+static unsigned FieldLength(const char *s, unsigned max) {
+    unsigned n = 0;
+    while (s && n < max && s[n]) ++n;
+    return n;
+}
+
+static bool SameBytes(const char *a, unsigned an, const char *b, unsigned bn) {
+    if (an != bn) return false;
+    for (unsigned i = 0; i < an; ++i) if (a[i] != b[i]) return false;
+    return true;
+}
+
+static bool EndsWithMark(const char *s, unsigned n) {
+    return n >= 3 && s[n - 1] == '.' && s[n - 2] == '.' && s[n - 3] == '.';
+}
+
+// <save folder>\Virtual Families 2 Patcher Data\Names\<the slot's save file>.txt (b200names.inc NamesPath).
+static bool NamesPath(int slot, char *out, unsigned cap) {
+    unsigned char *state = GameState();
+    if (!state || slot < 1 || slot > 5) return false;
+    void **vtable = *(void ***)state;
+    const char *save = ((MakePathFn)vtable[HIST_LDW_PATH_VSLOT / 4])(state, slot);
+    unsigned n = Length(save);
+    if (!save || n == 0) return false;
+    unsigned cut = n;
+    while (cut > 0 && save[cut - 1] != '\\' && save[cut - 1] != '/') --cut;
+    static const char middle[] = "Virtual Families 2 Patcher Data\\Names\\";
+    unsigned m = sizeof(middle) - 1;
+    if (cut == 0 || n + m + 5 >= cap) return false;
+    Text t;
+    t.Init(out, cap);
+    t.Name(save, cut).S(middle).Name(save + cut, n - cut).S(".txt");
+    return t.n == n + m + 4;
+}
+
+static unsigned Letters(const unsigned *cps, unsigned n) {
+    unsigned count = 0;
+    for (unsigned i = 0; i < n; i = ut::ClusterEnd(cps, n, i)) ++count;
+    return count;
+}
+
+// A whole name the Names file may hold (b200names.inc NameOk).
+static bool NameOk(const unsigned *cps, unsigned n, unsigned storedLen) {
+    if (!n || storedLen > kNameBoxBytes) return false;
+    for (unsigned i = 0; i < n; ++i)
+        if (cps[i] < 0x20 || (cps[i] >= 0x7F && cps[i] < 0xA0) || (cps[i] >= 0xD800 && cps[i] <= 0xDFFF)) return false;
+    return Letters(cps, n) <= kNameLetters;
+}
+
+// UTF-8 text -> the stored form (into out, cap bytes): its length, or -1 when it is not valid (b200names.inc FromUtf8).
+static int FromUtf8(const unsigned char *s, unsigned n, unsigned char *out, unsigned cap, bool name) {
+    static unsigned cps[1300];
+    unsigned count = 0, i = 0, cp;
+    while (i < n) {
+        unsigned k = ut::Utf8Seq(s + i, n - i, &cp);
+        if (!k || count >= 1300) return -1;
+        cps[count++] = cp;
+        i += k;
+    }
+    int len = ut::Encode(cps, count, out, cap);
+    if (len < 0) return -1;
+    if (name && !NameOk(cps, count, (unsigned)len)) return -1;
+    return len;
+}
+
+static bool WholeInSlot(unsigned slot, const char *s, unsigned n) {
+    for (unsigned i = 0; i < WholeCount; ++i)
+        if (Wholes[i].slot == slot && SameBytes(Wholes[i].shortForm, Wholes[i].shortLen, s, n)) return true;
+    return false;
+}
+
+static bool AddWhole(unsigned slot, const char *s, unsigned sn, const char *w, unsigned wn) {
+    if (WholeCount >= kMaxWhole || wn > kNameBoxBytes) return false;
+    char *copy = (char *)Alloc(sn + 1 + wn + 1);
+    if (!copy) return false;
+    WholeEntry &e = Wholes[WholeCount++];
+    e.slot = slot; e.shortLen = sn; e.wholeLen = wn; e.shortForm = copy; e.whole = copy + sn + 1;
+    Copy(e.shortForm, s, sn);
+    e.shortForm[sn] = 0;
+    Copy(e.whole, w, wn);
+    e.whole[wn] = 0;
+    return true;
+}
+
+static void ForgetWhole(int slot) {
+    unsigned k = 0;
+    for (unsigned i = 0; i < WholeCount; ++i) {
+        if (slot > 0 && Wholes[i].slot != (unsigned)slot) { Wholes[k++] = Wholes[i]; continue; }
+        Release(Wholes[i].shortForm);
+    }
+    WholeCount = k;
+    for (int s = 1; s <= 5; ++s) if (slot <= 0 || s == slot) WholeLoaded[s] = false;
+}
+
+static void LoadWhole(int slot) {
+    char path[MAX_PATH + 64];
+    if (slot < 1 || slot > 5 || !NamesPath(slot, path, sizeof(path))) return;
+    WholeLoaded[slot] = true;
+    HANDLE h = CreateFileA(path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
+    if (h == INVALID_HANDLE_VALUE) return;
+    DWORD size = GetFileSize(h, 0), got = 0;
+    unsigned char *text = size && size < (4u << 20) ? (unsigned char *)Alloc(size + 1) : 0;
+    bool ok = text && ReadFile(h, text, size, &got, 0) && got == size;
+    CloseHandle(h);
+    if (!ok) { Release(text); return; }
+    static const char header[] = "VF2 Names 1";
+    unsigned at = 0;
+    for (; header[at]; ++at) if (at >= size || text[at] != (unsigned char)header[at]) { Release(text); return; }
+    if (at < size && text[at] == '\r') ++at;
+    if (at >= size || text[at] != '\n') { Release(text); return; }
+    ++at;
+    static unsigned char shortForm[64], whole[kNameBoxBytes + 8];
+    while (at < size) {
+        unsigned end = at;
+        while (end < size && text[end] != '\n') ++end;
+        unsigned stop = end > at && text[end - 1] == '\r' ? end - 1 : end;
+        unsigned tab1 = at, tab2;
+        while (tab1 < stop && text[tab1] != '\t') ++tab1;
+        tab2 = tab1 + 1;
+        while (tab2 < stop && text[tab2] != '\t') ++tab2;
+        unsigned room = 0;
+        bool digits = tab1 < stop && tab2 < stop && tab2 > tab1 + 1;
+        for (unsigned i = tab1 + 1; digits && i < tab2; ++i) {
+            if (text[i] < '0' || text[i] > '9' || room > 100000) digits = false;
+            else room = room * 10 + (text[i] - '0');
+        }
+        if (digits && room >= 1 && room < kNameBoxBytes) {
+            int sn = FromUtf8(text + at, tab1 - at, shortForm, room < sizeof(shortForm) ? room : 0, false);
+            int wn = FromUtf8(text + tab2 + 1, stop - tab2 - 1, whole, kNameBoxBytes, true);
+            if (sn > 0 && wn > 0 && sn <= 24 && EndsWithMark((const char *)shortForm, (unsigned)sn) &&
+                !WholeInSlot((unsigned)slot, (const char *)shortForm, (unsigned)sn))
+                AddWhole((unsigned)slot, (const char *)shortForm, (unsigned)sn, (const char *)whole, (unsigned)wn);
+        }
+        at = end + 1;
+    }
+    Release(text);
+}
+
+static void EnsureWhole() {
+    for (int s = 1; s <= 5; ++s) if (!WholeLoaded[s]) LoadWhole(s);
+}
+
+// The entry whose short form is s (n bytes): the current slot's first, else any slot's (b200names.inc FindShort).
+static int FindWhole(const char *s, unsigned n) {
+    int any = -1;
+    unsigned prefer = (unsigned)CurrentSlot();
+    for (unsigned i = 0; i < WholeCount; ++i)
+        if (SameBytes(Wholes[i].shortForm, Wholes[i].shortLen, s, n)) {
+            if (Wholes[i].slot == prefer) return (int)i;
+            if (any < 0) any = (int)i;
+        }
+    return any;
+}
+
+static const char *WholeName(const char *stored, unsigned max) {
+    unsigned n = FieldLength(stored, max);
+    if (!EndsWithMark(stored, n)) return 0;
+    EnsureWhole();
+    int e = FindWhole(stored, n);
+    if (e < 0) {                       // not known yet: the Unicode text DLL may have written it since
+        int slot = CurrentSlot();
+        if (slot) { ForgetWhole(slot); LoadWhole(slot); e = FindWhole(stored, n); }
+    }
+    return e < 0 ? 0 : Wholes[e].whole;
+}
+
 static const char kSaves[] = "Virtual Families 2 Patcher\\Save ";
 
 // <save folder>\Virtual Families 2 Patcher\Save <slot>
@@ -555,7 +771,7 @@ static bool HistoryFile(int slot, unsigned number, char *out, unsigned cap) {
 static void Header(Text &t, int slot) {
     const char *name = FamilyName();
     t.S("Family: ");
-    if (name[0]) t.Name(name, HIST_GAME_STATE_NICKNAME_LEN - 1); else t.S("(no name)");
+    if (name[0]) t.Whole(name, HIST_GAME_STATE_NICKNAME_LEN - 1); else t.S("(no name)");
     t.S(" (Save ").U((unsigned)slot).S(")").NL();
 }
 
@@ -586,9 +802,9 @@ static unsigned NewestFile(int slot, unsigned *records) {
 static void CreateLog(int slot) {
     char path[MAX_PATH + 64];
     unsigned records = 0;
-    if (NewestFile(slot, &records) || !HistoryFile(slot, 1, path, sizeof(path))) return;
+    if (NewestFile(slot, &records) || !HistoryFile(slot, 1, path, sizeof(path)) || !EnsureBuffers()) return;
     Text t;
-    t.Init(Line, sizeof(Line));
+    t.Init(Line, kRecordBytes);
     Header(t, slot);
     Append(path, Line, t.n);
 }
@@ -626,9 +842,9 @@ static void WriteNow(int slot, const char *kind, const char *lines, bool backfil
     unsigned records = 0;
     unsigned newest = NewestFile(slot, &records);
     unsigned file = !newest ? 1 : records >= HIST_HISTORY_RECORDS_PER_FILE ? newest + 1 : newest;
-    if (!HistoryFile(slot, file, path, sizeof(path))) return;
+    if (!HistoryFile(slot, file, path, sizeof(path)) || !EnsureBuffers()) return;
     Text t;
-    t.Init(Line, sizeof(Line));
+    t.Init(Line, kRecordBytes);
     if (!Exists(path)) Header(t, slot);
     if (backfilled) {
         t.S("[backfilled, no date] ");
@@ -644,7 +860,7 @@ static void WriteNow(int slot, const char *kind, const char *lines, bool backfil
 
 // While a Random Event's dialog is open, the records its choice makes (a child who arrives or leaves home) wait,
 // and follow the event's own record, as vf1logs.dll orders them.
-struct Pending { int slot; char kind[24]; char lines[0x800]; };
+struct Pending { int slot; char kind[24]; char *lines; };    // lines: a heap buffer of kRecordBytes, made once
 static Pending Waiting[8];
 static unsigned WaitingCount;
 static int gInEvent;
@@ -653,14 +869,18 @@ static const char *gEventKind = "Popup Event";
 
 static void Write(int slot, const char *kind, const char *lines, bool backfilled = false) {
     if (gInEvent && !backfilled && WaitingCount < sizeof(Waiting) / sizeof(Waiting[0])) {
-        Pending &w = Waiting[WaitingCount++];
-        w.slot = slot;
-        Text k, l;
-        k.Init(w.kind, sizeof(w.kind));
-        k.S(kind);
-        l.Init(w.lines, sizeof(w.lines));
-        l.S(lines);
-        return;
+        Pending &w = Waiting[WaitingCount];
+        if (!w.lines) w.lines = (char *)Alloc(kRecordBytes);
+        if (w.lines) {
+            ++WaitingCount;
+            w.slot = slot;
+            Text k, l;
+            k.Init(w.kind, sizeof(w.kind));
+            k.S(kind);
+            l.Init(w.lines, kRecordBytes);
+            l.S(lines);
+            return;
+        }
     }
     WriteNow(slot, kind, lines, backfilled);
 }
@@ -682,10 +902,18 @@ static bool Value(const char *p, const char *label, char *out, unsigned cap) {  
     return true;
 }
 
+// The names in the log are whole (or, in a log written before whole names, short forms): `head` (the save's stored
+// name) is compared as its whole name. earlier gets the whole name as the log wrote it (kNameBytes room).
+static const unsigned kNameBytes = kNameBoxBytes + 1;
+static char EarlierA[kNameBytes], EarlierB[kNameBytes];
+
 static bool EarlierSpouse(int slot, int gen, const char *head, char *earlier, char *how) {
     char path[MAX_PATH + 64];
     earlier[0] = how[0] = 0;
-    char kind[16], a[28], b[28], g[12];
+    const char *whole = WholeName(head, 25);
+    if (whole) head = whole;
+    char kind[16], g[12];
+    char *a = EarlierA, *b = EarlierB;
     kind[0] = a[0] = b[0] = g[0] = 0;
     for (unsigned k = 1; k <= kMaxFiles && HistoryFile(slot, k, path, sizeof(path)) && Exists(path); ++k) {
         unsigned got = 0;
@@ -695,12 +923,12 @@ static bool EarlierSpouse(int slot, int gen, const char *head, char *earlier, ch
             if (heading && kind[0]) {                  // the record before ends: what it says
                 int gn = 0;
                 for (const char *q = g; *q >= '0' && *q <= '9'; ++q) gn = gn * 10 + (*q - '0');
-                if (SameText(kind, "Marriage", 16) && gn == gen && (SameText(a, head, 28) || SameText(b, head, 28))) {
-                    Copy(earlier, SameText(a, head, 28) ? b : a, 28);
+                if (SameText(kind, "Marriage", 16) && gn == gen && (SameText(a, head, kNameBytes) || SameText(b, head, kNameBytes))) {
+                    Copy(earlier, SameText(a, head, kNameBytes) ? b : a, kNameBytes);
                     how[0] = 0;
-                } else if (SameText(kind, "Death", 16) && earlier[0] && SameText(a, earlier, 28)) {
+                } else if (SameText(kind, "Death", 16) && earlier[0] && SameText(a, earlier, kNameBytes)) {
                     Copy(how, "died", 5);
-                } else if (SameText(kind, "Divorce", 16) && earlier[0] && SameText(b, earlier, 28)) {
+                } else if (SameText(kind, "Divorce", 16) && earlier[0] && SameText(b, earlier, kNameBytes)) {
                     Copy(how, "divorced", 9);
                 } else if (SameText(kind, "Evict Family", 16)) {
                     earlier[0] = how[0] = 0;
@@ -716,8 +944,8 @@ static bool EarlierSpouse(int slot, int gen, const char *head, char *earlier, ch
                 while (*q && *q != '\r' && *q != '\n' && !(*q == ' ' && q[1] >= '0' && q[1] <= '9') && n < 15) kind[n++] = *q++;
                 kind[n] = 0;
             } else {
-                Value(p, "  Family member: ", a, sizeof(a)) || Value(p, "  Name: ", a, sizeof(a)) ||
-                    Value(p, "  Married: ", b, sizeof(b)) || Value(p, "  Divorced: ", b, sizeof(b)) ||
+                Value(p, "  Family member: ", a, kNameBytes) || Value(p, "  Name: ", a, kNameBytes) ||
+                    Value(p, "  Married: ", b, kNameBytes) || Value(p, "  Divorced: ", b, kNameBytes) ||
                     Value(p, "  Generation: ", g, sizeof(g));
             }
             while (*p && *p != '\n') ++p;
@@ -835,7 +1063,7 @@ static void OnConception(const unsigned char *mother, const unsigned char *fathe
         c.father = f;
     }
     Text t;
-    t.Init(Body, sizeof(Body));
+    if (!Begin(t)) return;
     Member(t, "  ", "Mother", m, "Age at conception");
     if (father) Member(t, "  ", "Father", f, "Age at conception");
     else Field(t, "  ", "Father", "(unknown)");
@@ -910,11 +1138,11 @@ static void OnBirths(int mother) {
         Person c;
         Capture(Villager(born[i]), c);
         Text t;
-        t.Init(Body, sizeof(Body));
-        t.S("  Child: ").Name(c.name, 25).NL();
+        if (!Begin(t)) return;
+        t.S("  Child: ").Whole(c.name, 25).NL();
         t.S("    Sex: ").S(SexWord(c.sex)).NL().S("    Head: ").I(c.head).NL().S("    Body: ").I(c.body).NL();
-        t.S("  Mother: ").Name(m.name, 25).NL().S("    Head: ").I(m.head).NL().S("    Body: ").I(m.body).NL();
-        if (known) t.S("  Father: ").Name(f.name, 25).NL().S("    Head: ").I(f.head).NL().S("    Body: ").I(f.body).NL();
+        t.S("  Mother: ").Whole(m.name, 25).NL().S("    Head: ").I(m.head).NL().S("    Body: ").I(m.body).NL();
+        if (known) t.S("  Father: ").Whole(f.name, 25).NL().S("    Head: ").I(f.head).NL().S("    Body: ").I(f.body).NL();
         else Field(t, "  ", "Father", "(unknown)");
         Field(t, "  ", "Born as", n == 1 ? "Single birth" : n == 2 ? "Twin" : "Triplet");
         Generation(t, Generations());
@@ -946,15 +1174,15 @@ static void ReportDeath(TreeVillagerFn next, void *tree, void *villager) {
     if (!dead || p.slot < 0 || !slot || gInLoad || WasLogged(p)) return;
     MarkLogged(p);
     Text t;
-    t.Init(Body, sizeof(Body));
-    t.S("  Name: ").Name(p.name, 25).NL();
+    if (!Begin(t)) return;
+    t.S("  Name: ").Whole(p.name, 25).NL();
     t.S("  Age at death: ").U(Years(p.age)).NL();
     t.S("  Sex: ").S(SexWord(p.sex)).NL();
     Field(t, "  ", "Cause of death", CauseWord(cause));
     t.S("  Head: ").I(p.head).NL().S("  Body: ").I(p.body).NL();
     Field(t, "  ", "Family role", RoleText(role));
     Generation(t, gen);
-    if (widowed[0]) t.S("  Current spouse of ").Name(widowed, 25).S(": (none)").NL();
+    if (widowed[0]) t.S("  Current spouse of ").Whole(widowed, 25).S(": (none)").NL();
     Write(slot, "Death", Body);
 }
 
@@ -963,18 +1191,19 @@ static void ReportDeath(TreeVillagerFn next, void *tree, void *villager) {
 static void OnMarriage(const Person &head, const Person &spouse, int gen) {
     int slot = CurrentSlot();
     if (!slot) return;
-    char earlier[28], how[12];
+    static char earlier[kNameBytes];
+    char how[12];
     bool again = EarlierSpouse(slot, gen, head.name, earlier, how);
     Text t;
-    t.Init(Body, sizeof(Body));
+    if (!Begin(t)) return;
     Member(t, "  ", "Family member", head, "Age");
     Member(t, "  ", "Married", spouse, "Age");
     if (again) {
-        t.S("  Remarried: yes").NL().S("  Earlier spouse: ").Name(earlier, 25);
+        t.S("  Remarried: yes").NL().S("  Earlier spouse: ").Name(earlier, kNameBoxBytes);
         if (how[0]) t.S(" (").S(how).S(")");
         t.NL();
     }
-    t.S("  Current spouse of ").Name(head.name, 25).S(": ").Name(spouse.name, 25).NL();
+    t.S("  Current spouse of ").Whole(head.name, 25).S(": ").Whole(spouse.name, 25).NL();
     Generation(t, gen);
     Write(slot, "Marriage", Body);
 }
@@ -990,11 +1219,11 @@ static void OnDivorce(const unsigned char *spouseVillager) {
     unsigned char *head = rec ? Peep(rec, 0) : 0;
     bool known = PeepValid(head);
     Text t;
-    t.Init(Body, sizeof(Body));
+    if (!Begin(t)) return;
     if (known) PeepLines(t, "Family member", head); else Field(t, "  ", "Family member", "(unknown)");
     Member(t, "  ", "Divorced", p, "Age");
     Field(t, "  ", "How", "Divorce Spouse");
-    if (known) t.S("  Current spouse of ").Name((const char *)head, 25).S(": (none)").NL();
+    if (known) t.S("  Current spouse of ").Whole((const char *)head, 25).S(": (none)").NL();
     Generation(t, Generations());
     Write(slot, "Divorce", Body);
 }
@@ -1006,7 +1235,7 @@ static void OnArrived(const unsigned char *v, const char *how) {
     Person c;
     Capture(v, c);
     Text t;
-    t.Init(Body, sizeof(Body));
+    if (!Begin(t)) return;
     Self(t, c, "Age at arrival");
     Field(t, "  ", "How", how);
     Field(t, "  ", "Family role", RoleText(TreeRole(c)));
@@ -1034,7 +1263,7 @@ static void OnGeneration(const unsigned char *v, bool newFamily, bool afterEvict
     }
     if (newFamily) gStartedOver = 0;
     Text t;
-    t.Init(Body, sizeof(Body));
+    if (!Begin(t)) return;
     Self(t, p, "Age");
     Field(t, "  ", "How", how);
     Generation(t, Generations());
@@ -1051,12 +1280,12 @@ static void OnLeftHome(const unsigned char *v, int why) {
     Person p;
     Capture(v, p);
     Text t;
-    t.Init(Body, sizeof(Body));
+    if (!Begin(t)) return;
     Self(t, p, "Age");
     t.S("  What happened: ");
     if (why == LEFT_COLLEGE) {
         for (const char *s = Word(HIST_STR_COLLEGE_TITLE); *s;) {
-            if (StartsWith(s, "{name}")) { t.Name(p.name, 25); s += 6; }
+            if (StartsWith(s, "{name}")) { t.Whole(p.name, 25); s += 6; }
             else { char c[2] = { *s++, 0 }; t.S(c); }
         }
     } else if (why == LEFT_TALENT_SCOUT) {
@@ -1075,9 +1304,9 @@ static void OnRename(const Person &p, const char *name) {
     int slot = CurrentSlot();
     if (!slot || p.slot < 0) return;
     Text t;
-    t.Init(Body, sizeof(Body));
-    t.S("  Old name: ").Name(p.name, 25).NL();
-    t.S("  New name: ").Name(name, 24).NL();
+    if (!Begin(t)) return;
+    t.S("  Old name: ").Whole(p.name, 25).NL();
+    t.S("  New name: ").Whole(name, 24).NL();
     t.S("  Age: ").U(Years(p.age)).NL();
     t.S("  Sex: ").S(SexWord(p.sex)).NL();
     t.S("  Head: ").I(p.head).NL();
@@ -1091,7 +1320,7 @@ static void OnRename(const Person &p, const char *name) {
 // on an event with choices (vtable +10h), as CIslandEventDialog::HandleMessage keeps it.
 static void EventRecord(int slot, const char *kind, const char *title, int choice) {
     Text t;
-    t.Init(Body, sizeof(Body));
+    if (!Begin(t)) return;
     t.S("  ").S(kind).S(": ").Name(title, 200).NL();
     if (choice >= 0) t.S("  Choice: ").S(choice ? "B" : "A").NL();
     Generation(t, Generations());
@@ -1103,13 +1332,13 @@ static void OnEvict() {
     int slot = CurrentSlot();
     if (!slot) return;
     Text t;
-    t.Init(Body, sizeof(Body));
+    if (!Begin(t)) return;
     t.S("  Family members:");
     bool any = false;
     for (int s = 0; s < (int)HIST_HOUSEHOLD_SLOTS; ++s) {
         unsigned char *v = Villager(s);
         if (!Active(v) || I32(v, HIST_VILLAGER_HEALTH) <= 0) continue;
-        t.S(any ? ", " : " ").Name((const char *)(v + HIST_VILLAGER_NAME), HIST_VILLAGER_NAME_LEN);
+        t.S(any ? ", " : " ").Whole((const char *)(v + HIST_VILLAGER_NAME), HIST_VILLAGER_NAME_LEN);
         any = true;
     }
     if (!any) t.S(" (none)");
@@ -1135,14 +1364,14 @@ static void Backfill(int slot) {
         unsigned char *p1 = Peep(rec, 0), *p2 = Peep(rec, 1);
         bool v1 = PeepValid(p1), v2 = PeepValid(p2);
         Text t;
-        t.Init(Body, sizeof(Body));
+        if (!Begin(t)) return;
         if (v1) BackfillPeep(t, "Parent", p1);
         if (v2) BackfillPeep(t, "Parent (married in)", p2);
         int n = RecordChildren(rec);
         for (int c = 0; c < n; ++c)
             if (PeepValid(Peep(rec, 2 + c))) BackfillPeep(t, "Child", Peep(rec, 2 + c));
         if (g == gens && v1 && v2 && I32(p1, HIST_PEEP_SLOT) != -1 && I32(p2, HIST_PEEP_SLOT) != -1)
-            t.S("  Current spouse of ").Name((const char *)p1, 25).S(": ").Name((const char *)p2, 25).NL();
+            t.S("  Current spouse of ").Whole((const char *)p1, 25).S(": ").Whole((const char *)p2, 25).NL();
         Generation(t, g);
         t.S("  Note: Recorded afterwards (from the save's Family Tree: no dates, ages, causes, twins or earlier spouses)")
             .NL();
@@ -1525,6 +1754,14 @@ extern "C" __declspec(dllexport) unsigned __cdecl B200History_TestScanAddress() 
 extern "C" __declspec(dllexport) void __cdecl B200History_TestSetModule(unsigned module) { ThisModule = (HMODULE)module; }
 extern "C" __declspec(dllexport) void __cdecl B200History_TestSites(unsigned *out) {
     for (unsigned i = 0; i < HIST_SITE_COUNT; ++i) out[i] = Sites[i];
+}
+// The whole names read so far are forgotten (the Names files are read again on the next record).
+extern "C" __declspec(dllexport) void __cdecl B200History_TestForgetNames() { ForgetWhole(0); }
+// The record buffers: [Line, Body, kRecordBytes, the Pending lines buffers (8)] (made now when not yet).
+extern "C" __declspec(dllexport) void __cdecl B200History_TestBuffers(unsigned *out) {
+    EnsureBuffers();
+    out[0] = (unsigned)Line; out[1] = (unsigned)Body; out[2] = kRecordBytes;
+    for (unsigned i = 0; i < 8; ++i) out[3 + i] = (unsigned)Waiting[i].lines;
 }
 // Plans without writing. out: [status, count, then per write: va, len, data, bytes0..3, byte4].
 extern "C" __declspec(dllexport) int __cdecl B200History_TestPlan(int enabled, unsigned *out) {

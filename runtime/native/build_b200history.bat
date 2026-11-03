@@ -2,7 +2,8 @@
 rem Build runtime\build\vf2history_b200.dll (32-bit, static CRT, no runtime DLL dependency):
 rem the Family History companion DLL for the B200 executable.
 rem Regenerate runtime\native\b200history\b200history_sites.h with tools\gen_b200_history_sites.py first
-rem if runtime\b200_history_sites.py changed.
+rem if runtime\b200_history_sites.py changed. The whole names in the log read the Names file with the Unicode text
+rem DLL's own rules (runtime\native\b200unicode\b200unicode_text.h, b200name_limit.h), hence the include path.
 rem
 rem   build_b200history.bat          the shipped DLL
 rem   build_b200history.bat test     the harness DLL (exports the planning test entry points,
@@ -21,5 +22,5 @@ if /I "%1"=="test" (
   set DEFS=/DB200HISTORY_TEST
   set OUT=vf2history_b200_test
 )
-cl /nologo /O2 /MT /EHsc /W4 /WX %DEFS% /LD /GS "%ROOT%\native\b200history\b200history.cpp" /Fo"%ROOT%\build\%OUT%.obj" /Fe"%ROOT%\build\%OUT%.dll" /link kernel32.lib /DYNAMICBASE /NXCOMPAT /SAFESEH:NO || exit /b 1
+cl /nologo /O2 /MT /EHsc /W4 /WX %DEFS% /LD /GS /I "%ROOT%\native\b200unicode" "%ROOT%\native\b200history\b200history.cpp" /Fo"%ROOT%\build\%OUT%.obj" /Fe"%ROOT%\build\%OUT%.dll" /link kernel32.lib /DYNAMICBASE /NXCOMPAT /SAFESEH:NO || exit /b 1
 if not exist "%ROOT%\build\%OUT%.dll" exit /b 1

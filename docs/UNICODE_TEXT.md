@@ -157,9 +157,18 @@ keeps its text. `tests/test_rename_family.py` and `tests/test_copy_slot.py`: lon
    shows whole names.
 5. Use Unicode Font with Comic Sans MS: the same checks.
 
-### Not in this part
+### The other DLLs
 
-* The Family History DLL (vf2history_b200.dll) still writes the short form into the log; the patcher's readers
-  show the whole name from the Names file.
-* Copy and Paste in Text Boxes (vf2clip_b200.dll, its own DLL) pastes up to the box's 1,200 bytes; the 300-character
-  count is applied to typing.
+* The Family History DLL (vf2history_b200.dll) writes WHOLE names into the log, as Virtual Families 1's does: a
+  stored name that ends with "..." is looked up in the slot's Names file the way the draw path looks it up (the
+  current slot's file first, then the others'; the file read again when a short form is not yet known, since the
+  Unicode text DLL writes it the moment a name is typed). A name the file does not hold, or no file, is logged
+  exactly as the save holds it; the patcher's readers (`vf2_family_history.whole_names`, the Family Tree Maker)
+  still expand old short forms from the Names file. The two record buffers are heap buffers of 64 KB each, every
+  write into them bounded (`tests/b200_history_scenarios.py`: a 300-character and a 1,200-byte name logged whole
+  through the game's own hooks, with guard bytes after every heap buffer).
+* Copy and Paste in Text Boxes (vf2clip_b200.dll) cuts a paste into a name box (a box whose limit is the 1,200
+  bytes only the long names give) at 300 characters in all, counted over the box's text plus the clipboard as
+  typing counts (grapheme clusters), at a character's start; the 1,200-byte limit still holds. Any other box is
+  cut as before, at its own byte limit. The limit is `runtime/native/b200unicode/b200name_limit.h`, the one C copy
+  of `NAME_LETTERS` / `NAME_BOX_BYTES`, checked against `src/vf2_game_text.py` by `tests/test_name_limit.py`.

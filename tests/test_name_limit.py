@@ -138,10 +138,20 @@ def test_the_ten_name_boxes_are_in_the_header():
 
 
 def test_one_limit_in_one_place():
+    """The one C copy of the limit (b200name_limit.h) is the Python definition; no other native source or Python
+    module writes the numbers; every DLL that needs them includes the header."""
     assert T.NAME_LETTERS == 300 and T.NAME_BOX_BYTES == 1200 == 4 * T.NAME_LETTERS
     assert T.NAME_BOX_BYTES == T.TEXT_BOX_CEILING_BYTES
-    inc = (NATIVE / "b200names.inc").read_text(encoding="utf-8")
-    assert "kNameLetters = 300;" in inc and "kNameBoxBytes = 1200;" in inc
+    header = (NATIVE / "b200name_limit.h").read_text(encoding="utf-8")
+    assert re.search(r"^static const unsigned kNameLetters = %d;" % T.NAME_LETTERS, header, re.M)
+    assert re.search(r"^static const unsigned kNameBoxBytes = %d;" % T.NAME_BOX_BYTES, header, re.M)
+    for path in list(NATIVE.glob("*")) + list((ROOT / "runtime" / "native" / "b200history").glob("*.cpp")):
+        if path.name != "b200name_limit.h" and path.is_file():
+            text = path.read_text(encoding="utf-8")
+            assert not re.search(r"kName(Letters|BoxBytes)\s*=\s*\d", text), path.name
+    assert '#include "b200name_limit.h"' in (NATIVE / "b200unicode.cpp").read_text(encoding="utf-8")
+    assert '#include "b200name_limit.h"' in (ROOT / "runtime" / "native" / "b200history" / "b200history.cpp").read_text(
+        encoding="utf-8")
     for path in (ROOT / "src").glob("*.py"):
         text = path.read_text(encoding="utf-8")
         if path.name != "vf2_game_text.py":
@@ -161,6 +171,37 @@ def test_short_forms():
     assert s == "Ł" * 7 + "..." and N.size(s) <= 18
     assert N.name_problem("a" * 300) is None and N.name_problem("a" * 301)
     assert N.name_problem(CUNEIFORM * 300) is None and N.name_problem("a\tb")
+
+
+def test_old_short_form_logs_still_read_back_as_whole_names(tmp_path):
+    """A Family History log written before vf2history_b200.dll logged whole names holds short forms: the reader
+    (vf2_family_history.whole_names, which the Family Tree Maker runs) still expands them from the Names file; a
+    log of whole names reads the same, and a name the file does not hold stays as it is."""
+    import vf2_family_history as FH
+    whole, other = "Maximilianus Fitzgerald the Third", "Ł" * 300
+    short = N.short_form(whole, N.MEMBER_ROOM, {})
+    short_other = N.short_form(other, N.MEMBER_ROOM, {short: whole})
+    N.write(N.names_path(tmp_path, 2), [N.Entry(short, N.MEMBER_ROOM, whole), N.Entry(short_other, N.MEMBER_ROOM, other)])
+    folder = tmp_path / "Virtual Families 2 Patcher" / "Save 2" / "Logs" / "Family History"
+    folder.mkdir(parents=True)
+
+    def record(head, spouse):
+        return FH.log_bytes("[2026-10-25 21:07:05] Marriage 1\n  Family member: " + head + "\n    Age: 25\n    Sex: Female\n"
+                            "    Head: 3\n    Body: 4\n  Married: " + spouse + "\n    Age: 26\n    Sex: Male\n"
+                            "    Head: 3\n    Body: 4\n  Current spouse of " + head + ": " + spouse + "\n  Generation: 1\n\n")
+    old = b"Family: Ana (Save 2)\r\n" + record(short, "Unknown...").replace(b"\n", b"\r\n") + \
+        record(short_other, "Bob").replace(b"\n", b"\r\n")
+    (folder / "Family History 1.txt").write_bytes(old)
+    h = FH.read(tmp_path, 2)
+    assert [(m.head, m.spouse) for m in h.marriages] == [(short, "Unknown..."), (short_other, "Bob")]
+    FH.whole_names(h, N.Book(tmp_path), 2)
+    assert [(m.head, m.spouse) for m in h.marriages] == [(whole, "Unknown..."), (other, "Bob")]
+    new = b"Family: Ana (Save 2)\r\n" + record(whole, "Unknown...").replace(b"\n", b"\r\n") + \
+        record(other, "Bob").replace(b"\n", b"\r\n")                           # as the DLL writes it now
+    (folder / "Family History 1.txt").write_bytes(new)
+    h2 = FH.read(tmp_path, 2)
+    FH.whole_names(h2, N.Book(tmp_path), 2)
+    assert h2.marriages == h.marriages
 
 
 def test_names_file_round_trip(tmp_path):
