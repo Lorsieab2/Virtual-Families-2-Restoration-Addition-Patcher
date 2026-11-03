@@ -1755,6 +1755,8 @@ class VF2PatcherGUI(ToolsTabMixin):
         if success:
             self.status_var.set(f"{label} complete.")
             self._save_current_paths()
+            if not dry_run and hasattr(self, "_apply_translation_choice"):
+                self._apply_translation_choice()
             if summary and not dry_run:
                 self._show_apply_success(summary)
         else:

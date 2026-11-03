@@ -326,6 +326,7 @@ ALLOWED = {
     ("vf2_translation_strings.py", "latin-1"): "PE section names of the executable the lines are read from",
     ("vf2_translation_strings.py", "ascii"): "the names of the string table's records in the executable",
     ("vf2_translation_strings.py", "cp1252"): "the game's own lines, which the executable holds in Windows-1252 (the template's English; not save text)",
+    ("vf2_translations_github.py", "ascii"): "a file name made safe for Windows (ASCII only)",
     ("vf2_glyph_render.py", "utf-16-be"): "a font file's own name table",
     ("vf2_glyph_render.py", "mac_roman"): "a font file's own name table (Macintosh records)",
     ("vf2_unicode_font.py", "utf-16"): "the Unicode Font tool's own ini (Windows' Unicode ini form)",

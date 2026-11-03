@@ -44,6 +44,13 @@ GUI_TOOL_FILES = (
     "vf2_game_fonts.json",       # Game Font Text: the four game fonts' metrics (numbers only, no game art)
     "vf2_text_tool.py",          # Game Font Text: the window
     "vf2_unicode_font.py",       # Unicode Font: the window that picks Use Unicode Font's font
+    "vf2_translation_format.py",  # Translations: the file format (the validator the GitHub checks run too)
+    "vf2_translation_strings.py",  # Translations: the lines of the game and the patches, with their room
+    "vf2_translation_limits.json",  # Translations: the room of every line (numbers only, no game text)
+    "vf2_patch_strings.json",  # Translations: the lines the patcher adds (its own words)
+    "vf2_translations.py",  # Translations: the files, the choice, sharing
+    "vf2_translations_github.py",  # Translations: Download from GitHub
+    "vf2_translations_window.py",  # Translations: the window and the editor
     # The Family Tree Maker (the Tools tab's link): the family, the log and tree file readers, the picture, the
     # editor, and the owner's backgrounds and logos beside them (FAMILY_TREE_ASSETS).
     "vf2_genealogy.py",
@@ -4658,6 +4665,33 @@ def copy_patcher_icon_assets(bundle_dir: Path) -> list[str]:
     return copied
 
 
+TRANSLATIONS_SOURCE_DIR = SOURCE_DIR.parent / "translations"      # the repository's public translations/ folder
+SHIPPED_TRANSLATIONS_DIR = ("translations", "vf2")                 # inside the Patcher Files folder
+
+
+def shipped_translation_files(folder: Path | None = None) -> list[Path]:
+    """The accepted translations that go into a release: every .tsv directly in the repository's translations/ folder
+    that the validator can use, except a test file (its language or its credit starts with "(TEST)", or its name
+    says so). A release ships accepted translations, never a "(TEST)" one; a file the format refuses (an email address
+    anywhere, a wrong game) is never shipped."""
+    import vf2_translation_format as tfmt
+    folder = TRANSLATIONS_SOURCE_DIR if folder is None else Path(folder)
+    shipped: list[Path] = []
+    if not folder.is_dir():
+        return shipped
+    for path in sorted(folder.glob("*.tsv")):
+        if "(test)" in path.name.casefold() or path.name.casefold().startswith("test-"):
+            continue
+        try:
+            parsed = tfmt.parse_bytes(path.read_bytes(), tfmt.GAME)
+        except OSError:
+            continue
+        if parsed.fatal or not tfmt.validate(parsed, None).usable or tfmt.is_test_file(parsed):
+            continue
+        shipped.append(path)
+    return shipped
+
+
 def write_bundle_runner_files(bundle_dir: Path, build_label: str) -> list[str]:
     """Write the runners into BUNDLE_DIR, the unzipped folder's top level.
 
@@ -4675,6 +4709,12 @@ def write_bundle_runner_files(bundle_dir: Path, build_label: str) -> list[str]:
     for tool_name in GUI_TOOL_FILES:
         (files_dir / tool_name).parent.mkdir(parents=True, exist_ok=True)   # family_tree_backgrounds/...
         shutil.copy2(SOURCE_DIR / tool_name, files_dir / tool_name)
+    translation_files: list[str] = []
+    for source in shipped_translation_files():
+        target = files_dir.joinpath(*SHIPPED_TRANSLATIONS_DIR, source.name)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, target)
+        translation_files.append("/".join((*SHIPPED_TRANSLATIONS_DIR, source.name)))
     shutil.copy2(SOURCE_DIR / "vf2_crash_capture.py", files_dir / "vf2_crash_capture.py")
     (files_dir / "crash-capture-manifest.template.json").write_text(
         json.dumps(
@@ -4956,6 +4996,7 @@ Have fun! -Lorsieab2 :)
                 "offline_vf2_patcher.py",
                 "offline_vf2_patcher_gui.py",
                 *GUI_TOOL_FILES,
+                *translation_files,
                 "vf2_crash_capture.py",
                 "crash-capture-manifest.template.json",
                 *icon_files,
@@ -5007,6 +5048,12 @@ def _clear_generated_runner_files_in(bundle_dir: Path) -> None:
         for path in bundle_dir.glob(pattern):
             if path.is_file():
                 path.unlink()
+    shipped = bundle_dir.joinpath(*SHIPPED_TRANSLATIONS_DIR)       # translations/vf2/*.tsv, then the empty folders
+    for path in shipped.glob("*.tsv") if shipped.is_dir() else ():
+        path.unlink()
+    for folder in (shipped, shipped.parent):
+        if folder.is_dir() and not any(folder.iterdir()):
+            folder.rmdir()
 
 
 def write_transparency_log(bundle_dir: Path, manifest: dict[str, Any], files_dir: Path | None = None) -> str:

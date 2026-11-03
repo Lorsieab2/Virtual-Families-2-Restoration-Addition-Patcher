@@ -342,6 +342,16 @@
         "Tick \"As Use Unicode Font draws it, with:\" and pick a font to see the text as that setting draws it."
       ]
     },
+    "translations_tool": {
+      "section": "Tools",
+      "title": "Translations",
+      "guide": [
+        "Choose the language the game shows (each language is listed by its own name). It applies from the next game start; there is no need to patch again. English (original) changes nothing.",
+        "Make a translation writes a file with every English line of the game and the patches, and opens an editor: English on the left, your translation on the right, and a preview in the game's font.",
+        "The list takes several translations at once. Add a file or drag one in, Export, Delete (to the Recycle Bin), or Download from GitHub the ones other players shared.",
+        "Share on GitHub asks first, then for the name you want in the credits, which you type yourself. Email addresses are never saved and are rejected from translation files."
+      ]
+    },
     "unicode_font": {
       "section": "Tools",
       "title": "Unicode Font",

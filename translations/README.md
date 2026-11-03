@@ -10,14 +10,18 @@ translator's credit name is shown in the credits.
 ## The easy way
 
 1. **Get a file.** To improve a language, open its file in this folder and press the download
-   button ("Download raw file"). To start a new language, use the English template that the
-   patcher's **Make a translation** window writes (that window is coming in a later version).
+   button ("Download raw file"), or use the patcher's **Download from GitHub...** button (Tools tab,
+   **Translations...**), which lists this folder and installs the ones you pick. To start a new
+   language, press **Make a translation...** in the same window: it writes the English template
+   (every line of the game and of the patches, with the room each one has) and opens an editor.
 2. **Translate it** with any text editor (Notepad is fine) or a spreadsheet. Fill in the
    **Translation** column only; leave **Key** and **English** exactly as they are. Save it as
    **UTF-8** text, named `<language code>.tsv` (see "File names" below if that language is
    already here).
-3. **Upload it.** Come back to this folder on GitHub and choose **Add file → Upload files**, drop
-   your file in, and press **Propose changes**. If you cannot change this repository yourself,
+3. **Upload it.** Press **Share on GitHub...** in the patcher's Translations window (it asks you first,
+   then for the credit name you want shown, and opens this page), or come back to this folder on GitHub
+   yourself and choose **Add file → Upload files**, drop your file in, and press **Propose changes**.
+   You need a free GitHub account: https://github.com/signup. If you cannot change this repository yourself,
    GitHub copies it for you and opens a pull request automatically; you do not need to know git.
 
 A robot then checks the file and writes the result on your pull request (see "What happens next").
