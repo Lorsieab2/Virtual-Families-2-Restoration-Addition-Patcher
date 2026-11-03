@@ -11,10 +11,13 @@
 // * characters: a simplified extended grapheme cluster (b200unicode_tables.h EXTEND; ZWJ joins the next; regional
 //   indicators pair; CR LF);
 // * the stock text functions with a character in place of a byte: GetWidth and GetNextJustifiedLine, given each
-//   character's glyph width by the caller.
+//   character's glyph width by the caller; GetNextJustifiedLine also breaks a line where UAX #14 allows next to a
+//   letter of a script written without spaces (ICU when the host gives it, else the table of b200linebreak_table.h)
+//   and cuts a word wider than the line between whole characters.
 #pragma once
 
 #include "b200unicode_tables.h"
+#include "b200linebreak_table.h"
 
 namespace ut {
 
@@ -40,11 +43,47 @@ inline bool InRanges(const UtRange *r, unsigned count, unsigned cp) {
 inline bool IsExtend(unsigned cp) { return InRanges(UT_EXTEND, UT_EXTEND_COUNT, cp); }
 inline bool IsRegional(unsigned cp) { return cp >= 0x1F1E6 && cp <= 0x1F1FF; }
 
-// A character after which a line may break with no space (CJK, kana, Hangul, fullwidth forms).
-inline bool IsWide(unsigned cp) {
-    return (cp >= 0x1100 && cp <= 0x115F) || (cp >= 0x2E80 && cp <= 0xA4CF) || (cp >= 0xAC00 && cp <= 0xD7A3) ||
-           (cp >= 0xF900 && cp <= 0xFAFF) || (cp >= 0xFE30 && cp <= 0xFE4F) || (cp >= 0xFF00 && cp <= 0xFF60) ||
-           (cp >= 0xFFE0 && cp <= 0xFFE6) || (cp >= 0x20000 && cp <= 0x3FFFD);
+// ------------------------------------------------------------------------------------------- line breaking (UAX #14)
+// The host (the DLL, or the 64-bit test DLL) may give Windows' ICU (icu.dll: ubrk_open(UBRK_LINE), which also knows the
+// Thai, Lao, Khmer and Myanmar words, and u_getIntPropertyValue(UCHAR_LINE_BREAK)); without it the table of
+// b200linebreak_table.h (src/vf2_line_break.py is the same rule in the patcher) is used.
+struct IcuApi {
+    int (*lineClass)(unsigned cp);                                           // ICU's line break class of a code point
+    bool (*boundaries)(const wchar_t *text, int length, unsigned char *out);  // out[0..length]: 1 where a line may break
+};
+inline const IcuApi *&Icu() { static const IcuApi *api = 0; return api; }
+// Called (when set) the first time a text has a letter of a script written without spaces: the host looks for ICU then,
+// so a game that never wraps such text never loads it.
+inline void (*&IcuLoader())() { static void (*load)() = 0; return load; }
+
+inline int FallbackClass(unsigned cp) {
+    int lo = 0, hi = (int)kLineBreakRangeCount - 1;
+    while (lo <= hi) {
+        int mid = (lo + hi) / 2;
+        if (cp < kLineBreakRanges[mid].first) hi = mid - 1;
+        else if (cp > kLineBreakRanges[mid].last) lo = mid + 1;
+        else return kLineBreakRanges[mid].cls;
+    }
+    return LbOther;
+}
+
+// May a line break between a character `before` and one `after` (the table)? Next to an ideographic letter, unless the
+// next one is closing punctuation or the one before opens; after closing punctuation before an opening one.
+inline bool FallbackMayBreak(unsigned before, unsigned after) {
+    int a = FallbackClass(before), b = FallbackClass(after);
+    if (b == LbClosing || a == LbOpening) return false;
+    return a == LbIdeographic || b == LbIdeographic || (a == LbClosing && b == LbOpening);
+}
+
+// A letter of a script written without spaces: the CJK punctuation blocks, and ICU's line-break classes ID, SA, H2, H3,
+// JL, JT, JV, CJ, EB and EM (the table's ideographic class without ICU).
+inline bool NoSpaceLetter(unsigned cp) {
+    if ((cp >= 0x3000 && cp <= 0x303F) || (cp >= 0xFE30 && cp <= 0xFE4F) || (cp >= 0xFF00 && cp <= 0xFFEF)) return true;
+    if (const IcuApi *icu = Icu()) {
+        int c = icu->lineClass(cp);
+        return c == 14 || c == 24 || (c >= 31 && c <= 35) || c == 37 || c == 40 || c == 41;
+    }
+    return FallbackClass(cp) == LbIdeographic;
 }
 
 inline unsigned SingleByteChar(unsigned char b) {
@@ -272,15 +311,79 @@ inline int GetWidth(const unsigned char *text, float scale, int kerning, WidthFn
 // ldwFont::GetNextJustifiedLine, per character (src/vf2_game_text.next_justified_line, line for line).
 // out gets the line (0-terminated; never more than maxBytes bytes plus the 0). Returns how many bytes of src were
 // consumed; *doubleBreak as the stock flag.
+//
+// The stock function ends a line that is too long at its last space (an empty line, one character consumed, when
+// there is none: the letters of a word wider than the line were lost). Here the line ends at the nearest of: a space
+// (the stock rule, exactly), or a place UAX #14 allows a break, next to a letter of a script written without spaces
+// (ideographs, kana, Hangul, Thai, ...; kinsoku: no line starts with a closing mark or ends with an opening one); and
+// a word wider than the whole line is cut after its longest start of whole characters (at least one). Text with no
+// such letter and no word wider than the line is laid out by the stock rule, character for character.
 static const unsigned kMaxLineUnits = 4096;
+static const unsigned kMaxBreakUnits = 12288;     // UTF-16 units handed to ICU (a character keeps at most 16 code points)
 
 struct LineState {
     unsigned bufStart[kMaxLineUnits];   // the source bytes each written unit came from (a newline: none)
     unsigned bufSize[kMaxLineUnits];
+    unsigned bufSrc[kMaxLineUnits];     // the source unit it came from
+    int bufW[kMaxLineUnits];            // its width as the stock function adds it
+    unsigned short bufBytes[kMaxLineUnits];
     bool bufSpace[kMaxLineUnits];
-    bool bufWide[kMaxLineUnits];
     unsigned offs[kMaxLineUnits + 1];   // source byte offset of unit k
+    unsigned char brk[kMaxLineUnits + 1];   // a line may break between source unit k - 1 and k (UAX #14)
+    unsigned first[kMaxLineUnits], last[kMaxLineUnits];   // a source unit's first and last code point
+    unsigned short at16[kMaxLineUnits + 1];               // where it starts in the UTF-16 text given to ICU
+    wchar_t text16[kMaxBreakUnits + 1];
+    unsigned char bound[kMaxBreakUnits + 1];
 };
+
+// Where a line may break in the source text: st.brk[k] for 1 <= k < the unit count (the same as
+// src/vf2_line_break.break_flags): never next to a space or a line feed, and only where a letter of a script written
+// without spaces (or a zero width space) is next to the place and the rules (ICU, else the table) allow it.
+inline void ComputeBreaks(const unsigned char *src, unsigned n, LineState &st) {
+    for (unsigned k = 0; k <= kMaxLineUnits; ++k) st.brk[k] = 0;
+    bool ascii = true;
+    for (unsigned i = 0; i < n && ascii; ++i) if (src[i] >= 0x80) ascii = false;
+    if (ascii) return;                                         // no such letter: nothing to compute
+    if (void (*load)() = IcuLoader()) load();
+    Units it;
+    it.Init(src, n);
+    Unit u;
+    unsigned count = 0, len16 = 0;
+    bool any = false;
+    while (count < kMaxLineUnits && it.Next(u)) {
+        unsigned kept = u.ncp < kMaxClusterCps ? u.ncp : kMaxClusterCps;
+        unsigned need = 0;
+        for (unsigned i = 0; i < kept; ++i) need += u.cps[i] >= 0x10000 ? 2 : 1;
+        if (len16 + need > kMaxBreakUnits) break;
+        st.first[count] = u.cps[0];
+        st.last[count] = u.cps[kept - 1];
+        st.at16[count] = (unsigned short)len16;
+        for (unsigned i = 0; i < kept; ++i) {
+            unsigned cp = u.cps[i];
+            if (cp >= 0x10000) {
+                st.text16[len16++] = (wchar_t)(0xD800 + ((cp - 0x10000) >> 10));
+                st.text16[len16++] = (wchar_t)(0xDC00 + ((cp - 0x10000) & 0x3FF));
+            } else {
+                st.text16[len16++] = (wchar_t)cp;
+            }
+        }
+        if (NoSpaceLetter(u.cps[0]) || u.cps[0] == 0x200B) any = true;
+        ++count;
+    }
+    if (!any) return;
+    st.at16[count] = (unsigned short)len16;
+    bool useIcu = false;
+    if (const IcuApi *icu = Icu()) {
+        for (unsigned i = 0; i <= len16; ++i) st.bound[i] = 0;
+        useIcu = icu->boundaries(st.text16, (int)len16, st.bound);
+    }
+    for (unsigned i = 1; i < count; ++i) {
+        unsigned before = st.first[i - 1], after = st.first[i], last = st.last[i - 1];
+        if (before == ' ' || before == '\n' || after == ' ' || after == '\n') continue;
+        if (!(NoSpaceLetter(before) || NoSpaceLetter(after) || last == 0x200B)) continue;
+        st.brk[i] = (useIcu ? st.bound[st.at16[i]] != 0 : (last == 0x200B || FallbackMayBreak(before, after))) ? 1 : 0;
+    }
+}
 
 inline unsigned WriteLine(const unsigned char *src, LineState &st, unsigned k, unsigned char *out) {
     unsigned n = 0;
@@ -292,20 +395,35 @@ inline unsigned WriteLine(const unsigned char *src, LineState &st, unsigned k, u
     return n;
 }
 
-inline unsigned WalkBack(const unsigned char *src, LineState &st, unsigned esi, unsigned p, unsigned char *out) {
-    for (;;) {
-        if (esi == 0) { out[0] = 0; return st.offs[p]; }
-        --esi;
-        --p;
-        if (st.bufSpace[esi]) { WriteLine(src, st, esi, out); return st.offs[p]; }
+// The line is too long at the unit buf[esi] (written, unless !written: a character that would pass the byte limit).
+// p is the source unit after it. The line ends at the nearest place a line may break at or before it.
+inline unsigned Overflow(const unsigned char *src, LineState &st, unsigned esi, unsigned p, bool written, int maxBytes,
+                         int maxWidth, unsigned char *out) {
+    for (unsigned b = esi; b >= 1; --b) {
+        if (st.brk[st.bufSrc[b]]) { WriteLine(src, st, b, out); return st.offs[st.bufSrc[b]]; }   // UAX #14
+        if (st.bufSpace[b - 1]) { WriteLine(src, st, b - 1, out); return st.offs[p - (esi - (b - 1))]; }   // the stock walk back
     }
+    // no place: one word wider than the line. Its longest start of whole characters that fits, at least one.
+    unsigned n = written ? esi + 1 : esi, best = 0;
+    int w = 0, bytes = 0;
+    for (unsigned k = 1; k <= n; ++k) {
+        w += st.bufW[k - 1];
+        bytes += st.bufBytes[k - 1];
+        if (w <= maxWidth && (maxBytes <= 0 || bytes < maxBytes)) best = k;
+    }
+    if (!best && n && (maxBytes <= 0 || st.bufBytes[0] < maxBytes)) best = 1;
+    if (!best) { out[0] = 0; return st.offs[p]; }              // nothing fits (a character larger than the buffer)
+    WriteLine(src, st, best, out);
+    return st.offs[st.bufSrc[best - 1] + 1];
 }
 
 inline unsigned NextLine(const unsigned char *src, unsigned char *out, int maxBytes, int maxWidth, bool *doubleBreak,
                          bool keepNewline, float scale, int kerning, WidthFn width, void *ctx, LineState &st) {
     *doubleBreak = false;
+    unsigned srcLen = Length(src);
+    ComputeBreaks(src, srcLen, st);
     Units it;
-    it.Init(src, Length(src));
+    it.Init(src, srcLen);
     Unit u;
     unsigned nunits = 0;
     st.offs[0] = 0;
@@ -331,7 +449,6 @@ inline unsigned NextLine(const unsigned char *src, unsigned char *out, int maxBy
         unsigned start = p;
         bool space = false;
         unsigned bstart = cur.start, bsize = cur.size;
-        bool wide = cur.ncp && IsWide(cur.cps[0]);
         Unit measured = cur;
         if (cur.IsNewline()) {
             ++p;
@@ -339,7 +456,7 @@ inline unsigned NextLine(const unsigned char *src, unsigned char *out, int maxBy
             prevNewline = true;
             if (count == 0 || st.bufSpace[esi - 1]) continue;
             if (!keepNewline) { WriteLine(src, st, esi, out); return st.offs[p]; }
-            space = true; bsize = 0; wide = false;
+            space = true; bsize = 0;
             measured.ncp = 1; measured.cps[0] = 0x20; measured.size = 1;
         } else {
             prevNewline = false;
@@ -349,20 +466,20 @@ inline unsigned NextLine(const unsigned char *src, unsigned char *out, int maxBy
         unsigned usize = space ? 1 : cur.size;
         if (esi >= kMaxLineUnits) { WriteLine(src, st, esi, out); return st.offs[p]; }
         st.bufStart[esi] = bstart; st.bufSize[esi] = space && bsize == 0 ? 0 : bsize;
-        st.bufSpace[esi] = space; st.bufWide[esi] = wide;
-        if (maxBytes > 0 && usize > 1 && count + (int)usize > maxBytes) return WalkBack(src, st, esi, start + 1, out);
+        st.bufSpace[esi] = space; st.bufSrc[esi] = start;
+        st.bufBytes[esi] = (unsigned short)(usize < 0xFFFF ? usize : 0xFFFF);
+        st.bufW[esi] = 0;
+        if (maxBytes > 0 && usize > 1 && count + (int)usize > maxBytes)
+            return Overflow(src, st, esi, start + 1, false, maxBytes, maxWidth, out);
         int w = width(ctx, measured);
         count += (int)usize;
         p = start + 1;
-        wsum += (int)F32(F32((float)(kerning + w)) * scale);
+        int add = (int)F32(F32((float)(kerning + w)) * scale);
+        st.bufW[esi] = add;
+        wsum += add;
         if (wsum > maxWidth || (maxBytes > 0 && count >= maxBytes)) {
             if (st.bufSpace[esi]) { WriteLine(src, st, esi, out); return st.offs[p]; }
-            if (st.bufWide[esi] || (esi > 0 && st.bufWide[esi - 1])) {
-                if (esi == 0) { WriteLine(src, st, 1, out); return st.offs[p]; }
-                WriteLine(src, st, esi, out);
-                return st.offs[p - 1];
-            }
-            return WalkBack(src, st, esi, p, out);
+            return Overflow(src, st, esi, p, true, maxBytes, maxWidth, out);
         }
         ++esi;
     }

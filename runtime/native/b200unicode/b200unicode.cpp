@@ -33,6 +33,7 @@
 
 #include "b200unicode_sites.h"
 #include "b200unicode_text.h"
+#include "b200icu.h"
 #include "b200name_limit.h"     // kNameBoxBytes: the one name limit (src/vf2_game_text.py)
 #include "b200names_file.h"     // the Names file: header, CRC-32, one record (also read by the Family History DLL)
 
@@ -1036,6 +1037,7 @@ static const char *__fastcall UniNextLine(void *font, void *, const char *src, c
                                           bool *doubleBreak, int keep, float scale) {
     unsigned impl = *(unsigned *)((unsigned)font + 4);
     if (!impl || !IMPL_FIELD(impl, 0x0C)) return 0;
+    ut::IcuLoader() = &icu::Install;                     // ICU is looked for when a text has an ideograph (UAX #14)
     WidthCtx c = { Ensure(impl), impl, (const unsigned char *)src };
     bool dbl = false;
     unsigned used = ut::NextLine((const unsigned char *)src, (unsigned char *)out, maxChars, maxWidth, &dbl,

@@ -167,6 +167,36 @@ keeps its text. `tests/test_rename_family.py` and `tests/test_copy_slot.py`: lon
    shows whole names.
 5. Use Unicode Font with Comic Sans MS: the same checks.
 
+### Line breaking (UAX #14)
+
+The stock `ldwFont::GetNextJustifiedLine` (the wrapper behind every dialog and the news text) ends a line that is too
+long at its last space. Text in scripts written without spaces (Japanese, Chinese, Thai, Lao, Khmer, Myanmar ...) has
+none, and the DLL's replacement (`ut::NextLine` in `b200unicode_text.h`, the same rule as
+`vf2_game_text.next_justified_line`) now also ends a line where UAX #14 allows a break next to such a letter, and cuts
+a word wider than the line:
+
+* the line ends at the nearest of a space (the stock rule, exactly) or a place UAX #14 allows a break next to a
+  letter of a script written without spaces (UAX #14 classes ID, SA, H2, H3, JL, JT, JV, CJ, EB, EM, the CJK
+  punctuation blocks, or a zero width space), never next to a space or a line feed;
+* kinsoku: no line starts with a closing mark (`。 、 」`, `)`; with the table also the small kana, which ICU's
+  default mode lets start a line) or ends with an opening one (`「`, `(`);
+* where Windows has `icu.dll` (Windows 10 version 1903 and later) the DLL loads it from System32
+  (`LOAD_LIBRARY_SEARCH_SYSTEM32`, `b200icu.h`), only when a text has such a letter, and asks `ubrk_open(UBRK_LINE)`,
+  which also knows the Thai, Lao, Khmer and Myanmar words; without it the table `FALLBACK_RANGES` of
+  `src/vf2_line_break.py` (the same table as Virtual Families 1's) is used, and the patcher's own wrapping (the Game
+  Text tool's preview) always uses it; `runtime/tools/gen_b200_line_break.py` writes the DLL's copy;
+* a word wider than the whole line is cut after its longest start of whole characters that fits (at least one),
+  never inside a character. The stock function does not hang on such a word, as Virtual Families 1's wrapper did: it
+  answers with an empty line and eats one letter, so the letters of the word were lost one call at a time
+  (`tests/test_vf2_game_text.py`, `test_line_breaking_matches_the_game`, runs the game's own code on it);
+* a text with no such letter whose every word fits is laid out by the stock rule, character for character, ASCII and
+  Latin-1 pixel for pixel (the same test, over random texts, in four fonts and four line widths).
+
+Proved by `tests/test_b200_unicode_text.py` (the C++ and the Python give the same line, text by text, over fixed and
+random texts of every script, the same break places, and the header equals what the generator writes; and, on a Windows
+with `icu.dll`, ICU's own answers: Thai breaks between words only, no line starts with a closing mark or ends with an
+opening one) and `tests/test_vf2_game_text.py`.
+
 ### The other DLLs
 
 * The Family History DLL (vf2history_b200.dll) writes WHOLE names into the log, as Virtual Families 1's does: a

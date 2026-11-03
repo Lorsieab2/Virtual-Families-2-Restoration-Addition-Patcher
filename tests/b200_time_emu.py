@@ -81,6 +81,7 @@ class Emu:
         self.dialogs = []             # (template address, owner, dialog proc) of every DialogBoxIndirectParamW
         self.imports.update({
             "GetModuleHandleW": self._imp_get_module_handle,
+            "LoadLibraryExW": lambda emu: (0, 12),          # icu.dll (UAX #14 line breaking): not found, the built-in table
             "GetActiveWindow": lambda emu: (emu.active_window, 0),
             "DialogBoxIndirectParamW": self._imp_dialog,
             "SetDlgItemTextW": self._imp_set_text,

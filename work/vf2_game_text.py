@@ -43,6 +43,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 import vf2_unicode_tables as _tables  # noqa: E402  (the tables the DLL shares)
+import vf2_line_break as _line_break  # noqa: E402  (UAX #14: the table the DLL uses without icu.dll)
 FONTS_JSON = HERE / "vf2_game_fonts.json"
 FONT_NAMES = ("Segoe24", "Segoe24Bold", "Segoe32Bold", "Segoe36Bold")
 FONT_TITLES = {
@@ -486,14 +487,6 @@ def draw_chars(font: GameFont, raw: bytes, count: int, x: int, y: int) -> tuple[
     return x - x0, out
 
 
-def _wide(text: str) -> bool:
-    """A character after which a line may break although no space follows (CJK, kana, Hangul, fullwidth)."""
-    cp = ord(text[0])
-    return (0x1100 <= cp <= 0x115F or 0x2E80 <= cp <= 0xA4CF or 0xAC00 <= cp <= 0xD7A3 or 0xF900 <= cp <= 0xFAFF
-            or 0xFE30 <= cp <= 0xFE4F or 0xFF00 <= cp <= 0xFF60 or 0xFFE0 <= cp <= 0xFFE6
-            or 0x20000 <= cp <= 0x3FFFD)
-
-
 def next_justified_line(font: GameFont, raw: bytes, max_bytes: int, max_width: int, keep_newline: bool = True,
                         scale: float = 1.0) -> tuple[bytes, int, bool]:
     """ldwFont::GetNextJustifiedLine, step for step, with a character in place of a byte.
@@ -501,12 +494,17 @@ def next_justified_line(font: GameFont, raw: bytes, max_bytes: int, max_width: i
     Returns (the line written, how many bytes of `raw` it consumed, the flag it sets on a second line break in a
     row). Stock: leading and repeated spaces are skipped; a line break becomes a space (or ends the line when
     keep_newline is false); when the line is wider than max_width or max_bytes have been written, the line goes
-    back to its last space (an empty line if it has none). max_bytes counts BYTES (it guards the caller's
-    buffer): a character of several bytes that would pass it ends the line before it, back to a space.
+    back to its last space. max_bytes counts BYTES (it guards the caller's buffer): a character of several bytes
+    that would pass it ends the line before it, back to a space.
 
-    One addition for scripts written without spaces: when the character that made the line too long, or the one
-    before it, is a wide (CJK) character, the line ends just before that character. Text of single bytes (all
-    the game's own text) is the stock function exactly."""
+    Two additions to the stock function (the Unicode Text DLL does the same, b200unicode_text.h NextLine):
+    * the line may also end where UAX #14 allows a break next to a letter of a script written without spaces
+      (ideographs, kana, Hangul, Thai ...; vf2_line_break: no line starts with a closing mark or ends with an
+      opening one); the nearest of that and a space wins;
+    * a word wider than the whole line is cut after its longest start of whole characters (at least one), where the
+      stock function gave an empty line and lost the letters one by one.
+    Text without such a letter whose every word fits is the stock function exactly (tests/test_vf2_game_text.py runs
+    the game's own code to prove it)."""
     import struct as _s
 
     def f32(v):
@@ -517,28 +515,45 @@ def next_justified_line(font: GameFont, raw: bytes, max_bytes: int, max_width: i
     offs = [0]
     for u in us:
         offs.append(offs[-1] + u.size)
+    brk = _breaks(us)
     buf: list = []                 # the caller's buffer, one unit per position
+    src: list = []                 # the source unit each came from
+    widths: list = []              # the width it added
     esi = count = width = p = 0
     prev_newline = False
 
-    def put(i, unit):
+    def put(i, unit, source, added):
         if i < len(buf):
-            buf[i] = unit
+            buf[i], src[i], widths[i] = unit, source, added
         else:
             buf.append(unit)
+            src.append(source)
+            widths.append(added)
 
     def line(k):
         return b"".join(w.raw for w in buf[:k])
 
-    def overflow(esi, p):
-        # 0x116: buf[esi] is the character just written; p is the unit after it
-        if buf[esi].text == " ":
-            return line(esi), offs[p], False
-        if _wide(buf[esi].text) or (esi > 0 and _wide(buf[esi - 1].text)):
-            if esi == 0:
-                return line(1), offs[p], False
-            return line(esi), offs[p - 1], False
-        return _walk_back(buf, esi, p, offs)
+    def overflow(esi, p, written):
+        # buf[esi] is the unit that made the line too long (written, unless it would have passed max_bytes); p is the
+        # unit after it. The line ends at the nearest place it may break at or before that unit.
+        for b in range(esi, 0, -1):
+            if brk[src[b]]:
+                return line(b), offs[src[b]], False             # UAX #14
+            if buf[b - 1].text == " ":
+                return line(b - 1), offs[p - (esi - (b - 1))], False       # the stock walk back
+        # no place: one word wider than the line. Its longest start of whole characters that fits, at least one.
+        n = esi + 1 if written else esi
+        best, w, nbytes = 0, 0, 0
+        for k in range(1, n + 1):
+            w += widths[k - 1]
+            nbytes += buf[k - 1].size
+            if w <= max_width and (max_bytes <= 0 or nbytes < max_bytes):
+                best = k
+        if not best and n and (max_bytes <= 0 or buf[0].size < max_bytes):
+            best = 1
+        if not best:
+            return b"", offs[p], False                           # nothing fits (a character larger than the buffer)
+        return line(best), offs[src[best - 1] + 1], False
 
     while p < len(us):
         u = us[p]
@@ -560,29 +575,30 @@ def next_justified_line(font: GameFont, raw: bytes, max_bytes: int, max_width: i
                 continue
             unit = u
         if max_bytes > 0 and unit.size > 1 and count + unit.size > max_bytes:
-            put(esi, unit)              # never kept: the walk back always ends before it
-            return _walk_back(buf, esi, start + 1, offs)
-        put(esi, unit)
+            put(esi, unit, start, 0)    # never kept: the line always ends before it
+            return overflow(esi, start + 1, False)
         g = font.glyph(unit)
         count += unit.size
         p = start + 1
-        width += int(f32(f32(float(font.kerning + g.width)) * sc))
+        added = int(f32(f32(float(font.kerning + g.width)) * sc))
+        put(esi, unit, start, added)
+        width += added
         if width > max_width or (max_bytes > 0 and count >= max_bytes):
-            return overflow(esi, p)
+            if buf[esi].text == " ":
+                return line(esi), offs[p], False
+            return overflow(esi, p, True)
         esi += 1
     return line(esi), offs[p], False
 
 
-def _walk_back(buf, esi, p, offs):
-    """The stock walk back: the write and read positions step back together until the written unit is a space
-    (the line ends before it) or the line start (an empty line)."""
-    while True:
-        if esi == 0:
-            return b"", offs[p], False
-        esi -= 1
-        p -= 1
-        if buf[esi].text == " ":
-            return b"".join(w.raw for w in buf[:esi]), offs[p], False
+def _breaks(us: list) -> list[bool]:
+    """Where a line may break in the text's units (vf2_line_break.break_flags): flags[k] is True between unit k - 1
+    and unit k. Only the first 4,096 units count (the DLL's limit)."""
+    if all(len(u.raw) == 1 and u.raw[0] < 0x80 for u in us):
+        return [False] * (len(us) + 1)
+    chars = [(ord(u.text[0]), ord(u.text[min(len(u.text), 16) - 1])) for u in us[:4096]]
+    flags = _line_break.break_flags(chars)
+    return flags + [False] * (len(us) + 1 - len(flags))
 
 
 # ====================================================================== pictures
@@ -641,19 +657,6 @@ def wrap(font: GameFont, raw: bytes, max_width: int, max_bytes: int = 0x3FF) -> 
         if not rest:
             break
         line, used, double = next_justified_line(font, rest, max_bytes, max_width, False)
-        if not line and rest[:1] != b"\n":
-            # a word wider than the box: the stock function gives an empty line and skips letters (the game would
-            # lose them); the tool breaks the word instead, as many whole characters as fit (at least one)
-            line, width = b"", 0
-            for u in units(rest):
-                if u.text in (" ", "\n"):
-                    break
-                w = font.glyph(u).width + font.kerning
-                if line and width + w - font.kerning > max_width:
-                    break
-                line += u.raw
-                width += w
-            used, double = len(line), False
         lines.append(line)
         if double:
             lines.append(b"")
