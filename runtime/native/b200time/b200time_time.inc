@@ -72,7 +72,48 @@ static void ResolveAbi() {
 }
 
 static const int kTimeButtonId = B200TC_TIME_BUTTON_ID;
-static const char kTimeButtonText[] = "Time Controls";
+
+// ---------------------------------------------------------------- Translations
+// Every text the button and the dialog show is asked of the Translations DLL (vf2tr_b200.dll, loaded after this one,
+// so it is looked up when the text is drawn) by its English; with no translation, or without that DLL, the English
+// itself comes back. TRW (a wide text) and TRA (a narrow text with its room in bytes) mark the texts: the Translations
+// window's template lists each of them (tools/gen_vf2_patch_strings.py reads these markers, and
+// tests/test_vf2_translation_strings.py fails on a visible text that is not marked). A text with %s places is a
+// printf format: FormatW fills it.
+typedef const wchar_t *(__cdecl *TrTextWFn)(const wchar_t *);
+typedef const char *(__cdecl *TrTextAFn)(const char *, int);
+static const wchar_t *TrTextW(const wchar_t *english) {
+    HMODULE module = GetModuleHandleW(L"vf2tr_b200.dll");
+    TrTextWFn fn = module ? (TrTextWFn)GetProcAddress(module, "B200Tr_TextW") : 0;
+    const wchar_t *shown = fn ? fn(english) : english;
+    return shown ? shown : english;
+}
+static const char *TrTextA(const char *english, int room) {
+    HMODULE module = GetModuleHandleW(L"vf2tr_b200.dll");
+    TrTextAFn fn = module ? (TrTextAFn)GetProcAddress(module, "B200Tr_TextA") : 0;
+    const char *shown = fn ? fn(english, room) : english;
+    return shown ? shown : english;
+}
+#define TRW(text) TrTextW(text)
+#define TRA(text, room) TrTextA(text, room)
+
+// "%s" takes the next argument, "%%" is a percent sign; the result is cut to cap - 1 characters.
+static void FormatW(wchar_t *out, int cap, const wchar_t *format, const wchar_t *first, const wchar_t *second) {
+    int n = 0, taken = 0;
+    for (const wchar_t *f = format; *f && n < cap - 1; ++f) {
+        if (f[0] == L'%' && f[1] == L'%') {
+            out[n++] = L'%';
+            ++f;
+        } else if (f[0] == L'%' && f[1] == L's') {
+            const wchar_t *s = taken++ == 0 ? first : second;
+            ++f;
+            while (s && *s && n < cap - 1) out[n++] = *s++;
+        } else {
+            out[n++] = *f;
+        }
+    }
+    out[n] = 0;
+}
 
 static unsigned char *VillagerByIndex(int index) {
     if (index < 0 || index >= 30) return 0;
@@ -337,12 +378,7 @@ enum { ID_TC_STATUS = 560, ID_TC_PAUSE, ID_TC_RESUME, ID_TC_SLOW, ID_TC_NORMAL, 
 
 static const int kWarpTicks = 3 * B200TC_TICKS_PER_YEAR;  // "+3 years"
 
-// A tiny wide-string builder: no C runtime formatting in the dialog code.
-static wchar_t *PutText(wchar_t *p, const wchar_t *s) {
-    while (*s) *p++ = *s++;
-    return p;
-}
-
+// A tiny wide-string builder: no C runtime formatting in the dialog code (FormatW above, PutMoney below).
 // "$1,234,567"
 static wchar_t *PutMoney(wchar_t *p, unsigned v) {
     wchar_t digits[16];
@@ -362,51 +398,43 @@ static wchar_t *PutMoney(wchar_t *p, unsigned v) {
 static void TimeWarpClicked(HWND dlg) {
     bool free = FreeAndGuaranteedCheats();
     int price = TimeWarpPrice();
-    wchar_t text[400];
-    wchar_t *p = text;
+    wchar_t text[800];
+    wchar_t cost[24], have[24];
+    const wchar_t *title = TRW(L"Time Warp");
     if (!free && price < 0) {
-        MessageBoxW(dlg, L"The game does not know the store's Time Warp, so its price cannot be read. Nothing "
-                         L"was changed.", L"Time Warp", MB_OK | MB_ICONINFORMATION);
+        MessageBoxW(dlg, TRW(L"The game does not know the store's Time Warp, so its price cannot be read. Nothing "
+                             L"was changed."), title, MB_OK | MB_ICONINFORMATION);
         return;
     }
     if (!free && *Money < (double)price) {
-        p = PutText(p, L"The Time Warp costs ");
-        p = PutMoney(p, (unsigned)price);
-        p = PutText(p, L", the same as the store's Time Warp. Your family has ");
-        p = PutMoney(p, Dollars());
-        p = PutText(p, L", which is not enough. Nothing was changed.");
-        *p = 0;
-        MessageBoxW(dlg, text, L"Time Warp", MB_OK | MB_ICONINFORMATION);
+        *PutMoney(cost, (unsigned)price) = 0;
+        *PutMoney(have, Dollars()) = 0;
+        FormatW(text, 800, TRW(L"The Time Warp costs %s, the same as the store's Time Warp. Your family has %s, which "
+                               L"is not enough. Nothing was changed."), cost, have);
+        MessageBoxW(dlg, text, title, MB_OK | MB_ICONINFORMATION);
         return;
     }
-    p = PutText(p, L"Everyone at home ages at once, with every normal rule: birthdays, leaving home, and old "
-                   L"age. ");
     if (free) {
-        p = PutText(p, L"It is free: Free and Guaranteed Cheats is on.");
+        FormatW(text, 800, TRW(L"Everyone at home ages at once, with every normal rule: birthdays, leaving home, and "
+                               L"old age. It is free: Free and Guaranteed Cheats is on. Continue?"), 0, 0);
     } else {
-        p = PutText(p, L"It costs ");
-        p = PutMoney(p, (unsigned)price);
-        p = PutText(p, L", the store's Time Warp price.");
+        *PutMoney(cost, (unsigned)price) = 0;
+        FormatW(text, 800, TRW(L"Everyone at home ages at once, with every normal rule: birthdays, leaving home, and "
+                               L"old age. It costs %s, the store's Time Warp price. Continue?"), cost, 0);
     }
-    p = PutText(p, L" Continue?");
-    *p = 0;
-    if (MessageBoxW(dlg, text, L"Time Warp", MB_YESNO | MB_ICONQUESTION) != IDYES) return;
+    if (MessageBoxW(dlg, text, title, MB_YESNO | MB_ICONQUESTION) != IDYES) return;
     StartTimeWarp(kWarpTicks);
     if (WarpPending && !free) MoneySpend(Money, -(float)price, false);
 }
 
 static void RefreshTime(HWND dlg) {
     int speed = UnderlyingSpeed();
-    const wchar_t *name = speed == (int)B200TC_SPEED_SLOW ? L"slow" : speed == (int)B200TC_SPEED_NORMAL ? L"normal"
-                        : speed == (int)B200TC_SPEED_FAST ? L"fast" : speed == (int)B200TC_SPEED_5X ? L"5x"
-                        : speed == (int)B200TC_SPEED_10X ? L"10x" : L"custom";
-    wchar_t s[128];
-    wchar_t *p = PutText(s, GamePaused() ? L"Paused" : L"Running");
-    p = PutText(p, L". Speed: ");
-    p = PutText(p, name);
-    p = PutText(p, L".");
-    if (WarpUnderWay()) p = PutText(p, L" A time warp is under way.");
-    *p = 0;
+    const wchar_t *name = speed == (int)B200TC_SPEED_SLOW ? TRW(L"slow") : speed == (int)B200TC_SPEED_NORMAL ? TRW(L"normal")
+                        : speed == (int)B200TC_SPEED_FAST ? TRW(L"fast") : speed == (int)B200TC_SPEED_5X ? TRW(L"5x")
+                        : speed == (int)B200TC_SPEED_10X ? TRW(L"10x") : TRW(L"custom");
+    wchar_t s[800];
+    const wchar_t *state = GamePaused() ? TRW(L"Paused") : TRW(L"Running");
+    FormatW(s, 800, WarpUnderWay() ? TRW(L"%s. Speed: %s. A time warp is under way.") : TRW(L"%s. Speed: %s."), state, name);
     SetDlgItemTextW(dlg, ID_TC_STATUS, s);
 }
 
@@ -437,26 +465,26 @@ static Template TimeTemplate;  // file scope: no run-time initialiser, no C runt
 static void ShowTimeControls(HWND owner) {
     Template &t = TimeTemplate;
     // The button names its price as the store has it when the dialog opens.
-    wchar_t warpLabel[64];
-    wchar_t *p = PutText(warpLabel, L"Time Warp: +3 years (");
+    wchar_t warpLabel[160];
+    wchar_t price_text[24];
+    const wchar_t *shown;
     int price = TimeWarpPrice();
-    if (FreeAndGuaranteedCheats()) p = PutText(p, L"free");
-    else if (price >= 0) p = PutMoney(p, (unsigned)price);
-    else p = PutText(p, L"unavailable");
-    p = PutText(p, L")");
-    *p = 0;
-    t.Begin(L"Time Controls", 250, 150, 10);
+    if (FreeAndGuaranteedCheats()) shown = TRW(L"free");
+    else if (price >= 0) { *PutMoney(price_text, (unsigned)price) = 0; shown = price_text; }
+    else shown = TRW(L"unavailable");
+    FormatW(warpLabel, 160, TRW(L"Time Warp: +3 years (%s)"), shown, 0);
+    t.Begin(TRW(L"Time Controls"), 250, 150, 10);
     t.Item(STATIC, SS_LEFT, 10, 8, 230, 12, ID_TC_STATUS, L"");
-    t.Item(BUTTON, BS_PUSHBUTTON | WS_TABSTOP, 10, 24, 112, 16, ID_TC_PAUSE, L"Pause");
-    t.Item(BUTTON, BS_PUSHBUTTON | WS_TABSTOP, 128, 24, 112, 16, ID_TC_RESUME, L"Resume");
+    t.Item(BUTTON, BS_PUSHBUTTON | WS_TABSTOP, 10, 24, 112, 16, ID_TC_PAUSE, TRW(L"Pause"));
+    t.Item(BUTTON, BS_PUSHBUTTON | WS_TABSTOP, 128, 24, 112, 16, ID_TC_RESUME, TRW(L"Resume"));
     // Virtual Villagers' three speeds, then the two faster extras.
-    t.Item(BUTTON, BS_PUSHBUTTON | WS_TABSTOP, 10, 48, 73, 16, ID_TC_SLOW, L"Slow");
-    t.Item(BUTTON, BS_PUSHBUTTON | WS_TABSTOP, 88, 48, 74, 16, ID_TC_NORMAL, L"Normal");
-    t.Item(BUTTON, BS_PUSHBUTTON | WS_TABSTOP, 167, 48, 73, 16, ID_TC_FAST, L"Fast");
-    t.Item(BUTTON, BS_PUSHBUTTON | WS_TABSTOP, 10, 68, 112, 16, ID_TC_X5, L"5x");
-    t.Item(BUTTON, BS_PUSHBUTTON | WS_TABSTOP, 128, 68, 112, 16, ID_TC_X10, L"10x");
+    t.Item(BUTTON, BS_PUSHBUTTON | WS_TABSTOP, 10, 48, 73, 16, ID_TC_SLOW, TRW(L"Slow"));
+    t.Item(BUTTON, BS_PUSHBUTTON | WS_TABSTOP, 88, 48, 74, 16, ID_TC_NORMAL, TRW(L"Normal"));
+    t.Item(BUTTON, BS_PUSHBUTTON | WS_TABSTOP, 167, 48, 73, 16, ID_TC_FAST, TRW(L"Fast"));
+    t.Item(BUTTON, BS_PUSHBUTTON | WS_TABSTOP, 10, 68, 112, 16, ID_TC_X5, TRW(L"5x"));
+    t.Item(BUTTON, BS_PUSHBUTTON | WS_TABSTOP, 128, 68, 112, 16, ID_TC_X10, TRW(L"10x"));
     t.Item(BUTTON, BS_PUSHBUTTON | WS_TABSTOP, 10, 94, 230, 16, ID_TC_WARP, warpLabel);
-    t.Item(BUTTON, BS_DEFPUSHBUTTON | WS_TABSTOP, 165, 126, 75, 16, IDOK, L"Close");
+    t.Item(BUTTON, BS_DEFPUSHBUTTON | WS_TABSTOP, 165, 126, 75, 16, IDOK, TRW(L"Close"));
     DialogBoxIndirectParamW(ThisModule, t.Get(), owner, TimeProc, 0);
 }
 
@@ -481,7 +509,7 @@ static void __cdecl AddTimeButton(unsigned char *dialog) {
     void *button = ButtonCtor(memory, kTimeButtonId, grid, pos, dialog, false);
     unsigned colour = *(unsigned *)SITE(OPTIONS_TEXT_COLOUR);
     void *font = GetEvictFont(*(void **)(dialog + B200TC_OPTIONS_STRING_MANAGER_FIELD));
-    ButtonSetText(button, kTimeButtonText, colour, colour, colour, font);
+    ButtonSetText(button, TRA("Time Controls", 24), colour, colour, colour, font);
     AddControl(dialog, button);
 }
 

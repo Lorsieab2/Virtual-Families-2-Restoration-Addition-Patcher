@@ -399,11 +399,31 @@ static const char *FamilyName() {
     return gs ? (const char *)(gs + HIST_GAME_STATE_NICKNAME) : "";
 }
 
+// Translations (vf2tr_b200.dll, loaded after this DLL, so it is looked up when a word is written): the log is a file
+// the Family Tree Maker reads back, so it is written in English whatever the game shows. B200Tr_English(id) is the
+// line's English, B200Tr_EnglishOf(shown) the English of a translated line the game showed; without that DLL (or a
+// translation) both leave the game's own words as they are.
+typedef const char *(__cdecl *TrEnglishFn)(int);
+typedef const char *(__cdecl *TrEnglishOfFn)(const char *);
+static const char *EnglishOfId(unsigned id) {
+    HMODULE module = GetModuleHandleW(L"vf2tr_b200.dll");
+    TrEnglishFn fn = module ? (TrEnglishFn)GetProcAddress(module, "B200Tr_English") : 0;
+    return fn ? fn((int)id) : 0;
+}
+static const char *EnglishOfShown(const char *shown) {
+    HMODULE module = GetModuleHandleW(L"vf2tr_b200.dll");
+    TrEnglishOfFn fn = module ? (TrEnglishOfFn)GetProcAddress(module, "B200Tr_EnglishOf") : 0;
+    const char *english = fn ? fn(shown) : 0;
+    return english ? english : shown;
+}
+
 // The executable's own words.
 static const char *Word(unsigned id) {
     ((SingletonFn)SITE(SM_GET))();
     const char *s = ((GetStringFn)SITE(SM_GET_STRING))((int)id);
-    return s && (unsigned)s != SITE(STRING_MISSING) ? s : "";
+    if (!s || (unsigned)s == SITE(STRING_MISSING)) return "";
+    const char *english = EnglishOfId(id);
+    return english ? english : s;
 }
 static const char *SexWord(int sex) { return Word(sex == 1 ? HIST_STR_FEMALE : HIST_STR_MALE); }
 static const char *CauseWord(int cause) {
@@ -1473,6 +1493,7 @@ static int __fastcall RandomEventHook(void *dialog, void *, void *scene, int fla
     const unsigned char *d = (const unsigned char *)dialog;
     const void *event = *(const void *const *)(d + HIST_DIALOG_EVENT);
     const char *title = *(const char *const *)(d + HIST_DIALOG_TITLE);
+    if (title && title[0] && (unsigned)title != SITE(STRING_MISSING)) title = EnglishOfShown(title);
     Text t;
     t.Init(gEventTitle, sizeof(gEventTitle));
     if (title && title[0] && (unsigned)title != SITE(STRING_MISSING)) t.Name(title, sizeof(gEventTitle) - 1);

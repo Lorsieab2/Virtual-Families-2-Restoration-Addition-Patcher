@@ -162,6 +162,8 @@ class Emu:
             return emu.sdl_module, 4
         if emu.wstr(name).lower() == "kernel32.dll":
             return 0x7FFF0000, 4
+        if emu.wstr(name).lower() == "vf2tr_b200.dll":
+            return 0, 4                     # the Translations DLL is not loaded here: the English comes back
         raise EmuError("GetModuleHandleW of an unexpected module")
 
     def _imp_get_proc_address(self, emu):
