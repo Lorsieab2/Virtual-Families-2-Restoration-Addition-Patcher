@@ -1423,6 +1423,12 @@ static bool Apply(Plan &plan) {
     DWORD old = 0;
     if (!VirtualProtect(JustifiedTrampoline, sizeof(JustifiedTrampoline), PAGE_EXECUTE_READWRITE, &old)) return false;
     if (!VirtualProtect(SetTextTrampoline, sizeof(SetTextTrampoline), PAGE_EXECUTE_READWRITE, &old)) return false;
+    // The long names' two trampolines are code as well: without this the first call through them is an
+    // access violation on a no-execute data page (DEP), which no emulation of the DLL shows.
+#ifndef B200UNICODE_CLIP
+    if (!VirtualProtect(SetCanEditTrampoline, sizeof(SetCanEditTrampoline), PAGE_EXECUTE_READWRITE, &old)) return false;
+    if (!VirtualProtect(BoxDrawTrampoline, sizeof(BoxDrawTrampoline), PAGE_EXECUTE_READWRITE, &old)) return false;
+#endif
     RealPoll = *(PollEventFn *)PollSlot;
     if (!RealPoll) return false;
     for (unsigned i = 0; i < plan.count; ++i) {
