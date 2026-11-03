@@ -460,8 +460,17 @@ def load_village(folder: Path, game: int = GAME, slot: int = 1, full_names: bool
     family.sources.insert(0, str(path))
     if remember:
         vf2_tree_memory.remember(folder, slot, save, family)
+    # names longer than their save field: the save holds short forms, the slot's Names file the whole names
+    # (vf2_names); the log names people as the save does, so both are made whole before they are matched
+    import vf2_names
+    book = vf2_names.Book(folder)
+    for person in family.people.values():
+        if isinstance(person.name, str):
+            person.name = book.full(slot, person.name)
+    family.tribe = book.full(slot, family.tribe)
     history = vf2_family_history.read(folder, slot)
     if history is not None:
+        vf2_family_history.whole_names(history, book, slot)
         vf2_family_history.apply(family, history)
     finish(family)
     return family

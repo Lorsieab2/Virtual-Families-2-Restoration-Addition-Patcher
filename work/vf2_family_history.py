@@ -22,6 +22,8 @@ family's Generation 1.
 """
 from __future__ import annotations
 
+import dataclasses
+
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -245,6 +247,21 @@ def log_bytes(text: str) -> bytes:
     """The bytes of a record the patcher adds to a Family History file: line by line in the stored form
     (vf2_game_text.encode), as the DLL writes the names, so log_text reads it back exactly."""
     return b"\n".join(game_text.encode(line) for line in text.split("\n"))
+
+
+def whole_names(h: History, book, slot: int) -> None:
+    """Every name the log gives as a short form (a name longer than its save field: vf2history_b200.dll writes names
+    as the save holds them) made the whole name from the slot's Names file (vf2_names.Book), in place."""
+    def whole(value):
+        if isinstance(value, str):
+            return book.full(slot, value)
+        if isinstance(value, tuple):
+            return tuple(whole(v) for v in value)
+        if isinstance(value, list):
+            return [whole(v) for v in value]
+        return value
+    for f in dataclasses.fields(h):
+        setattr(h, f.name, whole(getattr(h, f.name)))
 
 
 def read(folder: Path, slot: int) -> History | None:

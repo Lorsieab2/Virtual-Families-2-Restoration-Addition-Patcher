@@ -36,6 +36,7 @@ GUI_TOOL_FILES = (
     "vf2_game_mechanics_window.py",
     "vf2_save_reader.py",
     "vf2_game_text.py",          # the one text rule every save and log reader / writer uses
+    "vf2_names.py",              # names longer than their save field: the Names files (docs/UNICODE_TEXT.md)
     "vf2_unicode_tables.py",     # its Unicode tables (the Unicode text DLL has the same ones)
     "vf2_glyph_render.py",       # Game Font Text: characters the game fonts lack, drawn in their style (GDI)
     "vf2_glyph_maker.py",        # Game Font Text: the patcher-made letters

@@ -103,6 +103,14 @@ def encode(text: str) -> bytes:
 # across the patchers can be set here.
 TEXT_BOX_CEILING_BYTES = 1200
 
+# One character limit for every name box (docs/UNICODE_TEXT.md, "Names up to 300 characters"): the only place the
+# number is written in Python (runtime/native/b200unicode/b200names.inc spells the same 300 as kNameLetters, checked
+# by tests/test_name_limit.py). 300 characters of one code point always fit the 1,200-byte cap; a character of
+# several code points (a joined emoji) can reach the bytes first. NAME_MARK ends every short form (src/vf2_names.py).
+NAME_LETTERS = 300
+NAME_BOX_BYTES = TEXT_BOX_CEILING_BYTES
+NAME_MARK = "..."
+
 # ====================================================================== characters (grapheme clusters)
 
 _EXTEND_STARTS = [a for a, _b in _tables.EXTEND]

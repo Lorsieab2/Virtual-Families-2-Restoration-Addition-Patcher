@@ -92,6 +92,7 @@ _BACKUP_NAME = re.compile(
 # restore touches it.
 _SAVE_NAME = re.compile(r"^Virtual Families 2(0|[1-9]\d*)\.ldw$", re.I)
 _SIDECAR_NAME = re.compile(r"^Virtual Families 2(0|[1-9]\d*)\.ldw\.dat$", re.I)
+_NAMES_NAME = re.compile(r"^Virtual Families 2([1-5])\.ldw\.txt$", re.I)    # vf2_names.names_path
 SIDECAR_FOLDERS = ("children", "outfits")      # b200kids / b200outfits SidecarPath, under the Patcher Data folder
 PATCHER_FOLDER = "Virtual Families 2 Patcher"   # its "Save <N>" folders: each slot's logs and Family Tree files
 SHARED_FILES = ("wc.dat",)      # beside ldwLog.txt, shared by every family
@@ -774,7 +775,8 @@ def file_slot(relative: Path) -> int | str | None:
 
     A slot file is exactly "Virtual Families 2<N>.ldw" at the top of the save folder (N + 20 is the
     previous save of slot N, for slots 1-5 only); the patcher's sidecars are that name + ".dat" in
-    "<Patcher Data>\\Children" and "<Patcher Data>\\Outfits" (N + 20's are slot N's too); and everything in
+    "<Patcher Data>\\Children" and "<Patcher Data>\\Outfits" (N + 20's are slot N's too); the whole names of
+    long names are that name + ".txt" in "<Patcher Data>\\Names" (src/vf2_names.py); and everything in
     "Virtual Families 2 Patcher\\Save <N>" (the Family History log, the Family Tree files) is slot N's.  Slot 0
     ("settings"), ldwLog.txt ("engine log") and wc.dat ("shared") belong to no family, and every other name is
     unknown (None): only a whole-folder restore touches those.
@@ -789,6 +791,8 @@ def file_slot(relative: Path) -> int | str | None:
         match = _SAVE_NAME.match(relative.name)
     elif len(parts) == 3 and parts[0].casefold() == DATA_FOLDER.casefold() and parts[1].casefold() in SIDECAR_FOLDERS:
         match = _SIDECAR_NAME.match(relative.name)
+    elif len(parts) == 3 and parts[0].casefold() == DATA_FOLDER.casefold() and parts[1].casefold() == "names":
+        match = _NAMES_NAME.match(relative.name)
     elif len(parts) >= 3 and parts[0].casefold() == PATCHER_FOLDER.casefold():
         folder = re.fullmatch(r"Save ([1-5])", parts[1], re.I)
         return int(folder.group(1)) if folder else None

@@ -350,8 +350,8 @@ class RefusalTests(Base):
     def test_bad_names_and_unreadable_saves_are_refused(self):
         before = self.snapshot(backups=True)
         # "Café" was refused under the old printable-ASCII rule; it is a name now (the shared text rule,
-        # vf2_game_text). A control character and a name over the field's 19 bytes are still refused.
-        for name in ("", "A" * 20, "NEW PLAYER", "Tab\there", "日本語の名前はとても長いです"):
+        # vf2_game_text). A control character and a name over the one limit (300 characters) are still refused.
+        for name in ("", "A" * 301, "NEW PLAYER", "Tab\there", "𒀀" * 301):
             with self.subTest(name=name), self.assertRaises(cs.CopyError):
                 self.copy(name)
         with self.assertRaisesRegex(cs.CopyError, "no family"):
@@ -579,3 +579,25 @@ class BackupLabelTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class LongNameCopyTests(unittest.TestCase):
+    """Copy Player Slot with a name longer than the save's 19 bytes (docs/UNICODE_TEXT.md): the copy holds the short
+    form, its Names file the source's whole names and the new one's."""
+
+    def test_the_copy_takes_the_names_file(self):
+        import vf2_names as names
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            (folder / r.save_file_name(0)).write_bytes(fixture("settings_slot0.ldw.gz"))
+            (folder / r.save_file_name(1)).write_bytes(fixture("one_generation_slot3.ldw.gz"))
+            member = names.Entry("Maximilianus Fi...", 18, "Maximilianus Fitzgerald")
+            names.write(names.names_path(folder, 1), [member])
+            whole = "The Second Fitzgerald Family of the Island"
+            plan = cs.plan_copy(folder, 1, 2, whole, when=WHEN)
+            short = names.short_form(whole, names.FAMILY_ROOM, {member.short: member.full})
+            self.assertEqual(plan.stored_name, short)
+            entry = next(f for f in plan.files if f.path == names.names_path(folder, 2))
+            self.assertEqual(names.parse(entry.data), [member, names.Entry(short, names.FAMILY_ROOM, whole)])
+            copy = next(f for f in plan.files if f.path == cs.save_path(folder, 2))
+            self.assertEqual(r.parse_family_save(copy.data).nickname, short)
