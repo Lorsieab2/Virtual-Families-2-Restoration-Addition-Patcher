@@ -1330,8 +1330,7 @@ static int __cdecl UniPollEvent(void *event) {
     unsigned n = JoinSurrogates(raw, rn, text, PendingHigh, joined);
     if (!joined && n == 1 && text[0] < 0x80) return r;                  // one ASCII key: the stock path
     unsigned cps[32];
-    unsigned count = ut::IsUtf8(text, n) ? ut::Decode(text, n, cps, 32) : 0;
-    if (!count && n) count = ut::Decode(text, n, cps, 32);
+    unsigned count = ut::Decode(text, n, cps, 32);
     void *events = ((EventsGetFn)SITE(EVENTS_GET))();
     for (unsigned i = 0; i < count; ++i) {
         if (cps[i] < 0x80) ((EventsHandleKeyFn)SITE(EVENTS_HANDLE_KEY))(events, UNI_KEY_TYPE_CHARACTER, 0, (int)cps[i]);

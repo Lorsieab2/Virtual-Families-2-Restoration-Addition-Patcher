@@ -106,9 +106,9 @@ class SaveReaderTests(unittest.TestCase):
                 got = r.parse_family_save(bytes(self.save)).nickname
                 self.assertTrue(whole_characters(name, got))
                 self.assertLessEqual(len(T.encode(got)), 19)
-        # "Zoë 👩🏽‍💻" is 20 bytes: it loses the whole emoji, never part of it
-        self.save[self.nick:self.nick + 20] = T.field_bytes("Zoë 👩🏽‍💻", 20)
-        self.assertEqual(r.parse_family_save(bytes(self.save)).nickname, "Zoë ")
+        # "Zoëë 👩🏽‍💻" is 20 bytes (the letters are one byte each): it loses the whole emoji, never part of it
+        self.save[self.nick:self.nick + 20] = T.field_bytes("Zoëë 👩🏽‍💻", 20)
+        self.assertEqual(r.parse_family_save(bytes(self.save)).nickname, "Zoëë ")
 
     def test_settings_slot_list(self):
         o = r.HEADER_SIZE + 0x10

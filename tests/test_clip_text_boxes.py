@@ -531,12 +531,13 @@ def test_typing_and_a_paste_agree(world, unicode, text):
     assert _paste(unicode, b"", text) == typed
 
 
-def test_with_unicode_on_a_shorter_stored_form_is_still_taken(unicode):
-    """Adding a letter can make the stored form shorter (UTF-8 "Ã©" is 4 bytes; with "é" after it the text is 3
-    single bytes): the paste checks characters, not byte growth, and goes on."""
-    start = "Ã©"
-    assert len(T.encode(start)) == 4 and len(T.encode(start + "é")) == 3
-    unicode.box(5, T.encode(start))
-    unicode.clipboard = "éx"
+def test_with_unicode_on_a_paste_can_change_how_earlier_characters_are_stored(unicode):
+    """Adding a letter can change the stored form of the text before it (a one-byte "\u00c3" followed by "\u00a9" would
+    read as UTF-8 "\u00e9", so the whole text becomes UTF-8): the paste checks characters, not byte growth, and goes on."""
+    start = "\u00c3"
+    assert len(T.encode(start)) == 1 and len(T.encode(start + "\u00a9")) == 4
+    unicode.box(8, T.encode(start))
+    unicode.clipboard = "\u00a9x"
     unicode.press(ord("v"), CTRL)
-    assert T.decode(unicode.text()) == start + "éx" and unicode.guard()
+    assert T.decode(unicode.text()) == start + "\u00a9x" and unicode.guard()
+    assert unicode.text() == (start + "\u00a9x").encode("utf-8")
