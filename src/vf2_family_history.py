@@ -235,8 +235,9 @@ def _rename(h: History, old: str, new: str, sex: str) -> None:
 
 
 def log_text(raw: bytes) -> str:
-    """A Family History file's text. vf2history_b200.dll writes each name exactly as the save holds it (its bytes,
-    Text::Name), so a line holds a name in its stored form: every line is read with the patcher's one text rule
+    """A Family History file's text. vf2history_b200.dll writes each name in the stored form (its bytes: the whole
+    name from the slot's Names file, in the form the save would hold, or the save's own bytes when the file does not
+    hold it; logs written before whole names hold the short forms), so every line is read with the patcher's one text rule
     (vf2_game_text.decode): a line of Latin-1 / Windows-1252 bytes as before, a line of UTF-8 as UTF-8. A 0 byte
     (never written) is kept as a character."""
     return "\n".join("\0".join(game_text.decode(part) for part in line.split(b"\0"))
@@ -250,8 +251,9 @@ def log_bytes(text: str) -> bytes:
 
 
 def whole_names(h: History, book, slot: int) -> None:
-    """Every name the log gives as a short form (a name longer than its save field: vf2history_b200.dll writes names
-    as the save holds them) made the whole name from the slot's Names file (vf2_names.Book), in place."""
+    """Every name the log gives as a short form (a name longer than its save field, in a log vf2history_b200.dll
+    wrote before it logged whole names, or one the Names file did not hold when it was written) made the whole name
+    from the slot's Names file (vf2_names.Book), in place. A whole name is left as it is."""
     def whole(value):
         if isinstance(value, str):
             return book.full(slot, value)
@@ -259,9 +261,16 @@ def whole_names(h: History, book, slot: int) -> None:
             return tuple(whole(v) for v in value)
         if isinstance(value, list):
             return [whole(v) for v in value]
+        if isinstance(value, dict):
+            return {k: whole(v) for k, v in value.items()}
+        if dataclasses.is_dataclass(value) and not isinstance(value, type):    # Marriage, Birth, Event, Entry
+            inside(value)
         return value
-    for f in dataclasses.fields(h):
-        setattr(h, f.name, whole(getattr(h, f.name)))
+
+    def inside(record):
+        for f in dataclasses.fields(record):
+            setattr(record, f.name, whole(getattr(record, f.name)))
+    inside(h)
 
 
 def read(folder: Path, slot: int) -> History | None:

@@ -563,7 +563,8 @@ release bundle, like almost everything else)
   executables) - while you type in one of the game's text boxes: **Ctrl+V** or **Shift+Insert** pastes the
   clipboard at the end of the text, **Ctrl+C** or **Ctrl+Insert** copies the box's whole text, **Ctrl+X** cuts it.
   Line breaks and tabs in pasted text become a space each; other control characters and lone surrogates are left
-  out; a paste stops at the box's own limit at whole characters. With either Unicode text setting on any character
+  out; a paste stops at the box's own limit at whole characters, and in a name box at 300 characters in all, as
+  typing counts them. With either Unicode text setting on any character
   is pasted (each through the box's own HandleKey, so the stored form and the width cap apply); with both off only
   Windows-1252 characters, one byte each. The keys do nothing anywhere else and never reach the game as letters.
   The companion DLL `vf2clip_b200.dll` is the Unicode text source built with `B200UNICODE_CLIP`

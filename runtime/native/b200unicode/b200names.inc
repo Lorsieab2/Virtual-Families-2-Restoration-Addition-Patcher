@@ -18,8 +18,8 @@
 //   text still hold.
 // Nothing else changes: the save keeps its fields; with both Unicode settings off the save shows the short forms.
 
-static const unsigned kNameLetters = 300;              // src/vf2_game_text.NAME_LETTERS
-static const unsigned kNameBoxBytes = 1200;            // src/vf2_game_text.NAME_BOX_BYTES (= TEXT_BOX_CEILING_BYTES)
+// kNameLetters (300) and kNameBoxBytes (1,200): b200name_limit.h, the one C copy of src/vf2_game_text.NAME_LETTERS /
+// NAME_BOX_BYTES (the Copy and Paste and Family History DLLs read the same header).
 static const unsigned kMaxNames = 1024;
 static const unsigned kMaxShort = 24;
 static const unsigned kNameBoxes = 32;

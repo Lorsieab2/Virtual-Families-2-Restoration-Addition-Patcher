@@ -10,6 +10,9 @@ Windows' clipboard as seams:
   both Unicode settings off only Windows-1252 characters go in, one byte each; with a Unicode setting on each whole
   character (grapheme cluster) goes through the box's HandleKey and one the box takes only part of is taken back;
 * at the box's limit and one past it: the text stops at the limit and the bytes after the buffer are untouched;
+* a name box (limit NAME_BOX_BYTES, the long names' own) takes at most NAME_LETTERS characters in all, counted as
+  typing counts them (over the box's text and the clipboard, in grapheme clusters), cut at a character's start, and
+  still at most NAME_BOX_BYTES bytes; a paste and typing leave the same text; any other box keeps its own limit;
 * the plan writes only the SDL_PollEvent import slot; the setting off plans nothing.
 """
 from __future__ import annotations
@@ -30,7 +33,10 @@ sys.path.append(str(ROOT / "runtime" / "tools"))
 
 import b200_unicode_sites as S  # noqa: E402
 import vf2_game_text as T  # noqa: E402
-from test_b200_unicode_dll import RUNTIME, World, _vcvars, exe  # noqa: E402,F401  (fixture)
+from test_b200_unicode_dll import RUNTIME, World, _vcvars, dlls, exe  # noqa: E402,F401  (fixtures)
+from test_name_limit import CUNEIFORM, world  # noqa: E402,F401  (the real name boxes, for typing)
+
+FAMILY = "\U0001F468‍\U0001F469‍\U0001F467‍\U0001F466"     # one character, 25 bytes
 
 KEYDOWN, KEYUP = 0x300, 0x301
 CTRL, SHIFT = 0x0040, 0x0001
@@ -382,6 +388,60 @@ def _renamed(test_dll: Path, tmp: Path) -> Path:
     out = d / "vf2clip_b200.dll"
     out.write_bytes(test_dll.read_bytes())
     return out
+
+
+# ---------------------------------------------------------------------------------------------- name boxes
+def _paste(unicode, text: bytes, clip: str) -> bytes:
+    unicode.box(T.NAME_BOX_BYTES, text)
+    unicode.clipboard = clip
+    unicode.press(ord("v"), CTRL)
+    assert unicode.guard()
+    return unicode.text()
+
+
+def test_a_name_box_paste_is_cut_at_300_characters(unicode):
+    assert _paste(unicode, b"", "a" * 301) == b"a" * 300
+    unicode.clipboard = "b"                                       # full: nothing more goes in
+    unicode.press(ord("v"), CTRL)
+    assert unicode.text() == b"a" * 300 and unicode.guard()
+    assert _paste(unicode, b"x" * 10, "y" * 295) == b"x" * 10 + b"y" * 290      # the box's text counts
+    assert _paste(unicode, b"", "é" * 301) == T.encode("é" * 300)      # 300 two-byte characters: 600 bytes
+    dropped = unicode.e.r32(unicode.e.dll_export("B200Clip_Status") + 24)
+    assert dropped == 1 + 1 + 5 + 1
+    unicode.box(1199, b"")                                        # not a name box: its own byte limit only
+    unicode.clipboard = "a" * 350
+    unicode.press(ord("v"), CTRL)
+    assert unicode.text() == b"a" * 350 and unicode.guard()
+
+
+def test_a_name_box_paste_is_cut_at_1200_bytes_for_multibyte_text(unicode):
+    assert _paste(unicode, b"", CUNEIFORM * 301) == T.encode(CUNEIFORM * 300)     # 300 characters = 1,200 bytes
+    got = _paste(unicode, b"", FAMILY * 49)                                       # 48 x 25 bytes: the bytes stop it
+    assert got == T.encode(FAMILY * 48) and len(got) == T.NAME_BOX_BYTES
+    assert T.length(T.decode(got)) == 48 < T.NAME_LETTERS
+
+
+def test_a_name_box_paste_is_cut_at_whole_characters(unicode):
+    got = _paste(unicode, b"", "é" * 301)                   # a letter and its mark: one character each
+    assert T.decode(got) == "é" * 300 and T.length(T.decode(got)) == T.NAME_LETTERS
+    # a mark at the clipboard's start stays with the box's last character: it is not a 301st character
+    got = _paste(unicode, T.encode("e" * 300), "́z")
+    assert T.decode(got) == "e" * 299 + "é"
+    got = _paste(unicode, T.encode("e" * 299), "́ée")     # 298 e, then two e with a mark: 300 in all
+    assert T.clusters(T.decode(got)) == ["e"] * 298 + ["é"] * 2
+
+
+@pytest.mark.parametrize("text", ["a" * 301, "é" * 301, CUNEIFORM * 301, "é" * 301, FAMILY * 49,
+                                  "Zoë " * 80, "日本語" * 150])
+def test_typing_and_a_paste_agree(world, unicode, text):
+    """The same text typed into a real name box (the game's SetCanEdit from a name box's call, the Unicode text
+    DLL's HandleKey) and pasted into one: the same stored text."""
+    w, _fonts = world
+    _ctl, impl = w.box(w.returns[7], 0x12)
+    w.type(impl, text)
+    typed = w.text(impl)
+    assert T.length(T.decode(typed)) <= T.NAME_LETTERS and len(typed) <= T.NAME_BOX_BYTES
+    assert _paste(unicode, b"", text) == typed
 
 
 def test_with_unicode_on_a_shorter_stored_form_is_still_taken(unicode):

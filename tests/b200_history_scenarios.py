@@ -43,8 +43,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "runtime"))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "runtime" / "tools"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 import b200_history_sites as S  # noqa: E402
 import gen_b200_history_sites as G  # noqa: E402
+import vf2_family_history as FH  # noqa: E402
+import vf2_game_text as T  # noqa: E402
+import vf2_names as N  # noqa: E402
 
 from b200_time_emu import DLL_BASE, Emu, EmuError  # noqa: E402
 from unicorn.x86_const import (UC_X86_REG_EAX, UC_X86_REG_EBP, UC_X86_REG_EBX, UC_X86_REG_ECX,  # noqa: E402
@@ -60,6 +64,8 @@ NOW = 50_000_000                 # the game clock (seconds)
 SPEED = 10                       # theGameState+25B18h
 ERROR_FILE_NOT_FOUND, ERROR_PATH_NOT_FOUND, ERROR_ALREADY_EXISTS, ERROR_NO_MORE_FILES = 2, 3, 183, 18
 STAMP = "[2026-10-25 21:07:05] "  # GetLocalTime below
+GUARD = b"\xAB" * 32             # after every heap buffer the DLL allocates
+NAMES_FILE = SAVE_DIR + "\\Virtual Families 2 Patcher Data\\Names\\Virtual Families 2{slot}.ldw.txt"
 
 _PROVED = {}
 
@@ -90,6 +96,8 @@ class FileSystem:
         self.next = 0x100
         self.last_error = 0
         self.log = []
+        self.heap = []                  # (address, bytes) of every HeapAlloc
+        self.emu = None
 
     @staticmethod
     def key(path):
@@ -253,14 +261,32 @@ class FileSystem:
             e.w32(e.arg(3), 0x40)
             return 1, 16
 
+        def file_size(e):
+            return len(fs.handles[e.arg(0)]["data"]), 8
+
+        # The process heap: each HeapAlloc gets its bytes and 32 guard bytes after them (guards_intact checks
+        # every one: the DLL's record buffers and whole names are never written past their end).
+        def heap_alloc(e):
+            n = e.arg(2)
+            p = e.alloc(n + 32)
+            e.write(p + n, GUARD)
+            fs.heap.append((p, n))
+            return p, 12
+
         emu.imports.update({
             "CreateFileA": create, "ReadFile": read_file, "WriteFile": write_file, "CloseHandle": close,
             "GetFileAttributesA": attributes, "CreateDirectoryA": mkdir, "DeleteFileA": delete,
             "RemoveDirectoryA": rmdir, "SetFileAttributesA": lambda e: (1, 8), "FindFirstFileA": find_first,
             "FindNextFileA": find_next, "FindClose": find_close, "GetLastError": lambda e: (fs.last_error, 0),
             "GetLocalTime": local_time, "VirtualProtect": protect, "FlushInstructionCache": lambda e: (1, 12),
-            "GetCurrentProcess": lambda e: (INVALID, 0),
+            "GetCurrentProcess": lambda e: (INVALID, 0), "GetFileSize": file_size,
+            "GetProcessHeap": lambda e: (0x7A000000, 0), "HeapAlloc": heap_alloc, "HeapFree": lambda e: (1, 12),
         })
+        self.emu = emu
+
+    def guards_intact(self):
+        """Every heap buffer the DLL made still has its guard bytes after it."""
+        return all(self.emu.read(p + n, 32) == GUARD for p, n in self.heap)
 
 
 class HistoryWorld:
@@ -407,7 +433,8 @@ class HistoryWorld:
         self.e.w32(self.state + S.GAME_STATE_SLOT, slot)
 
     def set_player(self, name):
-        self.e.write(self.state + S.GAME_STATE_NICKNAME, name.encode("ascii")[:19].ljust(20, b"\0"))
+        raw = name if isinstance(name, bytes) else name.encode("ascii")
+        self.e.write(self.state + S.GAME_STATE_NICKNAME, raw[:19].ljust(20, b"\0"))
 
     def tree(self):
         return self.s("FAMILY_TREE")
@@ -425,9 +452,11 @@ class HistoryWorld:
             self.e.write(v + S.VILLAGER_ACTIVE, b"\0")
 
     def set_villager(self, slot, name, gender, active=1, age=600, head=3, body=4, health=100):
+        """name: str (ASCII), or the bytes the save holds (a short form in the stored form)."""
         e = self.e
         v = self.villager(slot)
-        e.write(v + S.VILLAGER_NAME, name.encode("ascii")[:24].ljust(25, b"\0"))
+        raw = name if isinstance(name, bytes) else name.encode("ascii")
+        e.write(v + S.VILLAGER_NAME, raw[:24].ljust(25, b"\0"))
         e.w32(v + S.VILLAGER_GENDER, gender)
         e.w32(v + S.VILLAGER_HEAD, head)
         e.w32(v + S.VILLAGER_BODY, body)
@@ -1416,7 +1445,105 @@ def scenario_a_loss_the_log_never_saw_is_not_guessed(w: HistoryWorld):
     assert w.last()[1][10:12] == ["  Remarried: yes", "  Earlier spouse: Cal"]
 
 
-ALL = [scenario_rename_in_the_details_box, scenario_same_sex_marriage, scenario_a_loss_the_log_never_saw_is_not_guessed,
+# ====================================================================== whole names (the slot's Names file)
+def _stored(text: str) -> str:
+    """A name's stored bytes as the log files are read here (latin-1, byte for byte: HistoryWorld.records)."""
+    return T.encode(text).decode("latin-1")
+
+
+def _short(whole: str, room: int, taken: dict) -> bytes:
+    """The save's field for `whole`: its short form in the stored form, recorded in `taken` (short -> whole)."""
+    short = N.short_form(whole, room, taken)
+    taken.setdefault(short, whole)
+    return T.encode(short)
+
+
+def scenario_whole_names_in_the_log(w: HistoryWorld):
+    """Names longer than their save field (the save holds the short form, the slot's Names file the whole name): the
+    log writes the whole names, as the game shows them, a 300-character and a 1,200-byte name among them, through
+    the game's own hooks, with nothing written past any heap buffer; a short form the file did not hold when the
+    DLL first read it (the Unicode text DLL writes the file as a name is typed) is found when it is next needed;
+    the remarriage is seen across the whole names; the patcher's reader reads the log back whole."""
+    taken: dict = {}
+    player = "Patricia Persephone Prudence Plantagenet-Pomerania"
+    ana, ben = "Anastasia Alexandrovna Arkhangelskaya", "B" * 300
+    cal, dan = "\U00012000" * 300, "Daniel Dmitrievich Dolgorukov-Dashkov"           # 1,200 bytes; later
+    assert len(T.encode(cal)) == T.NAME_BOX_BYTES and T.length(ben) == T.NAME_LETTERS
+    short_player = _short(player, N.FAMILY_ROOM, taken)
+    short_ana, short_ben, short_cal = (_short(x, N.MEMBER_ROOM, taken) for x in (ana, ben, cal))
+    short_dan = _short(dan, N.MEMBER_ROOM, taken)
+    entries = [N.Entry(s, N.FAMILY_ROOM if f == player else N.MEMBER_ROOM, f) for s, f in taken.items()]
+    w.fs.write(NAMES_FILE.format(slot=1), N.render(entries[:-1]))        # Dan's line is not written yet
+    w.set_player(short_player)
+    w.household((short_ana, FEMALE, 500), (short_ben, MALE, 520))
+    w.set_active(1, 0)
+    w.new_family(0)
+    w.set_active(1, 1)
+    w.marry(0, 1)
+    assert w.lines()[0] == f"Family: {player} (Save 1)"
+    assert w.records() == [
+        ("Generation 1", self_lines(ana, 25, FEMALE) + ["  How: Founder (adopted and started the family)",
+                                                       "  Generation: 1"]),
+        ("Marriage 1", member("Family member", ana, FEMALE, 25) + member("Married", ben, MALE, 26)
+         + [f"  Current spouse of {ana}: {ben}", "  Generation: 1"]),
+    ]
+    w.kill(1, 0)
+    w.report_death_timeflow()
+    assert w.last() == ("Death 1", death_lines(ben, 26, MALE, "Disease", "Parent (married in)", ana))
+    w.set_villager(2, short_cal, MALE, age=700)
+    w.marry(0, 2)
+    assert w.last() == ("Marriage 2", remarriage_lines(ana, 25, FEMALE, _stored(cal), 35, MALE, ben, "died"))
+    # Dan's short form is not in the file the DLL read: the file, written since (as the Unicode text DLL writes it
+    # when the name is typed), is read again when his name is next logged
+    w.fs.write(NAMES_FILE.format(slot=1), N.render(entries))
+    w.set_villager(3, short_dan, MALE, age=640)
+    w.kill(3, 1)
+    w.report_death_timeflow()
+    assert w.last()[0] == "Death 2" and w.last()[1][0] == f"  Name: {dan}"
+    w.evict()
+    assert w.last() == ("Evict Family 1", [f"  Family members: {ana}, {_stored(cal)}", "  Generation: 1"])
+    assert w.fs.guards_intact(), "a heap buffer was written past its end"
+    out = w.e.alloc(4 * 12)
+    w.e.call(w.e.dll_export("B200History_TestBuffers"), (out,))
+    line, body, size = (w.e.r32(out + 4 * i) for i in range(3))
+    assert size == 0x10000 and {(line, size), (body, size)} <= set(w.fs.heap), "the record buffers are heap buffers"
+    # the patcher's reader: the whole names, as they are (nothing left to expand); after Evict Family nothing is the
+    # family's, so the records before it are read on their own
+    h = FH.parse(FH.log_text(w.fs.read(w.history_path(1))))
+    assert h.marriages == [] and h.evictions == 1 and h.entries == []
+    raw = w.fs.read(w.history_path(1)).split((STAMP + "Evict Family").encode("ascii"))[0]
+    h = FH.parse(FH.log_text(raw))
+    assert [(m.head, m.spouse, m.earlier, m.earlier_how) for m in h.marriages] == [(ana, ben, None, None),
+                                                                                  (ana, cal, ben, "died")]
+    assert [d[0] for d in h.deaths] == [ben, dan]
+    FH.whole_names(h, N.Book(Path("C:\\nowhere")), 1)
+    assert [m.spouse for m in h.marriages] == [ben, cal], "a whole name is left as it is by the reader"
+
+
+def scenario_a_missing_names_file_logs_the_stored_name(w: HistoryWorld):
+    """No Names file, or one without the name: the log holds the name exactly as the save does (the readers expand
+    it from the Names file when they have one)."""
+    short = T.encode(N.short_form("Maximilianus Fitzgerald the Third", N.MEMBER_ROOM, {}))
+    assert short == b"Maximilianus Fi..."
+    w.household((short, FEMALE, 500), ("Ben", MALE, 520))
+    w.set_active(1, 0)
+    w.new_family(0)
+    assert w.last()[1][0] == "  Name: Maximilianus Fi..."
+    assert not any(path.endswith(".ldw.txt") for path in w.fs.files), "no Names file was made"
+    w.fs.write(NAMES_FILE.format(slot=1), N.render([N.Entry("Other...", N.MEMBER_ROOM, "Other Name Entirely")]))
+    w.set_active(1, 1)
+    w.marry(0, 1)
+    assert w.last()[1][0] == "  Family member: Maximilianus Fi..."
+    damaged = NAMES_FILE.format(slot=1)
+    w.fs.write(damaged, b"VF2 Names 1\n\xff\xfe\tdamaged\nMaximilianus Fi...\t18\tMaximilianus Fitzgerald the Third\n")
+    w.kill(1, 0)
+    w.report_death_timeflow()
+    assert "  Current spouse of Maximilianus Fitzgerald the Third: (none)" in w.last()[1], "a damaged line is skipped"
+    assert w.fs.guards_intact()
+
+
+ALL = [scenario_whole_names_in_the_log, scenario_a_missing_names_file_logs_the_stored_name,
+       scenario_rename_in_the_details_box, scenario_same_sex_marriage, scenario_a_loss_the_log_never_saw_is_not_guessed,
        scenario_new_family_and_marriage, scenario_conception_and_birth_single, scenario_the_father_after_a_load,
        scenario_twins, scenario_triplets, scenario_child_dies, scenario_spouse_dies_and_remarriage,
        scenario_spouse_with_a_child_dies_and_remarriage, scenario_head_dies_and_the_widow_remarries,
