@@ -167,15 +167,17 @@ class ReadmeCountsTests(unittest.TestCase):
             self.assertIn("%d arrive enabled" % len(on), README)
         with self.subTest("the README states the real default-off count"):
             off = len(self.manifest["settings"]) - len(on)
-            # Six since B206 (owner, 1 November 2026: cheats off by default):
+            # Seven since B207 (Use Unicode Font (overrides in-game fonts), default off; the owner's
+            # 2 November 2026 pair of exclusive Unicode settings). Six since B206 (owner, 1 November 2026:
+            # cheats off by default):
             # Swap Invisible Furniture Graphics with Transparent Graphics, the
             # Experimental Up to 28 Children, Cheat Upgrades, Free and
             # Guaranteed Cheats, All 36 Flea Market goods and All outfits and
             # hairstyles always for sale. (Two from the 26 October 2026 update
             # of B204 through B205.)
             self.assertEqual(
-                6, off,
-                "the legend names exactly six default-off settings; update it "
+                7, off,
+                "the legend names exactly seven default-off settings; update it "
                 "if the bundle ever ships a different number",
             )
 
