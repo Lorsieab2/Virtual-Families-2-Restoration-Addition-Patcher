@@ -22,11 +22,12 @@ from functools import lru_cache
 
 # The order the DLL tries, after the game font and the patcher-made glyphs (the owner's list).
 FALLBACK_CHAIN = (
-    "Segoe UI", "Segoe UI Historic", "Segoe UI Symbol", "Segoe UI Emoji",
-    "Microsoft YaHei UI", "Microsoft JhengHei UI", "Yu Gothic UI", "Malgun Gothic", "SimSun-ExtB",
-    "Nirmala UI", "Ebrima", "Gadugi", "Leelawadee UI", "Javanese Text", "Myanmar Text", "Mongolian Baiti",
-    "Microsoft Himalaya", "Microsoft New Tai Lue", "Microsoft Tai Le", "Microsoft Yi Baiti", "Sylfaen",
-    "Noto Sans", "Noto Sans CJK SC", "Noto Sans Symbols", "Noto Sans Symbols 2", "Noto Sans Cuneiform",
+    "Segoe UI", "Segoe UI Historic", "Segoe UI Symbol", "Segoe UI Emoji", "Yu Gothic UI", "Meiryo",
+    "Microsoft YaHei UI", "Microsoft JhengHei UI", "Malgun Gothic", "SimSun-ExtB", "Nirmala UI", "Ebrima", "Gadugi",
+    "Leelawadee UI", "Myanmar Text", "Javanese Text", "Mongolian Baiti", "Microsoft Himalaya", "Microsoft Yi Baiti",
+    "Microsoft New Tai Lue", "Microsoft Tai Le", "Microsoft PhagsPa", "Sylfaen", "Cambria Math", "Noto Sans",
+    "Noto Sans Symbols", "Noto Sans Symbols 2", "Noto Sans CJK JP", "Noto Sans CJK SC", "Noto Sans Math",
+    "Noto Sans Cuneiform", "Noto Color Emoji",
 )
 
 ANTIALIASED_QUALITY = 4

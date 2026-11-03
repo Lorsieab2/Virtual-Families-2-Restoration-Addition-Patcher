@@ -240,6 +240,12 @@ def units(raw: bytes) -> list[Unit]:
     return out
 
 
+def stock_units(raw: bytes) -> list[Unit]:
+    """What the unpatched game steps over: one unit per stored byte, whatever the bytes mean."""
+    raw = bytes(raw).split(b"\0", 1)[0]
+    return [Unit(_single_byte_char(b), bytes([b])) for b in raw]
+
+
 # ====================================================================== fonts
 
 @dataclass
@@ -268,6 +274,9 @@ class GameFont:
     # Use Unicode Font (overrides in-game fonts): (face, fitted px, baseline row) - every character, the game's own
     # too, drawn by Windows in that face (then the chain); None = the game's letters (with_unicode_font)
     override: tuple | None = None
+    # As the unpatched game shows it: every stored byte is one character drawn from the sheet by the stock rule, a byte
+    # the font lacks showing glyph 0 ('!'); no UTF-8 reading, no patcher-made letter (stock_font)
+    stock: bool = False
 
     def stock_rect(self, byte: int) -> tuple:
         """ldwFontImpl::GetCharSourceRect for one byte (a byte the font lacks gives entry 0, '!')."""
@@ -285,6 +294,9 @@ class GameFont:
 
     def glyph(self, unit: Unit) -> Glyph:
         text = unit.text
+        if self.stock:
+            l, t, r, b = self.stock_rect(unit.raw[0])
+            return Glyph(r - l, "game", (l, t, r, b))
         if self.override is not None:
             # the DLL's Mode 2: never the sheet, never a patcher-made letter
             if text not in self.runtime:
@@ -414,13 +426,23 @@ def with_unicode_font(font: GameFont, face: str = DEFAULT_UNICODE_FACE) -> GameF
 
 # ====================================================================== the stock functions, per character
 
+def _units(font: GameFont, raw: bytes) -> list[Unit]:
+    return stock_units(raw) if font.stock else units(raw)
+
+
+def stock_font(font: GameFont) -> GameFont:
+    """`font` as the unpatched game shows it (GameFont.stock): the stored bytes one by one, from the sheet only."""
+    import dataclasses
+    return dataclasses.replace(font, stock=True, override=None, extra={}, runtime={}, maker=None)
+
+
 def get_width(font: GameFont, raw: bytes, scale: float = 1.0) -> int:
     """ldwFont::GetWidth(const char *, float): per line the sum of (kerning + glyph width) * scale (each step
     truncated), the widest line, minus one kerning."""
     import struct as _s
     sc = _s.unpack("<f", _s.pack("<f", scale))[0]
     widest = cur = 0
-    for u in units(raw):
+    for u in _units(font, raw):
         if u.text == "\n":
             if cur:
                 widest = max(widest, cur)
@@ -454,7 +476,7 @@ def draw_string(font: GameFont, raw: bytes, x: int, y: int) -> list[Placement]:
     the kerning."""
     out = []
     x0 = x
-    for u in units(raw):
+    for u in _units(font, raw):
         if u.text == "\n":
             y += font.line_height
             x = x0
@@ -471,7 +493,7 @@ def draw_chars(font: GameFont, raw: bytes, count: int, x: int, y: int) -> tuple[
     """ldwGameWindowImpl::DrawChars: the first `count` BYTES at most (never part of a character: a character
     that would cross `count` is not drawn), as DrawString; returns how far x moved."""
     out, x0, used = [], x, 0
-    for u in units(raw):
+    for u in _units(font, raw):
         if used + u.size > count:
             break
         used += u.size
@@ -511,7 +533,7 @@ def next_justified_line(font: GameFont, raw: bytes, max_bytes: int, max_width: i
         return _s.unpack("<f", _s.pack("<f", v))[0]
 
     sc = f32(scale)
-    us = units(raw)
+    us = _units(font, raw)
     offs = [0]
     for u in us:
         offs.append(offs[-1] + u.size)

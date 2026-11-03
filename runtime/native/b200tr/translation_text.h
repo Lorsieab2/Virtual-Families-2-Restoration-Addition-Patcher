@@ -685,7 +685,7 @@ static const tt_branch *tt_choose(const tt_select *sel, int rule, int known, int
     return other != 0 ? other : &sel->branch[0];
 }
 
-/* A UTF-8 writer that converts to the game's text: 0 = Windows-1252 (unknown letters '?'),
+/* A UTF-8 writer that converts to the game's text: 0 = the game's own letters (Latin-1 from A2h; the characters its sheets lack folded; unknown letters '?'),
    1 = UTF-8 as it is, 2 = UTF-16 (wide). `longest` measures instead of writing branches. */
 typedef struct tt_out {
     char *buf;
@@ -695,10 +695,37 @@ typedef struct tt_out {
     int overflow;
 } tt_out;
 
-static const unsigned short TT_CP1252[32] = {
-    0x20AC, 0, 0x201A, 0x0192, 0x201E, 0x2026, 0x2020, 0x2021, 0x02C6, 0x2030, 0x0160, 0x2039, 0x0152, 0, 0x017D, 0,
-    0, 0x2018, 0x2019, 0x201C, 0x201D, 0x2022, 0x2013, 0x2014, 0x02DC, 0x2122, 0x0161, 0x203A, 0x0153, 0, 0x017E, 0x0178,
-};
+/* Virtual Families 2's own letter sheets have no picture for the bytes 80h to A1h (Windows-1252's quotes, dashes, the
+   ellipsis, oe, the euro, TM; the no-break space; the inverted exclamation mark): the game draws entry 0 ("!") for a
+   byte its font lacks. Without the Unicode text DLL the translation is written in the game's own letters, so those
+   characters are written as the plain ones they stand for (a no-break space as a space, the curly quotes as straight
+   ones, oe as "oe"); with it (UTF-8) every one of them is drawn as it is. The fold is never longer than the UTF-8 form. */
+static const char *tt_fold(unsigned int cp) {
+    switch (cp) {
+    case 0x00A0: case 0x2000: case 0x2001: case 0x2002: case 0x2003: case 0x2004: case 0x2005: case 0x2006:
+    case 0x2007: case 0x2008: case 0x2009: case 0x200A: case 0x202F: case 0x205F: case 0x3000: return " ";
+    case 0x00A1: return "!";
+    case 0x2018: case 0x2019: case 0x201A: case 0x2039: case 0x203A: return "'";
+    case 0x201C: case 0x201D: case 0x201E: return "\"";
+    case 0x2013: case 0x2014: return "-";
+    case 0x2022: return "*";
+    case 0x2026: return "...";
+    case 0x20AC: return "EUR";
+    case 0x2122: return "TM";
+    case 0x0152: return "OE";
+    case 0x0153: return "oe";
+    case 0x0160: return "S";
+    case 0x0161: return "s";
+    case 0x017D: return "Z";
+    case 0x017E: return "z";
+    case 0x0178: return "Y";
+    case 0x0192: return "f";
+    case 0x02C6: return "^";
+    case 0x02DC: return "~";
+    case 0x2030: return "%";
+    default: return 0;
+    }
+}
 
 static void tt_put_unit(tt_out *o, unsigned int u) {
     if (o->mode == 2) {
@@ -728,9 +755,9 @@ static void tt_put_cp(tt_out *o, unsigned int cp) {
             tt_put_unit(o, 0x80 | ((cp >> 6) & 0x3F)); tt_put_unit(o, 0x80 | (cp & 0x3F));
         }
     } else {
-        int k;
-        if (cp < 0x80 || (cp >= 0xA0 && cp <= 0xFF)) { tt_put_unit(o, cp); return; }
-        for (k = 0; k < 32; ++k) if (TT_CP1252[k] != 0 && TT_CP1252[k] == cp) { tt_put_unit(o, 0x80 + (unsigned int)k); return; }
+        const char *fold = tt_fold(cp);
+        if (fold != 0) { while (*fold) tt_put_unit(o, (unsigned char)*fold++); return; }
+        if (cp < 0x80 || (cp >= 0xA2 && cp <= 0xFF)) { tt_put_unit(o, cp); return; }
         tt_put_unit(o, '?');
     }
 }

@@ -1,5 +1,5 @@
 """The Tools tab: Back Up Saves, Restore Saves, Copy Player Slot, Rename Family, Game Speed, Game Mechanics, the Family Tree Maker
-(vf2_family_tree_window, its family read by vf2_genealogy), the Picture Maker (vf2_picture_maker), Game Font Text
+(vf2_family_tree_window, its family read by vf2_genealogy), the Picture Maker (vf2_picture_maker), Game Text
 (vf2_text_tool), Unicode Font (vf2_unicode_font) and the guide.
 
 A mixin for VF2PatcherGUI (offline_vf2_patcher_gui.py), kept in its own file so the window's patching code
@@ -146,7 +146,7 @@ class ToolsTabMixin:
         self._help_button(family, "game_mechanics").pack(side="left", padx=(3, 0))
         self._link(family, "Picture Maker...", self.picture_maker).pack(side="left", padx=(18, 0))
         self._help_button(family, "picture_maker").pack(side="left", padx=(3, 0))
-        self._link(family, "Game Font Text...", self.game_font_text).pack(side="left", padx=(18, 0))
+        self._link(family, "Game Text...", self.game_font_text).pack(side="left", padx=(18, 0))
         self._help_button(family, "game_font_text").pack(side="left", padx=(3, 0))
         self._link(family, "Unicode Font...", self.unicode_font).pack(side="left", padx=(18, 0))
         self._help_button(family, "unicode_font").pack(side="left", padx=(3, 0))

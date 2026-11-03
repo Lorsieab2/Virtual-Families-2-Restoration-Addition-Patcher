@@ -361,11 +361,22 @@ def test_nineteen_accented_letters_fit_in_either_mode(world):
     assert world.get_string(caption) == b"\xe9" * 19                              # 19 bytes in the game, 38 as counted
 
 
-def test_windows_1252_when_the_unicode_hooks_are_not_installed(world):
-    text = "Réessayer — € ✓"
+def test_the_games_own_letters_when_the_unicode_hooks_are_not_installed(world):
+    text = "R\u00e9essayer \u2014 \u20ac \u2713"
     assert _install(world, {113: text}, unicode=False) == 1
-    assert world.get_string(113) == b"R\xe9essayer \x97 \x80 ?"                  # the check mark has no byte
-    assert world.status()["textMode"] == 0
+    assert world.get_string(113) == b"R\xe9essayer - EUR ?"                       # the sheets have no picture for the
+    assert world.status()["textMode"] == 0                                         # dash or the euro; no mapping: "?"
+
+
+def test_a_character_the_games_sheets_lack_is_never_written_as_a_byte_that_draws_an_exclamation_mark(world):
+    """The game's letter sheets (Segoe 24 / 24 Bold / 32 Bold / 36 Bold) have no picture for the bytes 80h to A1h: the
+    game draws entry 0, "!", for such a byte. Without the Unicode text DLL a French line is written with the plain
+    characters those stand for; the guillemets (AB / BB), the accented letters and the middle dot are in the sheets."""
+    text = "Oui\u00a0! C\u0153ur\u2026 \u00ab\u00a0bon\u00a0\u00bb l\u2019\u00e9t\u00e9 \u201cx\u201d 50\u202f% \u00bf\u00a1"
+    assert _install(world, {113: text}, unicode=False) == 1
+    got = world.get_string(113)
+    assert got == b"Oui ! Coeur... \xab bon \xbb l'\xe9t\xe9 \"x\" 50 % \xbf!"
+    assert not any(0x80 <= b <= 0xA1 for b in got)
 
 
 def test_utf8_when_the_unicode_hooks_are_installed(world):

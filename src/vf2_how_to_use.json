@@ -331,12 +331,13 @@
     },
     "game_font_text": {
       "section": "Tools",
-      "title": "Game Font Text",
+      "title": "Game Text",
       "guide": [
         "Type anything and see it drawn in the game's own fonts, exactly as the game draws text, then save it as a PNG picture with a clear background.",
         "Pick one of the game's four fonts, a colour (white, black, brown or your own) and, if you like, a wrap width in pixels (0: each line break starts a new line).",
         "Accents: choose a language, then click a letter to add it. Any character: type a name (snowman, heart) or a code (U+2603), click Find, then Insert.",
         "Letters the game's fonts do not have are made by the patcher in the font's style and marked (patcher-made). The line under the preview counts each kind.",
+        "Tick \"As the stock game shows it\" to see the text as the original game shows it.",
         "Pick the game folder: the letters come from it, and it is only read. Save PNG: at the game's size, 2x or 4x (crisp), or your own size (smooth).",
         "Tick \"As Use Unicode Font draws it, with:\" and pick a font to see the text as that setting draws it."
       ]
