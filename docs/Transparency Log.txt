@@ -3997,3 +3997,61 @@ Release profile shipped two cheats ON (B206's first export; fixed before publish
   differs (work/gate_release_zip.py defaults_differ_from_the_table).
 - No executable changes: B206 was exported again from the same 32 executables.
 
+Title Screen Player Name Box (owner request 2026-11-02; for B207)
+------------------------------------------------------------------
+
+- Request (verbatim): "Can you add a transparent white 20% opacity box to show
+  behind the Player Name on the VF2 title screen?" Setting
+  title_screen_player_name_box, label "Title Screen Player Name Box", Optional,
+  default on (visual, not a cheat), on in Owner's Defaults and the release
+  profile. Loader byte .vf2tbox (patch_title_box_manifest; loaded by the Time
+  Controls wrapper after the Outfit Pictures DLL, before the clip and Unicode
+  text DLLs); companion vf2titlebox_b200.dll + vf2titlebox.ini (NameBox=1).
+- Where the name is drawn (B200 objects, the B200 core and the B206 core):
+  theMenuScene's constructor makes the name an ldwTextControl at [this+0F0h]
+  (id [this+0D0h] = 7) at (widescreen + 200h, 133h), justify 1 (centred), font
+  0 (the window's font, Segoe32Bold since theStringManager::LoadFonts), colour
+  0xFF804C05, no background; UpdateShowPlayer sets its text to the player's
+  name (theGameState+25ABCh while +25B20h is not 0) and adds it to the scene,
+  or removes it. ldwScene::Draw each frame: DrawScene (vtable slot 6: the
+  vf2_boxshot.jpg background and the distributor logo), DrawControls (the
+  name among them), DrawSceneFinal (slot 7: animation, butterflies), hints.
+  ldwTextControlImpl::Draw: x by justification from its bounds (centred:
+  left + (right - left - GetWidth(text, scale)) / 2), y = top + [+48h], both
+  plus the scene's bounds; height GetHeight(0) * scale. The control's own
+  background fill cannot be used: SetText never re-measures its bounds (they
+  stay the constructor's placeholder text's), so it would not fit the name.
+- The DLL: theMenuScene's vtable through RTTI (".?AVtheMenuScene@@", the one
+  complete object locator at offset 0, the one vtable); its DrawScene slot ->
+  TitleDrawScene: the game's DrawScene, then, while the name control is in
+  the scene's control list and its Draw would draw text, ldwGameWindow::
+  FillRect(the text's rectangle +- 8, 0x33FFFFFF). Every address from pinned
+  runs (runtime/b200_titlebox_sites.py, gen_b200_titlebox_sites.py proves them
+  on the B200 core and resolves the B206 core); the text Draw is searched from
+  +7 (the Unicode DLL's long-names hook takes its first 7 bytes). One write.
+- 20%: ldwGameWindow::FillRect divides the colour's alpha byte by 255 (33h ->
+  0.2); ldwGameWindowImpl::FillRect below alpha 1 blends a = int(0.2 * 255 +
+  0.5) = 51: each colour byte (old * 204 >> 8) + (255 * 51 >> 8) = (old * 204 >>
+  8) + 50 (0 -> 50, 128 -> 152, 255 -> 253); the pixel's alpha byte is kept.
+- Padding 8 on every side: ldwHintControlImpl (the game's tooltip box) keeps
+  its text rectangle 2 larger than the text (SetText) and draws its box 8
+  further out (Draw: add -8 / +8, then FillRect); the title box's edge is those
+  8 pixels from the name's text rectangle. Pinned as hint_draw_box and
+  hint_set_text_rect.
+- Unicode: Render Unicode with In-Game Fonts and Use Unicode Font both put an
+  entry jump at ldwFont::GetWidth (GET_WIDTH), the function the box calls, so
+  the box is measured by the same code as the text (tested: the Unicode
+  resolver's GET_WIDTH is FONT_GET_WIDTH; a width hook at that entry moves
+  the text and the box together, for Turkish, Japanese, an emoji and 300
+  letters).
+- Evidence (tests/test_b200_title_name_box.py, tests/b200_titlebox_scenarios.py):
+  the real test DLL with the real B200 core under unicorn, at the link
+  address and relocated, runs ldwScene::Draw of a title screen made with the
+  game's own ldwTextControl constructor, SetColors, SetText and AddControl,
+  the game's font metrics (src/vf2_game_fonts.json), GetWidth/GetHeight and
+  FillRect into a 1024 x 768 ARGB8888 screen: the plan is the one slot; the
+  pixels that change are exactly the box, each the blend above; the name is
+  drawn after the box with the same text, place, colour and font; with
+  NameBox=0, or no name on the screen, the frame is the stock frame; a changed
+  pinned byte installs nothing. Not live tested.
+

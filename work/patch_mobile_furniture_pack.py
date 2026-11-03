@@ -558,6 +558,16 @@ CLIP_FLAG_SECTION = ".vf2clip"
 CLIP_FLAG_SYMBOL = "_gVF2Clip"
 CLIP_DLL_NAME = "vf2clip_b200.dll"
 CLIP_INI_NAME = "vf2clip.ini"
+# Title Screen Player Name Box (after B206; on by default): a white box at 20% opacity behind the player's name on
+# the title screen, drawn by vf2titlebox_b200.dll (runtime/native/b200titlebox: theMenuScene's DrawScene vtable slot,
+# the game's own FillRect), loaded by its own dormant byte (.vf2tbox) before the clip and Unicode text DLLs;
+# vf2titlebox.ini says NameBox=1. Zero never loads it.
+TITLE_BOX_SETTING = "title_screen_player_name_box"
+TITLE_BOX_FLAG_SECTION = ".vf2tbox"
+TITLE_BOX_FLAG_SYMBOL = "_gVF2TitleBox"
+TITLE_BOX_DLL_NAME = "vf2titlebox_b200.dll"
+TITLE_BOX_INI_NAME = "vf2titlebox.ini"
+TITLE_BOX_STARTUP = "B200TitleBox_Startup"
 OUTFIT_PICTURES_FLAG_SECTION = VANILLA_BUGS_FLAG_SECTION
 OUTFIT_PICTURES_DLL_NAME = "vf2outfits_b200.dll"
 OUTFIT_PICTURES_INI_NAME = "vf2outfits.ini"
@@ -16435,6 +16445,29 @@ static void VF2LoadOutfitPicturesDll() {
     if (startup) startup();
 }
 
+// Title Screen Player Name Box loader (see TITLE_BOX_* in the generator). Zero = never loads the companion DLL. It
+// is loaded by the same wrapper, before the clip and Unicode text DLLs, once; nothing else reads the byte.
+#pragma section(".vf2tbox", read, write)
+extern "C" __declspec(allocate(".vf2tbox"))
+volatile unsigned char gVF2TitleBox = 0;
+
+static void VF2LoadTitleBoxDll() {
+    unsigned short path[512];
+    unsigned long length = GetModuleFileNameW(0, path, 400);
+    if (length == 0 || length >= 400) return;
+    unsigned long cut = length;
+    while (cut > 0 && path[cut - 1] != 92) --cut;
+    if (cut == 0) return;
+    const char *tail = "__VF2_TITLE_BOX_RELATIVE_PATH__";
+    unsigned long out = cut;
+    for (const char *c = tail; *c; ++c) path[out++] = (unsigned short)(unsigned char)*c;
+    path[out] = 0;
+    void *module = LoadLibraryW(path);
+    if (!module) return;
+    void (__cdecl *startup)() = (void (__cdecl *)())GetProcAddress(module, "B200TitleBox_Startup");
+    if (startup) startup();
+}
+
 // Unicode text loaders (see UNICODE_TEXT_* / UNICODE_FONT_* in the generator). Zero = never loads the companion
 // DLL. The two settings are exclusive; each has its own byte and its own copy of the DLL. Loaded by the same
 // wrapper, after every other companion DLL, once; nothing else reads the bytes.
@@ -16474,6 +16507,7 @@ extern "C" void *__cdecl VF2GameStateGetAfterTimeControlsLoad() {
         if (gVF2FamilyHistory == 1) VF2LoadFamilyHistoryDll();
         if (gVF2StoreRefresh == 1) VF2LoadStoreRefreshDll();
         if (gVF2FixVanillaGameBugs == 1) VF2LoadOutfitPicturesDll();
+        if (gVF2TitleBox == 1) VF2LoadTitleBoxDll();
         if (gVF2Clip == 1) VF2LoadUnicodeDll("__VF2_CLIP_RELATIVE_PATH__");
         if (gVF2UnicodeText == 1) VF2LoadUnicodeDll("__VF2_UNICODE_TEXT_RELATIVE_PATH__");
         else if (gVF2UnicodeFont == 1) VF2LoadUnicodeDll("__VF2_UNICODE_FONT_RELATIVE_PATH__");
@@ -18972,6 +19006,10 @@ extern "C" void __cdecl VF2ApplyVisibleSpecialUpgrade(int itemId) {
     special_upgrade_helper_cpp = special_upgrade_helper_cpp.replace(
         "__VF2_CLIP_RELATIVE_PATH__",
         TIME_CONTROLS_PATCHER_FOLDER + "\\\\" + CLIP_DLL_NAME,
+    )
+    special_upgrade_helper_cpp = special_upgrade_helper_cpp.replace(
+        "__VF2_TITLE_BOX_RELATIVE_PATH__",
+        TIME_CONTROLS_PATCHER_FOLDER + "\\\\" + TITLE_BOX_DLL_NAME,
     )
     special_upgrade_helper_cpp = special_upgrade_helper_cpp.replace(
         "__VF2_TIME_CONTROLS_RELATIVE_PATH__",
@@ -26968,6 +27006,43 @@ def patch_clip_manifest(manifest):
         "companion_ini": CLIP_INI_NAME,
         "startup_export": UNICODE_TEXT_STARTUP,
         "save_format": "unchanged: a pasted name is stored as a typed one",
+        "flag_off": "the DLL is never loaded: the game is the unmodified build",
+    }
+
+
+def patch_title_box_manifest(manifest):
+    """Title Screen Player Name Box: one dormant byte (.vf2tbox) compiled into every executable; the Time Controls
+    wrapper on theGame::Init's first call loads vf2titlebox_b200.dll when it is 1, before the clip and Unicode text
+    DLLs. Requires patch_time_controls_loader."""
+    if "TimeControls" not in manifest:
+        raise RuntimeError("Title Screen Player Name Box rides the Time Controls loader; patch it first")
+    manifest["TitleBox"] = {
+        "status": "dormant loader installed in every executable",
+        "offline_patcher_setting": TITLE_BOX_SETTING,
+        "label": "Title Screen Player Name Box",
+        "category": "optional",
+        "default": True,
+        "hook": (
+            "theGame::Init's first call (theGameState::Get) -> VF2GameStateGetAfterTimeControlsLoad, which "
+            f"loads {TIME_CONTROLS_PATCHER_FOLDER}\\{TITLE_BOX_DLL_NAME} once when the byte is 1, before the clip and "
+            "Unicode text DLLs"
+        ),
+        "runtime_flag": {
+            "symbol": TITLE_BOX_FLAG_SYMBOL,
+            "source_section": TITLE_BOX_FLAG_SECTION,
+            "size": 1,
+            "default": "00",
+            "enabled": "01",
+            "linked_location_status": "pending_link_metadata",
+        },
+        "companion_dll": TITLE_BOX_DLL_NAME,
+        "companion_ini": TITLE_BOX_INI_NAME,
+        "startup_export": TITLE_BOX_STARTUP,
+        "draws": (
+            "theMenuScene's DrawScene vtable slot: the game's DrawScene, then ldwGameWindow::FillRect(name "
+            "rectangle + 8 px, white at alpha 33h) while the name control is in the scene"
+        ),
+        "save_format": "unchanged: the box is drawn, never saved",
         "flag_off": "the DLL is never loaded: the game is the unmodified build",
     }
 
@@ -43031,6 +43106,8 @@ def main():
     patch_unicode_text_manifest(manifest)
     # Copy and Paste in Text Boxes (.vf2clip; the same loader, before the Unicode text DLL).
     patch_clip_manifest(manifest)
+    # Title Screen Player Name Box (.vf2tbox; the same loader, before the clip and Unicode text DLLs).
+    patch_title_box_manifest(manifest)
     # Invisible furniture counts as its stock donor where stock code tests
     # the donor's item id (every executable).
     patch_invisible_furniture_parity(manifest)

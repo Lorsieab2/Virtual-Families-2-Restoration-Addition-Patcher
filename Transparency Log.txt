@@ -334,6 +334,20 @@ Changelog
   It reads and writes only the clipboard and the text box. Needs executables
   built with the .vf2clip loader byte (B207).
 
+- Title Screen Player Name Box (after B206; Optional, on by default, on in
+  Owner's Defaults): installs vf2titlebox_b200.dll and vf2titlebox.ini
+  (NameBox=1) in the Virtual Families 2 Patcher Files folder, only while the
+  setting is on; the executable's .vf2tbox loader byte loads the DLL. The DLL
+  replaces one pointer, the title screen's (theMenuScene's) DrawScene slot,
+  found through the game's RTTI: the game's own DrawScene runs, then the game's
+  own FillRect draws a white box at 20% opacity (alpha 33h) behind the current
+  player's name: the name's own rectangle (placed as the game's text Draw
+  places it, measured with the game's GetWidth) plus 8 pixels on every side,
+  the margin of the game's own hint boxes. The game then draws the name over
+  it. It draws only while a name is shown, reads only the title screen's name
+  control and writes nothing but the screen. Needs executables built with the
+  .vf2tbox loader byte (B207).
+
 - Game Font Text (Tools tab, after B205): writes text in the game's four fonts
   and saves a PNG. It reads the game's font pictures from the game folder and
   writes only the PNG you save.

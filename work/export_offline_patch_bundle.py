@@ -129,6 +129,7 @@ FINAL_PLAYTEST_DEFAULT_ON_SETTINGS = frozenset({
     "r_refreshes_store",
     "render_unicode_in_game_fonts",
     "copy_paste_text_boxes",
+    "title_screen_player_name_box",
 })
 # cheat_upgrades and expanded_flea_market left this set on 1 November 2026: every release bundle is
 # exported with this profile, so listing them shipped both ON although the SETTINGS table had them OFF
@@ -383,6 +384,7 @@ SOURCE_BACKED_OPTIONAL_SETTINGS = {
     "render_unicode_in_game_fonts",
     "use_unicode_font",
     "copy_paste_text_boxes",
+    "title_screen_player_name_box",
 }
 EXECUTABLE_OVERLAY_OPTIONAL_SETTINGS = {
     "island_events",
@@ -677,6 +679,13 @@ SETTINGS = [
         "id": "copy_paste_text_boxes",
         "label": "Copy and Paste in Text Boxes",
         "description": "While you type in one of the game's text boxes (a name, the Family Tree note): Ctrl+V or Shift+Insert pastes, Ctrl+C or Ctrl+Insert copies the box's whole text, Ctrl+X cuts it. Line breaks and tabs in pasted text become spaces, other control characters are left out, and a paste stops at the box's own limit, never inside a character. With either Unicode text setting on, any character can be pasted; with both off, only the letters the original game can store (Windows-1252). The keys do nothing anywhere else and never reach the game as letters. Works with or without the Unicode text settings. Installs a small companion DLL in the Virtual Families 2 Patcher Files folder next to the game; unticking the setting removes it and the game is unmodified again.",
+        "default": True,
+        "category": "optional",
+    },
+    {
+        "id": "title_screen_player_name_box",
+        "label": "Title Screen Player Name Box",
+        "description": "On the title screen (Play, Start Over, Manage Games, Quit) the current player's name is shown on a see-through white box (20% opacity), so it is easy to read on the picture behind it. The box is the name's own size plus 8 pixels on every side (the margin the game's own tip boxes keep around their text), and it grows and shrinks with the name: long names, accented letters and any other characters with Render Unicode with In-Game Fonts or Use Unicode Font, or neither. It is drawn behind the name with the game's own drawing, only while a name is shown; nothing else on the screen changes and nothing is saved. Installs a small companion DLL in the Virtual Families 2 Patcher Files folder next to the game; unticking the setting removes it and the title screen is the original game's again.",
         "default": True,
         "category": "optional",
     },
@@ -1192,6 +1201,7 @@ RUNTIME_FLAG_SECTION_BY_SETTING = {
     "render_unicode_in_game_fonts": ".vf2utxt",
     "use_unicode_font": ".vf2ufnt",
     "copy_paste_text_boxes": ".vf2clip",
+    "title_screen_player_name_box": ".vf2tbox",
     "expanded_flea_market": ".vf2flea",
     "free_guaranteed_cheats": ".vf2free",
     "all_outfits_hairstyles": ".vf2clth",
@@ -1667,6 +1677,7 @@ def unicode_text_post_asset_patches(
         ("UnicodeText", "render_unicode_in_game_fonts", "Render Unicode with In-Game Fonts"),
         ("UnicodeFont", "use_unicode_font", "Use Unicode Font (overrides in-game fonts)"),
         ("ClipBoard", "copy_paste_text_boxes", "Copy and Paste in Text Boxes"),
+        ("TitleBox", "title_screen_player_name_box", "Title Screen Player Name Box"),
     ):
         contract = build_manifest_data.get(key)
         if not isinstance(contract, dict):
@@ -1839,6 +1850,61 @@ def clip_asset_patches(
             "allow_missing_target": True,
             "remove_when_disabled": True,
             "requires": ["core_executable", "copy_paste_text_boxes"],
+            "note": note,
+        })
+    return records
+
+
+TITLE_BOX_DLL_NAME = "vf2titlebox_b200.dll"
+TITLE_BOX_INI_NAME = "vf2titlebox.ini"
+TITLE_BOX_INI_TEXT = "[Patches]\r\nNameBox=1\r\n"
+
+
+def title_box_asset_patches(
+    bundle_dir: Path,
+    dll_path: Path | None,
+    build_manifest_data: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Title Screen Player Name Box: vf2titlebox_b200.dll (runtime\\native\\build_b200titlebox.bat) and its ini
+    (NameBox=1), loaded by the executable's dormant .vf2tbox loader. A build without the loader has no TitleBox
+    contract and gets no records."""
+    contract = build_manifest_data.get("TitleBox")
+    if not isinstance(contract, dict):
+        return []
+    if dll_path is None:
+        raise ValueError(
+            "This build has the Title Screen Player Name Box loader; pass --title-box-dll with the built "
+            f"{TITLE_BOX_DLL_NAME} (runtime\\native\\build_b200titlebox.bat) or the setting would do nothing."
+        )
+    if not dll_path.is_file() or dll_path.name != TITLE_BOX_DLL_NAME:
+        raise ValueError(f"--title-box-dll must be an existing {TITLE_BOX_DLL_NAME}: {dll_path}")
+    if contract.get("companion_dll") != TITLE_BOX_DLL_NAME or contract.get("companion_ini") != TITLE_BOX_INI_NAME:
+        raise ValueError("Build manifest's TitleBox contract names another companion file.")
+    require_vf2_pe32_x86(dll_path, label="Title Screen Player Name Box DLL")
+    data = dll_path.read_bytes()
+    if b"B200TitleBox_Startup" not in data or b"B200TitleBox_TestPlan" in data:
+        raise ValueError("The Title Screen Player Name Box DLL must be the shipped build (exports "
+                         "B200TitleBox_Startup, no test entry points).")
+    records: list[dict[str, Any]] = []
+    for name, payload, note in (
+        (TITLE_BOX_DLL_NAME, data, "Title Screen Player Name Box companion DLL, loaded by the executable's dormant "
+                                   ".vf2tbox loader. Disabling the setting removes only this exact file."),
+        (TITLE_BOX_INI_NAME, TITLE_BOX_INI_TEXT.encode("ascii"), "Title Screen Player Name Box switch (NameBox=1) "
+                                                                 "read by the companion DLL. Disabling the setting "
+                                                                 "removes only this exact file."),
+    ):
+        path = bundle_dir / "payload" / "TitleBox" / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(payload)
+        records.append({
+            "file_path": f"{TIME_CONTROLS_PATCHER_FOLDER}/{name}",
+            "source_path": relative_posix(path.relative_to(bundle_dir)),
+            "source_sha256": sha256_file(path),
+            "source_size": path.stat().st_size,
+            "overwrite_existing": True,
+            "allow_missing_target": True,
+            "remove_when_disabled": True,
+            "requires": ["core_executable", "title_screen_player_name_box"],
             "note": note,
         })
     return records
@@ -5508,6 +5574,11 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
             Path(args.clip_dll).resolve() if getattr(args, "clip_dll", None) else None,
             build_manifest_data,
         ))
+        asset_patches.extend(title_box_asset_patches(
+            bundle_dir,
+            Path(args.title_box_dll).resolve() if getattr(args, "title_box_dll", None) else None,
+            build_manifest_data,
+        ))
     # Invisible Workspace Upgrades is emitted AFTER the misc/optional visual
     # records on purpose. Records that share a target with distinct requires
     # are a layered override and the patcher applies them in manifest order,
@@ -6082,6 +6153,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--invisible-upgrades-dir", help="Folder containing invisible upgrade .png files to place in payload/OptionalVisualMods/Invisible Upgrades and target to Images/Upgrades.")
     parser.add_argument("--original-upgrades-dir", help="Folder containing original upgrade .png files to bundle as restore/reference sources for Invisible Upgrades.")
     parser.add_argument("--clip-dll", help="The built vf2clip_b200.dll (runtime\\native\\build_b200unicode.bat clip) to ship behind the copy_paste_text_boxes setting. Required when the build has its loader.")
+    parser.add_argument("--title-box-dll", help="The built vf2titlebox_b200.dll (runtime\\native\\build_b200titlebox.bat) to ship behind the title_screen_player_name_box setting. Required when the build has its loader.")
     parser.add_argument("--unicode-text-dll", help="The built vf2unicode_b200.dll (runtime\\native\\build_b200unicode.bat) to ship behind the render_unicode_in_game_fonts and use_unicode_font settings. Required when the build has the Unicode text loaders.")
     parser.add_argument("--store-refresh-dll", help="The built vf2refresh_b200.dll (runtime\\native\\build_b200refresh.bat) to ship behind the r_refreshes_store setting. Required when the build has the R Refreshes the Store loader.")
     parser.add_argument("--outfit-pictures-dll", help="The built vf2outfits_b200.dll (runtime\\native\\build_b200outfits.bat) to ship behind the fix_vanilla_game_bugs setting. Required when the build has the Outfit Pictures loader.")
