@@ -90,7 +90,12 @@ Things to keep in a translation:
 
 - **Placeholders** like `%d` and `%s`: the same ones, in the same order.
 - **Names in braces** like `{name}`: every one the English has, spelled the same.
-- `\n` is a line break; write `%%` for a percent sign and `{{` `}}` for braces.
+- **Percent signs:** only the placeholders the line's own English has count as placeholders. Any other `%` is
+  plain text, so write a percent sign as you normally would: `2 %`, `2 %` (no-break space), `50 % de réduction`.
+  Where the game formats a line with printf, the patcher hands it each such `%` as `%%`, so it still shows one `%`
+  (the extra byte counts toward the line's room); anywhere else it is shown as you wrote it. `%%` shows as two
+  percent signs unless the English has `%%` itself.
+- `\n` is a line break; write `{{` `}}` for braces.
 - **Choices by person or number** are allowed:
   `{%1: m=Il est content | f=Elle est contente | o=Iel est content·e}` picks by the person's sex
   (m, f, o), and `%d {%1: one=pomme | other=pommes}` picks by the number (your language's plural
