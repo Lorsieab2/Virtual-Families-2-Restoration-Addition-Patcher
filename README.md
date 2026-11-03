@@ -612,6 +612,15 @@ release bundle, like almost everything else)
   `tests/test_trampolines_executable.py` read the source for it). Text is Windows-1252, or UTF-8 when the Unicode
   text DLL has installed its hooks (`B200Unicode_UnicodeTextActive()`, else its status block). Not yet seen in a
   running game.
+  **The Translations window** (Tools tab, **Translations...**; `src/vf2_translations_window.py`, ported from the Virtual
+  Families 1 Fun Patcher): the language the game uses (each by its own name; it is written into every modded copy's
+  `Translation.ini`, so it applies at the next game start with no re-patching), **Make a translation** (the English
+  template, `src/vf2_translation_strings.py`, and a two-column editor with the game's own font as a preview, protected
+  placeholders and gender / plural selects), **Add translation file...** (button or drag and drop), **Export...**,
+  **Delete...** (to the Windows Recycle Bin after one Yes/No; English is never deleted), a multi-select list,
+  **Download from GitHub...** (this repository's public `translations/` folder, read-only, no login, validated as
+  data) and **Share on GitHub...** (the owner's confirmation text, the credit name typed by hand, never an email).
+  Accepted translations ship in `<Patcher Files>\translations\vf2`; a "(TEST)" translation never does.
 - **R Refreshes the Store** (`.vf2rfsh`, an Optional patch and a cheat, **on by default**; new in the final
   B204 rebuild) - in the store, press **R** (or Shift+R) to pick the store's random items again, the
   game's own way and with the game's own odds:
