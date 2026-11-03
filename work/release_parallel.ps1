@@ -101,7 +101,7 @@ if ($null -ne $saved.refresh) { $env:VF2_REFRESH_EXE = $saved.refresh } else { R
 if ($null -ne $saved.unicode) { $env:VF2_UNICODE_EXE = $saved.unicode } else { Remove-Item Env:VF2_UNICODE_EXE -ErrorAction SilentlyContinue }
 if ($gate -ne 0) { throw "The release test run still fails alone; see $runDir\tests-release\summary.txt. DLLs not built." }
 
-foreach ($bat in @("build_b200time.bat", "build_b200kids.bat", "build_b200history.bat", "build_b200outfits.bat", "build_b200refresh.bat", "build_b200unicode.bat", "build_b200titlebox.bat")) {
+foreach ($bat in @("build_b200time.bat", "build_b200kids.bat", "build_b200history.bat", "build_b200outfits.bat", "build_b200refresh.bat", "build_b200unicode.bat", "build_b200titlebox.bat", "build_b200tr.bat")) {
     & cmd.exe /d /c "`"$(Join-Path $root "runtime\native\$bat")`"" > (Join-Path $runDir "$bat.log") 2>&1
     if ($LASTEXITCODE -ne 0) { throw "$bat failed; see $runDir\$bat.log" }
 }

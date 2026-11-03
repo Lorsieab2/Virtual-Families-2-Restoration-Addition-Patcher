@@ -55,11 +55,15 @@ class GuideContentTests(unittest.TestCase):
         self.assertIn("family_history", guides.keys())
         self.assertEqual(guides.setting_keys(), ["family_history", "expanded_flea_market", "r_refreshes_store",
                                                 "copy_paste_text_boxes", "title_screen_player_name_box",
-                                                "fix_vanilla_game_bugs"])
+                                                "translations", "fix_vanilla_game_bugs"])
         box = guides.guide("title_screen_player_name_box").text
         for needle in ("title screen", "30% opacity", "8 pixels on every side", "On by default",
                        "either Unicode text setting or neither", "nothing is saved"):
             self.assertIn(needle, box)
+        tr = guides.guide("translations").text
+        for needle in ("own language", "next game start", "stays in English", "Unicode text setting", "On by default",
+                       "English (original)"):
+            self.assertIn(needle, tr)
         text = guides.guide("family_history").text
         self.assertNotIn("Experimental", text)        # a normal row, on by default (owner, 2026-10-26)
         for needle in ("on by default", "Family History", "remarriage", "divorce", "Twins and triplets",

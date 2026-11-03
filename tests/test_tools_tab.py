@@ -134,7 +134,7 @@ class ToolsTabTests(unittest.TestCase):
         import json
         self.assertEqual(guides.setting_keys(), ["family_history", "expanded_flea_market", "r_refreshes_store",
                                                 "copy_paste_text_boxes", "title_screen_player_name_box",
-                                                "fix_vanilla_game_bugs"])
+                                                "translations", "fix_vanilla_game_bugs"])
         rows = [{"id": "family_history", "label": "Family History log", "description": "The log.",
                  "default": False, "category": "experimental"},
                 {"id": "time_controls", "label": "Time Controls", "description": "Speeds.", "default": True,
