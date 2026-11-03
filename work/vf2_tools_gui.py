@@ -150,6 +150,10 @@ class ToolsTabMixin:
         self._help_button(family, "game_font_text").pack(side="left", padx=(3, 0))
         self._link(family, "Unicode Font...", self.unicode_font).pack(side="left", padx=(18, 0))
         self._help_button(family, "unicode_font").pack(side="left", padx=(3, 0))
+        language = ttk.Frame(box)
+        language.grid(row=3, column=0, sticky="w", pady=(6, 0))
+        self._link(language, "Translations...", self.translations).pack(side="left")
+        self._help_button(language, "translations_tool").pack(side="left", padx=(3, 0))
 
         guide = ttk.LabelFrame(tab, text="How to Use", padding=10)
         guide.pack(fill="x", pady=(10, 0))
@@ -241,6 +245,33 @@ class ToolsTabMixin:
                     folders.append(text)
         return vf2_unicode_font.open_window(self, game_folders=[Path(f) for f in folders], hold=self._hold,
                                             show_help=lambda: self._show_how_to_use("unicode_font"))
+
+    # -- Translations -------------------------------------------------------
+
+    def _known_game_folders(self) -> list[str]:
+        """The original game folder and the modded output folder the window knows (the Unicode Font's way)."""
+        folders: list[str] = []
+        for name in ("output_dir_var", "game_dir_var"):
+            var = getattr(self, name, None)
+            with contextlib.suppress(Exception):
+                text = var.get().strip() if var is not None else ""
+                if text and text not in folders:
+                    folders.append(text)
+        return folders
+
+    def translations(self):
+        """The Translations window (vf2_translations_window): the language the game uses (applied at its next start,
+        with no new patching), Make a translation, the list, Download from GitHub and Share on GitHub. One at a time."""
+        import vf2_translations_window
+        return vf2_translations_window.open_window(self, self._known_game_folders(), hold=self._hold)
+
+    def _apply_translation_choice(self) -> None:
+        """After a patch: the new modded copy uses the language chosen in the Translations window (the patch cleared
+        the folder it keeps its choice in). A failure never stops the patch."""
+        with contextlib.suppress(Exception):
+            import vf2_translations
+            for folder in self._known_game_folders():
+                vf2_translations.write_choice_into(Path(folder), "vf2")
 
     # -- How to Use ---------------------------------------------------------
 

@@ -83,6 +83,13 @@ REQUIRED_RUNNERS = {
     "vf2_game_fonts.json",       # Game Font Text: the four game fonts' metrics (numbers only, no game art)
     "vf2_text_tool.py",          # Game Font Text: the window
     "vf2_unicode_font.py",       # Unicode Font: the window that picks Use Unicode Font's font
+    "vf2_translation_format.py",  # Translations: the file format (the validator the GitHub checks run too)
+    "vf2_translation_strings.py",  # Translations: the lines of the game and the patches, with their room
+    "vf2_translation_limits.json",  # Translations: the room of every line (numbers only, no game text)
+    "vf2_patch_strings.json",  # Translations: the lines the patcher adds (its own words)
+    "vf2_translations.py",  # Translations: the files, the choice, sharing
+    "vf2_translations_github.py",  # Translations: Download from GitHub
+    "vf2_translations_window.py",  # Translations: the window and the editor
     "vf2_genealogy.py",
     "vf2_family_history.py",
     "vf2_tree_memory.py",
