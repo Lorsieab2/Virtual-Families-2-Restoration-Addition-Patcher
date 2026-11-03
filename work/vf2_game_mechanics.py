@@ -654,7 +654,7 @@ def _hidden_lines() -> list[Fact]:
               "the Family Tree note). Ctrl+V or Shift+Insert pastes at the end of the text, Ctrl+C or Ctrl+Insert "
               "copies the whole text, Ctrl+X cuts it. Line breaks and tabs in what you paste become spaces, other "
               "control characters are left out, and a paste stops at the box's limit, never inside a letter; with "
-              "both Unicode text options off only the original game's letters (Windows-1252) are pasted. Anywhere "
+              "both Unicode text options off only the letters the original game's fonts can draw (ASCII and Latin-1 from ¢ to ÿ) are pasted. Anywhere "
               "else these keys do nothing, as in the original game, and they never reach the game as letters.", E,
            "vf2clip_b200.dll (runtime/native/b200unicode built with B200UNICODE_CLIP) replaces only the SDL_PollEvent "
            "import slot: SDL_KEYDOWN/UP with KMOD_CTRL (0xC0) and 'v' 'c' 'x' / SDLK_INSERT, or KMOD_SHIFT and "

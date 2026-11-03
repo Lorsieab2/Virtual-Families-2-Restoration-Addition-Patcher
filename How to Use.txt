@@ -102,7 +102,7 @@ https://github.com/Lorsieab2/Virtual-Families-2-Restoration-Addition-Patcher/
    game's text boxes, Ctrl+V or Shift+Insert pastes, Ctrl+C or Ctrl+Insert
    copies the whole text, Ctrl+X cuts it. Line breaks and tabs become spaces
    and a paste stops at the box's limit. With both text settings above off,
-   only the letters the original game can store are pasted. The keys do
+   only the letters the original game's fonts can draw are pasted. The keys do
    nothing anywhere else.
 
    Title Screen Player Name Box (on by default): on the title screen the

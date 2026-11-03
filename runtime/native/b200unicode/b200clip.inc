@@ -14,7 +14,7 @@
 // dropped; a held key acts once (its repeats are only hidden); it is
 // cut to the box's own byte limit at whole characters (grapheme clusters). With a Unicode text setting on the text is
 // stored in the patcher's one stored form (b200unicode_text.h, as typing stores it); with both off only
-// Windows-1252 characters are pasted, one byte each, and the rest are dropped. A number-only box takes digits only.
+// the characters the stock fonts draw (ASCII and Latin-1 from A2h) are pasted, one byte each, and the rest are dropped. A number-only box takes digits only.
 // A name box (its limit is kNameBoxBytes, the long names' own, b200names.inc; no stock box has it) takes up to those
 // bytes as stored, with no separate character cap (b200name_limit.h): the paste is cut at whole characters. The key events are hidden from the game (it never sees them as
 // letters); anywhere else the keys do nothing new.
@@ -74,14 +74,19 @@ static bool UnicodeOn() {
     return false;
 }
 
-// Windows-1252 bytes 80h..9Fh
+// Windows-1252 bytes 80h..9Fh (to read the text of a box back as characters: a name from a save can hold them)
 static const unsigned short kCp1252High[32] = {
     0x20AC, 0, 0x201A, 0x0192, 0x201E, 0x2026, 0x2020, 0x2021, 0x02C6, 0x2030, 0x0160, 0x2039, 0x0152, 0, 0x017D, 0,
     0, 0x2018, 0x2019, 0x201C, 0x201D, 0x2022, 0x2013, 0x2014, 0x02DC, 0x2122, 0x0161, 0x203A, 0x0153, 0, 0x017E, 0x0178 };
 
-static int Cp1252Byte(unsigned cp) {
-    if ((cp >= 0x20 && cp < 0x7F) || (cp >= 0xA0 && cp <= 0xFF)) return (int)cp;
-    for (unsigned i = 0; i < 32; ++i) if (kCp1252High[i] && kCp1252High[i] == cp) return (int)(0x80 + i);
+// With both Unicode settings off a paste keeps only the characters the game's stock fonts can draw, one byte each
+// ("what the fonts draw", the owner's decision of 2026-11-03). The stock fonts (Segoe24, Segoe24Bold, Segoe32Bold,
+// Segoe36Bold; src/vf2_game_fonts.json) draw ASCII 20h..7Eh and Latin-1 A2h..FFh and nothing in 80h..A1h (those
+// bytes show the '!' of glyph 0): tests/test_clip_text_boxes.py derives this set from the font tables and checks it
+// character by character. Any other character, the Windows-1252 euro and curly quotes and the no-break space
+// included, is dropped, never turned into a blank.
+static int DrawnByte(unsigned cp) {
+    if ((cp >= 0x20 && cp <= 0x7E) || (cp >= 0xA2 && cp <= 0xFF)) return (int)cp;
     return -1;
 }
 
@@ -183,13 +188,13 @@ static void ClipPaste(unsigned box) {
     bool unicode = UnicodeOn();
     B200Clip_Status.unicode = unicode ? 1u : 0u;
     if (!unicode) {
-        // both Unicode settings off: Windows-1252 bytes straight into the box (the stock HandleKey takes no byte
-        // above 7Fh), to its byte limit; the rest are dropped
+        // both Unicode settings off: the bytes the stock fonts draw straight into the box (the stock HandleKey takes no
+        // byte above 7Fh), to its byte limit; the rest are dropped
         char *buf = *(char **)(box + 0x30);
         unsigned max = (unsigned)*(int *)(box + 0x28), at = ut::Length((const unsigned char *)buf), pasted = 0;
         bool number = *(unsigned char *)(box + 0x2D) != 0;
         for (unsigned i = 0; i < add; ++i) {
-            int b = Cp1252Byte(ClipAdd[i]);
+            int b = DrawnByte(ClipAdd[i]);
             if (b < 0 || (number && (b < '0' || b > '9'))) { ++dropped; continue; }
             if (at >= max) { dropped += add - i; break; }
             buf[at++] = (char)b;
