@@ -687,3 +687,66 @@ def test_a_typed_name_is_never_wider_than_the_widest_stock_name(draw_world, name
     assert len(T.encode(start)) < 18
     w.e.call(w.h["handle_key"], (5, 0, ord("W")), ecx=ctl, edx=0)
     assert w.e.read(buf, 19).split(b"\0")[0] == T.encode(start)
+
+
+THAI = "\u0e2a\u0e27\u0e31\u0e2a\u0e14\u0e35\u0e04\u0e23\u0e31\u0e1a\u0e02\u0e2d\u0e1a\u0e04\u0e38\u0e13\u0e21\u0e32\u0e01"
+
+
+def test_without_icu_the_games_wrapping_breaks_thai_between_words(draw_world):
+    """Windows without icu.dll (LoadLibraryExW finds none here): the DLL's GetNextJustifiedLine reads
+    "Unicode Text\\Word Lists\\thaidict.txt" from beside the DLL the first time a Thai line is wrapped, and every line
+    ends between two words, exactly where the patcher's rule (src/vf2_game_text.next_justified_line, ICU off, the same
+    lists) ends it."""
+    import vf2_line_break as LB
+    w, fonts = draw_world
+    if not hasattr(w, "real_gdi"):
+        w.s, w.h = w.sites(), w.hooks()
+        w.game_seams(w.s)
+        from test_unicode_font import RealGdi, _kernel_seams
+        import vf2_glyph_render as R
+        if not R.available():
+            pytest.skip("needs Windows' GDI")
+        w.real_gdi = RealGdi(w.e, {})
+        _kernel_seams(w.e)
+    e = w.e
+    opened = []
+    real_open = w._open
+
+    def open_(em):
+        path = em.wstr(em.arg(0))
+        opened.append(path)
+        if path.endswith("\\Unicode Text\\Word Lists\\thaidict.txt"):
+            handle = 0x900 + len(w.files)
+            w.files[handle] = (ROOT / "runtime" / "word-lists" / "thaidict.txt").read_bytes()
+            return handle, 28
+        return real_open(em)
+    e.imports["CreateFileW"] = open_
+    e.imports["GetPrivateProfileIntW"] = lambda em: (0, 16)
+    folder = e.alloc(64)
+    e.write(folder, "C:\\Game\\Patcher Files\\\0".encode("utf-16-le"))
+    e.call(e.dll_export("B200Unicode_TestReadSettings"), (folder,))
+    e.call(e.dll_export("B200Unicode_TestWordLists"))
+    font_obj, _f, _sheet = w.font("Segoe24")
+    font, _s = fonts["Segoe24"]
+    LB.use_icu(False)
+    try:
+        for text in ("Hello there", THAI, THAI + " " + THAI):
+            raw = T.encode(text)
+            for width in (60, 120, 400):
+                src = e.alloc(len(raw) + 1)
+                e.write(src, raw + b"\0")
+                out, dbl = e.alloc(len(raw) + 16), e.alloc(4)
+                end = e.call(w.h["next_line"], (src, out, 255, width, dbl, 0,
+                                                struct.unpack("<I", struct.pack("<f", 1.0))[0]), ecx=font_obj, edx=0)
+                line = e.read(out, len(raw) + 1).split(b"\0")[0]
+                want_line, want_used, _d = T.next_justified_line(font, raw, 255, width, False)
+                assert (line, end - src) == (want_line, want_used), (text, width)
+                if text == THAI and width < 400:
+                    words = ["\u0e2a\u0e27\u0e31\u0e2a\u0e14\u0e35", "\u0e04\u0e23\u0e31\u0e1a",
+                             "\u0e02\u0e2d\u0e1a\u0e04\u0e38\u0e13", "\u0e21\u0e32\u0e01"]
+                    assert T.decode(line) in ["".join(words[:k]) for k in (1, 2, 3)], width     # whole words
+    finally:
+        LB.use_icu(True)
+    thai_opens = [p for p in opened if p.endswith("thaidict.txt")]
+    assert thai_opens == ["C:\\Game\\Patcher Files\\Unicode Text\\Word Lists\\thaidict.txt"]   # once, lazily
+    assert not any(p.endswith(("laodict.txt", "khmerdict.txt", "burmesedict.txt")) for p in opened)

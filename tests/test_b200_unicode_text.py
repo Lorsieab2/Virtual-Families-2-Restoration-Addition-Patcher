@@ -30,6 +30,7 @@ import vf2_game_text as T  # noqa: E402
 import vf2_unicode_tables as TABLES  # noqa: E402
 
 NATIVE = ROOT / "runtime" / "native" / "b200unicode"
+WORD_LISTS = ROOT / "runtime" / "word-lists"
 MAXCP = 16
 
 
@@ -68,7 +69,15 @@ def lib(tmp_path_factory):
     d.UtNextLine.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_int, ctypes.c_int, ctypes.c_int,
                              ctypes.c_float, ctypes.c_int, ctypes.POINTER(ctypes.c_int)]
     d.UtNextLine.restype = ctypes.c_uint32
-    return d
+    d.UtWords.argtypes = [ctypes.c_wchar_p]
+    d.UtWordsRead.argtypes = [ctypes.c_int]
+    d.UtWordsRead.restype = ctypes.c_uint32
+    # both sides without icu.dll and with the word lists (the DLL's fallback); the ICU test turns ICU on in both
+    import vf2_line_break as LB
+    d.UtWords(str(WORD_LISTS) + "\\")
+    LB.use_icu(False)
+    yield d
+    LB.use_icu(True)
 
 
 def c_units(lib, raw: bytes):
@@ -229,7 +238,8 @@ def test_break_places_are_the_same_in_the_dll_without_icu_and_in_python(lib):
     for raw in _all_raws():
         raw = raw.split(b"\0", 1)[0]
         us = T.units(raw)
-        want = LB.break_flags([(ord(u.text[0]), ord(u.text[min(len(u.text), 16) - 1])) for u in us])
+        want = LB.break_flags([(ord(u.text[0]), ord(u.text[min(len(u.text), 16) - 1])) for u in us],
+                              [tuple(ord(c) for c in u.text[:16]) for u in us])
         got = _break_flags(lib, raw)
         assert got == want[:len(got)] and len(got) == len(want), raw
         seen_break = seen_break or any(want)
@@ -254,7 +264,9 @@ def test_with_windows_icu_the_breaks_follow_uax14_dictionary_and_kinsoku(lib):
         raw = T.encode(thai)
         icu_flags = _break_flags(lib, raw)
         lib.UtIcu(0)
+        lib.UtWords("")                                                       # the table alone
         table_flags = _break_flags(lib, raw)
+        lib.UtWords(str(WORD_LISTS) + "\\")
         lib.UtIcu(1)
         assert sum(icu_flags) >= 2 and sum(table_flags) > sum(icu_flags)       # words, not letters
         assert all(t for i, t in enumerate(table_flags) if icu_flags[i])       # ICU's places are among the table's
@@ -267,6 +279,99 @@ def test_with_windows_icu_the_breaks_follow_uax14_dictionary_and_kinsoku(lib):
                 assert units[i - 1] != "\u300c", (i, units[i - 1])               # none ends with an opening one
         assert any(flags)
     finally:
+        lib.UtIcu(0)
+
+
+WORD_SAMPLES = {
+    # (text, its words as ICU 77-1's list has them)
+    0: ("สวัสดีครับขอบคุณมาก",
+        ["สวัสดี", "ครับ", "ขอบคุณ",
+         "มาก"]),                                                       # Thai: hello, thank you very much
+    1: ("ສະບາຍດີຂອບໃຈ", None),    # Lao
+    2: ("សួស្តីអរគុណ", None),          # Khmer
+    3: ("မင်္ဂလာပါကောင်းသလား", None),
+}
+
+
+def _words_of(text, flags):
+    units = [u.text for u in T.units(T.encode(text))]
+    out, cur = [], ""
+    for i, u in enumerate(units):
+        if i and flags[i]:
+            out.append(cur)
+            cur = ""
+        cur += u
+    return out + [cur]
+
+
+def test_without_icu_the_word_lists_break_between_words_the_same_in_the_dll_and_python(lib):
+    """Windows without icu.dll: a run of Thai, Lao, Khmer or Burmese letters breaks only between its words (ICU's own
+    lists, longest match), the same places in the DLL's rules and in Python, and fewer places than the table alone."""
+    lib.UtIcu(0)
+    import vf2_line_break as LB
+    for which, (text, words) in WORD_SAMPLES.items():
+        raw = T.encode(text)
+        us = T.units(raw)
+        got = _break_flags(lib, raw)
+        want = LB.break_flags([(ord(u.text[0]), ord(u.text[min(len(u.text), 16) - 1])) for u in us],
+                              [tuple(ord(c) for c in u.text[:16]) for u in us])
+        assert got == want, text
+        table = LB.break_flags([(ord(u.text[0]), ord(u.text[min(len(u.text), 16) - 1])) for u in us])
+        assert 1 <= sum(got) < sum(table), text
+        assert all(table[i] for i, f in enumerate(got) if f)
+        if words:
+            assert _words_of(text, got) == words
+        assert lib.UtWordsRead(which) > 1000                    # the list was read: thousands of words
+    # mixed with Latin, spaces and a line too long: still the same in both
+    rng = random.Random(77)
+    pool = [t for t, _w in WORD_SAMPLES.values()] + ["abc", " ", "日本", "xก"]
+    for _ in range(300):
+        text = "".join(rng.choice(pool) for _ in range(rng.randint(1, 8)))
+        raw = T.encode(text)
+        us = T.units(raw)
+        want = LB.break_flags([(ord(u.text[0]), ord(u.text[min(len(u.text), 16) - 1])) for u in us],
+                              [tuple(ord(c) for c in u.text[:16]) for u in us])
+        assert _break_flags(lib, raw) == want, text
+        for max_w in (30, 80):
+            out = ctypes.create_string_buffer(len(raw) + 16)
+            dbl = ctypes.c_int()
+            used = lib.UtNextLine(raw, out, 200, max_w, 0, 1.0, 1, ctypes.byref(dbl))
+            assert (out.value, used, bool(dbl.value)) == T.next_justified_line(FakeFont(1), raw, 200, max_w, False)
+
+
+def test_the_word_lists_are_read_only_when_a_line_needs_one(lib, tmp_path):
+    lib.UtIcu(0)
+    lib.UtWords(str(WORD_LISTS) + "\\")
+    _break_flags(lib, T.encode("Hello 日本語 été"))
+    assert [lib.UtWordsRead(i) for i in range(4)] == [0, 0, 0, 0]
+    _break_flags(lib, T.encode(WORD_SAMPLES[0][0]))
+    assert lib.UtWordsRead(0) > 1000 and [lib.UtWordsRead(i) for i in (1, 2, 3)] == [0, 0, 0]
+    lib.UtWords(str(tmp_path) + "\\")                             # a folder without the lists: the table, as before
+    import vf2_line_break as LB
+    raw = T.encode(WORD_SAMPLES[0][0])
+    us = T.units(raw)
+    assert _break_flags(lib, raw) == LB.break_flags([(ord(u.text[0]), ord(u.text[min(len(u.text), 16) - 1])) for u in us])
+    assert lib.UtWordsRead(0) == 1
+    lib.UtWords(str(WORD_LISTS) + "\\")
+
+
+def test_with_icu_the_dll_and_python_break_the_same(lib):
+    """The first choice in both: Windows' icu.dll."""
+    import vf2_line_break as LB
+    lib.UtIcu.argtypes = [ctypes.c_int]
+    lib.UtIcu.restype = ctypes.c_int
+    if not lib.UtIcu(1):
+        pytest.skip("this Windows has no icu.dll")
+    LB.use_icu(True)
+    try:
+        for text, _w in list(WORD_SAMPLES.values()) + [("日本語。「日本」、きゃ", None)]:
+            raw = T.encode(text)
+            us = T.units(raw)
+            want = LB.break_flags([(ord(u.text[0]), ord(u.text[min(len(u.text), 16) - 1])) for u in us],
+                                  [tuple(ord(c) for c in u.text[:16]) for u in us])
+            assert _break_flags(lib, raw) == want, text
+    finally:
+        LB.use_icu(False)
         lib.UtIcu(0)
 
 
