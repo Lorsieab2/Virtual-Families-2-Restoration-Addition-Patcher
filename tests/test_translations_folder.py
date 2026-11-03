@@ -539,6 +539,18 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn("github.event.sender.login == github.repository_owner", accept)
         self.assertIn("--match-head-commit \"$HEAD_SHA\"", accept)
 
+    def test_a_newer_event_cancels_the_older_run_of_the_same_pull_request(self):
+        # A stale run must not scan, check or merge after the pull request moved on (the owner's
+        # Codex review of the VV patcher's translation workflow, P1).
+        self.assertRegex(self.text, r"(?m)^concurrency:\n  group: translations-\$\{\{ github\.event\.pull_request\.number "
+                                    r"\|\| github\.run_id \}\}\n  cancel-in-progress: \$\{\{ github\.event_name == "
+                                    r"'pull_request_target' \}\}\n")
+        # pushes to main and manual runs are never in a pull request's group, so they are never cancelled
+        self.assertNotIn("cancel-in-progress: true", self.text)
+        # the merge still names the commit that fired this run
+        self.assertIn("HEAD_SHA: ${{ github.event.pull_request.head.sha }}", self.text)
+        self.assertIn("--match-head-commit \"$HEAD_SHA\"", self.text)
+
     def test_never_checks_out_or_runs_the_pull_request(self):
         self.assertNotIn("ref:", self.text)
         self.assertNotRegex(self.text, r"head\.ref|head_ref|refs/pull|merge_commit_sha")
