@@ -17,7 +17,7 @@ This tool
 * resolve(exe): the algorithm the DLL runs, in Python, on any executable;
 * render_header(): the C header, a pure function of b200_translations_sites and the core executable;
 * scan_limits(exe): every place the game copies one of its own strings into a fixed space (the same scan as the
-  Virtual Families 1 Fun Patcher's tools/build_vf1_translation_limits.py), and render_limits(): data/
+  Virtual Families 1 Fun Patcher's tools/build_vf1_translation_limits.py), and render_limits(): src/
   vf2_translation_limits.json and runtime/native/b200tr/b200tr_limits.h.
 
 A line the game hands to GetString and then to strncpy with a constant count n gets n - 1 bytes of room; one it
@@ -44,7 +44,7 @@ from gen_b200_history_sites import Exe, SiteError, _md, find_all, pin_mask  # no
 ROOT = RUNTIME.parent
 HEADER = RUNTIME / "native" / "b200tr" / "b200tr_sites.h"
 LIMITS_H = RUNTIME / "native" / "b200tr" / "b200tr_limits.h"
-LIMITS_JSON = ROOT / "data" / "vf2_translation_limits.json"
+LIMITS_JSON = ROOT / "src" / "vf2_translation_limits.json"
 
 for _p in S.PINS:                 # gen_b200_history_sites.pin_mask reads .skip
     _p.skip = 0

@@ -216,6 +216,17 @@ class World:
         e.call(self.site("sprintf"), (dst, fmt_ptr, *args))
         return self._bytes(dst)
 
+    def text_w(self, english: str) -> str:
+        """B200Tr_TextW: what a companion DLL is handed for a wide text."""
+        e = self.e
+        buf = e.alloc(2 * len(english) + 4)
+        e.write(buf, english.encode("utf-16-le") + b"\0\0")
+        return e.wstr(e.call(e.dll_export("B200Tr_TextW"), (buf,)))
+
+    def text_a(self, english: str, room: int) -> bytes:
+        """B200Tr_TextA: what a companion DLL is handed for a narrow text."""
+        return self._bytes(self.e.call(self.e.dll_export("B200Tr_TextA"), (self.cstring(english.encode("latin-1")), room)))
+
     def cstring(self, data: bytes) -> int:
         p = self.e.alloc(len(data) + 2)
         self.e.write(p, data + b"\0")
@@ -231,12 +242,17 @@ class World:
 def make_file(world: World, translations: dict[int, str], *, code="fr", language="Français", translator="(TEST)",
               game=None) -> bytes:
     """A translation file (UTF-8 with a BOM) for the executable's own table: id -> translation."""
+    import vf2_translation_strings as ts
     entries = []
     english = {}
     for id_, _key, text, _va in world.records():
         english.setdefault(id_, text.decode("cp1252"))
+    patch = {f"patch/{r['name']}": r["english"] for r in ts.patch_data()["literals"]}
     for id_ in translations:
-        entries.append(tf.Entry(tf.make_key("strings", str(id_), english[id_]), english[id_]))
+        if isinstance(id_, str):                                     # a "patch/<name>" line
+            entries.append(tf.Entry(tf.make_key("patch", id_.split("/", 1)[1], patch[id_]), patch[id_]))
+        else:
+            entries.append(tf.Entry(tf.make_key("strings", str(id_), english[id_]), english[id_]))
     f = tf.new_file("vf2", entries, language, code, translator)
     for row, id_ in zip(f.rows, translations):
         row.translation = translations[id_]
