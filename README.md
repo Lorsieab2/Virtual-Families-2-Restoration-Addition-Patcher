@@ -602,7 +602,7 @@ release bundle, like almost everything else)
   proved by `runtime/tools/gen_b200_translations_sites.py`) and reads the table, its size and the index from them.
   It calls `theStringManager::Get()` first, because the constructor's last loop clears every override it did not
   fill itself. **Room:** a translation longer than the space the game copies it into is refused (English stays):
-  `data/vf2_translation_limits.json` / `b200tr_limits.h` list, from the code of the 32 matrix executables, each line
+  `src/vf2_translation_limits.json` / `b200tr_limits.h` list, from the code of the 32 matrix executables, each line
   a `strncpy` copies (its count less one), each a `sprintf`, `strncat` or byte loop copies (its English length),
   and the lines handed to `sprintf` as a format (a plain `%` of a translation is handed on as `%%`); every line at
   most 1000 bytes. Whatever the scan could not tell is guarded at run time: the entries of the C runtime's `strncpy`

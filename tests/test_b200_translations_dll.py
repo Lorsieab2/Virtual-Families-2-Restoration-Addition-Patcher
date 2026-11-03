@@ -41,7 +41,7 @@ CORE_EXE = os.environ.get("VF2_B200_CORE_EXE")
 OTHER_EXE = os.environ.get("VF2_UNICODE_EXE")
 VCVARS = os.environ.get("VF2_VCVARS32")
 DELTAS = (0, 0x01230000)
-LIMITS = json.loads((ROOT / "data" / "vf2_translation_limits.json").read_text(encoding="utf-8"))
+LIMITS = json.loads((ROOT / "src" / "vf2_translation_limits.json").read_text(encoding="utf-8"))
 SETTING = "translations"
 RETRY = "Réessayer"                      # French for Try Again (line 113)
 
@@ -507,3 +507,35 @@ def test_the_order_of_the_writes_trampolines_first(world):
         assert b[0] == 0xE9, name
         target = (world.site(name) + 5 + int.from_bytes(b[1:5], "little", signed=True)) & 0xFFFFFFFF
         assert 0x30000000 <= target < 0x30200000, hex(target)
+
+
+def test_the_patches_own_text_is_handed_to_the_companion_dlls(world):
+    assert _install(world, {"patch/time.pause": "Mettre en pause", "patch/time.time_controls": "Gestion du temps",
+                            113: RETRY}) == 1
+    assert world.status()["patchLines"] == 2
+    assert world.text_w("Pause") == "Mettre en pause"                       # a wide text, by its English
+    assert world.text_w("Resume") == "Resume"                               # no translation: the English itself
+    assert world.text_a("Time Controls", 24) == b"Gestion du temps"          # a narrow text, within its room
+    assert world.text_a("Time Controls", 10) == b"Time Controls"             # too long for the room: English
+    assert world.get_string(113) == RETRY.encode("cp1252")                   # the game's own lines are not disturbed
+
+
+def test_a_patch_text_with_places_is_a_format_and_a_plain_percent_is_doubled(world):
+    status = "%s. Speed: %s."
+    assert _install(world, {"patch/time.s_speed_s": "%s. Vitesse : %s \u00e0 50 %."}) == 1
+    got = world.text_w(status)
+    assert got == "%s. Vitesse : %s \u00e0 50 %%."                           # FormatW writes "%%" as one percent sign
+    assert tf.runtime_text("%s. Vitesse : %s \u00e0 50 %.", status, True) == got
+
+
+def test_a_patch_text_that_changes_its_places_shows_english(world):
+    assert _install(world, {"patch/time.s_speed_s": "%s. Vitesse."}) == 0           # one place short: refused
+    assert "placeholders" in world.log()
+    assert world.text_w("%s. Speed: %s.") == "%s. Speed: %s."
+
+
+def test_a_patch_text_longer_than_its_room_shows_english(world):
+    assert _install(world, {"patch/time.pause": "x" * 81, "patch/time.resume": "x" * 80}) == 1
+    assert world.text_w("Pause") == "Pause"                                          # 81 bytes: refused, English
+    assert world.status()["used"] == 2 and world.status()["refused"] == 0          # both read; the room is checked when handed out
+    assert world.text_w("Resume") == "x" * 80
