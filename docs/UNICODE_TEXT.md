@@ -197,6 +197,22 @@ random texts of every script, the same break places, and the header equals what 
 with `icu.dll`, ICU's own answers: Thai breaks between words only, no line starts with a closing mark or ends with an
 opening one) and `tests/test_vf2_game_text.py`.
 
+### The fallback chain and the Game Text tool
+
+* A character no game font and no patcher-made letter has is drawn by Windows from the first installed face of one
+  shared list (the same in `kChain` of `b200unicode.cpp` and `FALLBACK_CHAIN` of `src/vf2_glyph_render.py`, in the
+  shared spec's order, checked by `tests/test_fallback_chain.py`): Segoe UI, Segoe UI Historic, Segoe UI Symbol, Segoe UI
+  Emoji, Yu Gothic UI, Meiryo, Microsoft YaHei UI, Microsoft JhengHei UI, Malgun Gothic, SimSun-ExtB, Nirmala UI, Ebrima,
+  Gadugi, Leelawadee UI, Myanmar Text, Javanese Text, Mongolian Baiti, Microsoft Himalaya, Microsoft Yi Baiti, Microsoft
+  New Tai Lue, Microsoft Tai Le, Microsoft PhagsPa, Sylfaen, Cambria Math, Noto Sans, Noto Sans Symbols, Noto Sans
+  Symbols 2, Noto Sans CJK JP, Noto Sans CJK SC, Noto Sans Math, Noto Sans Cuneiform, Noto Color Emoji. A face is used
+  for a character only when its character map has it; one that is not installed is skipped. (Emoji are still drawn in
+  one colour, the text's; colour emoji are not built yet.)
+* The Tools tab entry is **Game Text...** (B207 called it Game Font Text). Besides every game font, colours, wrapping,
+  the character picker with its (game font) / (patcher-made) / (drawn by Windows: face) / (missing: box) labels and
+  "As Use Unicode Font draws it", it has **As the stock game shows it**: the text is drawn one stored byte at a time
+  from the sheet by the stock rule, a byte the font lacks showing the `!` of glyph 0 (`vf2_game_text.stock_font`).
+
 ### The other DLLs
 
 * The Family History DLL (vf2history_b200.dll) writes WHOLE names into the log, as Virtual Families 1's does: a

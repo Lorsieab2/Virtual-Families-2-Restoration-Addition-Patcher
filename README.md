@@ -211,7 +211,7 @@ actions, as before. **Tools** holds:
   `src/family_tree_backgrounds/`; the evidence: `docs/family-tree-maker.md`; tests: `tests/test_family_tree.py`
   and `tests/test_family_tree_memory.py`, `tests/test_relationships.py`, `tests/test_tree_namesakes.py`,
   `tests/test_tree_big_speed.py`.
-- **Game Font Text...** writes any text in the game's own four fonts and saves it as a PNG (Game size, 2x, 4x,
+- **Game Text...** (called Game Font Text in B207) writes any text in the game's own four fonts and saves it as a PNG (Game size, 2x, 4x,
   a custom size, the Picture Maker's export): a text box, the font, the game's tint colours, a wrap width, a
   live preview drawn exactly as the game draws text (`src/vf2_game_text.py`, proved against the game's own code),
   and a character picker (accents by language, and any Unicode character by name or code). Letters the fonts lack
