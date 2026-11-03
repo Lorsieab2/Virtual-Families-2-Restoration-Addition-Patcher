@@ -319,6 +319,7 @@ ALLOWED = {
     ("vf2_glyph_maker.py", "ascii"): "the patcher's own glyph list file",
     ("vf2_game_text.py", "latin-1"): "the rule itself",
     ("vf2_text_tool.py", "utf-16-le"): "dropping lone surrogates from typed text",
+    ("vf2_translation_format.py", "utf-16-le"): "the room of a Windows popup's text, counted in UTF-16 units",
     ("vf2_glyph_render.py", "utf-16-be"): "a font file's own name table",
     ("vf2_glyph_render.py", "mac_roman"): "a font file's own name table (Macintosh records)",
     ("vf2_unicode_font.py", "utf-16"): "the Unicode Font tool's own ini (Windows' Unicode ini form)",
