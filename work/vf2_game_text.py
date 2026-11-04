@@ -368,12 +368,15 @@ def runtime_glyph(font: GameFont, text: str) -> Glyph:
         face = R.font_for(base, (chosen,) + R.FALLBACK_CHAIN)
         if face is None:
             return missing_box(font)
-        adv, grey, w, ox = R.render(text, face, px, g["weight"], h, row, True)
+        adv, grey, w, ox = R.render(text, face, px, R.weight_for(face, g["weight"]), h, row, True)
     else:
         face = R.font_for(base)
         if face is None:
             return missing_box(font)
-        adv, grey, w, ox = R.render(text, face, g["px"], g["weight"], h, g["top"])
+        # on the game font's baseline (TA_BASELINE), so a face with another ascent (the bundled fonts) sits where
+        # the game's letters do; for Segoe UI itself this is the same drawing as the text's top at gdi.top
+        adv, grey, w, ox = R.render(text, face, g["px"], R.weight_for(face, g["weight"]), h, unicode_baseline(font),
+                                    True)
     adv = max(0, min(adv, w - ox))
     lut = g["alpha"]
     a = bytearray(adv * h)
@@ -619,7 +622,7 @@ def _breaks(us: list) -> list[bool]:
     if all(len(u.raw) == 1 and u.raw[0] < 0x80 for u in us):
         return [False] * (len(us) + 1)
     chars = [(ord(u.text[0]), ord(u.text[min(len(u.text), 16) - 1])) for u in us[:4096]]
-    flags = _line_break.break_flags(chars)
+    flags = _line_break.break_flags(chars, [tuple(ord(c) for c in u.text[:16]) for u in us[:4096]])
     return flags + [False] * (len(us) + 1 - len(flags))
 
 

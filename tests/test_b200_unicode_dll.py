@@ -53,7 +53,7 @@ def test_the_dll_source_names_every_site_and_writes_nothing_else():
     src = (NATIVE / "b200unicode.cpp").read_text(encoding="utf-8")
     names = (NATIVE / "b200names.inc").read_text(encoding="utf-8")
     assert not re.search(r"\b0x4[0-9A-Fa-f]{5}\b", names)
-    assert names.count("PlanJump(plan,") == 2 and "PlanSlot(" not in names
+    assert names.count("PlanJump(plan,") == 2 and names.count("PlanSlot(") == 1        # + theGameState's Save slot
     header = (NATIVE / "b200unicode_sites.h").read_text(encoding="utf-8")
     for name, _obj, _fn in S.FUNCTIONS:
         assert f"UNI_PIN_{name.upper()}" in header
@@ -219,8 +219,9 @@ def test_the_plan_is_the_proved_sites(exe, dlls, delta):
     h = w.hooks()
     jumps = {wr["va"]: wr for wr in writes if not wr["data"]}
     slots = {wr["va"]: wr for wr in writes if wr["data"]}
-    # 7 entry jumps + 3 slots, then the long names' 2 (SetCanEdit, the text box's Draw: tests/test_name_limit.py)
-    assert len(writes) == 12 and len(jumps) == 9 and len(slots) == 3
+    # 7 entry jumps + 3 slots, then the long names' 3 (SetCanEdit, the text box's Draw, theGameState's Save slot:
+    # tests/test_name_limit.py)
+    assert len(writes) == 13 and len(jumps) == 9 and len(slots) == 4
     for site, hook, length in (("DRAW_STRING", "draw_string", 5), ("DRAW_CHARS", "draw_chars", 5),
                                ("GET_WIDTH", "get_width", 5), ("NEXT_LINE", "next_line", 5),
                                ("GET_TEXT", "get_text", 5), ("DRAW_JUSTIFIED", "draw_justified", 9),
@@ -621,7 +622,18 @@ def draw_world(exe, dlls, tmp_path_factory):
     import vf2_glyph_maker as M
     folder = tmp_path_factory.mktemp("unicode_text")
     M.write_sheets(GAME_IMAGES, folder)
-    return DrawWorld(exe, dlls[1], folder), M.load_fonts(GAME_IMAGES)
+    w = DrawWorld(exe, dlls[1], folder)
+    # the DLL's GDI calls on this machine's real GDI: a font's Load measures Segoe UI's ascent (the baseline every
+    # Windows face is drawn on), and a character no glyph file has is drawn by Windows
+    from test_unicode_font import RealGdi, _kernel_seams
+    import vf2_glyph_render as R
+    if not R.available():
+        pytest.skip("needs Windows' GDI")
+    w.s, w.h = w.sites(), w.hooks()
+    w.game_seams(w.s)                                  # once: two seams on one address would both run
+    w.real_gdi = RealGdi(w.e, {})
+    _kernel_seams(w.e)
+    return w, M.load_fonts(GAME_IMAGES)
 
 
 SAMPLES = ["Łódź Żółć", "İstanbul ığüşöç", "José Müller", "Nguyễn Thị", "€5 “quotes” — ok…", "Αθήνα Москва",
@@ -689,6 +701,69 @@ def test_a_typed_name_is_never_wider_than_the_widest_stock_name(draw_world, name
     assert w.e.read(buf, 19).split(b"\0")[0] == T.encode(start)
 
 
+THAI = "\u0e2a\u0e27\u0e31\u0e2a\u0e14\u0e35\u0e04\u0e23\u0e31\u0e1a\u0e02\u0e2d\u0e1a\u0e04\u0e38\u0e13\u0e21\u0e32\u0e01"
+
+
+def test_without_icu_the_games_wrapping_breaks_thai_between_words(draw_world):
+    """Windows without icu.dll (LoadLibraryExW finds none here): the DLL's GetNextJustifiedLine reads
+    "Unicode Text\\Word Lists\\thaidict.txt" from beside the DLL the first time a Thai line is wrapped, and every line
+    ends between two words, exactly where the patcher's rule (src/vf2_game_text.next_justified_line, ICU off, the same
+    lists) ends it."""
+    import vf2_line_break as LB
+    w, fonts = draw_world
+    if not hasattr(w, "real_gdi"):
+        w.s, w.h = w.sites(), w.hooks()
+        w.game_seams(w.s)
+        from test_unicode_font import RealGdi, _kernel_seams
+        import vf2_glyph_render as R
+        if not R.available():
+            pytest.skip("needs Windows' GDI")
+        w.real_gdi = RealGdi(w.e, {})
+        _kernel_seams(w.e)
+    e = w.e
+    opened = []
+    real_open = w._open
+
+    def open_(em):
+        path = em.wstr(em.arg(0))
+        opened.append(path)
+        if path.endswith("\\Unicode Text\\Word Lists\\thaidict.txt"):
+            handle = 0x900 + len(w.files)
+            w.files[handle] = (ROOT / "runtime" / "word-lists" / "thaidict.txt").read_bytes()
+            return handle, 28
+        return real_open(em)
+    e.imports["CreateFileW"] = open_
+    e.imports["GetPrivateProfileIntW"] = lambda em: (0, 16)
+    folder = e.alloc(64)
+    e.write(folder, "C:\\Game\\Patcher Files\\\0".encode("utf-16-le"))
+    e.call(e.dll_export("B200Unicode_TestReadSettings"), (folder,))
+    e.call(e.dll_export("B200Unicode_TestWordLists"))
+    font_obj, _f, _sheet = w.font("Segoe24")
+    font, _s = fonts["Segoe24"]
+    LB.use_icu(False)
+    try:
+        for text in ("Hello there", THAI, THAI + " " + THAI):
+            raw = T.encode(text)
+            for width in (60, 120, 400):
+                src = e.alloc(len(raw) + 1)
+                e.write(src, raw + b"\0")
+                out, dbl = e.alloc(len(raw) + 16), e.alloc(4)
+                end = e.call(w.h["next_line"], (src, out, 255, width, dbl, 0,
+                                                struct.unpack("<I", struct.pack("<f", 1.0))[0]), ecx=font_obj, edx=0)
+                line = e.read(out, len(raw) + 1).split(b"\0")[0]
+                want_line, want_used, _d = T.next_justified_line(font, raw, 255, width, False)
+                assert (line, end - src) == (want_line, want_used), (text, width)
+                if text == THAI and width < 400:
+                    words = ["\u0e2a\u0e27\u0e31\u0e2a\u0e14\u0e35", "\u0e04\u0e23\u0e31\u0e1a",
+                             "\u0e02\u0e2d\u0e1a\u0e04\u0e38\u0e13", "\u0e21\u0e32\u0e01"]
+                    assert T.decode(line) in ["".join(words[:k]) for k in (1, 2, 3)], width     # whole words
+    finally:
+        LB.use_icu(True)
+    thai_opens = [p for p in opened if p.endswith("thaidict.txt")]
+    assert thai_opens == ["C:\\Game\\Patcher Files\\Unicode Text\\Word Lists\\thaidict.txt"]   # once, lazily
+    assert not any(p.endswith(("laodict.txt", "khmerdict.txt", "burmesedict.txt")) for p in opened)
+
+
 # ---------------------------------------------------------------------------------------------- the Unicode contract
 class StartupWorld(World):
     """B200Unicode_Startup run whole, in the DLL's own code under unicorn: the settings read, SDL2.dll's functions
@@ -707,7 +782,13 @@ class StartupWorld(World):
             "GetProcAddress": self._proc, "VirtualProtect": self._protect,
             "FlushInstructionCache": lambda em: (1, 12), "GetCurrentProcess": lambda em: (0xFFFFFFFF, 0),
             "GetProcessHeap": lambda em: (1, 0), "HeapAlloc": lambda em: (em.alloc(em.arg(2) + 16), 12),
+            "AddFontResourceExW": self._add_font,          # the bundled fonts: none here (the DLL logs and goes on)
         })
+        self.fonts_asked = []
+
+    def _add_font(self, em):
+        self.fonts_asked.append((em.wstr(em.arg(0)), em.arg(1)))
+        return 0, 12
 
     def _module_file(self, em):
         path = "C:\\Game\\Virtual Families 2 Patcher Files\\vf2unicode_b200.dll\0".encode("utf-16-le")
@@ -782,12 +863,17 @@ def test_unicode_text_active_is_nonzero_only_once_the_hooks_are_installed(exe, d
     assert w.e.read(sites["DRAW_STRING"], 1) == b"\xE9" and before[0] != 0xE9
     # every trampoline the hooks call was made executable before it could run (DEP)
     assert sum(1 for _a, _n, prot in w.protects if prot == 0x40) >= 4
+    # Startup asked Windows for every bundled font from the setting's own folder, privately (FR_PRIVATE)
+    import vf2_glyph_render as R
+    sub = "Unicode Font Text" if mode == 2 else "Unicode Text"
+    assert w.fonts_asked == [(f"C:\\Game\\Virtual Families 2 Patcher Files\\{sub}\\Fonts\\{n}", 0x10)
+                             for n in R.BUNDLED_FONTS]
 
 
 def test_unicode_text_active_is_zero_with_the_settings_off(exe, dlls):
     w = StartupWorld(exe, dlls[1], mode=0)
     w.startup()
-    assert w.status()[4] == 0 and w.active() == 0 and not w.protects
+    assert w.status()[4] == 0 and w.active() == 0 and not w.protects and not w.fonts_asked
 
 
 @pytest.mark.parametrize("fail_at", [1, 5, 9])

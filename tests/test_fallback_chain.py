@@ -20,6 +20,8 @@ SPEC = (
     "Microsoft New Tai Lue", "Microsoft Tai Le", "Microsoft PhagsPa", "Sylfaen", "Cambria Math", "Noto Sans",
     "Noto Sans Symbols", "Noto Sans Symbols 2", "Noto Sans CJK JP", "Noto Sans CJK SC", "Noto Sans Math",
     "Noto Sans Cuneiform", "Noto Color Emoji",
+    # the bundled fonts (runtime/fonts), loaded for the game only, last
+    "Noto Serif Tangut", "Unifont", "Unifont Upper", "Last Resort High-Efficiency",
 )
 
 
@@ -30,9 +32,10 @@ def _dll_chain() -> tuple:
 
 
 def test_the_patcher_and_the_dll_use_the_shared_order():
-    assert len(SPEC) == 32 and len(set(SPEC)) == 32
+    assert len(SPEC) == 36 and len(set(SPEC)) == 36
     assert tuple(R.FALLBACK_CHAIN) == SPEC
     assert _dll_chain() == SPEC
+    assert R.BUNDLED_FACES == SPEC[-4:]
 
 
 def test_a_face_that_is_not_installed_is_skipped():

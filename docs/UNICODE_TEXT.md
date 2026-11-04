@@ -124,7 +124,9 @@ or merged with another, is skipped; B207's `VF2 Names 1` (three columns, no CRC)
 written makes the file version 2. Written through a temporary file and MoveFileEx, at once when a name leaves its
 box; a record that could not be written, or that was made while no save slot was known, stays pending and is tried
 again at a later draw (at most every 2 seconds; a record with no slot goes to the slot being played once there is
-one). The one rule for reading it is `runtime/native/b200unicode/b200names_file.h`, shared by the Unicode text DLL
+one), and at once after every save of the game (theGameState's Save vtable slot, chained to whatever it held, the
+Time Controls DLL's handler included), so a name stored just before the game saves and quits is never lost. Never
+from the DLL's detach. The one rule for reading it is `runtime/native/b200unicode/b200names_file.h`, shared by the Unicode text DLL
 and the Family History DLL, and `src/vf2_names.py`. A line is never removed: a short form no longer in the save is harmless (a new one is never made equal
 to it), and the game's previous save `<N+20>` stays readable. A line that is not valid (no mark, too long for its
 room, a control character, more than 1,200 bytes) is left out; a file that cannot be read is
@@ -182,9 +184,16 @@ a word wider than the line:
   default mode lets start a line) or ends with an opening one (`「`, `(`);
 * where Windows has `icu.dll` (Windows 10 version 1903 and later) the DLL loads it from System32
   (`LOAD_LIBRARY_SEARCH_SYSTEM32`, `b200icu.h`), only when a text has such a letter, and asks `ubrk_open(UBRK_LINE)`,
-  which also knows the Thai, Lao, Khmer and Myanmar words; without it the table `FALLBACK_RANGES` of
-  `src/vf2_line_break.py` (the same table as Virtual Families 1's) is used, and the patcher's own wrapping (the Game
-  Text tool's preview) always uses it; `runtime/tools/gen_b200_line_break.py` writes the DLL's copy;
+  which also knows the Thai, Lao, Khmer and Myanmar words; the patcher's own wrapping (`src/vf2_line_break.py`: the
+  Game Text tool's preview, the translation checks) asks the same `icu.dll` first. Without it the table
+  `FALLBACK_RANGES` of `src/vf2_line_break.py` (the same table as Virtual Families 1's) is used
+  (`runtime/tools/gen_b200_line_break.py` writes the DLL's copy), and inside a run of Thai, Lao, Khmer or Burmese
+  letters a line breaks only between words: ICU 77-1's own word lists (`runtime/word-lists`, shared by all the Fun
+  Patchers and copied unchanged, SHA-256 checked by `tests/test_word_lists.py`), longest match first
+  (`b200words.h`, `vf2_line_break.dictionary_breaks`). A list is read only the first time such a line is wrapped. The
+  release ships the four lists and ICU's licence beside the DLL (`Unicode Text\Word Lists\`, and
+  `Unicode Font Text\Word Lists\` for Use Unicode Font) and with the patcher (`word-lists\`). Chinese and Japanese
+  need no list: ICU's line breaking does not use one either;
 * a word wider than the whole line is cut after its longest start of whole characters that fits (at least one),
   never inside a character. The stock function does not hang on such a word, as Virtual Families 1's wrapper did: it
   answers with an empty line and eats one letter, so the letters of the word were lost one call at a time
@@ -205,9 +214,29 @@ opening one) and `tests/test_vf2_game_text.py`.
   Emoji, Yu Gothic UI, Meiryo, Microsoft YaHei UI, Microsoft JhengHei UI, Malgun Gothic, SimSun-ExtB, Nirmala UI, Ebrima,
   Gadugi, Leelawadee UI, Myanmar Text, Javanese Text, Mongolian Baiti, Microsoft Himalaya, Microsoft Yi Baiti, Microsoft
   New Tai Lue, Microsoft Tai Le, Microsoft PhagsPa, Sylfaen, Cambria Math, Noto Sans, Noto Sans Symbols, Noto Sans
-  Symbols 2, Noto Sans CJK JP, Noto Sans CJK SC, Noto Sans Math, Noto Sans Cuneiform, Noto Color Emoji. A face is used
-  for a character only when its character map has it; one that is not installed is skipped. (Emoji are still drawn in
-  one colour, the text's; colour emoji are not built yet.)
+  Symbols 2, Noto Sans CJK JP, Noto Sans CJK SC, Noto Sans Math, Noto Sans Cuneiform, Noto Color Emoji, then the
+  bundled fonts: Noto Serif Tangut, Unifont, Unifont Upper, Last Resort High-Efficiency. A face is used for a character
+  only when its character map has it (formats 4, 12 and Last Resort's many-to-one 13); one that is not installed is
+  skipped. (Emoji are still drawn in one colour, the text's; colour emoji are not built yet.)
+* Every Windows face is drawn on the game font's baseline (TA_BASELINE at `gdi.top` + Segoe UI's ascent, the row
+  Use Unicode Font already used: `unicode_baseline`, the DLL's `FontRec.base`). For Segoe UI faces that is the very
+  same drawing as before; a face with another ascent (the bundled fonts, Cambria Math) now sits where the game's
+  letters do instead of floating above or below the line.
+* **Bundled fonts** (`runtime/fonts`, `runtime/fonts/README.md` lists each source, version, SHA-256 and licence;
+  `tests/test_bundled_fonts.py` checks them): Noto Sans Cuneiform 2.001 (OFL), Noto Serif Tangut 2.170 (OFL), GNU
+  Unifont 18.0.01 and Unifont Upper 18.0.01 (OFL 1.1 or GPL 2+ with the font embedding exception; GnuPG-verified),
+  Last Resort High-Efficiency 18.000 (OFL). The release ships them with their licences in `Unicode Text\Fonts\` (and
+  `Unicode Font Text\Fonts\` for Use Unicode Font); `B200Unicode_Startup` adds each with `AddFontResourceExW`
+  (`FR_PRIVATE`: this game only, never installed in Windows), and the patcher's Game Text preview loads the same files
+  the same way (`vf2_glyph_render.load_bundled_fonts`). Unifont and Last Resort have a glyph for every code point, so
+  the bundled faces only draw code points that are assigned and neither controls nor surrogates (`UT_ASSIGNED` /
+  `vf2_unicode_tables.ASSIGNED`); the rest keep the missing-glyph box. Every assigned code point of Unicode 18.0 is
+  drawn by some face of the chain (Last Resort alone covers all of them, with its block symbols): a script no font has
+  (Jurchen, Seal, CJK Extension J) shows Last Resort's symbol for its block, not a box.
+* **Unicode 18.0.0 tables**: `runtime/tools/gen_b200_unicode_tables.py` reads `UnicodeData.txt`
+  (`https://www.unicode.org/Public/18.0.0/ucd/`, SHA-256 `0736451de439ae7baf1425136617da495e09ee5afbe6e394374db7009ea08950`,
+  Unicode licence `runtime/fonts/UNICODE-LICENSE.txt`) and writes `EXTEND`, `COMPOSE` and `ASSIGNED` for the patcher
+  (`src/vf2_unicode_tables.py`) and the DLL (`b200unicode_tables.h`), the same whatever Python runs them.
 * The Tools tab entry is **Game Text...** (B207 called it Game Font Text). Besides every game font, colours, wrapping,
   the character picker with its (game font) / (patcher-made) / (drawn by Windows: face) / (missing: box) labels and
   "As Use Unicode Font draws it", it has **As the stock game shows it**: the text is drawn one stored byte at a time

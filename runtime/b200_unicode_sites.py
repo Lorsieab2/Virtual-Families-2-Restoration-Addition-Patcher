@@ -128,13 +128,21 @@ NAME_FUNCTIONS = (
     ("villager_ctor", "theVillagerScene", "??0theVillagerScene@@QAE@XZ"),
     ("adoption_ctor", "AdoptionScene", "??0CAdoptionScene@@AAE@XZ"),
     ("dating_ctor", "DatingScene", "??0CDatingScene@@AAE@XZ"),
+    ("gs_save", "theGameState", "?Save@theGameState@@UAE_NH@Z"),
 )
 
 NAME_SITES = (
     ("SET_CAN_EDIT", "set_can_edit", "entry"),
     ("BOX_DRAW", "box_draw", "entry"),
     ("GAME_STATE_INSTANCE", "gs_get", ("abs", GAME_STATE_INSTANCE)),
+    ("GS_SAVE", "gs_save", "entry"),
 )
+# theGameState::Save(slot), the game's own save: its vtable slot 14 (+38h) is chained (whatever it holds: the stock
+# Save, or the Time Controls DLL's handler), and pending Names records are written right after every save. Up to 28
+# Children writes a jmp over Save's first 5 bytes, so the pin does not compare them.
+GS_TYPE_NAME = ".?AVtheGameState@@"
+GS_SAVE_VSLOT = 0x38
+NAME_PIN_SKIP = {"gs_save": 5}
 
 # The name boxes: every ldwTextControl::SetCanEdit call that makes a box for a name (found by its return address).
 # Kind F: a family name (its fields keep 19 bytes: GetText(.., 14h)); kind M: a family member's name (18 bytes:

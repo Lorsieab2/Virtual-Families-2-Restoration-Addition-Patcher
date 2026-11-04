@@ -324,11 +324,15 @@ class NamesWorld(DrawWorld):
     def __init__(self, exe_path, dll, glyph_dir):
         super().__init__(exe_path, dll, glyph_dir)
         e = self.e
+        # a game font's baseline row is measured with GDI (Segoe UI's ascent) the first time the font is drawn
+        from test_unicode_font import RealGdi
+        self.real_gdi = RealGdi(e, {})
         import gen_b200_unicode_sites as G
         self.exe_path = exe_path
         _status, writes = self.plan(1)
         for wr in writes:
             e.write(wr["va"], wr["bytes"])
+        self.writes = writes
         self.game_seams(self.s)
         self.tick = 100000                              # GetTickCount (the pending Names records retry every 2 s)
         self.fail_write = False                         # CreateFileA for writing fails (a Names file that cannot be written)
@@ -336,9 +340,9 @@ class NamesWorld(DrawWorld):
         out = e.alloc(4 * 32)
         e.call(e.dll_export("B200Unicode_TestNames"), (out,))
         self.names_on = e.r32(out)
-        sites = [e.r32(out + 4 * (1 + i)) for i in range(3)]
-        self.set_can_edit, self.box_draw, self.instance = sites
-        self.returns = [e.r32(out + 16 + 4 * i) for i in range(10)]
+        sites = [e.r32(out + 4 * (1 + i)) for i in range(4)]
+        self.set_can_edit, self.box_draw, self.instance, self.gs_save = sites
+        self.returns = [e.r32(out + 20 + 4 * i) for i in range(10)]
         self.proved = G.resolve_names(G.Exe(exe_path), G.load_name_pins(OBJS))
         # the game state
         self.gs = e.alloc(0x26000, fill=0xCD)
@@ -477,6 +481,7 @@ def test_the_long_names_are_proved(world):
     assert w.set_can_edit == w.proved["sites"]["SET_CAN_EDIT"]
     assert w.box_draw == w.proved["sites"]["BOX_DRAW"]
     assert w.instance == w.proved["sites"]["GAME_STATE_INSTANCE"]
+    assert w.gs_save == w.proved["sites"]["GS_SAVE"] == w.e.exe.get_dword_at_rva(w.proved["gs_vtable"] + S.GS_SAVE_VSLOT - w.e.base)
     assert w.returns == [at for _kind, at in w.proved["boxes"]]
 
 
@@ -818,6 +823,76 @@ def test_a_record_made_while_no_slot_is_known_waits_for_one(world):
     w.draw("Segoe24", b"x")
     assert _file(w, 3) == N.render([N.Entry(T.decode(short), N.MEMBER_ROOM, whole)]) and len(w.fs) == 1
     e.w32(w.gs + S.GS_CURRENT_SLOT, 1)
+
+
+def _restore(w, slot_va=None, slot_value=None):
+    """The executable's own bytes again where the plan wrote (the plan proves the stock bytes); then `slot_va`."""
+    e = w.e
+    for wr in w.writes:
+        e.write(wr["va"], e.exe.get_data(wr["va"] - e.base, wr["len"]))
+    if slot_va is not None:
+        e.w32(slot_va, slot_value)
+
+
+def _replan(w, slot_va=None, slot_value=None):
+    _restore(w, slot_va, slot_value)
+    status, writes = w.plan(1)
+    assert status == 1
+    for wr in writes:
+        w.e.write(wr["va"], wr["bytes"])
+    w.writes = writes
+    return writes
+
+
+def test_a_pending_record_is_written_by_the_games_save(world):
+    """A name stored while no slot is known (the new family's name, before its save slot is chosen) is written to
+    its Names file by the game's own save path, at once: theGameState's vtable +38h (Save) is chained, whatever it
+    held (here a handler outside the executable, as the Time Controls DLL's), and the save's own answer is kept."""
+    w, _fonts = world
+    e = w.e
+    slot_va = w.proved["gs_vtable"] + S.GS_SAVE_VSLOT
+    calls = []
+    time_controls = e.fake_code(b"\xC3")
+
+    def save(em):
+        calls.append((em.ecx, em.arg(0), e.r32(w.gs + S.GS_CURRENT_SLOT)))
+        e.w32(w.gs + S.GS_CURRENT_SLOT, em.arg(0))                   # the game saves into the slot it plays
+        return 1, 4
+    e.seam_live(time_controls, save)
+    try:
+        writes = _replan(w, slot_va, time_controls)
+        hooked = [wr for wr in writes if wr["va"] == slot_va]
+        assert len(hooked) == 1 and e.r32(slot_va) != time_controls
+        w.forget()
+        w.fs.clear()
+        e.w32(w.gs + S.GS_CURRENT_SLOT, 0xFFFFFFFF)                 # no save slot yet
+        whole = "Maximilianus Fitzgerald the Third"
+        short = _short_form_of(w, whole)
+        assert not w.fs                                              # pending
+        w.draw("Segoe24", b"x")                                      # a draw tries it now (no slot): the 2 s wait starts
+        assert not w.fs
+        got = e.call(e.r32(slot_va), (4,), ecx=w.gs)                 # at once the game saves into slot 4 and may quit
+        assert calls == [(w.gs, 4, 0xFFFFFFFF)] and got & 0xFF == 1
+        assert _file(w, 4) == N.render([N.Entry(T.decode(short), N.MEMBER_ROOM, whole)])   # no draw, no 2 s wait
+        e.call(e.r32(slot_va), (4,), ecx=w.gs)                       # nothing pending: the save alone
+        assert len(calls) == 2 and len(w.fs) == 1
+    finally:
+        _replan(w)
+        e.w32(w.gs + S.GS_CURRENT_SLOT, 1)
+
+
+def test_a_save_slot_holding_another_game_function_keeps_the_stock_limits(world):
+    w, _fonts = world
+    e = w.e
+    slot_va = w.proved["gs_vtable"] + S.GS_SAVE_VSLOT
+    try:
+        _restore(w, slot_va, w.set_can_edit)                         # inside the executable, but not Save
+        _status, writes = w.plan(1)
+        out = e.alloc(4 * 32)
+        e.call(e.dll_export("B200Unicode_TestNames"), (out,))
+        assert e.r32(out) == 0 and len(writes) == 10                  # the Unicode text, without the long names
+    finally:
+        _replan(w)
 
 
 def _fit(font, full: str, max_width: int) -> str:

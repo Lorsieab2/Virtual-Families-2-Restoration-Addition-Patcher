@@ -108,7 +108,7 @@ def test_every_text_a_dll_shows_is_marked_and_in_the_template():
 
 ALLOWED_FILE_TEXT = (
     r"^[\w.\-]+\.(ini|log|dll|dat|txt|png|tmp|exe|inc|h)$", r"^\.\w+$",
-    r"^(Segoe|Microsoft|Yu Gothic|Malgun|SimSun|Nirmala|Ebrima|Gadugi|Leelawadee|Javanese|Myanmar|Mongolian|Noto|Sylfaen|Meiryo|Cambria)",
+    r"^(Segoe|Microsoft|Yu Gothic|Malgun|SimSun|Nirmala|Ebrima|Gadugi|Leelawadee|Javanese|Myanmar|Mongolian|Noto|Sylfaen|Meiryo|Cambria|Unifont|Last Resort)",
     r"^(Use Unicode Font|Render Unicode with In-Game Fonts) installed$",   # the Unicode DLL's log line (a ternary)
     r"^The quick brown fox jumps over the lazy dog",            # the Unicode DLL's font-fit sample, never shown
     r"^slot %u: ",                                               # the rest of a Log() call on a later line

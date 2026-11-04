@@ -508,8 +508,11 @@ release bundle, like almost everything else)
     from the original game's own font pictures: accented letters composed from the game's own letters and accents,
     the rest drawn in the fonts' own style), and anything else is drawn when first needed from the first Windows
     font that has it (Segoe UI, Segoe UI Historic, Segoe UI Symbol, Segoe UI Emoji, the CJK fonts, Nirmala UI,
-    Ebrima ..., Noto if installed) at the game font's fitted size, weight and alpha levels, else a box. Emoji are
-    drawn in one colour (the text's), not in full colour;
+    Ebrima ..., Noto if installed, then the bundled Noto Sans Cuneiform, Noto Serif Tangut, GNU Unifont and Last
+    Resort, shipped in `Unicode Text\Fonts\` and loaded for the game only) at the game font's fitted size, on its
+    baseline, with its weight and alpha levels; every assigned character of Unicode 18.0 is drawn by one of them
+    (Last Resort shows a block symbol for a script no font has), and only unassigned code points and controls get
+    a box. Emoji are drawn in one colour (the text's), not in full colour;
   - **typing**: the game's text boxes take every character the keyboard sends (accented keys, dead keys, Alt
     codes, an input method); the original game drops all of them (`CheckForEvents` only passes a one-byte
     `SDL_TEXTINPUT`). A character is added only if the whole name still fits the box; Backspace removes a whole
@@ -1179,6 +1182,16 @@ These three do more than change eligibility or wording:
   exporter, runner, and GUI tests.
 - `work/assets/holiday_collectibles/` - curated Holiday Ornament source art and reproducible runtime assets.
 - `patcher_assets/optional_patches/` - checked-in source art and audio for the optional asset patches.
+- `runtime/word-lists/` - the word lists used to break Thai, Lao, Khmer and Burmese lines between words on a Windows
+  without `icu.dll`. They are ICU 77-1's own (ICU, Unicode, Inc. and others; the Lao word list by Brian Eugene Wilson
+  and Robert Martin Campbell; the Myanmar Karen Word Lists; Libtabe and IPADIC for Chinese and Japanese), under the
+  Unicode licence and the notices in `runtime/word-lists/ICU-LICENSE.txt`, which ships with them.
+- `runtime/fonts/` - the bundled fonts the Unicode text DLL loads for the game only, as the last fallback for
+  characters no Windows font has: Noto Sans Cuneiform 2.001 and Noto Serif Tangut 2.170 (Google, SIL Open Font
+  License 1.1), GNU Unifont 18.0.01 and Unifont Upper (Roman Czyborra, Paul Hardy and others; OFL 1.1 or GPL 2+ with
+  the font embedding exception) and Last Resort High-Efficiency 18.000 (Unicode, Inc., Apple; OFL 1.1), with their
+  licence texts and the Unicode licence of the Unicode 18.0 Character Database the tables are made from.
+  `runtime/fonts/README.md` lists each source, version, SHA-256 and how it was verified.
 - `data/vf2/` - target-identity records, build matrices, furniture/image tables, and the native contracts the tests pin.
 - `docs/offline-patcher.md` - technical patcher documentation.
 - `docs/villager-behavior-plans.md` - behavior ID and label-family reference.
