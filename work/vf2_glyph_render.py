@@ -20,7 +20,10 @@ import struct
 import sys
 from functools import lru_cache
 
-# The order the DLL tries, after the game font and the patcher-made glyphs (the owner's list).
+# The order the DLL tries, after the game font and the patcher-made glyphs (the owner's list). The last four are the
+# bundled fonts (BUNDLED_FONTS, runtime/fonts, loaded for this process only; Noto Sans Cuneiform is bundled too, in
+# its place); Unifont and Last Resort have a glyph for every code point, so they only draw assigned, non-control
+# characters.
 FALLBACK_CHAIN = (
     "Segoe UI", "Segoe UI Historic", "Segoe UI Symbol", "Segoe UI Emoji", "Yu Gothic UI", "Meiryo",
     "Microsoft YaHei UI", "Microsoft JhengHei UI", "Malgun Gothic", "SimSun-ExtB", "Nirmala UI", "Ebrima", "Gadugi",
@@ -28,7 +31,13 @@ FALLBACK_CHAIN = (
     "Microsoft New Tai Lue", "Microsoft Tai Le", "Microsoft PhagsPa", "Sylfaen", "Cambria Math", "Noto Sans",
     "Noto Sans Symbols", "Noto Sans Symbols 2", "Noto Sans CJK JP", "Noto Sans CJK SC", "Noto Sans Math",
     "Noto Sans Cuneiform", "Noto Color Emoji",
+    "Noto Serif Tangut", "Unifont", "Unifont Upper", "Last Resort High-Efficiency",
 )
+BUNDLED_FACES = FALLBACK_CHAIN[-4:]
+# The bundled font files, in the DLL's order (kBundledFonts): the repo's runtime/fonts, shipped as "Fonts\" beside
+# the DLL (the game) and payload/Fonts in the patcher's folder (this preview).
+BUNDLED_FONTS = ("NotoSansCuneiform-Regular.otf", "NotoSerifTangut-Regular.otf", "unifont-18.0.01.otf",
+                 "unifont_upper-18.0.01.otf", "LastResortHE-Regular.ttf")
 
 ANTIALIASED_QUALITY = 4
 FW_NORMAL, FW_BOLD = 400, 700
@@ -193,7 +202,7 @@ class Cmap:
         if len(table) < 4:
             return
         _ver, count = struct.unpack_from(">HH", table, 0)
-        best4 = best12 = None
+        best4 = best12 = best13 = None
         for k in range(count):
             if 4 + 8 * k + 8 > len(table):
                 break
@@ -203,6 +212,8 @@ class Cmap:
             fmt = struct.unpack_from(">H", table, off)[0]
             if fmt == 12 and best12 is None:
                 best12 = off
+            elif fmt == 13 and best13 is None:
+                best13 = off
             elif fmt == 4 and best4 is None:
                 best4 = off
         if best12 is not None and best12 + 16 <= len(table):
@@ -214,6 +225,17 @@ class Cmap:
                 first, last, glyph = struct.unpack_from(">III", table, at)
                 if first <= last:
                     self.groups.append((first, last, glyph))
+            return
+        if best13 is not None and best13 + 16 <= len(table):
+            # format 13: the same groups, every code point of a group mapped to its one glyph (Last Resort)
+            n = struct.unpack_from(">I", table, best13 + 12)[0]
+            for k in range(n):
+                at = best13 + 16 + 12 * k
+                if at + 12 > len(table):
+                    break
+                first, last, glyph = struct.unpack_from(">III", table, at)
+                if first <= last:
+                    self.groups.append((first, last, glyph, True))
             return
         if best4 is None or best4 + 14 > len(table):
             return
@@ -247,10 +269,17 @@ class Cmap:
         import bisect
         i = bisect.bisect_right(self._starts, cp) - 1
         if i >= 0:
-            first, last, g = self.groups[i]
+            first, last, g = self.groups[i][:3]
             if first <= cp <= last:
-                return g + (cp - first)
+                return g if len(self.groups[i]) == 4 else g + (cp - first)
         return 0
+
+    def covered(self) -> set:
+        """Every code point the map gives a glyph."""
+        out = {cp for cp, g in self.single.items() if g}
+        for group in self.groups:
+            out.update(range(group[0], group[1] + 1))
+        return out
 
 
 @lru_cache(maxsize=None)
@@ -272,8 +301,25 @@ def has(face: str, cp: int) -> bool:
     return cmap(face).glyph(cp) != 0
 
 
+def is_assigned(cp: int) -> bool:
+    """Assigned and neither a control nor a surrogate (vf2_unicode_tables.ASSIGNED): what a bundled face may draw."""
+    import bisect
+    from vf2_unicode_tables import ASSIGNED
+    i = bisect.bisect_right(ASSIGNED, (cp, 0x10FFFF)) - 1
+    return i >= 0 and ASSIGNED[i][0] <= cp <= ASSIGNED[i][1]
+
+
+def weight_for(face: str, weight: int) -> int:
+    """The weight `face` is drawn at for a game font of `weight` (the DLL's WeightFor): Unifont's 64-unit outlines
+    smear into solid blocks under GDI's synthetic bold, so the two Unifont faces are always drawn regular."""
+    return FW_NORMAL if face in ("Unifont", "Unifont Upper") else weight
+
+
 def font_for(cp: int, chain=FALLBACK_CHAIN) -> str | None:
+    load_bundled_fonts()
     for face in chain:
+        if face == BUNDLED_FACES[0] and not is_assigned(cp):
+            break                                   # unassigned, controls, surrogates: the missing box
         if has(face, cp):
             return face
     return None
@@ -369,6 +415,31 @@ def add_private_font(path) -> bool:
             cached.cache_clear()
         return True
     return False
+
+
+_bundled = [None]        # the folder the bundled fonts were loaded from (None: not yet, "": no folder)
+
+
+def bundled_fonts_folder():
+    """The repo's runtime/fonts, else the shipped bundle's payload/Fonts beside the patcher's folder; None if neither."""
+    from pathlib import Path
+    here = Path(__file__).resolve().parent
+    for folder in (here.parent / "runtime" / "fonts", here.parent / "payload" / "Fonts"):
+        if (folder / BUNDLED_FONTS[-1]).is_file():
+            return folder
+    return None
+
+
+def load_bundled_fonts() -> int:
+    """The bundled fonts (BUNDLED_FONTS) added for this process only, once, as the DLL's InstallBundledFonts does in
+    the game; the number loaded. Nothing without Windows or the files."""
+    if _bundled[0] is not None or not available():
+        return 0
+    folder = bundled_fonts_folder()
+    _bundled[0] = folder or ""
+    if folder is None:
+        return 0
+    return sum(1 for name in BUNDLED_FONTS if add_private_font(folder / name))
 
 
 def font_file_family(data: bytes) -> str | None:

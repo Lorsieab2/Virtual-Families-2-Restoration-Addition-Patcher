@@ -152,15 +152,22 @@ def test_the_exporter_files(exporter, tmp_path):
         assert r["remove_when_disabled"] and r["requires"][0] == "core_executable"
     folder = "Virtual Families 2 Patcher Files"
     lists = ("thaidict.txt", "laodict.txt", "khmerdict.txt", "burmesedict.txt", "ICU-LICENSE.txt")
+    fonts = exporter.GAME_FONT_FILES
     assert sorted(by[FONT]) == sorted([f"{folder}/vf2unicodefont.ini", f"{folder}/vf2unicodefont_b200.dll"] +
-                                      [f"{folder}/Unicode Font Text/Word Lists/{n}" for n in lists])
+                                      [f"{folder}/Unicode Font Text/Word Lists/{n}" for n in lists] +
+                                      [f"{folder}/Unicode Font Text/Fonts/{n}" for n in fonts])
     assert f"{folder}/vf2unicode_b200.dll" in by[TEXT] and f"{folder}/vf2unicode.ini" in by[TEXT]
     assert {f"{folder}/Unicode Text/Word Lists/{n}" for n in lists} <= set(by[TEXT])
-    for r in records:                                          # the shared lists, byte for byte
+    assert {f"{folder}/Unicode Text/Fonts/{n}" for n in fonts} <= set(by[TEXT])
+    for r in records:                                          # the shared lists and fonts, byte for byte
         if "/Word Lists/" in r["file_path"]:
             name = r["file_path"].rsplit("/", 1)[1]
             assert (tmp_path / r["source_path"]).read_bytes() == (ROOT / "runtime" / "word-lists" / name).read_bytes()
-    sheets = sorted(p for p in by[TEXT] if "/Unicode Text/" in p and "/Word Lists/" not in p)
+        if "/Fonts/" in r["file_path"]:
+            name = r["file_path"].rsplit("/", 1)[1]
+            assert r["source_path"] == f"payload/Fonts/{name}"
+            assert (tmp_path / r["source_path"]).read_bytes() == (ROOT / "runtime" / "fonts" / name).read_bytes()
+    sheets = sorted(p for p in by[TEXT] if "/Unicode Text/" in p and "/Word Lists/" not in p and "/Fonts/" not in p)
     assert sheets == sorted(f"{folder}/Unicode Text/{n}.{e}" for n in
                             ("Segoe24", "Segoe24Bold", "Segoe32Bold", "Segoe36Bold") for e in ("png", "txt"))
     assert not set(by[TEXT]) & set(by[FONT])                   # no file is shared, so none is removed by the other
