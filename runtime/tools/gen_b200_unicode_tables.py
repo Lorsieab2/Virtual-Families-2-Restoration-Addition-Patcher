@@ -1,21 +1,24 @@
 #!/usr/bin/env python3
-"""Write the Unicode tables the patcher and the Unicode Text DLL share, from Python's unicodedata.
+"""Write the Unicode tables the patcher and the Unicode Text DLL share, from the Unicode Character Database.
 
-    gen_b200_unicode_tables.py [--check]
+    gen_b200_unicode_tables.py --ucd <UnicodeData.txt> [--version 18.0.0] [--check]
 
 * src/vf2_unicode_tables.py: EXTEND (the code point ranges that stay with the character before them: combining
   marks Mn/Me/Mc, joiners, variation selectors, emoji modifiers, tags), COMPOSE (a base letter + accents -> the one
-  letter, for the blocks of vf2_game_text.COMPOSE_RANGES) and UNIDATA_VERSION;
+  letter, for the blocks of vf2_game_text.COMPOSE_RANGES), ASSIGNED (every code point that is not unassigned, a
+  control or a surrogate: the ones the Last Resort font may draw) and UNIDATA_VERSION;
 * runtime/native/b200unicode/b200unicode_tables.h: the same tables for the DLL.
 
-Both are committed, so the patcher and the DLL agree whatever Python runs them. --check compares instead of writing
-(it only means something when this Python's Unicode version is the recorded one).
+The source is UnicodeData.txt of the Unicode version named (https://www.unicode.org/Public/<version>/ucd/, Unicode
+licence: runtime/fonts/UNICODE-LICENSE.txt); its SHA-256 is written into both files. Python's own unicodedata is not
+used, so the tables can be newer than the Python that runs them. Both outputs are committed, so the patcher and the
+DLL agree whatever Python runs them. --check compares instead of writing.
 """
 from __future__ import annotations
 
 import argparse
+import hashlib
 import sys
-import unicodedata
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -24,16 +27,62 @@ H_OUT = ROOT / "runtime" / "native" / "b200unicode" / "b200unicode_tables.h"
 COMPOSE_RANGES = ((0x00C0, 0x024F), (0x0370, 0x052F), (0x1E00, 0x1FFF))
 
 
-def extend_ranges() -> list:
-    fixed = [(0x200C, 0x200D), (0xFE00, 0xFE0F), (0x1F3FB, 0x1F3FF), (0xE0020, 0xE007F), (0xE0100, 0xE01EF)]
-    cps = set()
-    for cp in range(0x110000):
-        if 0xD800 <= cp <= 0xDFFF:
-            continue
-        if unicodedata.category(chr(cp)) in ("Mn", "Me", "Mc"):
-            cps.add(cp)
-    for a, b in fixed:
-        cps.update(range(a, b + 1))
+class Ucd:
+    """UnicodeData.txt: general category, canonical combining class and canonical decomposition per code point."""
+
+    def __init__(self, text: str):
+        self.category: dict = {}
+        self.ccc: dict = {}
+        self.decomp: dict = {}
+        first = None
+        for line in text.splitlines():
+            f = line.split(";")
+            if len(f) < 6:
+                continue
+            cp, name, cat = int(f[0], 16), f[1], f[2]
+            if name.endswith(", First>"):
+                first = cp
+                continue
+            if name.endswith(", Last>"):
+                for c in range(first, cp + 1):
+                    self.category[c] = cat
+                first = None
+                continue
+            self.category[cp] = cat
+            if f[3] != "0":
+                self.ccc[cp] = int(f[3])
+            if f[5] and not f[5].startswith("<"):
+                self.decomp[cp] = tuple(int(x, 16) for x in f[5].split())
+
+    def gc(self, cp: int) -> str:
+        return self.category.get(cp, "Cn")
+
+    def nfd(self, cp: int) -> tuple:
+        """The full canonical decomposition in canonical order (UAX #15; Hangul is not needed here)."""
+        out = []
+
+        def expand(c):
+            if c in self.decomp:
+                for d in self.decomp[c]:
+                    expand(d)
+            else:
+                out.append(c)
+        expand(cp)
+        # canonical ordering: stable sort of each run of non-starters by combining class
+        i = 0
+        while i < len(out):
+            if self.ccc.get(out[i], 0) == 0:
+                i += 1
+                continue
+            j = i
+            while j < len(out) and self.ccc.get(out[j], 0) != 0:
+                j += 1
+            out[i:j] = sorted(out[i:j], key=lambda c: self.ccc.get(c, 0))
+            i = j
+        return tuple(out)
+
+
+def ranges(cps) -> list:
     out = []
     for cp in sorted(cps):
         if out and cp == out[-1][1] + 1:
@@ -43,38 +92,53 @@ def extend_ranges() -> list:
     return [tuple(r) for r in out]
 
 
-def compose_pairs() -> list:
+def extend_ranges(ucd: Ucd) -> list:
+    fixed = [(0x200C, 0x200D), (0xFE00, 0xFE0F), (0x1F3FB, 0x1F3FF), (0xE0020, 0xE007F), (0xE0100, 0xE01EF)]
+    cps = {cp for cp, cat in ucd.category.items() if cat in ("Mn", "Me", "Mc")}
+    for a, b in fixed:
+        cps.update(range(a, b + 1))
+    return ranges(cps)
+
+
+def compose_pairs(ucd: Ucd) -> list:
     out = {}
     for a, b in COMPOSE_RANGES:
         for cp in range(a, b + 1):
-            ch = chr(cp)
-            if unicodedata.category(ch) == "Cn":
+            if ucd.gc(cp) == "Cn":
                 continue
-            nfd = unicodedata.normalize("NFD", ch)
+            nfd = ucd.nfd(cp)
             if 1 < len(nfd) <= 4:
-                out.setdefault(tuple(ord(c) for c in nfd), cp)
+                out.setdefault(nfd, cp)
     return sorted(out.items())
 
 
-def render_py(ext, comp) -> str:
-    lines = ['"""GENERATED by runtime/tools/gen_b200_unicode_tables.py from Python\'s unicodedata. Do not edit.',
+def assigned_ranges(ucd: Ucd) -> list:
+    return ranges(cp for cp, cat in ucd.category.items() if cat not in ("Cn", "Cc", "Cs"))
+
+
+def render_py(version, sha, ext, comp, assigned) -> str:
+    lines = ['"""GENERATED by runtime/tools/gen_b200_unicode_tables.py from UnicodeData.txt. Do not edit.',
              "",
              "The Unicode tables src/vf2_game_text.py and the Unicode Text DLL (b200unicode_tables.h) share.",
-             '"""', "", f'UNIDATA_VERSION = "{unicodedata.unidata_version}"', "",
+             '"""', "", f'UNIDATA_VERSION = "{version}"', f'UNIDATA_SHA256 = "{sha}"', "",
              "# code point ranges that stay with the character before them (inclusive)", "EXTEND = ("]
     for a, b in ext:
         lines.append(f"    (0x{a:X}, 0x{b:X}),")
     lines += [")", "", "# base letter + accents (code points) -> the one letter", "COMPOSE = {"]
     for seq, cp in comp:
         lines.append(f"    ({', '.join(f'0x{c:X}' for c in seq)},): 0x{cp:X},")
-    lines += ["}", ""]
+    lines += ["}", "", "# code point ranges that are assigned and neither a control nor a surrogate (inclusive)",
+              "ASSIGNED = ("]
+    for a, b in assigned:
+        lines.append(f"    (0x{a:X}, 0x{b:X}),")
+    lines += [")", ""]
     return "\n".join(lines)
 
 
-def render_h(ext, comp) -> str:
-    lines = ["// GENERATED by runtime/tools/gen_b200_unicode_tables.py from Python's unicodedata. Do not edit.",
+def render_h(version, sha, ext, comp, assigned) -> str:
+    lines = ["// GENERATED by runtime/tools/gen_b200_unicode_tables.py from UnicodeData.txt. Do not edit.",
              "// src/vf2_unicode_tables.py holds the same tables for the patcher.",
-             "#pragma once", f'#define UT_UNIDATA_VERSION "{unicodedata.unidata_version}"', "",
+             "#pragma once", f'#define UT_UNIDATA_VERSION "{version}"', f'#define UT_UNIDATA_SHA256 "{sha}"', "",
              "struct UtRange { unsigned first, last; };",
              "struct UtCompose { unsigned seq[4]; unsigned count; unsigned cp; };", "",
              f"static const unsigned UT_EXTEND_COUNT = {len(ext)}u;",
@@ -86,16 +150,29 @@ def render_h(ext, comp) -> str:
     for seq, cp in comp:
         s = list(seq) + [0] * (4 - len(seq))
         lines.append(f"    {{{{{', '.join(f'0x{c:X}u' for c in s)}}}, {len(seq)}u, 0x{cp:X}u}},")
+    lines += ["};", "", f"static const unsigned UT_ASSIGNED_COUNT = {len(assigned)}u;",
+              "static const UtRange UT_ASSIGNED[] = {"]
+    for i in range(0, len(assigned), 6):
+        lines.append("    " + " ".join(f"{{0x{a:X}u, 0x{b:X}u}}," for a, b in assigned[i:i + 6]))
     lines += ["};", ""]
     return "\n".join(lines)
 
 
+def render(ucd_path: Path, version: str) -> tuple:
+    data = Path(ucd_path).read_bytes()
+    ucd = Ucd(data.decode("utf-8"))
+    sha = hashlib.sha256(data).hexdigest()
+    ext, comp, assigned = extend_ranges(ucd), compose_pairs(ucd), assigned_ranges(ucd)
+    return render_py(version, sha, ext, comp, assigned), render_h(version, sha, ext, comp, assigned)
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("--ucd", required=True, help="UnicodeData.txt of the Unicode version")
+    ap.add_argument("--version", default="18.0.0")
     ap.add_argument("--check", action="store_true")
     a = ap.parse_args(argv)
-    ext, comp = extend_ranges(), compose_pairs()
-    py, h = render_py(ext, comp), render_h(ext, comp)
+    py, h = render(Path(a.ucd), a.version)
     if a.check:
         ok = PY_OUT.read_text(encoding="utf-8") == py and H_OUT.read_text(encoding="utf-8") == h
         print("tables match" if ok else "tables differ")
@@ -103,7 +180,7 @@ def main(argv=None) -> int:
     H_OUT.parent.mkdir(parents=True, exist_ok=True)
     PY_OUT.write_text(py, encoding="utf-8", newline="\n")
     H_OUT.write_text(h, encoding="utf-8", newline="\n")
-    print(f"wrote {PY_OUT} and {H_OUT}: {len(ext)} extend ranges, {len(comp)} compositions")
+    print(f"wrote {PY_OUT} and {H_OUT}: {py.count('0x')} entries")
     return 0
 
 

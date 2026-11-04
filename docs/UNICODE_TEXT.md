@@ -214,9 +214,29 @@ opening one) and `tests/test_vf2_game_text.py`.
   Emoji, Yu Gothic UI, Meiryo, Microsoft YaHei UI, Microsoft JhengHei UI, Malgun Gothic, SimSun-ExtB, Nirmala UI, Ebrima,
   Gadugi, Leelawadee UI, Myanmar Text, Javanese Text, Mongolian Baiti, Microsoft Himalaya, Microsoft Yi Baiti, Microsoft
   New Tai Lue, Microsoft Tai Le, Microsoft PhagsPa, Sylfaen, Cambria Math, Noto Sans, Noto Sans Symbols, Noto Sans
-  Symbols 2, Noto Sans CJK JP, Noto Sans CJK SC, Noto Sans Math, Noto Sans Cuneiform, Noto Color Emoji. A face is used
-  for a character only when its character map has it; one that is not installed is skipped. (Emoji are still drawn in
-  one colour, the text's; colour emoji are not built yet.)
+  Symbols 2, Noto Sans CJK JP, Noto Sans CJK SC, Noto Sans Math, Noto Sans Cuneiform, Noto Color Emoji, then the
+  bundled fonts: Noto Serif Tangut, Unifont, Unifont Upper, Last Resort High-Efficiency. A face is used for a character
+  only when its character map has it (formats 4, 12 and Last Resort's many-to-one 13); one that is not installed is
+  skipped. (Emoji are still drawn in one colour, the text's; colour emoji are not built yet.)
+* Every Windows face is drawn on the game font's baseline (TA_BASELINE at `gdi.top` + Segoe UI's ascent, the row
+  Use Unicode Font already used: `unicode_baseline`, the DLL's `FontRec.base`). For Segoe UI faces that is the very
+  same drawing as before; a face with another ascent (the bundled fonts, Cambria Math) now sits where the game's
+  letters do instead of floating above or below the line.
+* **Bundled fonts** (`runtime/fonts`, `runtime/fonts/README.md` lists each source, version, SHA-256 and licence;
+  `tests/test_bundled_fonts.py` checks them): Noto Sans Cuneiform 2.001 (OFL), Noto Serif Tangut 2.170 (OFL), GNU
+  Unifont 18.0.01 and Unifont Upper 18.0.01 (OFL 1.1 or GPL 2+ with the font embedding exception; GnuPG-verified),
+  Last Resort High-Efficiency 18.000 (OFL). The release ships them with their licences in `Unicode Text\Fonts\` (and
+  `Unicode Font Text\Fonts\` for Use Unicode Font); `B200Unicode_Startup` adds each with `AddFontResourceExW`
+  (`FR_PRIVATE`: this game only, never installed in Windows), and the patcher's Game Text preview loads the same files
+  the same way (`vf2_glyph_render.load_bundled_fonts`). Unifont and Last Resort have a glyph for every code point, so
+  the bundled faces only draw code points that are assigned and neither controls nor surrogates (`UT_ASSIGNED` /
+  `vf2_unicode_tables.ASSIGNED`); the rest keep the missing-glyph box. Every assigned code point of Unicode 18.0 is
+  drawn by some face of the chain (Last Resort alone covers all of them, with its block symbols): a script no font has
+  (Jurchen, Seal, CJK Extension J) shows Last Resort's symbol for its block, not a box.
+* **Unicode 18.0.0 tables**: `runtime/tools/gen_b200_unicode_tables.py` reads `UnicodeData.txt`
+  (`https://www.unicode.org/Public/18.0.0/ucd/`, SHA-256 `0736451de439ae7baf1425136617da495e09ee5afbe6e394374db7009ea08950`,
+  Unicode licence `runtime/fonts/UNICODE-LICENSE.txt`) and writes `EXTEND`, `COMPOSE` and `ASSIGNED` for the patcher
+  (`src/vf2_unicode_tables.py`) and the DLL (`b200unicode_tables.h`), the same whatever Python runs them.
 * The Tools tab entry is **Game Text...** (B207 called it Game Font Text). Besides every game font, colours, wrapping,
   the character picker with its (game font) / (patcher-made) / (drawn by Windows: face) / (missing: box) labels and
   "As Use Unicode Font draws it", it has **As the stock game shows it**: the text is drawn one stored byte at a time

@@ -368,12 +368,15 @@ def runtime_glyph(font: GameFont, text: str) -> Glyph:
         face = R.font_for(base, (chosen,) + R.FALLBACK_CHAIN)
         if face is None:
             return missing_box(font)
-        adv, grey, w, ox = R.render(text, face, px, g["weight"], h, row, True)
+        adv, grey, w, ox = R.render(text, face, px, R.weight_for(face, g["weight"]), h, row, True)
     else:
         face = R.font_for(base)
         if face is None:
             return missing_box(font)
-        adv, grey, w, ox = R.render(text, face, g["px"], g["weight"], h, g["top"])
+        # on the game font's baseline (TA_BASELINE), so a face with another ascent (the bundled fonts) sits where
+        # the game's letters do; for Segoe UI itself this is the same drawing as the text's top at gdi.top
+        adv, grey, w, ox = R.render(text, face, g["px"], R.weight_for(face, g["weight"]), h, unicode_baseline(font),
+                                    True)
     adv = max(0, min(adv, w - ox))
     lut = g["alpha"]
     a = bytearray(adv * h)

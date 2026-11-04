@@ -146,18 +146,20 @@ def test_counts_without_a_game_folder():
 @needs_fonts
 def test_counts_say_where_each_letter_comes_from(fonts):
     font, _sheet = fonts["Segoe24"]
-    text = "Ab é\nŁ☃𒀀\U0010FFFD"
+    text = "Ab é\nŁ☃𒀀͸"
     c = tt.counts(font, text)
     assert c["characters"] == T.length(text) == 9          # the line break is a character too
     assert c["bytes"] == len(T.encode(text))
     assert c["game"] == 4                                  # A b space é
     assert c["patcher"] == 3                               # Ł (patcher-made), ☃ (patcher-made), 𒀀 (Windows font)
-    assert c["missing"] == 1                               # a private-use character no font draws
+    assert c["missing"] == 1                               # an unassigned code point: no face may draw it
     said = tt.status_text(c)
     assert "From the game font: 4. Patcher-made: 3. Missing (drawn as a box): 1." in said
     assert tt.char_label(font, "é") == "(game font)"
     assert tt.char_label(font, "Ł") == "(patcher-made)"
-    assert tt.char_label(font, "\U0010FFFD") == "(missing: box)"
+    assert tt.char_label(font, "͸") == "(missing: box)"
+    # a private-use character is assigned: the bundled Last Resort draws its block symbol instead of a box
+    assert tt.char_label(font, "\U0010FFFD") == "(patcher-made from Last Resort High-Efficiency)"
 
 
 @needs_fonts

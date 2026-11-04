@@ -1755,6 +1755,41 @@ def word_list_records(bundle_dir: Path, folder: str, setting_id: str) -> list[di
     return out
 
 
+BUNDLED_FONTS_SOURCE = ROOT / "runtime" / "fonts"
+# The bundled fonts the Unicode text DLL loads for the game only (the end of its fallback chain, runtime/native/
+# b200unicode/b200unicode.cpp kBundledFonts) and their licences; runtime/fonts/README.md lists each source and SHA-256.
+GAME_FONT_FILES = ("NotoSansCuneiform-Regular.otf", "NotoSerifTangut-Regular.otf", "unifont-18.0.01.otf",
+                   "unifont_upper-18.0.01.otf", "LastResortHE-Regular.ttf", "NotoSansCuneiform-OFL.txt",
+                   "NotoSerifTangut-OFL.txt", "Unifont-OFL-1.1.txt", "Unifont-COPYING.txt", "LastResort-OFL.txt",
+                   "UNICODE-LICENSE.txt")
+
+
+def bundled_font_records(bundle_dir: Path, folder: str, setting_id: str) -> list[dict[str, Any]]:
+    """`<folder>\\Fonts\\` beside the DLL, behind one setting. The fonts are staged once (payload/Fonts, which the
+    patcher's own Game Text preview reads too) and shared by both settings' records."""
+    out = []
+    staged = bundle_dir / "payload" / "Fonts"
+    staged.mkdir(parents=True, exist_ok=True)
+    for name in GAME_FONT_FILES:
+        path = staged / name
+        if not path.is_file():
+            shutil.copy2(BUNDLED_FONTS_SOURCE / name, path)
+        out.append({
+            "file_path": f"{TIME_CONTROLS_PATCHER_FOLDER}/{folder}/Fonts/{name}",
+            "source_path": relative_posix(path.relative_to(bundle_dir)),
+            "source_sha256": sha256_file(path),
+            "source_size": path.stat().st_size,
+            "overwrite_existing": True,
+            "allow_missing_target": True,
+            "remove_when_disabled": True,
+            "requires": ["core_executable", setting_id],
+            "note": "A bundled open font (or its licence) the Unicode text DLL loads for this game only, as the "
+                    "last fallback for characters no Windows font has. Disabling the setting removes only this "
+                    "exact file.",
+        })
+    return out
+
+
 def unicode_text_asset_patches(
     bundle_dir: Path,
     dll_path: Path | None,
@@ -1838,8 +1873,10 @@ def unicode_text_asset_patches(
                         "never changed). Disabling Render Unicode with In-Game Fonts removes only this exact file.",
             })
         records.extend(word_list_records(bundle_dir, UNICODE_GLYPH_FOLDER, setting))
+        records.extend(bundled_font_records(bundle_dir, UNICODE_GLYPH_FOLDER, setting))
     if isinstance(font_contract, dict):
         records.extend(word_list_records(bundle_dir, UNICODE_FONT_DATA_FOLDER, "use_unicode_font"))
+        records.extend(bundled_font_records(bundle_dir, UNICODE_FONT_DATA_FOLDER, "use_unicode_font"))
         if (font_contract.get("companion_dll") != UNICODE_FONT_DLL_NAME
                 or font_contract.get("companion_ini") != UNICODE_FONT_INI_NAME):
             raise ValueError("Build manifest's UnicodeFont contract names another companion file.")

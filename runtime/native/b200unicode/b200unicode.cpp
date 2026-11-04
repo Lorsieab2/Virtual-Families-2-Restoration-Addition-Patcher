@@ -302,7 +302,10 @@ static bool LoadSdl() {
 
 // ================================================================ GDI: a character in a Windows font
 // The shared fallback chain (docs/UNICODE_TEXT.md, the same list and order as src/vf2_glyph_render.FALLBACK_CHAIN;
-// tests/test_fallback_chain.py checks it): a face that is not installed is skipped.
+// tests/test_fallback_chain.py checks it): a face that is not installed is skipped. The last four are the bundled
+// fonts InstallBundledFonts loads for this game only (runtime/fonts; Noto Sans Cuneiform is bundled too, in its
+// place above); Unifont and Last Resort have a glyph for every code point, so they only draw assigned,
+// non-control characters.
 static const wchar_t *const kChain[] = {
     L"Segoe UI", L"Segoe UI Historic", L"Segoe UI Symbol", L"Segoe UI Emoji", L"Yu Gothic UI", L"Meiryo",
     L"Microsoft YaHei UI", L"Microsoft JhengHei UI", L"Malgun Gothic", L"SimSun-ExtB", L"Nirmala UI", L"Ebrima",
@@ -310,10 +313,29 @@ static const wchar_t *const kChain[] = {
     L"Microsoft Yi Baiti", L"Microsoft New Tai Lue", L"Microsoft Tai Le", L"Microsoft PhagsPa", L"Sylfaen",
     L"Cambria Math", L"Noto Sans", L"Noto Sans Symbols", L"Noto Sans Symbols 2", L"Noto Sans CJK JP",
     L"Noto Sans CJK SC", L"Noto Sans Math", L"Noto Sans Cuneiform", L"Noto Color Emoji",
+    L"Noto Serif Tangut", L"Unifont", L"Unifont Upper", L"Last Resort High-Efficiency",
 };
 static const unsigned kChainCount = sizeof(kChain) / sizeof(kChain[0]);
+static const unsigned kBundledFirst = kChainCount - 4;      // Noto Serif Tangut: the first of the four bundled faces
 
-struct CmapCache { const wchar_t *face; int weight; unsigned char *table; unsigned size; unsigned sub12, sub4; bool loaded; };
+// The bundled font files (runtime/fonts, shipped in "<setting folder>\Fonts\" beside the DLL by
+// work/export_offline_patch_bundle.bundled_font_records).
+static const wchar_t *const kBundledFonts[] = {
+    L"NotoSansCuneiform-Regular.otf", L"NotoSerifTangut-Regular.otf", L"unifont-18.0.01.otf",
+    L"unifont_upper-18.0.01.otf", L"LastResortHE-Regular.ttf",
+};
+
+static bool IsAssigned(unsigned cp) { return ut::InRanges(UT_ASSIGNED, UT_ASSIGNED_COUNT, cp); }
+
+// The weight a face is drawn at for a game font of `weight` (src/vf2_glyph_render.weight_for): Unifont's 64-unit
+// outlines smear into solid blocks under GDI's synthetic bold, so the two Unifont faces are always drawn regular.
+static int WeightFor(const wchar_t *face, int weight) {
+    // by name: in Use Unicode Font `face` may be the chosen face's own buffer (OverrideFace), not a kChain entry
+    return lstrcmpiW(face, kChain[kBundledFirst + 1]) == 0 || lstrcmpiW(face, kChain[kBundledFirst + 2]) == 0
+               ? FW_NORMAL : weight;
+}
+
+struct CmapCache { const wchar_t *face; int weight; unsigned char *table; unsigned size; unsigned sub12, sub13, sub4; bool loaded; };
 static CmapCache Cmaps[2 * (sizeof(kChain) / sizeof(kChain[0]) + 1)];
 
 static unsigned BE16(const unsigned char *p) { return (p[0] << 8) | p[1]; }
@@ -332,7 +354,7 @@ static CmapCache *CmapOf(const wchar_t *face, int weight) {
     }
     if (free == 0xFFFFFFFF) return 0;
     CmapCache &c = Cmaps[free];
-    c.face = face; c.weight = weight; c.loaded = true; c.table = 0; c.size = 0; c.sub12 = c.sub4 = 0;
+    c.face = face; c.weight = weight; c.loaded = true; c.table = 0; c.size = 0; c.sub12 = c.sub13 = c.sub4 = 0;
     HDC dc = CreateCompatibleDC(0);
     if (!dc) return &c;
     HFONT f = MakeFont(face, 16, weight);
@@ -357,6 +379,7 @@ static CmapCache *CmapOf(const wchar_t *face, int weight) {
             if (off + 2 > c.size || !(pid == 0 || (pid == 3 && (eid == 1 || eid == 10)))) continue;
             unsigned fmt = BE16(c.table + off);
             if (fmt == 12 && !c.sub12) c.sub12 = off;
+            else if (fmt == 13 && !c.sub13) c.sub13 = off;      // many-to-one groups (Last Resort)
             else if (fmt == 4 && !c.sub4) c.sub4 = off;
         }
     }
@@ -366,17 +389,20 @@ static CmapCache *CmapOf(const wchar_t *face, int weight) {
 static unsigned GlyphIndex(CmapCache *c, unsigned cp) {
     if (!c || !c->size) return 0;
     const unsigned char *t = c->table;
-    if (c->sub12 && c->sub12 + 16 <= c->size) {
-        unsigned off = c->sub12, n = BE32(t + off + 12);
+    // formats 12 and 13 share one layout of sorted groups {first, last, glyph}: 12 maps first..last to glyph,
+    // glyph+1, ...; 13 maps every code point of the group to that one glyph
+    unsigned grp = c->sub12 ? c->sub12 : c->sub13;
+    if (grp && grp + 16 <= c->size) {
+        unsigned n = BE32(t + grp + 12);
         unsigned lo = 0, hi = n;
         while (lo < hi) {
             unsigned mid = (lo + hi) / 2;
-            unsigned at = off + 16 + 12 * mid;
+            unsigned at = grp + 16 + 12 * mid;
             if (at + 12 > c->size) return 0;
             unsigned first = BE32(t + at), last = BE32(t + at + 4);
             if (cp < first) hi = mid;
             else if (cp > last) lo = mid + 1;
-            else return BE32(t + at + 8) + (cp - first);
+            else return BE32(t + at + 8) + (c->sub12 ? cp - first : 0);
         }
         return 0;
     }
@@ -407,8 +433,10 @@ static bool Ignorable(unsigned cp) {
 // first in Mode 2). 0 = none.
 static const wchar_t *FaceFor(unsigned base) {
     if (Mode == 2 && OverrideFace[0] && GlyphIndex(CmapOf(OverrideFace, FW_NORMAL), base)) return OverrideFace;
-    for (unsigned i = 0; i < kChainCount; ++i)
+    for (unsigned i = 0; i < kChainCount; ++i) {
+        if (i == kBundledFirst && !IsAssigned(base)) break;    // unassigned, controls, surrogates: the box
         if (GlyphIndex(CmapOf(kChain[i], FW_NORMAL), base)) return kChain[i];
+    }
     return 0;
 }
 
@@ -424,7 +452,8 @@ static int RenderRuntime(const ut::Unit &u, const UniFont &font, int px, int ty,
     const wchar_t *face = FaceFor(base);
     if (!face) return -1;
     int h = font.lineHeight, width = 10 * (px > 1 ? px : 1);
-    CmapCache *cm = CmapOf(face, font.weight);
+    int weight = WeightFor(face, font.weight);
+    CmapCache *cm = CmapOf(face, weight);
     HDC dc = CreateCompatibleDC(0);
     if (!dc) return -1;
     BITMAPINFO bmi;
@@ -438,7 +467,7 @@ static int RenderRuntime(const ut::Unit &u, const UniFont &font, int px, int ty,
     HBITMAP bmp = CreateDIBSection(dc, &bmi, DIB_RGB_COLORS, &bits, 0, 0);
     if (!bmp || !bits) { DeleteDC(dc); return -1; }
     HGDIOBJ oldBmp = SelectObject(dc, bmp);
-    HFONT f = MakeFont(face, px, font.weight);
+    HFONT f = MakeFont(face, px, weight);
     HGDIOBJ oldFont = SelectObject(dc, f);
     SetTextColor(dc, 0x00FFFFFF);
     SetBkColor(dc, 0);
@@ -729,6 +758,7 @@ static int PatcherCell(FontRec &f, unsigned cp, unsigned char *cell, unsigned ca
     return g.w;
 }
 static void FitOverride(FontRec &f, unsigned impl);    // Use Unicode Font: below
+static int FaceMeasure(const wchar_t *face, int px, int weight, const char *text, bool ascent);
 
 // The record of a font object; the first time, the font is recognised by its glyph widths and given its room.
 static FontRec *Ensure(unsigned impl) {
@@ -758,7 +788,9 @@ static FontRec *Ensure(unsigned impl) {
     f.nextX = 0;
     f.nextY = f.stockH;
     f.px = UNI_FONTS[f.index].px;
-    f.base = UNI_FONTS[f.index].top;
+    // the game font's baseline row: its fitted Segoe UI's (src/vf2_game_text.unicode_baseline); every Windows face
+    // is drawn on it (TA_BASELINE), so a face with another ascent (the bundled fonts) sits where the game's letters do
+    f.base = UNI_FONTS[f.index].top + FaceMeasure(L"Segoe UI", f.px, UNI_FONTS[f.index].weight, 0, true);
     if (Mode == 2) FitOverride(f, impl);
     LoadPatcherGlyphs(f);
     ++B200Unicode_Status.fonts;
@@ -871,8 +903,7 @@ static bool GlyphFor(FontRec *f, unsigned impl, const ut::Unit &u, const unsigne
         if (!create) return false;
         static unsigned char cell[512 * 64];
         const UniFont &font = UNI_FONTS[f->index];
-        int w = Mode == 2 ? RenderRuntime(u, font, f->px, f->base, true, cell, sizeof(cell))
-                          : RenderRuntime(u, font, font.px, font.top, false, cell, sizeof(cell));
+        int w = RenderRuntime(u, font, f->px, f->base, true, cell, sizeof(cell));     // both modes: on the baseline
         if (w < 0) { w = MissingBox(font, cell, sizeof(cell)); ++B200Unicode_Status.boxes; }
         else ++B200Unicode_Status.runtimeGlyphs;
         if (w < 0 || !PlaceGlyph(*f, s, cell, w)) { s->w = 0; }
@@ -1506,6 +1537,20 @@ static void InstallWordLists() {
     if (InFolder(Mode == 2 ? L"Unicode Font Text\\Word Lists\\" : L"Unicode Text\\Word Lists\\", lists))
         words::Install(lists);
 }
+
+// The bundled fonts (kBundledFonts) each setting ships in its own "Fonts\" folder beside the DLL, added for this
+// process only (FR_PRIVATE: never installed in Windows), so the end of the fallback chain is there on every PC.
+static void InstallBundledFonts() {
+    const wchar_t *dir = Mode == 2 ? L"Unicode Font Text\\Fonts\\" : L"Unicode Text\\Fonts\\";
+    for (unsigned i = 0; i < sizeof(kBundledFonts) / sizeof(kBundledFonts[0]); ++i) {
+        wchar_t rel[MAX_PATH], full[MAX_PATH];
+        unsigned n = 0;
+        for (unsigned k = 0; dir[k]; ++k) rel[n++] = dir[k];
+        for (unsigned k = 0; kBundledFonts[i][k] && n + 1 < MAX_PATH; ++k) rel[n++] = kBundledFonts[i][k];
+        rel[n] = 0;
+        if (InFolder(rel, full) && !AddFontResourceExW(full, FR_PRIVATE, 0)) Log("a bundled font was not loaded");
+    }
+}
 #endif
 
 extern "C" __declspec(dllexport) void __cdecl B200Unicode_Startup() {
@@ -1526,6 +1571,7 @@ extern "C" __declspec(dllexport) void __cdecl B200Unicode_Startup() {
 #else
     if (Mode != 1 && Mode != 2) { Log("Unicode text is off: the game is stock"); return; }
     InstallWordLists();
+    InstallBundledFonts();
 #endif
     if (!LoadSdl()) { Log("SDL2.dll's functions were not found: installing nothing"); return; }
     static Plan plan;
@@ -1598,6 +1644,8 @@ extern "C" __declspec(dllexport) unsigned __cdecl B200Unicode_TestReadSettings(c
 #ifndef B200UNICODE_CLIP
 // the word lists as Startup installs them, for the mode and folder TestReadSettings set
 extern "C" __declspec(dllexport) void __cdecl B200Unicode_TestWordLists() { InstallWordLists(); }
+// the bundled fonts as Startup loads them, for the mode and folder TestReadSettings set
+extern "C" __declspec(dllexport) void __cdecl B200Unicode_TestBundledFonts() { InstallBundledFonts(); }
 #endif
 // SDL2.dll / SDL2_image.dll' functions, as Startup finds them
 extern "C" __declspec(dllexport) int __cdecl B200Unicode_TestLoadSdl() { return LoadSdl() ? 1 : 0; }
