@@ -1002,3 +1002,68 @@ def test_the_title_screens_manage_games_shows_the_french(world):
     assert world.e.read(imm, len(french) + 1) == french.encode("cp1252") + b"\0"
     world2_text = world.text_a("Manage Games", 60)                       # the same line a DLL would be handed
     assert world2_text == french.encode("cp1252")
+
+
+# ===================================================================== B209: sprintf into a frame buffer of known size
+def test_the_sprintf_rooms_are_frame_buffers_of_the_scan():
+    """gen_b200_translations_sites.scan_sprintf_rooms: each format of the table is pushed by the game's code and
+    every one of its calls writes into a buffer of the caller's frame; the Details screen's level line has 256 bytes."""
+    rooms = LIMITS["sprintf_room"]
+    assert rooms["%s (%i)"] == 256 and all("%s" in k and v > 0 for k, v in rooms.items())
+    assert '{ "%s (%i)", 256 },' in (SRC / "b200tr_limits.h").read_text()
+    assert "%s" not in rooms                  # a call of the bare "%s" writes where the scan cannot tell
+
+
+def _niveau_site(world):
+    """The Details screen's level line (theVillagerScene::UpdateScene): `push eax` (the level's name), `lea eax,
+    [ebp - 204h]`, `push "%s (%i)"`, `push eax`, `call sprintf`. Returns (link VA of the first push, of the call)."""
+    found = []
+    fmt = b"%s (%i)\0"
+    for _n, va, raw, ch, _vs in world.exe.sections:
+        if ch & 0x20000000:
+            continue
+        for m in re.finditer(re.escape(fmt), raw):
+            imm = struct.pack("<I", va + m.start())
+            for _n2, cva, craw, ch2, _v2 in world.exe.sections:
+                if not ch2 & 0x20000000:
+                    continue
+                for c in re.finditer(re.escape(b"\x68" + imm), craw):
+                    at = cva + c.start()
+                    pre = world.exe.read(at - 7, 7)
+                    if pre[0] == 0x50 and pre[1:3] == b"\x8D\x85" and world.exe.read(at + 5, 2) == b"\x50\xE8":
+                        found.append((at - 7, at + 6))
+    assert len(found) == 1, found
+    return found[0]
+
+
+def _run_niveau(world):
+    from unicorn.x86_const import UC_X86_REG_EAX, UC_X86_REG_EBP, UC_X86_REG_ESP
+    start, call = _niveau_site(world)
+    assert _call_target(world, call) == world.sites["SPRINTF"]
+    e = world.e
+    name = world.get_string_ptr(1896)
+    frame = e.alloc(0x2000, 0x7E)
+    ebp, esp = frame + 0x1800, frame + 0x200
+    e.w32(esp, 1)                                             # the level, pushed before the name
+    e.setreg(UC_X86_REG_ESP, esp)
+    e.setreg(UC_X86_REG_EBP, ebp)
+    e.setreg(UC_X86_REG_EAX, name)
+    e.uc.emu_start(world.live(start), world.live(call + 5))
+    return world._bytes(ebp - 0x204)
+
+
+def test_the_details_screens_level_shows_the_whole_french_word(world):
+    """Live on B209: the Details screen's Niveau row showed "Débutan (1)": the guard on sprintf cut the translated
+    "Débutant " to the 7 bytes of "Novice ". The REAL code of the level line runs with the REAL DLL: its buffer
+    holds 256 bytes (the scan proves it), so the whole word is written."""
+    assert world.english(1896) == "Novice "
+    assert _install(world, {1896: "Débutant ", 113: RETRY}) == 1 and world.status()["refused"] == 0
+    assert _run_niveau(world) == "Débutant  (1)".encode("cp1252")     # the line ends with a space
+    # a format the scan does not know still gives at most the English length
+    out = world.get_string_ptr(1896)
+    assert world.sprintf(world.cstring(b"[%s]"), out) == b"[" + "Débutant ".encode("cp1252")[:7] + b"]"
+
+
+def test_the_details_screens_level_in_english_is_unchanged(world):
+    assert _install(world, {113: RETRY}) == 1
+    assert _run_niveau(world) == b"Novice  (1)"

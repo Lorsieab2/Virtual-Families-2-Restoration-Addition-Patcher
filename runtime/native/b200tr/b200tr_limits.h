@@ -325,3 +325,29 @@ static const unsigned short B200TR_ENGLISH_LENGTH[] = { 8, 9, 19, 20, 36, 71, 87
 static const unsigned short B200TR_NEVER[] = { 36, 0 };
 /* The lines the game hands sprintf as its FORMAT: a plain '%' of their translation is written as "%%". */
 static const unsigned short B200TR_FORMAT[] = { 8, 9, 20, 98, 118, 150, 151, 652, 1228, 1231, 1734, 1914, 1915, 0 };
+/* sprintf formats the game's code pushes itself and the bytes of the frame buffer every call writes into. */
+typedef struct { const char *format; unsigned short room; } b200tr_sprintf_room;
+static const b200tr_sprintf_room B200TR_SPRINTF_ROOM[] = {
+    { "\x0a""\x0a""%s,\x0a""%s", 287 },
+    { "%d%s", 143 },
+    { "%d%s12", 143 },
+    { "%s %i", 138 },
+    { "%s (%i)", 256 },
+    { "%s%d%d%s", 909 },
+    { "%s%d.ldw", 143 },
+    { "%s%s", 143 },
+    { "%s, %d", 256 },
+    { "%sX%01dY%01d.jpg", 32 },
+    { "Anim Direction: %s  Head Direction: %s", 219 },
+    { "Feet link point for anim frame %s = (%d,%d)", 4 },
+    { "Version 1.2.4, %s", 186 },
+    { "W:aypoint: %s", 7 },
+    { "id=\x22""%s\x22""", 87 },
+    { "login.php?id=%s&platform=%s&game=vf2&sku=%s", 143 },
+    { "markmessage.php?session=%s&message=%d", 143 },
+    { "message.php?session=%s&game=%s&platform=%s", 143 },
+    { "poll.php?session=%s", 133 },
+    { "promocode.php?code=%s&game=%s", 143 },
+    { "vote.php?session=%s&poll=%d&opinion=%d", 143 },
+    { 0, 0 }
+};

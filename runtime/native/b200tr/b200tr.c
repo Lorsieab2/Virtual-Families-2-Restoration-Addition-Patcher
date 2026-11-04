@@ -747,11 +747,28 @@ static char *__cdecl guard_strncpy(char *dst, const char *src, size_t n) {
 static char sprintf_t[(TR_ABSOLUTE_MAX + 64) * 10];
 static char sprintf_e[(TR_ABSOLUTE_MAX + 64) * 10];
 
+/* The formats of B200TR_SPRINTF_ROOM (b200tr_limits.h) as this executable holds them: the address the game's code
+   pushes, and the bytes of the frame buffer every such call writes into (install_sprintf_rooms). */
+#define SPRINTF_ROOMS 64
+static unsigned sprintf_room_at[SPRINTF_ROOMS];
+static int sprintf_room_n[SPRINTF_ROOMS];
+static int sprintf_rooms = 0;
+
+/* The most a sprintf with this (untranslated) format may write, less its NUL; 0 when it is not a known format. */
+static int sprintf_room_of(const char *format) {
+    int k;
+    for (k = 0; k < sprintf_rooms; ++k)
+        if (sprintf_room_at[k] == (unsigned)(UINT_PTR)format) return sprintf_room_n[k] - 1;
+    return 0;
+}
+
 /* sprintf(dst, format, up to 8 more): a translated format or argument may make the text no longer than the English
-   format and arguments make it. */
+   format and arguments make it -- or, for a format of the game's own whose every call writes into a frame buffer of
+   a known size (B200TR_SPRINTF_ROOM: the Details screen's "%s (%i)", "Novice (1)" -> "Débutant (1)"), as long as
+   that buffer holds less its NUL; then a translated argument is not cut to its English first. */
 static int __cdecl guard_sprintf(char *dst, const char *format, DWORD a0, DWORD a1, DWORD a2, DWORD a3, DWORD a4,
                                  DWORD a5, DWORD a6, DWORD a7) {
-    int changed = 0, q, lt, le;
+    int changed = 0, q, lt, le, room_ = 0;
     DWORD a[8], e[8];
     const char *fe = format;
     const char *ft = format;
@@ -763,11 +780,14 @@ static int __cdecl guard_sprintf(char *dst, const char *format, DWORD a0, DWORD 
             fe = r->english_game;
             changed = 1;
             if (r->out_fmt != NULL) ft = r->out_fmt;   /* a line that is no format: its '%' are plain text */
+        } else {
+            room_ = sprintf_room_of(format);
         }
         for (q = 0; q < 8; ++q) {
             const row *x = row_of_out((const void *)(UINT_PTR)a[q]);
             e[q] = x != NULL ? (DWORD)(UINT_PTR)x->english_game : a[q];
-            if (x != NULL) a[q] = (DWORD)(UINT_PTR)cut((const char *)(UINT_PTR)a[q]);   /* each text at most its English */
+            if (x != NULL && room_ <= 0)                 /* each text at most its English */
+                a[q] = (DWORD)(UINT_PTR)cut((const char *)(UINT_PTR)a[q]);
             if (x != NULL) changed = 1;
         }
     } __except (EXCEPTION_EXECUTE_HANDLER) {
@@ -779,6 +799,7 @@ static int __cdecl guard_sprintf(char *dst, const char *format, DWORD a0, DWORD 
     lt = next(sprintf_t, ft, a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7]);
     le = next(sprintf_e, fe, e[0], e[1], e[2], e[3], e[4], e[5], e[6], e[7]);
     if (lt < 0 || le < 0) return next(dst, fe, e[0], e[1], e[2], e[3], e[4], e[5], e[6], e[7]);
+    if (room_ > le) le = room_;                       /* the buffer holds more than the English needs */
     if (lt > le) {
         lt = le;
         if (text_mode == 1) while (lt > 0 && ((unsigned char)sprintf_t[lt] & 0xC0) == 0x80) --lt;
@@ -1035,6 +1056,42 @@ static void install_game_words(void) {
     }
 }
 
+/* The formats of B200TR_SPRINTF_ROOM as this executable holds them: each place its text (with its NUL) is outside
+   the code and the code pushes or loads its address. */
+static void install_sprintf_rooms(void) {
+    HMODULE exe = GetModuleHandleW(0);
+    const IMAGE_NT_HEADERS32 *nt;
+    const IMAGE_SECTION_HEADER *s;
+    unsigned base, nsec, w, i;
+    if (exe == NULL) return;
+    base = (unsigned)(UINT_PTR)exe;
+    nt = (const IMAGE_NT_HEADERS32 *)((const unsigned char *)exe + ((const IMAGE_DOS_HEADER *)exe)->e_lfanew);
+    s = IMAGE_FIRST_SECTION(nt);
+    nsec = nt->FileHeader.NumberOfSections;
+    for (w = 0; B200TR_SPRINTF_ROOM[w].format != NULL; ++w) {
+        const char *f = B200TR_SPRINTF_ROOM[w].format;
+        unsigned len = (unsigned)slen(f);
+        for (i = 0; i < nsec; ++i) {
+            unsigned size = s[i].Misc.VirtualSize ? s[i].Misc.VirtualSize : s[i].SizeOfRawData, from = 0;
+            const unsigned char *data = (const unsigned char *)(UINT_PTR)(base + s[i].VirtualAddress);
+            if (s[i].Characteristics & (IMAGE_SCN_MEM_EXECUTE | IMAGE_SCN_CNT_UNINITIALIZED_DATA)) continue;
+            if (s[i].SizeOfRawData < size) size = s[i].SizeOfRawData;
+            while (from + len + 1 <= size && sprintf_rooms < SPRINTF_ROOMS) {
+                unsigned hits = 0, found = ScanPattern(data + from, size - from, (const unsigned char *)f, no_mask,
+                                                       len + 1, &hits);
+                unsigned at[1];
+                if (!hits) break;
+                if (game_word_refs(s, nsec, base, found, at, 1) > 0) {
+                    sprintf_room_at[sprintf_rooms] = found;
+                    sprintf_room_n[sprintf_rooms] = B200TR_SPRINTF_ROOM[w].room;
+                    ++sprintf_rooms;
+                }
+                from = found - (unsigned)(UINT_PTR)data + 1;
+            }
+        }
+    }
+}
+
 /* ----------------------------------------------------------------- installing */
 
 static void own_folder(void) {
@@ -1079,6 +1136,7 @@ static int install_from_text(const char *text, int text_n) {
     TR_CHECK(by_id != NULL, "out of memory");
     if (!read_rows(text, text_n)) return 0;
     if (used == 0) { log_add("Translations: no translated line could be used (English)\r\n"); return 0; }
+    install_sprintf_rooms();
     TR_CHECK(install_guards(), "a C runtime entry is not what this build expects");
     for (k = 1; k < tab_max_id; ++k) if (by_id[k] != NULL) by_id[k]->rec->override = by_id[k]->out;
     install_game_words();

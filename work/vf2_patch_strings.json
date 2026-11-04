@@ -8618,8 +8618,8 @@
    "english": "Your brokerage has increased your interest rate by %d",
    "wide": false,
    "where": "Redeem Credit in Settings: the server's answer (%d is the number)",
-   "note": "the original game's own words, drawn by the game, at most 250 letters; the % places are filled with the words or numbers shown",
-   "max_length": 250,
+   "note": "the original game's own words, drawn by the game, at most 160 letters; the % places are filled with the words or numbers shown",
+   "max_length": 160,
    "is_format": true
   },
   {
@@ -8627,8 +8627,8 @@
    "english": "Your brokerage has increased your interest rate by %d%",
    "wide": false,
    "where": "Redeem Credit in the store: the server's answer (%d is the number; the original game ends this line with a lone %)",
-   "note": "the original game's own words, drawn by the game, at most 250 letters; the % places are filled with the words or numbers shown",
-   "max_length": 250,
+   "note": "the original game's own words, drawn by the game, at most 160 letters; the % places are filled with the words or numbers shown",
+   "max_length": 160,
    "is_format": true
   },
   {
@@ -8636,8 +8636,8 @@
    "english": "%s, Lvl 1",
    "wide": false,
    "where": "Adoption and Dating: a candidate's career and level (%s is the career)",
-   "note": "the original game's own words, drawn by the game, at most 120 letters; the % places are filled with the words or numbers shown",
-   "max_length": 120,
+   "note": "the original game's own words, drawn by the game, at most 80 letters; the % places are filled with the words or numbers shown",
+   "max_length": 80,
    "is_format": true
   },
   {
@@ -8645,8 +8645,8 @@
    "english": "%s, Lvl 2",
    "wide": false,
    "where": "Adoption and Dating: a candidate's career and level (%s is the career)",
-   "note": "the original game's own words, drawn by the game, at most 120 letters; the % places are filled with the words or numbers shown",
-   "max_length": 120,
+   "note": "the original game's own words, drawn by the game, at most 80 letters; the % places are filled with the words or numbers shown",
+   "max_length": 80,
    "is_format": true
   },
   {
@@ -8663,8 +8663,8 @@
    "english": "%d coins have been added to your balance.",
    "wide": false,
    "where": "Redeem Credit (the store's hidden corner, Settings): the server's answer (%d is the number)",
-   "note": "the original game's own words, drawn by the game, at most 250 letters; the % places are filled with the words or numbers shown",
-   "max_length": 250,
+   "note": "the original game's own words, drawn by the game, at most 160 letters; the % places are filled with the words or numbers shown",
+   "max_length": 160,
    "is_format": true
   },
   {

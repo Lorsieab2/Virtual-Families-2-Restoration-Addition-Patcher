@@ -374,8 +374,103 @@ def scan_limits(exe_bytes: bytes, core_bytes: bytes | None = None) -> dict:
                 limit[sid] = min(limit.get(sid, 1 << 30), count - 1)
             else:
                 english_only.add(sid)
+    rooms, unproved = scan_sprintf_rooms(ex, sites, md, t_va, code)
     return {"get_string_calls": len(calls), "copies": copies, "strncpy_room": limit,
-            "english_length": english_only, "format": formats, "unresolved": len(unresolved)}
+            "english_length": english_only, "format": formats, "unresolved": len(unresolved),
+            "sprintf_room": rooms, "sprintf_unproved": unproved}
+
+
+PROLOGUE = b"\x55\x8B\xEC"           # push ebp; mov ebp, esp
+
+
+def frame_space(code: bytes, off: int, x: int) -> int | None:
+    """The bytes a stack buffer at [ebp - x] may hold in the function around code offset `off`: up to the nearest
+    other [ebp - k] (k < x) the function's bytes could address, else up to ebp. Every byte of the function is read
+    as a possible ModRM [ebp + disp8 / disp32] (a superset of the real references: a false one only makes the room
+    smaller). The function runs from the last `push ebp; mov ebp, esp` before `off` to the next one; None without."""
+    def entry(at: int) -> bool:
+        # a function's first instruction: aligned to 16 bytes after the padding or the `ret` of the one before
+        # (bytes 55 8B EC inside an instruction would otherwise cut the function short)
+        return at % 16 == 0 and at > 0 and (code[at - 1] in (0xCC, 0xC3, 0x90) or code[at - 3] == 0xC2)
+
+    start = code.rfind(PROLOGUE, 0, off)
+    while start > 0 and not entry(start):
+        start = code.rfind(PROLOGUE, 0, start)
+    if start <= 0:
+        return None
+    end = code.find(PROLOGUE, off)
+    while end >= 0 and not entry(end):
+        end = code.find(PROLOGUE, end + 1)
+    body = code[start:end if end >= 0 else len(code)]
+    ks = set()
+    for i in range(len(body) - 1):
+        b = body[i]
+        if b & 0xC7 == 0x45:
+            d = struct.unpack_from("<b", body, i + 1)[0]
+        elif b & 0xC7 == 0x85 and i + 5 <= len(body):
+            d = struct.unpack_from("<i", body, i + 1)[0]
+        else:
+            continue
+        if -0x100000 < d < 0:
+            ks.add(-d)
+    above = [k for k in ks if k < x]
+    return x - (max(above) if above else 0)
+
+
+def scan_sprintf_rooms(ex, sites: dict, md, t_va: int, code: bytes) -> tuple[dict, set]:
+    """Every sprintf call whose FORMAT is a literal the code pushes (push imm32, a text outside the table) and whose
+    destination is a buffer of the caller's frame (`lea reg, [ebp - x]; push reg` as the last push): {format text:
+    the smallest frame_space over its calls}. A format with any call whose destination cannot be told this way, or
+    whose text is also a line of the table (the linker may fold the two into one address), is in `unproved`."""
+    sprintf = sites["SPRINTF"]
+    table_texts = set()
+    for k in range(sites["COUNT"]):
+        try:
+            rec = struct.unpack("<IIII", ex.read(sites["TABLE"] + 16 * k, 16))
+        except SiteError:
+            break
+        if rec[2]:
+            t = ex.cstr(rec[2])
+            if t is not None:
+                table_texts.add(t)
+    rooms: dict[bytes, int] = {}
+    unproved: set[bytes] = set()
+    for m in re.finditer(rb"\xE8", code):
+        if m.start() + 5 > len(code):
+            continue
+        at = t_va + m.start()
+        if (at + 5 + struct.unpack_from("<i", code, m.start() + 1)[0]) & 0xFFFFFFFF != sprintf:
+            continue
+        before = []
+        for back in range(64, 0, -1):
+            d = list(md.disasm(code[m.start() - back:m.start()], at - back))
+            if d and d[-1].address + d[-1].size == at and sum(i.size for i in d) == back:
+                before = d
+                break
+        pushes = [k for k, i in enumerate(before) if i.mnemonic == "push"]
+        if len(pushes) < 2:
+            continue
+        dst, fmt = before[pushes[-1]], before[pushes[-2]]
+        if not fmt.op_str.startswith("0x") or fmt.size != 5:
+            continue
+        text = ex.cstr(int(fmt.op_str, 16))
+        if text is None:
+            continue
+        room = None
+        if re.fullmatch(r"e(ax|bx|cx|dx|si|di)", dst.op_str):
+            for i in reversed(before[:pushes[-1]]):
+                mm = re.fullmatch(dst.op_str + r", \[ebp - (0x[0-9a-f]+)\]", i.op_str) if i.mnemonic == "lea" else None
+                if mm:
+                    room = frame_space(code, m.start(), int(mm.group(1), 16))
+                    break
+                if i.op_str.startswith(dst.op_str + ",") or i.mnemonic in ("call", "pop", "xchg") \
+                        or i.mnemonic.startswith("j"):
+                    break
+        if room is None or text in table_texts:
+            unproved.add(text)
+        else:
+            rooms[text] = min(rooms.get(text, 1 << 30), room)
+    return rooms, unproved
 
 
 # The line the program parses: never translated (the decimal point numbers are written with).
@@ -391,6 +486,15 @@ def merge_limits(scans: list[dict]) -> dict:
             limit[k] = min(limit.get(k, 1 << 30), v)
         english |= s["english_length"]
         formats |= s["format"]
+    sprintf_room: dict[bytes, int] = {}
+    unproved: set[bytes] = set()
+    for s in scans:
+        unproved |= s["sprintf_unproved"]
+        for k, v in s["sprintf_room"].items():
+            sprintf_room[k] = min(sprintf_room.get(k, 1 << 30), v)
+    # only a format every executable proves, and only one a translated line can reach as an argument (%s)
+    sprintf_room = {k: v for k, v in sprintf_room.items()
+                    if k not in unproved and b"%s" in k and all(k in s["sprintf_room"] for s in scans)}
     return {
         "comment": "Written by runtime/tools/gen_b200_translations_sites.py from the B200 executables; do not edit.",
         "executables": len(scans),
@@ -401,6 +505,10 @@ def merge_limits(scans: list[dict]) -> dict:
         "english_length": sorted(english),
         "never": {str(k): v for k, v in sorted(NEVER.items())},
         "format": sorted(formats),
+        # sprintf formats the game's code pushes itself, whose every call writes into a buffer of its own frame:
+        # the bytes that buffer holds (the smallest over the calls and the executables), so a translated %s
+        # argument may make the text that long, not only as long as the English (guard_sprintf)
+        "sprintf_room": {k.decode("cp1252"): v for k, v in sorted(sprintf_room.items())},
     }
 
 
@@ -417,8 +525,17 @@ def render_limits_header(data: dict) -> str:
         f"static const unsigned short B200TR_NEVER[] = {{ {never}, 0 }};",
         "/* The lines the game hands sprintf as its FORMAT: a plain '%' of their translation is written as \"%%\". */",
         f"static const unsigned short B200TR_FORMAT[] = {{ {', '.join(str(v) for v in data['format'])}, 0 }};",
+        "/* sprintf formats the game's code pushes itself and the bytes of the frame buffer every call writes into. */",
+        "typedef struct { const char *format; unsigned short room; } b200tr_sprintf_room;",
+        "static const b200tr_sprintf_room B200TR_SPRINTF_ROOM[] = {\n"
+        + "".join(f"    {{ {_c_text(k)}, {v} }},\n" for k, v in data.get("sprintf_room", {}).items())
+        + "    { 0, 0 }\n};",
         "",
     ])
+
+
+def _c_text(s: str) -> str:
+    return '"' + "".join(c if 0x20 <= ord(c) < 0x7F and c not in '"\\' else f"\\x{ord(c):02x}\"\"" for c in s) + '"'
 
 
 def main(argv=None) -> int:

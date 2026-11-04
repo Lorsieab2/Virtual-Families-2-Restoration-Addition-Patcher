@@ -56,8 +56,9 @@ LITERALS: dict[str, tuple[str, str, str, int]] = {}
 # instructions the translation's address instead (runtime/native/b200tr/b200tr_game_words.h, written from this
 # table). {name: (english, where, room in bytes, the number of instructions that hand it over)}. The room is what
 # the place it goes to holds: a button, a text box and a message box keep a copy of any length; CDealerSay::Say
-# strncpy's into 255 bytes; a sprintf FORMAT goes into a buffer of 256 (the title screen, Adoption, Dating) or 300
-# bytes (Redeem Credit) with its %s / %d filled. Left out (the audit of every literal the original code hands over):
+# strncpy's into 255 bytes; a sprintf FORMAT goes into a frame buffer gen_b200_translations_sites.frame_space proves
+# at least 186 bytes (the title screen), 143 (Adoption, Dating: with the career's English) or 180 (Redeem Credit),
+# with its %s / %d filled. Left out (the audit of every literal the original code hands over):
 # the Community Event vote dialog's words; it opens only while logged in to LDW's server, which no longer runs.
 GAME_WORDS: dict[str, tuple[str, str, int, int]] = {
     "game.manage_games": ("Manage Games", "the title screen: the Manage Games button", 60, 1),
@@ -66,9 +67,9 @@ GAME_WORDS: dict[str, tuple[str, str, int, int]] = {
     "game.decor": ("Decor", "the house: the Decor button", 60, 1),
     "game.done": ("Done", "Settings opened from the game menu: the button that closes it", 60, 1),
     "game.career_level_1": ("%s, Lvl 1", "Adoption and Dating: a candidate's career and level (%s is the career)",
-                            120, 2),
+                            80, 2),
     "game.career_level_2": ("%s, Lvl 2", "Adoption and Dating: a candidate's career and level (%s is the career)",
-                            120, 2),
+                            80, 2),
     "game.special_training": ("Special training is needed to collect this",
                               "the house: the message when a villager cannot pick up a collectable", 200, 1),
     "game.couch_or_bed": ("They need a couch or a bed...",
@@ -77,12 +78,12 @@ GAME_WORDS: dict[str, tuple[str, str, int, int]] = {
                             "Redeem Credit (the store's hidden corner, Settings): the server's answer", 250, 2),
     "game.coins_added": ("%d coins have been added to your balance.",
                          "Redeem Credit (the store's hidden corner, Settings): the server's answer (%d is the number)",
-                         250, 2),
+                         160, 2),
     "game.brokerage_store": ("Your brokerage has increased your interest rate by %d%",
                              "Redeem Credit in the store: the server's answer (%d is the number; the original game "
-                             "ends this line with a lone %)", 250, 1),
+                             "ends this line with a lone %)", 160, 1),
     "game.brokerage_settings": ("Your brokerage has increased your interest rate by %d",
-                                "Redeem Credit in Settings: the server's answer (%d is the number)", 250, 1),
+                                "Redeem Credit in Settings: the server's answer (%d is the number)", 160, 1),
     "game.redeem_problem": ("There was a problem redeeming the code.\nMake sure you are connected to the internet "
                             "and try again.",
                             "Redeem Credit (the store's hidden corner, Settings): no answer from the server", 250, 2),
