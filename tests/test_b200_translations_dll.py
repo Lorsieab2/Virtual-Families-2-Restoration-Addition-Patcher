@@ -111,7 +111,8 @@ def test_the_unicode_contract():
 def test_the_limits_are_a_table_of_the_games_copies():
     assert LIMITS["executables"] >= 1 and LIMITS["get_string_calls"] > 600
     assert LIMITS["never"] == {"36": "the decimal point (eString_Decimal): numbers are written with it"}
-    assert all(1 <= int(i) < 0xFF3 for i in LIMITS["strncpy_room"]) and all(v > 0 for v in LIMITS["strncpy_room"].values())
+    assert all(1 <= int(i) <= 0xFF4 for i in LIMITS["strncpy_room"]) and all(v > 0 for v in LIMITS["strncpy_room"].values())
+    assert LIMITS["strncpy_room"]["4083"] == 38          # the Behavior Patches caption (B209): strncpy(.., 0x27)
     header = (SRC / "b200tr_limits.h").read_text()
     for k, v in LIMITS["strncpy_room"].items():
         assert "{ %d, %d }," % (int(k), v) in header

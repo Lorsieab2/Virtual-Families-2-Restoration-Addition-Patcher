@@ -7086,6 +7086,19 @@ def head_string_ids_for_entry(entry_index):
     return base, base + 1
 
 
+def private_romantic_time_string_id():
+    """The Behavior Patches caption "Having private adult romantic time": its own record (B209), chained one past
+    the hairstyle rows, the highest block, so no established id moves. Before B209 the generated code copied the
+    English itself, so the caption could not be translated."""
+    return head_string_ids_for_entry(HEAD_STORE_ENTRY_COUNT - 1)[1] + 1
+
+
+def power_failure_spoiled_food_string_id():
+    """Island Events' Power Failure B2 result ("The food was not ok."): its own record (B209), so the stock line
+    eEventThePowerFailureResultB2 keeps its stock words in every executable and both lines translate."""
+    return private_romantic_time_string_id() + 1
+
+
 def villager_body_image_base():
     return ORIG_IMAGE_MAX + 1 + len(ITEMS) + LOCKED_GENERATION_FRAME_COUNT + len(VISIBLE_SPECIAL_UPGRADE_ICON_FILES)
 
@@ -19677,6 +19690,20 @@ def patch_string_manager(manifest):
                 "key": key,
                 "text": text,
             })
+        romantic_id = private_romantic_time_string_id()
+        romantic_key = "eString_VF2PrivateRomanticTime"
+        romantic_text = "Having private adult romantic time"
+        romantic_key_sym = f"_vf2behaviorstr_key_{romantic_id:X}"
+        romantic_text_sym = f"_vf2behaviorstr_text_{romantic_id:X}"
+        helper_lines.append(f'const char {romantic_key_sym[1:]}[] = "{c_string(romantic_key)}";')
+        helper_lines.append(f'const char {romantic_text_sym[1:]}[] = "{c_string(romantic_text)}";')
+        new_rows.append((romantic_id, romantic_key_sym, romantic_text_sym))
+        string_manifest.append({
+            "pc_string_id": hex(romantic_id),
+            "source": "behavior label",
+            "key": romantic_key,
+            "text": romantic_text,
+        })
 
     if ENABLE_HOLIDAY_ORNAMENTS:
         ornament_title_id = holiday_ornament_collection_title_string_id()
@@ -19940,15 +19967,26 @@ def patch_string_manager(manifest):
     if ENABLE_ISLAND_EVENTS:
         # Power Failure's spoiled-food result no longer makes EVERYONE ill
         # (each person has a 15% chance; see append_power_failure_helper_cpp),
-        # so its stock text would now overstate it. Only the island-events
-        # executables carry that changed outcome; the others keep the stock
-        # event and its stock text.
-        existing_text_fixes.append({
-            "old": "Everyone gets an upset stomach. The food was not ok.",
-            "new": "The food was not ok.",
-            "key": "eEventThePowerFailureResultB2",
-            "symbol_prefix": "_vf2textfix_power_failure_b2",
-            "candidates": (b"Everyone gets an upset stomach. The food was not ok.",),
+        # so the stock text would overstate it. The result is a record of the
+        # patcher's own (B209): the stock eEventThePowerFailureResultB2 keeps
+        # its stock words in every executable, so a translation of either
+        # line is the same line in every variant (before B209 the stock record
+        # was rewritten here, and only in the island-events executables).
+        spoiled_id = power_failure_spoiled_food_string_id()
+        spoiled_key = "eEventThePowerFailureResultB2Patched"
+        spoiled_text = "The food was not ok."
+        spoiled_key_sym = f"_vf2eventstr_key_{spoiled_id:X}"
+        spoiled_text_sym = f"_vf2eventstr_text_{spoiled_id:X}"
+        helper_lines.append(f'const char {spoiled_key_sym[1:]}[] = "{c_string(spoiled_key)}";')
+        helper_lines.append(f'const char {spoiled_text_sym[1:]}[] = "{c_string(spoiled_text)}";')
+        new_rows.append((spoiled_id, spoiled_key_sym, spoiled_text_sym))
+        string_manifest.append({
+            "pc_string_id": hex(spoiled_id),
+            "source": "mobile island event",
+            "event": "CEventThePowerFailure",
+            "kind": "result B2 (spoiled food)",
+            "key": spoiled_key,
+            "text": spoiled_text,
         })
     existing_text_fix_symbols = []
     for fix in existing_text_fixes:
@@ -21116,7 +21154,9 @@ extern "C" int __cdecl VF2PowerFailureGetResultDescription(void *event, int choi
     if (choice == 0) return 0x9BC; // stock ResultA
     VF2PowerFailureState *state = VF2FindPowerFailureState(event, false);
     if (state && state->b2) {
-        return 0x9BE; // eEventThePowerFailureResultB2
+        // The patcher's own record, "The food was not ok." (B209): the stock
+        // eEventThePowerFailureResultB2 (0x9BE) keeps its stock words.
+        return __VF2_POWER_FAILURE_SPOILED_FOOD_STRING_ID__;
     }
     return 0x9BD; // eEventThePowerFailureResultB1
 }
@@ -21139,6 +21179,9 @@ extern "C" void __cdecl VF2PowerFailureImpactGame(void *event, int choice)
     VF2ClearPowerFailureState(event);
 }
 '''
+    helper = helper.replace(
+        "__VF2_POWER_FAILURE_SPOILED_FOOD_STRING_ID__", hex(power_failure_spoiled_food_string_id())
+    )
     helper_path.write_text(text.rstrip() + helper, encoding="ascii")
 
 
@@ -21218,8 +21261,9 @@ def patch_power_failure_event(manifest):
     manifest["PowerFailure"] = {
         "status": "enabled",
         "choice_a": "stock food reset: Environment.SetProp(0x17), FoodStore.Reset(true)",
-        "choice_b": "one GetRandom(4) roll: 3 in 4 B1 (no illness), 1 in 4 B2 (ResultB2 'The food was not ok.' + GiveAllVillagersSymptom(2,15): each villager 15%)",
-        "result_ids": {"a": "0x9BC", "b1": "0x9BD", "b2": "0x9BE"},
+        "choice_b": "one GetRandom(4) roll: 3 in 4 B1 (no illness), 1 in 4 B2 (the patcher's own record 'The food was not ok.' + GiveAllVillagersSymptom(2,15): each villager 15%)",
+        "result_ids": {"a": "0x9BC", "b1": "0x9BD", "b2": hex(power_failure_spoiled_food_string_id())},
+        "result_b2_stock_record": "0x9BE keeps its stock words (B209); before, it was rewritten to the patched text in the island-events executables only",
         "state_storage": "four bounded helper slots keyed by stock event pointer; overwritten on CalcAward and cleared by ImpactGame",
         "forbidden_event_offsets": ["0x0C", "0x14"],
         "routes": applied,
@@ -39541,8 +39585,11 @@ extern "C" void __cdecl VF2PrivateRomanticTimeLabel(CVillager &villager)
 {
     if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::GoInHouse)) return;
     if (!VF2SkipSameSexTryToMakeBaby()) return;
+    // The caption is a string-table record of the patcher's own, read through
+    // GetString like every other label, so a translation (vf2tr_b200.dll's
+    // override) reaches it. Before B209 the English was copied here itself.
     char *behaviorLabel = ((char *)&villager) + 0x1BBA8;
-    strncpy(behaviorLabel, "Having private adult romantic time", 0x27);
+    VF2SetBehaviorLabel(villager, __VF2_PRIVATE_ROMANTIC_TIME_STRING_ID__);
     behaviorLabel[0x27] = '\\0';
 }
 
@@ -41616,6 +41663,9 @@ extern "C" void __cdecl VF2EnableAutonomousCandidates(void *villager)
         f"{furniture_item_id_by_name('InvisibleYogaEquipment'):#x}",
     )
     helper_cpp = helper_cpp.replace("__VF2_BEHAVIOR_LABEL_ARRAYS__", behavior_label_arrays)
+    helper_cpp = helper_cpp.replace(
+        "__VF2_PRIVATE_ROMANTIC_TIME_STRING_ID__", str(private_romantic_time_string_id())
+    )
     helper_cpp = helper_cpp.replace("__VF2_PRAISE_AWARD_CASES__", praise_award_cases_cpp)
     helper_cpp = helper_cpp.replace("__VF2_SCOLD_AWARD_CASES__", scold_award_cases_cpp)
     (PATCHED / "vf2_spontaneous_behaviors.cpp").write_text(helper_cpp, encoding="ascii")

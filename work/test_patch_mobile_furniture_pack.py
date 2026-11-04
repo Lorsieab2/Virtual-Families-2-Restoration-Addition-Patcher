@@ -7327,7 +7327,13 @@ class MobileIslandEventTextTests(unittest.TestCase):
                 self.assertEqual(len(contract["routes"]), 3)
                 self.assertEqual(contract["forbidden_event_offsets"], ["0x0C", "0x14"])
                 self.assertIn("dialog +0x830", contract["lifecycle_evidence"])
-                self.assertEqual(contract["result_ids"]["b2"], "0x9BE")
+                # B209: the spoiled-food result is the patcher's own record,
+                # so the stock 0x9BE keeps its stock words in every variant.
+                self.assertEqual(
+                    contract["result_ids"]["b2"],
+                    hex(patcher.power_failure_spoiled_food_string_id()),
+                )
+                self.assertNotEqual(contract["result_ids"]["b2"], "0x9BE")
                 helper = (temp / "vf2_island_events.cpp").read_text(encoding="ascii")
                 helper_tail = helper[helper.index("struct VF2PowerFailureState") :]
                 self.assertIn("gVF2PowerFailureStates[4]", helper_tail)
@@ -8477,36 +8483,31 @@ class TextFixStringManagerTests(unittest.TestCase):
             finally:
                 patcher.PATCHED = old_patched
 
-    def test_power_failure_spoiled_text_is_retargeted_in_island_event_builds(self):
+    def test_power_failure_spoiled_text_is_its_own_record_in_island_event_builds(self):
         """Codex on PR #418: the B2 result must really read "The food was not
         ok." now that only 15% of villagers fall ill, not "Everyone gets an
-        upset stomach..."."""
-        updates, obj, helper = self._power_failure_text_fix(True)
-        rows = [row for row in updates
-                if row["old"] == "Everyone gets an upset stomach. The food was not ok."]
-        self.assertEqual(len(rows), 1)
-        self.assertEqual(rows[0]["new"], "The food was not ok.")
-        self.assertEqual(len(rows[0]["table_relocations"]), 1)
-        # The relocation sits in the text field (+8) of the string record
-        # whose id is the stock eEventThePowerFailureResultB2, 0x9BE, and now
-        # names the patcher's own replacement text.
-        vaddr = int(rows[0]["table_relocations"][0], 16)
-        table = obj.symbol(patcher.STRINGTABLE)
-        sec = obj.section(table.section)
-        record_id = struct.unpack_from("<I", obj.buf, sec.raw_ptr + vaddr - 8)[0]
-        self.assertEqual(record_id, 0x9BE)
-        target = None
-        for i in range(sec.nreloc):
-            va, symidx, _ = struct.unpack_from("<IIH", obj.buf, sec.reloc_ptr + i * 10)
-            if va == vaddr:
-                target = obj.symbol_by_index[symidx].name
-        self.assertEqual(target, "_vf2textfix_power_failure_b2_text")
-        self.assertIn('vf2textfix_power_failure_b2_text[] = "The food was not ok.";', helper)
+        upset stomach...". B209: that text is a record of the patcher's own
+        (the id VF2PowerFailureGetResultDescription returns), and the stock
+        0x9BE is never rewritten, so a translation of either line is the same
+        line in every variant."""
+        updates, _obj, helper = self._power_failure_text_fix(True)
+        self.assertFalse([row for row in updates if "upset stomach" in row["old"]])
+        self.assertNotIn("power_failure_b2", helper)
+        spoiled_id = patcher.power_failure_spoiled_food_string_id()
+        self.assertIn(f'vf2eventstr_key_{spoiled_id:X}[] = "eEventThePowerFailureResultB2Patched";', helper)
+        self.assertIn(f'vf2eventstr_text_{spoiled_id:X}[] = "The food was not ok.";', helper)
+        # chained past the hairstyle rows, the highest block: no established id moves
+        self.assertEqual(
+            patcher.private_romantic_time_string_id(),
+            patcher.head_string_ids_for_entry(patcher.HEAD_STORE_ENTRY_COUNT - 1)[1] + 1,
+        )
+        self.assertEqual(spoiled_id, patcher.private_romantic_time_string_id() + 1)
 
     def test_power_failure_text_is_stock_without_island_events(self):
         updates, _obj, helper = self._power_failure_text_fix(False)
         self.assertFalse([row for row in updates if "upset stomach" in row["old"]])
         self.assertNotIn("power_failure_b2", helper)
+        self.assertNotIn("eEventThePowerFailureResultB2Patched", helper)
 
     def test_all_custom_achievement_strings_are_exact_and_stable(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -13525,10 +13526,14 @@ class SameSexMarriagePatchTests(unittest.TestCase):
             'retarget(0x14B5, 0x166, "_VF2PrivateRomanticTimeLabel"',
             source,
         )
+        # B209: the caption is a string-table record read through GetString
+        # (so a translation reaches it), with the terminator kept.
         self.assertIn(
-            'strncpy(behaviorLabel, "Having private adult romantic time", 0x27);',
+            "VF2SetBehaviorLabel(villager, __VF2_PRIVATE_ROMANTIC_TIME_STRING_ID__);\n"
+            "    behaviorLabel[0x27] = '\\\\0';",
             source,
         )
+        self.assertNotIn('strncpy(behaviorLabel, "Having private adult romantic time"', source)
         # The label reuses the very predicate that suppresses pregnancy, so
         # the two can never disagree.
         self.assertIn("if (!VF2SkipSameSexTryToMakeBaby()) return;", source)

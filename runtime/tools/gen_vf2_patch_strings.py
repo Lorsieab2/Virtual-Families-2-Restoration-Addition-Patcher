@@ -7,7 +7,7 @@ the ones a companion DLL uses as printf formats.
 * `table`: a line is the patcher's when its id is in a patched executable's string table and not in the original's;
 * `changed`: a stock line is rewritten when EVERY patched executable gives it the same, other words (a translation only
   ever runs in a patched game, so its template uses the patched words); a stock line only some executables rewrite
-  (the island events' three) keeps the original words;
+  would keep the original words (since B209 there is none: a variant's own words are records of its own);
 * `literals`: the patches' text that is not a table record: every text a companion DLL marks with TRW(L"...") (wide: a
   Windows dialog or message box) or TRA("...", room) (narrow: drawn by the game), and the text of generated
   executable code (LITERALS below). The DLL asks vf2tr_b200.dll for each by its English (B200Tr_TextW / B200Tr_TextA).
@@ -44,16 +44,10 @@ PIECE = re.compile(r'L?"((?:[^"\\\n]|\\.)*)"')
 ESCAPES = {"n": "\n", "r": "\r", "t": "\t", "\\": "\\", '"': '"', "'": "'"}
 
 # Text the generated executable code shows that is not a table record. {name: (english, where, note, max_length)}.
-LITERALS = {
-    "exe.private_adult_romantic_time": (
-        "Having private adult romantic time",
-        "Behavior Patches: the caption under a same-sex couple's villagers while they try for a baby "
-        "(VF2PrivateRomanticTimeLabel, strncpy(label, .., 0x27))",
-        "the executable's code copies this text itself, so it is not yet read from a translation: it shows in English "
-        "until the patch reads it from the string table",
-        38,
-    ),
-}
+# Empty since B209: every text the generated code shows is a record of the string table (the Behavior Patches
+# caption "Having private adult romantic time" was the last one; it is eString_VF2PrivateRomanticTime now).
+# tests/test_vf2_translation_strings.py scans the generator for a copied text and fails here if one comes back.
+LITERALS: dict[str, tuple[str, str, str, int]] = {}
 
 SOURCES = (
     (r"OutfitBody", "Outfits"), (r"Hairstyle", "Hairstyles"), (r"CheatUpgrade", "Cheat Upgrades"),

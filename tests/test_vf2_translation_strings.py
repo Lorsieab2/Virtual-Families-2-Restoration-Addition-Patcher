@@ -47,11 +47,20 @@ def patched() -> bytes:
 def test_the_patch_data_is_well_formed():
     data = ts.patch_data()
     ids = [r["id"] for r in data["table"]]
-    assert len(ids) == len(set(ids)) and min(ids) > data["original_ids_to"] - 100 and max(ids) < 0xFF3
+    # the two B209 records (the Behavior Patches caption, Island Events' spoiled-food result) are the last ids
+    assert len(ids) == len(set(ids)) and min(ids) > data["original_ids_to"] - 100 and max(ids) == 0xFF4
     assert all(r["key"] and r["source"] for r in data["table"])
     assert [r["id"] for r in data["table"] if not r["english"]] == [3779, 3780]     # empty in the game: not in a template
     assert {r["id"] for r in data["changed"]} == {5, 17, 44, 45, 46, 47, 134, 401, 403, 1157}
-    assert len(data["table"]) == 1418
+    assert len(data["table"]) == 1420
+    by_id = {r["id"]: r for r in data["table"]}
+    assert by_id[0xFF3] == {"id": 0xFF3, "key": "eString_VF2PrivateRomanticTime",
+                            "english": "Having private adult romantic time", "source": "Behavior Patches"}
+    assert by_id[0xFF4] == {"id": 0xFF4, "key": "eEventThePowerFailureResultB2Patched",
+                            "english": "The food was not ok.", "source": "Island Events"}
+    # the stock line Island Events used to rewrite keeps its stock words everywhere: it is not a changed line
+    assert 2494 not in {r["id"] for r in data["changed"]}
+    assert data["literals"] and all(r["name"].startswith("time.") for r in data["literals"])
     names = [r["name"] for r in data["literals"]]
     assert len(names) == len(set(names)) and all(re.fullmatch(r"[a-z0-9_.-]+", n) for n in names)
     keys = [e.key for e in ts.patch_entries()]
@@ -192,7 +201,7 @@ def test_the_reader_finds_the_table_in_the_original_game():
 
 def test_the_reader_finds_the_table_in_a_patched_game():
     table = ts.read_table(patched())
-    assert len(table) >= 3557 and max(table) <= 0xFF2
+    assert len(table) >= 3557 and max(table) <= 0xFF4
     assert table[113][1] == b"Try Again" and table[5][1] == b"{name} sees their adorable pet."
 
 
