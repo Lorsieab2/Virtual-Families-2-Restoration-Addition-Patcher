@@ -625,6 +625,8 @@ enum UniNameSite {
     UNI_NSITE_BOX_DRAW,
     UNI_NSITE_GAME_STATE_INSTANCE,
     UNI_NSITE_GS_SAVE,
+    UNI_NSITE_WINDOW_GET,
+    UNI_NSITE_WINDOW_FONT,
     UNI_NSITE_COUNT
 };
 
@@ -1915,6 +1917,8 @@ static const UniEvidence UNI_NAME_EVIDENCE[] = {
     { UNI_NSITE_GAME_STATE_INSTANCE, 'A', 2, 0x4Fu },
     { UNI_NSITE_GAME_STATE_INSTANCE, 'A', 2, 0x65u },
     { UNI_NSITE_GS_SAVE, 'L', 9, 0x0u },
+    { UNI_NSITE_WINDOW_GET, 'C', 1, 0x15u },
+    { UNI_NSITE_WINDOW_FONT, 'C', 1, 0x6Du },
 };
 
 // every name box's SetCanEdit call: the pin, the kind (F family name, M member) and the offset of

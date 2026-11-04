@@ -136,6 +136,10 @@ NAME_SITES = (
     ("BOX_DRAW", "box_draw", "entry"),
     ("GAME_STATE_INSTANCE", "gs_get", ("abs", GAME_STATE_INSTANCE)),
     ("GS_SAVE", "gs_save", "entry"),
+    # a box without its own font is drawn in the game window's font, and while it is typed into the stock Draw
+    # cuts its text byte by byte until it fits the box: the stock Draw's own calls of the window and its font
+    ("WINDOW_GET", "box_draw", ("call", "?Get@ldwGameWindow@@SAPAV1@XZ")),
+    ("WINDOW_FONT", "box_draw", ("call", "?GetFont@ldwGameWindow@@QAEPAVldwFont@@XZ")),
 )
 # theGameState::Save(slot), the game's own save: its vtable slot 14 (+38h) is chained (whatever it holds: the stock
 # Save, or the Time Controls DLL's handler), and pending Names records are written right after every save. Up to 28

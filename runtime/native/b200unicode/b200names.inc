@@ -554,6 +554,10 @@ static void __fastcall UniBoxDraw(void *implp, void *) {
     NameBox *b = BoxOf(impl);
     unsigned char *text = *(unsigned char **)(impl + 0x30);
     unsigned font = *(unsigned *)(impl + 0x3C);
+    if (!font && b) {          // no font of its own: the stock Draw uses the game window's (and cuts the text to it)
+        void *window = ((void *(__cdecl *)())NSITE(WINDOW_GET))();
+        font = window ? (unsigned)((void *(__thiscall *)(void *))NSITE(WINDOW_FONT))(window) : 0;
+    }
     unsigned fimpl = font ? *(unsigned *)(font + 4) : 0;
     if (!b || !text || !fimpl || !IMPL_FIELD(fimpl, 0x10) || *(unsigned char *)(impl + 0x2F)) {
         ((BoxDrawFn)(void *)BoxDrawTrampoline)(implp);
@@ -626,7 +630,8 @@ static bool ResolveNames() {
     for (unsigned e = 0; e < sizeof(UNI_NAME_EVIDENCE) / sizeof(UNI_NAME_EVIDENCE[0]); ++e) {
         const UniEvidence &ev = UNI_NAME_EVIDENCE[e];
         unsigned at = loc[ev.pin] + ev.offset;
-        unsigned v = ev.kind == 'A' ? *(const unsigned *)at : at;
+        unsigned v = ev.kind == 'A' ? *(const unsigned *)at : ev.kind == 'C' ? at + 4 + *(const unsigned *)at : at;
+        if (ev.kind == 'C' && (v < imageBase || v >= imageEnd)) return false;     // a call's target: in the image
         if (have[ev.site] && NSites[ev.site] != v) return false;
         NSites[ev.site] = v;
         have[ev.site] = true;

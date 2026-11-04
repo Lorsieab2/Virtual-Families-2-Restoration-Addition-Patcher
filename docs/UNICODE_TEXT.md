@@ -336,3 +336,10 @@ opening one) and `tests/test_vf2_game_text.py`.
   selector, an emoji modifier) is refused too, so it never lands on the box's last character or starts a character
   with nothing before it (`tests/test_b200_unicode_dll.py`, `test_a_mark_after_a_character_refused_*`;
   `tests/test_clip_text_boxes.py`, `test_typing_and_a_paste_agree`).
+* A name box scrolls: its Draw (`UniBoxDraw`) hands the stock Draw a fitted copy, so the stock Draw's own loop that
+  cuts a box being typed into a byte at a time until it fits never cuts the name. A box with no font of its own (the
+  family member screen's) is fitted in the game window's font, the one the stock Draw uses (`ldwGameWindow::Get`
+  and `GetFont`, the stock Draw's own calls: sites `WINDOW_GET`, `WINDOW_FONT`). Before, such a box was drawn by
+  the stock code directly, which cut every character typed past the box's width and left the zero-width marks
+  after it ("สวัสดี" became "สัี"; `tests/test_name_limit.py`,
+  `test_a_name_box_without_its_own_font_keeps_what_is_typed`).
