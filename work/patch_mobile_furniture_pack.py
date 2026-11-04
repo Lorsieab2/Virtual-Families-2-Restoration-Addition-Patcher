@@ -19274,7 +19274,7 @@ static void VF2ShowBathroom2RenovationRequiredMessage() {{
     // own "OK" (eOK, 0xA35), so a translation reaches both.
     char okButton[32];
     strncpy(okButton, theStringManager::Get()->GetString((StringId)0xA35), 31);
-    okButton[31] = '\0';
+    okButton[31] = '\\0';
     theMessageBoxDlg notice(
         theStringManager::Get()->GetString((StringId){patch_text_string_id("eString_MobileRenovationBathroom2Required")}),
         0,

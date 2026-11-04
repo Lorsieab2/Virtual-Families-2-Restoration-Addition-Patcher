@@ -591,7 +591,7 @@ def test_a_patch_text_longer_than_its_room_shows_english(world):
 import vf2_translation_strings as ts  # noqa: E402
 
 CAPTION_KEY, SPOILED_KEY = "eString_VF2PrivateRomanticTime", "eEventThePowerFailureResultB2Patched"
-CAPTION_ID, SPOILED_ID = (next(int(r["id"]) for r in ts.patch_data()["table"] if r["key"] == k)
+CAPTION_ID, SPOILED_ID = (next((int(r["id"]) for r in ts.patch_data()["table"] if r["key"] == k), None)
                           for k in (CAPTION_KEY, SPOILED_KEY))
 CAPTION_ENGLISH, SPOILED_ENGLISH = "Having private adult romantic time", "The food was not ok."
 STOCK_2494 = b"Everyone gets an upset stomach. The food was not ok."
@@ -602,6 +602,8 @@ def b209_exe() -> str:
     """An executable built from this branch or later with the B209 records: the biggest table among the matrix
     executables (VF2_B200_MATRIX_GLOB / VF2_B207_MATRIX_GLOB: the all-enabled variant has every line), else
     VF2_FINAL_EXE or VF2_UNICODE_EXE; skipped when none holds them (a B208 or earlier executable)."""
+    if CAPTION_ID is None or SPOILED_ID is None:
+        pytest.skip("src/vf2_patch_strings.json has no B209 records")
     paths = []
     for key in ("VF2_B200_MATRIX_GLOB", "VF2_B207_MATRIX_GLOB"):
         if os.environ.get(key):
