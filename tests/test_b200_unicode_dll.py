@@ -621,7 +621,18 @@ def draw_world(exe, dlls, tmp_path_factory):
     import vf2_glyph_maker as M
     folder = tmp_path_factory.mktemp("unicode_text")
     M.write_sheets(GAME_IMAGES, folder)
-    return DrawWorld(exe, dlls[1], folder), M.load_fonts(GAME_IMAGES)
+    w = DrawWorld(exe, dlls[1], folder)
+    # the DLL's GDI calls on this machine's real GDI: a font's Load measures Segoe UI's ascent (the baseline every
+    # Windows face is drawn on), and a character no glyph file has is drawn by Windows
+    from test_unicode_font import RealGdi, _kernel_seams
+    import vf2_glyph_render as R
+    if not R.available():
+        pytest.skip("needs Windows' GDI")
+    w.s, w.h = w.sites(), w.hooks()
+    w.game_seams(w.s)                                  # once: two seams on one address would both run
+    w.real_gdi = RealGdi(w.e, {})
+    _kernel_seams(w.e)
+    return w, M.load_fonts(GAME_IMAGES)
 
 
 SAMPLES = ["Łódź Żółć", "İstanbul ığüşöç", "José Müller", "Nguyễn Thị", "€5 “quotes” — ok…", "Αθήνα Москва",
@@ -770,7 +781,13 @@ class StartupWorld(World):
             "GetProcAddress": self._proc, "VirtualProtect": self._protect,
             "FlushInstructionCache": lambda em: (1, 12), "GetCurrentProcess": lambda em: (0xFFFFFFFF, 0),
             "GetProcessHeap": lambda em: (1, 0), "HeapAlloc": lambda em: (em.alloc(em.arg(2) + 16), 12),
+            "AddFontResourceExW": self._add_font,          # the bundled fonts: none here (the DLL logs and goes on)
         })
+        self.fonts_asked = []
+
+    def _add_font(self, em):
+        self.fonts_asked.append((em.wstr(em.arg(0)), em.arg(1)))
+        return 0, 12
 
     def _module_file(self, em):
         path = "C:\\Game\\Virtual Families 2 Patcher Files\\vf2unicode_b200.dll\0".encode("utf-16-le")
@@ -845,12 +862,17 @@ def test_unicode_text_active_is_nonzero_only_once_the_hooks_are_installed(exe, d
     assert w.e.read(sites["DRAW_STRING"], 1) == b"\xE9" and before[0] != 0xE9
     # every trampoline the hooks call was made executable before it could run (DEP)
     assert sum(1 for _a, _n, prot in w.protects if prot == 0x40) >= 4
+    # Startup asked Windows for every bundled font from the setting's own folder, privately (FR_PRIVATE)
+    import vf2_glyph_render as R
+    sub = "Unicode Font Text" if mode == 2 else "Unicode Text"
+    assert w.fonts_asked == [(f"C:\\Game\\Virtual Families 2 Patcher Files\\{sub}\\Fonts\\{n}", 0x10)
+                             for n in R.BUNDLED_FONTS]
 
 
 def test_unicode_text_active_is_zero_with_the_settings_off(exe, dlls):
     w = StartupWorld(exe, dlls[1], mode=0)
     w.startup()
-    assert w.status()[4] == 0 and w.active() == 0 and not w.protects
+    assert w.status()[4] == 0 and w.active() == 0 and not w.protects and not w.fonts_asked
 
 
 @pytest.mark.parametrize("fail_at", [1, 5, 9])
