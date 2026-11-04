@@ -3678,6 +3678,8 @@ class TestSuiteCopiesInSyncTests(unittest.TestCase):
             "vf2_line_break.py",
              "vf2_glyph_render.py",
              "vf2_glyph_maker.py",
+             "vf2_glyph_color.py",
+             "vf2_emoji.py",
              "vf2_game_fonts.json",
              "vf2_text_tool.py",
              "vf2_unicode_font.py",

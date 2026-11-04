@@ -512,7 +512,9 @@ release bundle, like almost everything else)
     Resort, shipped in `Unicode Text\Fonts\` and loaded for the game only) at the game font's fitted size, on its
     baseline, with its weight and alpha levels; every assigned character of Unicode 18.0 is drawn by one of them
     (Last Resort shows a block symbol for a script no font has), and only unassigned code points and controls get
-    a box. Emoji are drawn in one colour (the text's), not in full colour;
+    a box. Emoji are drawn in full colour (Segoe UI Emoji, or Noto Color Emoji if installed, by Windows'
+    Direct2D), never recoloured by the text's colour; a see-through text makes them see-through too. Without
+    Direct2D they are drawn in one colour, the text's, as before;
   - **typing**: the game's text boxes take every character the keyboard sends (accented keys, dead keys, Alt
     codes, an input method); the original game drops all of them (`CheckForEvents` only passes a one-byte
     `SDL_TEXTINPUT`). A character is added only if the whole name still fits the box; Backspace removes a whole

@@ -256,6 +256,7 @@ class Glyph:
     rect: tuple | None = None        # game glyphs: (left, top, right, bottom) on the game's sheet
     alpha: bytes | None = None       # other glyphs: width * line_height alpha bytes
     source: str = ""                 # how a patcher-made / runtime glyph was made
+    rgba: bytes | None = None        # a colour emoji (vf2_glyph_color): its own straight R, G, B, A, never tinted
 
 
 @dataclass
@@ -363,6 +364,9 @@ def runtime_glyph(font: GameFont, text: str) -> Glyph:
     base = next((c for c in cps if not _is_extend(c) or len(cps) == 1), cps[0])
     g = font.gdi
     h = font.line_height
+    coloured = colour_glyph(font, text)
+    if coloured is not None:
+        return coloured
     if font.override is not None:
         chosen, px, row = font.override
         face = R.font_for(base, (chosen,) + R.FALLBACK_CHAIN)
@@ -384,6 +388,26 @@ def runtime_glyph(font: GameFont, text: str) -> Glyph:
         row = grey[y * w + ox: y * w + ox + adv]
         a[y * adv: (y + 1) * adv] = bytes(lut[v] for v in row)
     return Glyph(adv, "windows" if font.override is not None else "runtime", None, bytes(a), face)
+
+
+def colour_glyph(font: GameFont, text: str) -> Glyph | None:
+    """A character drawn from a colour font, in its own colours (vf2_glyph_color; the DLL's ColourCell): at the font's
+    em (Use Unicode Font: its fitted size, the chosen face first) on its baseline row. None: GDI draws it."""
+    import vf2_glyph_color as C
+    import vf2_glyph_render as R
+    if font.override is not None:
+        chosen, px, row = font.override
+        face = C.colour_face_for(text, (chosen,) + R.FALLBACK_CHAIN)
+    else:
+        px, row = font.gdi["px"], unicode_baseline(font)
+        face = C.colour_face_for(text)
+    if face is None:
+        return None
+    drawn = C.draw(text, px, row, font.line_height, face)
+    if drawn is None:
+        return None
+    w, rgba = drawn
+    return Glyph(w, "colour", None, bytes(rgba[3::4]), face, rgba)
 
 
 # ====================================================================== Use Unicode Font
@@ -656,6 +680,9 @@ def glyph_pixels(font: GameFont, glyph: Glyph, sheet, rgb=(255, 255, 255)) -> tu
         for yy in range(h):
             at = ((t + yy) * sheet.width + l) * 4
             data[yy * w * 4:(yy + 1) * w * 4] = sheet.data[at:at + 4 * w]
+    elif glyph.rgba is not None:
+        # a colour emoji: its own colours, never tinted (the DLL keeps its cell untinted in every tinted copy)
+        return glyph.width, font.line_height, glyph.rgba
     else:
         w, h = glyph.width, font.line_height
         data = bytearray(w * h * 4)
@@ -715,4 +742,5 @@ def glyph_label(glyph: Glyph) -> str:
     """How the patcher shows where a glyph comes from."""
     return {"game": "(game font)", "patcher": "(patcher-made)", "runtime": f"(patcher-made from {glyph.source})",
             "windows": f"(drawn by Windows: {glyph.source})",
+            "colour": f"(drawn by Windows in colour: {glyph.source})",
             "box": "(missing: box)"}[glyph.kind]

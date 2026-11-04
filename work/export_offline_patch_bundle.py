@@ -41,6 +41,8 @@ GUI_TOOL_FILES = (
     "vf2_line_break.py",         # its line breaking next to scripts written without spaces (UAX #14, the DLL has the table)
     "vf2_glyph_render.py",       # Game Font Text: characters the game fonts lack, drawn in their style (GDI)
     "vf2_glyph_maker.py",        # Game Font Text: the patcher-made letters
+    "vf2_glyph_color.py",        # Game Font Text: colour emoji (Direct2D), as the Unicode text DLL draws them
+    "vf2_emoji.py",              # Game Font Text: which characters are colour emoji
     "vf2_game_fonts.json",       # Game Font Text: the four game fonts' metrics (numbers only, no game art)
     "vf2_text_tool.py",          # Game Font Text: the window
     "vf2_unicode_font.py",       # Unicode Font: the window that picks Use Unicode Font's font
