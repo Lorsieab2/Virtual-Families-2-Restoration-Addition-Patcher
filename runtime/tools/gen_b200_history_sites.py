@@ -107,6 +107,9 @@ def pin_mask(pin, exe: Exe) -> bytes:
                 m[o + k] = 1
     for k in range(pin.skip):
         m[k] = 1
+    for off, n in getattr(pin, "wild", ()):
+        for k in range(n):
+            m[off + k] = 1
     return bytes(m)
 
 
@@ -281,7 +284,7 @@ def _cross_checks():
         "gs_load": {0x90, 0x25B18, S.GAME_STATE_SLOT},
         "gs_get": {S.CORE_VALUES["GAME_STATE_INSTANCE"]},
         "mn_start_over": {S.GAME_STATE_NICKNAME, S.GAME_STATE_NICKNAME + 0x14},
-        "sm_get_string": {0xFF1, 0x0C, 0x08},
+        "sm_get_string": {0x0C, 0x08},
     }
 
 

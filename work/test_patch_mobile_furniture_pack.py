@@ -8515,7 +8515,6 @@ class TextFixStringManagerTests(unittest.TestCase):
         self.assertFalse([row for row in updates if "upset stomach" in row["old"]])
         self.assertNotIn("power_failure_b2", helper)
         self.assertIn("eEventThePowerFailureResultB2Patched", helper)     # the record is in every executable
-        self.assertNotIn("eEventThePowerFailureResultB2Patched", helper)
 
     def test_all_custom_achievement_strings_are_exact_and_stable(self):
         with tempfile.TemporaryDirectory() as tmp:
