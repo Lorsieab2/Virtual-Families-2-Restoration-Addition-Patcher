@@ -548,16 +548,21 @@ static void __fastcall UniSetCanEdit(void *ctl, void *, int edit, int limit) {
     if (b && (edit & 0xFF)) OpenWhole(impl, b);
 }
 
+// The game window's font: the one the stock Draw uses for a box without its own (ldwGameWindow::Get, GetFont, the
+// stock Draw's own calls), or 0 when the long names' sites are not proved.
+static unsigned WindowFont() {
+    if (!NamesOn) return 0;
+    void *window = ((void *(__cdecl *)())NSITE(WINDOW_GET))();
+    return window ? (unsigned)((void *(__thiscall *)(void *))NSITE(WINDOW_FONT))(window) : 0;
+}
+
 // ldwTextControlImpl::Draw: a name box draws a copy that fits.
 static void __fastcall UniBoxDraw(void *implp, void *) {
     unsigned impl = (unsigned)implp;
     NameBox *b = BoxOf(impl);
     unsigned char *text = *(unsigned char **)(impl + 0x30);
     unsigned font = *(unsigned *)(impl + 0x3C);
-    if (!font && b) {          // no font of its own: the stock Draw uses the game window's (and cuts the text to it)
-        void *window = ((void *(__cdecl *)())NSITE(WINDOW_GET))();
-        font = window ? (unsigned)((void *(__thiscall *)(void *))NSITE(WINDOW_FONT))(window) : 0;
-    }
+    if (!font && b) font = WindowFont();   // no font of its own: the stock Draw uses the window's (and cuts to it)
     unsigned fimpl = font ? *(unsigned *)(font + 4) : 0;
     if (!b || !text || !fimpl || !IMPL_FIELD(fimpl, 0x10) || *(unsigned char *)(impl + 0x2F)) {
         ((BoxDrawFn)(void *)BoxDrawTrampoline)(implp);
@@ -593,14 +598,17 @@ static bool NameGetText(unsigned impl, const unsigned char *src, unsigned n, cha
         if (b->kind == 'F' && !(gs && d == gs + UNI_GS_NICKNAME)) record = false;  // a label read into a local
     }
     static unsigned char out[64];
-    if (IsSetIn(impl)) {
-        if (b->expanded >= 0 && (unsigned)b->expanded < NameCount && Names[b->expanded].shortLen <= room) {
-            const NameEntry &e = Names[b->expanded];
-            for (unsigned i = 0; i < e.shortLen; ++i) dst[i] = (char)e.shortForm[i];
-            return true;
-        }
-        return false;                    // a name the game set: the stock rule (UniGetText)
+    // the whole name the box opened with, unchanged: its own short form back. A text that differs from it (however it
+    // was changed) gets its own short form below, never the old one.
+    bool opened = b->expanded >= 0 && (unsigned)b->expanded < NameCount &&
+                  SameBytes(Names[b->expanded].whole, Names[b->expanded].wholeLen, src, n);
+    if (opened && Names[b->expanded].shortLen <= room) {
+        const NameEntry &e = Names[b->expanded];
+        for (unsigned i = 0; i < e.shortLen; ++i) dst[i] = (char)e.shortForm[i];
+        return true;
     }
+    if (IsSetIn(impl) && (opened || b->expanded < 0)) return false;    // a name the game set: the stock rule
+
     if (room >= sizeof(out)) return false;
     unsigned k = StoreName(src, n, room, slot, record, out);
     if (!k) return false;

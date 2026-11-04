@@ -540,11 +540,18 @@ def test_each_name_box_takes_1200_bytes(world, index, kind, stock):
         assert T.length(T.decode(w.text(impl))) == 400 and len(w.text(impl)) == 1200
 
 
+def _other_box(w, limit, font=0):
+    """A box made by a SetCanEdit call that is not a name box's (the return address is seamed once per world)."""
+    other = w.returns[0] + 0x10                                   # not a name box's call
+    if not getattr(w, "other_seamed", False):
+        w.e.seam_live(other, lambda em: (None, 0))
+        w.other_seamed = True
+    return w.box(other, limit, font)
+
+
 def test_another_box_keeps_its_stock_limit(world):
     w, _fonts = world
-    other = w.returns[0] + 0x10                                   # not a name box's call
-    w.e.seam_live(other, lambda em: (None, 0))
-    _ctl, impl = w.box(other, 0x14)
+    _ctl, impl = _other_box(w, 0x14)
     assert w.e.r32(impl + 0x28) == 0x14
     assert w.buffers[-1][1] == 0x15
 
@@ -722,6 +729,50 @@ def _opens_as(w, short: bytes) -> bytes:
     _ctl, impl = w.box(w.returns[7], 0x12)
     w.set_text(impl, short)
     return w.text(impl)
+
+
+def test_a_renamed_name_with_the_same_start_gets_its_own_short_form(world):
+    """A member named A (a short form, its whole name in the Names file) is opened, and the player erases it and
+    types A's start with another ending (fixing a typo at the end of a long name), or replaces only the ending:
+    GetText gives a short form of its own (never A's), so the game stores the change and the Names file holds both.
+    The box's text is what counts: a text that differs from the whole name the box opened with never gets that
+    name's short form, even when nothing told the DLL the player changed it."""
+    w, _fonts = world
+    e = w.e
+    w.forget()
+    w.fs.clear()
+    start = "שלום नमस्ते "
+    a = start + "สัี"
+    endings = {"erase all": "สวัสดี", "the ending": "ครับ",
+               "unseen": "ดี"}
+    short_a = _short_form_of(w, a, index=7)
+    assert short_a == T.encode(N.short_form(a, N.MEMBER_ROOM, {}))
+    seen = {short_a}
+    for how, ending in endings.items():
+        ctl, impl = w.box(w.returns[7], 0x12)
+        w.set_text(impl, short_a)                                  # the scene shows the member: A, whole
+        assert w.text(impl) == T.encode(a)
+        if how == "erase all":
+            for _ in range(len(a)):
+                e.call(w.h["handle_key"], (5, 0, 8), ecx=impl, edx=0)
+            w.type(impl, start + ending)
+        elif how == "the ending":
+            e.call(w.h["handle_key"], (5, 0, 8), ecx=impl, edx=0)  # "สัี" is one character
+            w.type(impl, ending)
+        else:                                                      # changed without a key the DLL saw
+            e.write(e.r32(impl + 0x30), T.encode(start + ending) + bytes(1))
+        assert T.decode(w.text(impl)) == start + ending, how
+        out = e.alloc(0x20, fill=0)
+        e.call(w.s["GET_TEXT"], (out, 0x13), ecx=ctl)
+        short = e.read(out, 0x13).split(bytes(1))[0]
+        assert short and short not in seen, (how, short)          # its own short form: the game stores the change
+        seen.add(short)
+        assert _opens_as(w, short) == T.encode(start + ending), how
+    ctl, impl = w.box(w.returns[7], 0x12)
+    w.set_text(impl, short_a)                                      # A again, unchanged: A's own short form back
+    out = e.alloc(0x20, fill=0)
+    e.call(w.s["GET_TEXT"], (out, 0x13), ecx=ctl)
+    assert e.read(out, 0x13).split(bytes(1))[0] == short_a
 
 
 def test_the_dll_writes_version_2_with_crcs_the_patcher_reads(world):
@@ -943,33 +994,28 @@ def test_short_forms_draw_as_whole_names(world, fname):
 
 
 def _seam_stock_draw(w, font):
-    """The stock Draw after its first 7 bytes, once per world: it records the text it is handed and, while the box is
-    editable (+24h), cuts it a byte at a time until it fits, as the stock loop does (Draw+147h..+163h: while
-    GetWidth + left + 44h > right, text[--len] = 0). The game window and its font are the given font."""
+    """The stock Draw after its first 7 bytes, once per world: it records the text it is handed (w.drawn) and the
+    box and text pointer (w.handed) for _stock_cut. The game window's font is Segoe24."""
     from unicorn import UC_HOOK_CODE
     from unicorn.x86_const import UC_X86_REG_EBP, UC_X86_REG_ECX, UC_X86_REG_EIP, UC_X86_REG_ESI, UC_X86_REG_ESP
     e = w.e
     if getattr(w, "drawn", None) is not None:
         return w.drawn
-    w.drawn = []
+    w.drawn, w.handed = [], []
     # the Hebrew, Hindi and Thai letters are drawn with GDI (the world's real GDI): the face names are compared
     from test_unicode_font import _kernel_seams
     probe = type("Probe", (), {"imports": {}})()
     _kernel_seams(probe)
     for name in ("lstrcmpiW", "lstrlenW"):
         e.imports.setdefault(name, probe.imports[name])
-    font_obj, _f, _s = w.font("Segoe24")
+    w.window_font_obj = font_obj = w.font("Segoe24")[0]
     window = e.alloc(0x40)
 
     def stock(uc, address, size, user):
         impl = e.reg(UC_X86_REG_ECX)
         text = e.r32(impl + 0x30)
-        raw = e.cstr(text).encode("latin-1")
-        w.drawn.append(raw)
-        right, left = e.r32(impl + 0x10), e.r32(impl + 0x08) + e.r32(impl + 0x44)
-        while raw and e.read(impl + 0x24, 1)[0] and T.get_width(font, raw) + left > right:
-            raw = raw[:-1]
-            e.write(text + len(raw), bytes(1))
+        w.drawn.append(e.cstr(text).encode("latin-1"))
+        w.handed.append((impl, text))
         ebp = e.reg(UC_X86_REG_EBP)
         e.setreg(UC_X86_REG_ESI, e.r32(e.reg(UC_X86_REG_ESP)))     # the esi it pushed
         e.setreg(UC_X86_REG_ESP, ebp + 8)
@@ -980,6 +1026,29 @@ def _seam_stock_draw(w, font):
     e.seam_live(w.window_get, lambda em: (window, 0))
     e.seam_live(w.window_font, lambda em: (font_obj, 0))
     return w.drawn
+
+
+def _draw_and_cut(w, impl):
+    """The box drawn as the game draws it each frame: the DLL's Draw, then the stock Draw's own cut on the text it was
+    handed (Draw+147h..+163h, alignment 0: while the box is editable (+24h) and GetWidth(text, +58h scale) + left +
+    44h > right, text[--len] = 0), measured by the hooked GetWidth (the DLL's, as in the game), in the box's font or
+    the window's."""
+    e = w.e
+    w.handed.clear()
+    e.call(w.h["box_draw"], (), ecx=impl, edx=0)
+    for box, text in w.handed:
+        font = e.r32(box + 0x3C) or w.window_font_obj
+        scale = e.r32(box + 0x58)
+        right, left = e.r32(box + 0x10), e.r32(box + 0x08) + e.r32(box + 0x44)
+        raw = e.cstr(text).encode("latin-1")
+
+        def width(r):
+            p = e.alloc(len(r) + 1)
+            e.write(p, r + bytes(1))
+            return struct.unpack("<i", struct.pack("<I", e.call(w.h["get_width"], (p, scale), ecx=font, edx=0)))[0]
+        while raw and e.read(box + 0x24, 1)[0] and width(raw) + left > right:
+            raw = raw[:-1]
+            e.write(text + len(raw), bytes(1))
 
 
 def test_a_long_name_box_draws_a_fitted_copy(world):
@@ -1019,7 +1088,7 @@ def test_a_name_box_without_its_own_font_keeps_what_is_typed(world):
     Draw+147h..+163h: width + left + 44h > right). Live (B209), every Thai consonant typed past the box's width was
     cut by that loop after HandleKey had taken it, and only the zero-width marks stayed ("สวัสดี" became "สัี").
     The DLL draws a fitted copy in the window's font, so the stock loop never cuts the box's own text. The
-    stock Draw's body is the cut loop itself (_seam_stock_draw), run after every keystroke."""
+    stock Draw's body is the cut loop itself (_draw_and_cut), run after every keystroke."""
     w, fonts = world
     e = w.e
     font, _sheet = fonts["Segoe24"]
@@ -1033,10 +1102,45 @@ def test_a_name_box_without_its_own_font_keeps_what_is_typed(world):
     e.w32(impl + 0x10, 120)                                        # narrower than the whole name
     e.w32(impl + 0x44, 4)
     assert T.get_width(font, T.encode(live)) + 4 > 120
+    e.write(impl + 0x58, struct.pack("<f", 1.0))
     for ch in live:
         e.call(w.h["handle_key"], (5, ord(ch) | S.KEY_MARK, 0), ecx=impl, edx=0)
-        e.call(w.h["box_draw"], (), ecx=impl, edx=0)                 # the next frame draws the box
+        _draw_and_cut(w, impl)                                       # the next frame draws the box
     assert T.decode(w.text(impl)) == live
+
+
+def test_a_box_without_its_own_font_that_is_not_a_name_box_refuses_whole_characters(world):
+    """A box that is not a name box (the Family Tree note, the credit code, the developers' tools) and has no font of
+    its own does not scroll: while it is typed into, the stock Draw cuts its text a byte at a time to the box's width
+    in the game window's font. The DLL measures a typed character the same way and refuses one that would not fit,
+    whole, with every mark after it, so the stock loop (_seam_stock_draw, run after every keystroke) never cuts
+    anything and no mark is left without its base."""
+    w, fonts = world
+    e = w.e
+    font, _sheet = fonts["Segoe24"]
+    _seam_stock_draw(w, font)
+    typed = ("ëสวัสดีครับé́̂"
+             "👍🏽สี")
+    _ctl, impl = _other_box(w, 0x50)
+    assert e.r32(impl + 0x28) == 0x50 and e.r32(impl + 0x3C) == 0
+    e.write(impl + 0x24, b"")                              # editable, being typed into
+    e.write(impl + 0x58, struct.pack("<f", 1.0))
+    e.w32(impl + 0x08, 0)
+    e.w32(impl + 0x10, 110)
+    e.w32(impl + 0x44, 4)
+    assert T.get_width(font, T.encode(typed)) + 4 > 110
+    for ch in typed:
+        e.call(w.h["handle_key"], (5, ord(ch) | S.KEY_MARK, 0), ecx=impl, edx=0)
+        before = w.text(impl)
+        _draw_and_cut(w, impl)                                       # the next frame draws the box
+        assert w.text(impl) == before, ("the stock Draw cut the text", ascii(ch))
+    kept, whole = T.clusters(T.decode(w.text(impl))), T.clusters(typed)
+    assert kept and len(kept) < len(whole), kept
+    # each kept character is a typed one from its start (its base first; typing goes a code point at a time, so a
+    # modifier that no longer fits may be left off, as at the byte limit), in order; never a mark without its base
+    it = iter(whole)
+    assert all(any(c.startswith(k) for c in it) for k in kept), ascii(kept)
+    assert not any(T._is_extend(ord(k[0])) for k in kept), ascii(kept)
 
 
 def test_a_changed_long_names_byte_keeps_the_unicode_text(exe, dlls):

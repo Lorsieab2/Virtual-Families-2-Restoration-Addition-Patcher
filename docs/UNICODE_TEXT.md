@@ -98,7 +98,9 @@ installs the Unicode text without the long names (`B200Unicode_Status.names = 0`
 
 and the first part's hooks do more: HandleKey stops a name box at its bytes (1,200, no character cap),
 and lets a name box scroll instead of refusing a character wider than the box; SetText opens a short form as the
-whole name; GetText of a name box gives the short form (`ShortFor`, the rule of `vf2_names.short_form`) and
+whole name; GetText of a name box gives the short form (`ShortFor`, the rule of `vf2_names.short_form`; the
+short form the box opened with only while its text is still that whole name, so a changed name with the same
+start gets one of its own: `test_a_renamed_name_with_the_same_start_gets_its_own_short_form`) and
 records the whole name in the Names file of the slot the destination belongs to (the slot menu's field k: slot k;
 the new family's name and a member's name: the slot being played, gs+25B20h; a local the game only compares:
 nothing); DrawString and GetWidth draw and measure the whole name wherever a short form is drawn, fitted with "…"
@@ -343,3 +345,11 @@ opening one) and `tests/test_vf2_game_text.py`.
   the stock code directly, which cut every character typed past the box's width and left the zero-width marks
   after it ("สวัสดี" became "สัี"; `tests/test_name_limit.py`,
   `test_a_name_box_without_its_own_font_keeps_what_is_typed`).
+* Every other editable box (the Family Tree note, the credit code box, the developers' animation tool and day/night
+  test dialog) does not scroll. `UniHandleKey` refuses a typed character (`Refuse`, its marks with it) when the text
+  would no longer fit the box the way the stock Draw measures it while the box is editable (+24h): the hooked
+  GetWidth at the box's scale (+58h) in its font, or the game window's for a box without one, from left + margin
+  (alignment 0) or centred (1), against the right edge; alignment 2 never cuts. So the stock cut loop never cuts
+  typed text (`test_a_box_without_its_own_font_that_is_not_a_name_box_refuses_whole_characters`). Typing goes a
+  code point at a time: a character whose base fits keeps its base when a later modifier does not fit (as at the
+  byte limit); a paste goes in whole characters.
