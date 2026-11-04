@@ -28,7 +28,9 @@
    PATCHES.  Lines keyed "patch/..." are the patches' own text: kept by their English and handed out when a patch's
    DLL asks (B200Tr_TextW / B200Tr_TextA), within their room.  B200Tr_English / B200Tr_EnglishOf give a DLL that
    writes a file another program reads (the Family History log) the English, so the file stays English while the game
-   shows the translation.  The likes and dislikes lists are not part of VF2.
+   shows the translation.  The likes and dislikes lists are not part of VF2.  Lines keyed "patch/game.*" are the
+   original game's own words that are no line of the table (b200tr_game_words.h): the code that hands their English
+   to the game is pointed at the translation (install_game_words).
 
    PERCENT.  Only a line's own English placeholders are placeholders; any other '%' in a translation is plain text
    ("2 %", "50 % de reduction").  A line the game (B200TR_FORMAT) or a patch's DLL (B200TR_PATCH_FORMAT) uses as a
@@ -50,6 +52,7 @@
 #include "b200tr_sites.h"
 #include "b200tr_limits.h"
 #include "b200tr_patch_formats.h"
+#include "b200tr_game_words.h"
 
 EXTERN_C IMAGE_DOS_HEADER __ImageBase;
 
@@ -943,6 +946,95 @@ static int build_manager(void) {
     return 1;
 }
 
+/* ----------------------------------------------------------------- the game's own words */
+
+/* A few words the original game's code shows itself: it hands the game the address of its own English (push imm32 or
+   mov r32, imm32), not a line of the table, so an override never reaches them (the title screen's Manage Games, ...:
+   b200tr_game_words.h).  Each is a "patch/game.*" line of the template.  When one is translated within its room,
+   every instruction that hands that English over is given the translation's address instead: the English is found
+   (with its NUL) outside the code, the instructions by its address in the code, and only when exactly the expected
+   number of them is found is anything written; otherwise that word stays English (and the line counts as refused). */
+static int game_words_changed = 0;
+static unsigned char no_mask[TR_MAX_LINE + 8];                /* all zero: every byte must match */
+
+/* The push imm32 / mov r32, imm32 instructions of the code whose immediate is `target`: their count; the address
+   of each immediate in at[] (at most `cap`). */
+static int game_word_refs(const IMAGE_SECTION_HEADER *s, unsigned nsec, unsigned base, unsigned target,
+                          unsigned *at, int cap) {
+    unsigned char want[4];
+    unsigned i;
+    int n = 0;
+    want[0] = (unsigned char)target; want[1] = (unsigned char)(target >> 8);
+    want[2] = (unsigned char)(target >> 16); want[3] = (unsigned char)(target >> 24);
+    for (i = 0; i < nsec; ++i) {
+        unsigned size = s[i].Misc.VirtualSize ? s[i].Misc.VirtualSize : s[i].SizeOfRawData, from = 1;
+        const unsigned char *code = (const unsigned char *)(UINT_PTR)(base + s[i].VirtualAddress);
+        if (!(s[i].Characteristics & IMAGE_SCN_MEM_EXECUTE)) continue;
+        if (s[i].SizeOfRawData < size) size = s[i].SizeOfRawData;
+        while (from + 4 <= size) {
+            unsigned hits = 0, found = ScanPattern(code + from, size - from, want, no_mask, 4, &hits);
+            unsigned char op;
+            if (!hits) break;
+            op = ((const unsigned char *)(UINT_PTR)found)[-1];
+            if (op == 0x68 || (op >= 0xB8 && op <= 0xBF)) {
+                if (n < cap) at[n] = found;
+                ++n;
+            }
+            from = found - (unsigned)(UINT_PTR)code + 1;
+        }
+    }
+    return n;
+}
+
+static void install_game_words(void) {
+    HMODULE exe = GetModuleHandleW(0);
+    const IMAGE_NT_HEADERS32 *nt;
+    const IMAGE_SECTION_HEADER *s;
+    unsigned base, nsec, w, i;
+    if (exe == NULL || patch_used == 0) return;
+    base = (unsigned)(UINT_PTR)exe;
+    nt = (const IMAGE_NT_HEADERS32 *)((const unsigned char *)exe + ((const IMAGE_DOS_HEADER *)exe)->e_lfanew);
+    s = IMAGE_FIRST_SECTION(nt);
+    nsec = nt->FileHeader.NumberOfSections;
+    for (w = 0; w < B200TR_GAME_WORD_COUNT; ++w) {
+        const b200tr_game_word *g = &B200TR_GAME_WORDS[w];
+        int len = slen(g->english), n = 0;
+        unsigned at[8];
+        row *r = patch_find(g->english, len);
+        const char *why = NULL;
+        if (r == NULL) continue;                                            /* not translated */
+        if (r->size > g->room || slen(r->out) > g->room) why = "too long for its space";
+        for (i = 0; why == NULL && i < nsec; ++i) {
+            unsigned size = s[i].Misc.VirtualSize ? s[i].Misc.VirtualSize : s[i].SizeOfRawData, from = 0;
+            const unsigned char *data = (const unsigned char *)(UINT_PTR)(base + s[i].VirtualAddress);
+            if (s[i].Characteristics & (IMAGE_SCN_MEM_EXECUTE | IMAGE_SCN_CNT_UNINITIALIZED_DATA)) continue;
+            if (s[i].SizeOfRawData < size) size = s[i].SizeOfRawData;
+            while (from + (unsigned)len + 1 <= size) {                       /* the English with its NUL */
+                unsigned hits = 0, found = ScanPattern(data + from, size - from, (const unsigned char *)g->english,
+                                                       no_mask, (unsigned)len + 1, &hits);
+                if (!hits) break;
+                n += game_word_refs(s, nsec, base, found, at + (n < 8 ? n : 8), n < 8 ? 8 - n : 0);
+                from = found - (unsigned)(UINT_PTR)data + 1;
+            }
+        }
+        if (why == NULL && n != (int)g->refs) why = "the game's code is not what this build expects";
+        if (why != NULL) {
+            --used;
+            --patch_used;
+            log_refused(r->line, why);
+            continue;
+        }
+        for (i = 0; i < (unsigned)n; ++i) {
+            unsigned v = (unsigned)(UINT_PTR)r->out;
+            unsigned char imm[4];
+            imm[0] = (unsigned char)v; imm[1] = (unsigned char)(v >> 8);
+            imm[2] = (unsigned char)(v >> 16); imm[3] = (unsigned char)(v >> 24);
+            write_code(at[i], imm, 4);
+        }
+        ++game_words_changed;
+    }
+}
+
 /* ----------------------------------------------------------------- installing */
 
 static void own_folder(void) {
@@ -989,6 +1081,7 @@ static int install_from_text(const char *text, int text_n) {
     if (used == 0) { log_add("Translations: no translated line could be used (English)\r\n"); return 0; }
     TR_CHECK(install_guards(), "a C runtime entry is not what this build expects");
     for (k = 1; k < tab_max_id; ++k) if (by_id[k] != NULL) by_id[k]->rec->override = by_id[k]->out;
+    install_game_words();
     return 1;
 }
 

@@ -67,7 +67,9 @@ def test_the_patch_data_is_well_formed():
     ]
     # the stock line Island Events used to rewrite keeps its stock words everywhere: it is not a changed line
     assert 2494 not in {r["id"] for r in data["changed"]}
-    assert data["literals"] and all(r["name"].startswith("time.") for r in data["literals"])
+    # the Time Controls dialog's texts, and (B209) the original game's own words its code hands over itself
+    assert data["literals"] and all(r["name"].startswith(("time.", "game.")) for r in data["literals"])
+    assert sum(r["name"].startswith("game.") for r in data["literals"]) == 14
     names = [r["name"] for r in data["literals"]]
     assert len(names) == len(set(names)) and all(re.fullmatch(r"[a-z0-9_.-]+", n) for n in names)
     keys = [e.key for e in ts.patch_entries()]
