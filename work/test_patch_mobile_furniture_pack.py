@@ -13536,10 +13536,13 @@ class SameSexMarriagePatchTests(unittest.TestCase):
         # B209: the caption is a string-table record read through GetString
         # (so a translation reaches it), with the terminator kept.
         self.assertIn(
-            "VF2SetBehaviorLabel(villager, __VF2_PRIVATE_ROMANTIC_TIME_STRING_ID__);\n"
-            "    behaviorLabel[0x27] = '\\\\0';",
+            "VF2SetBehaviorLabel(villager, __VF2_PRIVATE_ROMANTIC_TIME_STRING_ID__);",
             source,
         )
+        # the template is a raw string: a real NUL, not the '\\0' two-character
+        # constant (which wrote '0' past the field) it used to be
+        self.assertIn("    behaviorLabel[0x27] = '\\0';\n}", source)
+        self.assertNotIn("behaviorLabel[0x27] = '\\\\0';", source)
         self.assertNotIn('strncpy(behaviorLabel, "Having private adult romantic time"', source)
         # The label reuses the very predicate that suppresses pregnancy, so
         # the two can never disagree.

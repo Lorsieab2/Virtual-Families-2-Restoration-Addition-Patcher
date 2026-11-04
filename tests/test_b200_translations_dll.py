@@ -114,8 +114,9 @@ def test_the_limits_are_a_table_of_the_games_copies():
     assert LIMITS["never"] == {"36": "the decimal point (eString_Decimal): numbers are written with it"}
     assert all(1 <= int(i) <= 0xFFA for i in LIMITS["strncpy_room"]) and all(v > 0 for v in LIMITS["strncpy_room"].values())
     # the B209 records the generated code copies into fixed fields: the caption strncpy(.., 0x27), the two counters'
-    # labels (.., 55), the Adoption Services buttons (.., 63)
-    assert [LIMITS["strncpy_room"][str(i)] for i in (0xFF3, 0xFF5, 0xFF6, 0xFF8, 0xFF9)] == [38, 55, 55, 63, 63]
+    # labels (.., 55), the Adoption Services buttons (.., 63): the count less the NUL
+    assert [LIMITS["strncpy_room"][str(i)] for i in (0xFF3, 0xFF5, 0xFF6, 0xFF8, 0xFF9)] == [38, 54, 54, 62, 62]
+    assert all(i not in LIMITS["english_length"] for i in (0xFF3, 0xFF5, 0xFF6, 0xFF7, 0xFF8, 0xFF9, 0xFFA))
     header = (SRC / "b200tr_limits.h").read_text()
     for k, v in LIMITS["strncpy_room"].items():
         assert "{ %d, %d }," % (int(k), v) in header

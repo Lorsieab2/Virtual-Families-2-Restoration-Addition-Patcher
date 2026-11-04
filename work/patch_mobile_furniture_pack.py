@@ -39619,7 +39619,9 @@ extern "C" void __cdecl VF2PrivateRomanticTimeLabel(CVillager &villager)
     // override) reaches it. Before B209 the English was copied here itself.
     char *behaviorLabel = ((char *)&villager) + 0x1BBA8;
     VF2SetBehaviorLabel(villager, __VF2_PRIVATE_ROMANTIC_TIME_STRING_ID__);
-    behaviorLabel[0x27] = '\\0';
+    // A real NUL: this template is a raw string. Before B209 it read '\\0',
+    // a two-character constant, and wrote '0' into the byte past the field.
+    behaviorLabel[0x27] = '\0';
 }
 
 extern "C" void __cdecl VF2RandomTVLabel(CVillager &villager)
