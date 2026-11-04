@@ -1722,6 +1722,37 @@ UNICODE_FONT_INI_NAME = "vf2unicodefont.ini"
 UNICODE_TEXT_INI_TEXT = "[Patches]\r\nMode=1\r\n"
 UNICODE_FONT_INI_TEXT = "[Patches]\r\nMode=2\r\n[Font]\r\nFace=Segoe UI\r\n"
 UNICODE_GLYPH_FOLDER = "Unicode Text"
+UNICODE_FONT_DATA_FOLDER = "Unicode Font Text"     # Use Unicode Font's own data folder (each setting removes its own)
+WORD_LISTS_SOURCE = ROOT / "runtime" / "word-lists"
+# The ICU 77-1 word lists the Unicode text DLL reads where Windows has no icu.dll (runtime/native/b200unicode/
+# b200words.h), with their licence. Chinese and Japanese (cjdict.txt) are not needed: ICU's line breaking does not use it.
+GAME_WORD_LISTS = ("thaidict.txt", "laodict.txt", "khmerdict.txt", "burmesedict.txt", "ICU-LICENSE.txt")
+
+
+def word_list_records(bundle_dir: Path, folder: str, setting_id: str) -> list[dict[str, Any]]:
+    """`<folder>\\Word Lists\\` beside the DLL, behind one setting. The lists are staged once and shared by both
+    settings' records (the same source files, two targets)."""
+    out = []
+    staged = bundle_dir / "payload" / "WordLists"
+    staged.mkdir(parents=True, exist_ok=True)
+    for name in GAME_WORD_LISTS:
+        path = staged / name
+        if not path.is_file():
+            shutil.copy2(WORD_LISTS_SOURCE / name, path)
+        out.append({
+            "file_path": f"{TIME_CONTROLS_PATCHER_FOLDER}/{folder}/Word Lists/{name}",
+            "source_path": relative_posix(path.relative_to(bundle_dir)),
+            "source_sha256": sha256_file(path),
+            "source_size": path.stat().st_size,
+            "overwrite_existing": True,
+            "allow_missing_target": True,
+            "remove_when_disabled": True,
+            "requires": ["core_executable", setting_id],
+            "note": "ICU 77-1's word list (Unicode licence, ICU-LICENSE.txt), read by the Unicode text DLL only to "
+                    "wrap Thai, Lao, Khmer or Burmese lines on a Windows without icu.dll. Disabling the setting "
+                    "removes only this exact file.",
+        })
+    return out
 
 
 def unicode_text_asset_patches(
@@ -1806,7 +1837,9 @@ def unicode_text_asset_patches(
                 "note": "Patcher-made letters for the game font (new picture, the game's own font pictures are "
                         "never changed). Disabling Render Unicode with In-Game Fonts removes only this exact file.",
             })
+        records.extend(word_list_records(bundle_dir, UNICODE_GLYPH_FOLDER, setting))
     if isinstance(font_contract, dict):
+        records.extend(word_list_records(bundle_dir, UNICODE_FONT_DATA_FOLDER, "use_unicode_font"))
         if (font_contract.get("companion_dll") != UNICODE_FONT_DLL_NAME
                 or font_contract.get("companion_ini") != UNICODE_FONT_INI_NAME):
             raise ValueError("Build manifest's UnicodeFont contract names another companion file.")
@@ -4715,6 +4748,10 @@ def write_bundle_runner_files(bundle_dir: Path, build_label: str) -> list[str]:
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source, target)
         translation_files.append("/".join((*SHIPPED_TRANSLATIONS_DIR, source.name)))
+    for name in GAME_WORD_LISTS:       # the patcher's own line wrapping without icu.dll (src/vf2_line_break.py)
+        (files_dir / "word-lists").mkdir(exist_ok=True)
+        shutil.copy2(WORD_LISTS_SOURCE / name, files_dir / "word-lists" / name)
+        translation_files.append(f"word-lists/{name}")
     shutil.copy2(SOURCE_DIR / "vf2_crash_capture.py", files_dir / "vf2_crash_capture.py")
     (files_dir / "crash-capture-manifest.template.json").write_text(
         json.dumps(

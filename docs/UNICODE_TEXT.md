@@ -184,9 +184,16 @@ a word wider than the line:
   default mode lets start a line) or ends with an opening one (`「`, `(`);
 * where Windows has `icu.dll` (Windows 10 version 1903 and later) the DLL loads it from System32
   (`LOAD_LIBRARY_SEARCH_SYSTEM32`, `b200icu.h`), only when a text has such a letter, and asks `ubrk_open(UBRK_LINE)`,
-  which also knows the Thai, Lao, Khmer and Myanmar words; without it the table `FALLBACK_RANGES` of
-  `src/vf2_line_break.py` (the same table as Virtual Families 1's) is used, and the patcher's own wrapping (the Game
-  Text tool's preview) always uses it; `runtime/tools/gen_b200_line_break.py` writes the DLL's copy;
+  which also knows the Thai, Lao, Khmer and Myanmar words; the patcher's own wrapping (`src/vf2_line_break.py`: the
+  Game Text tool's preview, the translation checks) asks the same `icu.dll` first. Without it the table
+  `FALLBACK_RANGES` of `src/vf2_line_break.py` (the same table as Virtual Families 1's) is used
+  (`runtime/tools/gen_b200_line_break.py` writes the DLL's copy), and inside a run of Thai, Lao, Khmer or Burmese
+  letters a line breaks only between words: ICU 77-1's own word lists (`runtime/word-lists`, shared by all the Fun
+  Patchers and copied unchanged, SHA-256 checked by `tests/test_word_lists.py`), longest match first
+  (`b200words.h`, `vf2_line_break.dictionary_breaks`). A list is read only the first time such a line is wrapped. The
+  release ships the four lists and ICU's licence beside the DLL (`Unicode Text\Word Lists\`, and
+  `Unicode Font Text\Word Lists\` for Use Unicode Font) and with the patcher (`word-lists\`). Chinese and Japanese
+  need no list: ICU's line breaking does not use one either;
 * a word wider than the whole line is cut after its longest start of whole characters that fits (at least one),
   never inside a character. The stock function does not hang on such a word, as Virtual Families 1's wrapper did: it
   answers with an empty line and eats one letter, so the letters of the word were lost one call at a time

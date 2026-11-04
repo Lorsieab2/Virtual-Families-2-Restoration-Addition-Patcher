@@ -619,7 +619,7 @@ def _breaks(us: list) -> list[bool]:
     if all(len(u.raw) == 1 and u.raw[0] < 0x80 for u in us):
         return [False] * (len(us) + 1)
     chars = [(ord(u.text[0]), ord(u.text[min(len(u.text), 16) - 1])) for u in us[:4096]]
-    flags = _line_break.break_flags(chars)
+    flags = _line_break.break_flags(chars, [tuple(ord(c) for c in u.text[:16]) for u in us[:4096]])
     return flags + [False] * (len(us) + 1 - len(flags))
 
 
