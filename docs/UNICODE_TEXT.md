@@ -218,6 +218,28 @@ opening one) and `tests/test_vf2_game_text.py`.
   bundled fonts: Noto Serif Tangut, Unifont, Unifont Upper, Last Resort High-Efficiency. A face is used for a character
   only when its character map has it (formats 4, 12 and Last Resort's many-to-one 13); one that is not installed is
   skipped.
+* **Shaped and right-to-left scripts** (B209; the shared spec's row 3, the rule of Virtual Villagers and Virtual
+  Families 1). Before, Arabic, Hebrew, Syriac, Thaana, the Indic scripts, Thai, Lao, Tibetan, Myanmar, Khmer,
+  Mongolian and the other scripts whose letters change shape or run right to left were drawn one whole character at
+  a time, each in its isolated form and in logical order.
+  - A RUN of them is now drawn as one piece: whole characters of one script group, and the spaces between two of its
+    words, at most 64 characters and 380 bytes, else cut at its last space (`runtime/native/b200unicode/b200shape.h`,
+    `src/vf2_shaping.py`).
+  - ExtTextOutW draws the run's text, so Uniscribe shapes it (joining forms, ligatures, conjuncts, stacked marks) and
+    puts it in visual order (bidi, left-to-right base), as Windows draws it in its own windows.
+  - The face is the first of the chain that has every letter of the run. The run is drawn at the font's em on its
+    baseline row and cut to its extent. It goes into the glyph room by its bytes (`RunGlyph`;
+    `vf2_game_text.GameFont.run_glyph`).
+  - DrawString, DrawChars and GetWidth step over a run as one piece.
+  - DrawStringJustified (dialogs, events, the store) gets a run as one mapped character: the longest start of it,
+    ending at a space, that fits the paragraph's width. A longer phrase then goes on the next line in its own visual
+    order, and the stock wrapping places everything as before.
+  - A run of one character, a run no face has whole, or one wider than the font's sheet is drawn a character at a
+    time, as before. Text with no such letter is drawn exactly as before.
+  - The line breaker (GetNextJustifiedLine) still measures characters one at a time.
+  - Typing and Backspace work per whole character, as before.
+  - `tests/test_shaping.py`: the C and Python rules find the same runs. In emulation, with the real executable and
+    GDI, DrawString, GetWidth and the stock DrawStringJustified give the patcher's pieces, places and pixels.
 * **Colour emoji** (B209; the shared spec's row 3, the same rule as Virtual Families 1 and Fish and Plant Tycoon).
   A whole character drawn from a colour font is drawn by DirectWrite and Direct2D in its own colours
   (`runtime/native/b200unicode/b200colour.inc`, `src/vf2_glyph_color.py`). That covers an emoji shown as a picture

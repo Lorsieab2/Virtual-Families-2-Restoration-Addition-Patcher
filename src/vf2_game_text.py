@@ -271,6 +271,7 @@ class GameFont:
     gdi: dict
     extra: dict = field(default_factory=dict)      # cluster -> Glyph (patcher-made), filled by the glyph maker
     runtime: dict = field(default_factory=dict)    # cluster -> Glyph (Windows font), made on first use
+    runs: dict = field(default_factory=dict)       # shaped run -> Glyph, or None when it is drawn per character
     maker: object = None                           # cluster -> patcher-made Glyph or None (vf2_glyph_maker)
     # Use Unicode Font (overrides in-game fonts): (face, fitted px, baseline row) - every character, the game's own
     # too, drawn by Windows in that face (then the chain); None = the game's letters (with_unicode_font)
@@ -295,6 +296,8 @@ class GameFont:
 
     def glyph(self, unit: Unit) -> Glyph:
         text = unit.text
+        if self.runs.get(text) is not None:
+            return self.runs[text]                   # a shaped run (_pieces made it)
         if self.stock:
             l, t, r, b = self.stock_rect(unit.raw[0])
             return Glyph(r - l, "game", (l, t, r, b))
@@ -322,6 +325,34 @@ class GameFont:
             return self.runtime[text]
         g = runtime_glyph(self, text)
         self.runtime[text] = g
+        return g
+
+    def run_glyph(self, text: str) -> Glyph | None:
+        """A shaped run (vf2_shaping) drawn whole by Windows: the first face of the chain (Use Unicode Font: the chosen
+        face first) that has every letter of it, at the font's em on its baseline row, cut to its extent, the sheet's
+        alpha levels (the DLL's RunGlyph); None when no face has it whole, or it is wider than the font's sheet: the
+        run is then drawn a character at a time, as before."""
+        if text in self.runs:
+            return self.runs[text]
+        import vf2_glyph_render as R
+        g = None
+        if R.available():
+            if self.override is not None:
+                chosen, px, row = self.override
+                chain = (chosen,) + R.FALLBACK_CHAIN
+            else:
+                px, row, chain = self.gdi["px"], unicode_baseline(self), R.FALLBACK_CHAIN
+            face = R.run_face(text, chain)
+            if face is not None:
+                adv, grey, w, ox = R.render_run(text, face, px, R.weight_for(face, self.gdi["weight"]),
+                                                self.line_height, row)
+                if 0 < adv <= self.sheet_size[0]:
+                    h, lut = self.line_height, self.gdi["alpha"]
+                    a = bytearray(adv * h)
+                    for y in range(h):
+                        a[y * adv:(y + 1) * adv] = bytes(lut[v] for v in grey[y * w + ox:y * w + ox + adv])
+                    g = Glyph(adv, "run", None, bytes(a), face)
+        self.runs[text] = g
         return g
 
 
@@ -447,7 +478,7 @@ def with_unicode_font(font: GameFont, face: str = DEFAULT_UNICODE_FACE) -> GameF
     with its weight, line height and alpha levels."""
     import dataclasses
     face = (face or "").strip() or DEFAULT_UNICODE_FACE
-    return dataclasses.replace(font, extra={}, runtime={}, maker=None,
+    return dataclasses.replace(font, extra={}, runtime={}, runs={}, maker=None,
                                override=(face, fit_unicode_font(font, face), unicode_baseline(font)))
 
 
@@ -457,10 +488,31 @@ def _units(font: GameFont, raw: bytes) -> list[Unit]:
     return stock_units(raw) if font.stock else units(raw)
 
 
+def _pieces(font: GameFont, raw: bytes) -> list[Unit]:
+    """What DrawString, DrawChars and GetWidth step over: the characters, a shaped run of Arabic, Hebrew, Indic,
+    Thai ... (vf2_shaping) taken as one piece when Windows draws it whole (GameFont.run_glyph); the DLL's NextPiece."""
+    import vf2_shaping as S
+    us = _units(font, raw)
+    if font.stock or not hasattr(font, "run_glyph") or not any(u.text and S.script_group(ord(u.text[0])) for u in us):
+        return us
+    out, i = [], 0
+    while i < len(us):
+        end = S.run_end(us, i)
+        if end:
+            piece = Unit("".join(u.text for u in us[i:end]), b"".join(u.raw for u in us[i:end]))
+            if font.run_glyph(piece.text) is not None:
+                out.append(piece)
+                i = end
+                continue
+        out.append(us[i])
+        i += 1
+    return out
+
+
 def stock_font(font: GameFont) -> GameFont:
     """`font` as the unpatched game shows it (GameFont.stock): the stored bytes one by one, from the sheet only."""
     import dataclasses
-    return dataclasses.replace(font, stock=True, override=None, extra={}, runtime={}, maker=None)
+    return dataclasses.replace(font, stock=True, override=None, extra={}, runtime={}, runs={}, maker=None)
 
 
 def get_width(font: GameFont, raw: bytes, scale: float = 1.0) -> int:
@@ -469,7 +521,7 @@ def get_width(font: GameFont, raw: bytes, scale: float = 1.0) -> int:
     import struct as _s
     sc = _s.unpack("<f", _s.pack("<f", scale))[0]
     widest = cur = 0
-    for u in _units(font, raw):
+    for u in _pieces(font, raw):
         if u.text == "\n":
             if cur:
                 widest = max(widest, cur)
@@ -503,7 +555,7 @@ def draw_string(font: GameFont, raw: bytes, x: int, y: int) -> list[Placement]:
     the kerning."""
     out = []
     x0 = x
-    for u in _units(font, raw):
+    for u in _pieces(font, raw):
         if u.text == "\n":
             y += font.line_height
             x = x0
@@ -520,7 +572,7 @@ def draw_chars(font: GameFont, raw: bytes, count: int, x: int, y: int) -> tuple[
     """ldwGameWindowImpl::DrawChars: the first `count` BYTES at most (never part of a character: a character
     that would cross `count` is not drawn), as DrawString; returns how far x moved."""
     out, x0, used = [], x, 0
-    for u in _units(font, raw):
+    for u in _pieces(font, raw):
         if used + u.size > count:
             break
         used += u.size
@@ -743,4 +795,5 @@ def glyph_label(glyph: Glyph) -> str:
     return {"game": "(game font)", "patcher": "(patcher-made)", "runtime": f"(patcher-made from {glyph.source})",
             "windows": f"(drawn by Windows: {glyph.source})",
             "colour": f"(drawn by Windows in colour: {glyph.source})",
+            "run": f"(shaped by Windows: {glyph.source})",
             "box": "(missing: box)"}[glyph.kind]

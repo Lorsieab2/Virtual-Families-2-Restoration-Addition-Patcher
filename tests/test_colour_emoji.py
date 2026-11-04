@@ -213,7 +213,7 @@ def test_without_direct2d_every_character_is_drawn_by_gdi_as_before(exe, dlls, t
         raw = T.encode(text)
         _same(_draw(w, name, raw, RED), _patcher_blits(font, sheet, raw, (255, 0, 0)), text)
     st = _status(w)
-    assert st["version"] == 4 and st["colour"] == 0 and st["runtime"] > 0
+    assert st["version"] >= 4 and st["colour"] == 0 and st["runtime"] > 0
 
 
 @pytest.mark.parametrize("name", ["Segoe24", "Segoe32Bold"])

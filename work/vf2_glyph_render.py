@@ -369,6 +369,47 @@ def render(text: str, face: str, px: int, weight: int, cell_height: int, top: in
     return pen - int(px), bytes(raw[1::4]), width, int(px)
 
 
+@lru_cache(maxsize=1024)
+def render_run(text: str, face: str, px: int, weight: int, cell_height: int, row: int) -> tuple:
+    """A shaped run (vf2_shaping) drawn whole by ExtTextOutW of its text (no glyph numbers: Uniscribe shapes it and
+    puts it in visual order), TA_BASELINE on row `row`, the pen at x = px of a canvas as wide as the run's extent
+    (GetTextExtentPoint32W) plus px on each side. Returns (extent, grey bytes of width x cell_height, width, px), the
+    shape of render's answer. The DLL's RunGlyph makes the same calls."""
+    c = _Canvas(4, 4, face, px, weight)
+    try:
+        size = _SIZE()
+        c.gdi.GetTextExtentPoint32W(c.dc, text, len(text.encode("utf-16-le")) // 2, ctypes.byref(size))
+        adv = int(size.cx)
+    finally:
+        c.close()
+    width = adv + 2 * max(1, int(px))
+    c = _Canvas(width, cell_height, face, px, weight)
+    try:
+        c.gdi.SetTextAlign(c.dc, TA_BASELINE)
+        ctypes.memset(c.bits, 0, width * cell_height * 4)
+        buf = ctypes.create_unicode_buffer(text)
+        c.gdi.ExtTextOutW(c.dc, int(px), int(row), 0, None, buf, len(text.encode("utf-16-le")) // 2, None)
+        c.gdi.GdiFlush()
+        raw = ctypes.string_at(c.bits, width * cell_height * 4)
+    finally:
+        c.close()
+    return adv, bytes(raw[1::4]), width, max(1, int(px))
+
+
+def run_face(text: str, chain=FALLBACK_CHAIN) -> str | None:
+    """The first face of `chain` whose character map has every letter of a run (spaces and ignorables aside), as the
+    DLL's FaceForRun; None: the run is drawn a character at a time."""
+    load_bundled_fonts()
+    cps = [ord(c) for c in text if c != " " and not _ignorable(ord(c))]
+    for face in chain:
+        if face == BUNDLED_FACES[0] and not all(is_assigned(cp) for cp in cps):
+            break
+        cm = cmap(face)
+        if all(cm.glyph(cp) for cp in cps):
+            return face
+    return None
+
+
 # ---------------------------------------------------------------------- Use Unicode Font
 
 @lru_cache(maxsize=256)

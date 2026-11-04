@@ -33,6 +33,7 @@
 
 #include "b200unicode_sites.h"
 #include "b200unicode_text.h"
+#include "b200shape.h"         // shaped and right-to-left runs (Arabic, Hebrew, Indic, Thai ...)
 #include "b200icu.h"
 #include "b200words.h"         // without icu.dll: the ICU word lists for Thai, Lao, Khmer and Burmese
 #include "b200name_limit.h"    // kNameBoxBytes: the one name limit (src/vf2_game_text.py)
@@ -95,13 +96,14 @@ static unsigned char SetTextTrampoline[16];
 // set-in name too long for the box instead of cutting it; version 2); version 3, the long names (b200names.inc):
 // names (1: the name boxes take 1,200 bytes), nameBoxes (name boxes made), shortForms (GetText gave a short form),
 // namesWritten (Names files written), expanded (texts drawn or measured with whole names), boxCopies (name boxes
-// drawn from a fitted copy); version 4: colourGlyphs (characters drawn in colour by Direct2D, b200colour.inc)
+// drawn from a fitted copy); version 4: colourGlyphs (characters drawn in colour by Direct2D, b200colour.inc);
+// version 5: shapedRuns (runs of Arabic, Hebrew, Indic, Thai ... drawn whole, b200shape.h)
 struct UnicodeStatus {
     unsigned magic, version, mode, resolved, installed, writeMask, fonts, patcherGlyphs, runtimeGlyphs, boxes, typed,
-        refused, fittedCuts, keptNames, names, nameBoxes, shortForms, namesWritten, expanded, boxCopies, colourGlyphs;
+        refused, fittedCuts, keptNames, names, nameBoxes, shortForms, namesWritten, expanded, boxCopies, colourGlyphs, shapedRuns;
 };
 extern "C" __declspec(dllexport) volatile UnicodeStatus B200Unicode_Status = {
-    UNI_STATUS_MAGIC, 4u, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+    UNI_STATUS_MAGIC, 5u, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 
 static HMODULE ThisModule;
 static wchar_t Folder[MAX_PATH];
@@ -538,6 +540,7 @@ struct FontRec {
     struct Cell { int x, y, w, probeX, probeY; } *colour;     // probe: its most opaque pixel
     unsigned colourCount;
     struct Stamp { SDL_Surface *surface; unsigned count; } stamps[16];
+    struct RunSlot *runs;     // shaped runs drawn whole (RunGlyph), by their bytes
 };
 static const unsigned kColourCells = 1024;
 static FontRec Fonts[16];
@@ -838,7 +841,7 @@ static FontRec *Ensure(unsigned impl) {
     if (FontCount >= sizeof(Fonts) / sizeof(Fonts[0])) return 0;
     FontRec &f = Fonts[FontCount++];
     f.impl = impl; f.index = -1; f.sheet = 0; f.slots = 0; f.patcherSurf = 0; f.patcher = 0; f.patcherCount = 0;
-    f.colour = 0; f.colourCount = 0;
+    f.colour = 0; f.colourCount = 0; f.runs = 0;
     for (unsigned i = 0; i < 16; ++i) f.stamps[i].surface = 0;
     const int *table = (const int *)IMPL_FIELD(impl, 0x10);
     int lineHeight = IMPL_FIELD(impl, 0x04);
@@ -1019,6 +1022,138 @@ static int CtxWidth(void *ctx, const ut::Unit &u) {
     return WidthOf(c->f, c->impl, u, c->raw);
 }
 
+// ================================================================ shaped runs (b200shape.h; src/vf2_game_text.run_glyph)
+// A run of Arabic, Hebrew, Indic, Thai ... letters drawn whole by ExtTextOutW of its text (Uniscribe shapes it and puts
+// it in visual order) in the first face of the chain that has every letter of it (Use Unicode Font: the chosen face
+// first), at the font's em on its baseline row, cut to its extent, with the sheet's alpha levels; kept in the font's
+// glyph room like any glyph, by its bytes. A run no face has whole, or wider than the font's sheet, is drawn a
+// character at a time, as before.
+struct RunSlot { unsigned hash, len; unsigned char *bytes; int x, y, w; bool fits; };
+static const unsigned kRunSlots = 2048;
+
+static const wchar_t *FaceForRun(const unsigned *cps, unsigned n) {
+    bool assigned = true;
+    for (unsigned i = 0; i < n; ++i) if (cps[i] != 0x20 && !Ignorable(cps[i]) && !IsAssigned(cps[i])) assigned = false;
+    for (int k = Mode == 2 && OverrideFace[0] ? -1 : 0; k < (int)kChainCount; ++k) {
+        const wchar_t *face = k < 0 ? OverrideFace : kChain[k];
+        if (k == (int)kBundledFirst && !assigned) break;
+        CmapCache *cm = CmapOf(face, FW_NORMAL);
+        unsigned i = 0;
+        while (i < n && (cps[i] == 0x20 || Ignorable(cps[i]) || GlyphIndex(cm, cps[i]))) ++i;
+        if (i == n) return face;
+    }
+    return 0;
+}
+
+// The run's cell (alpha, width x lineHeight) into a new buffer; returns the width (its extent), or -1.
+static int RenderRun(const wchar_t *face, const FontRec &f, const wchar_t *text, int units, unsigned char **cell) {
+    const UniFont &font = UNI_FONTS[f.index];
+    int h = f.lineHeight, pad = f.px > 1 ? f.px : 1;
+    HDC dc = CreateCompatibleDC(0);
+    if (!dc) return -1;
+    HFONT hf = MakeFont(face, f.px, WeightFor(face, font.weight));
+    HGDIOBJ oldFont = SelectObject(dc, hf);
+    SIZE size = { 0, 0 };
+    int adv = GetTextExtentPoint32W(dc, text, units, &size) ? size.cx : 0;
+    int out = -1;
+    if (adv > 0 && adv <= f.sheetW) {
+        int width = adv + 2 * pad;
+        BITMAPINFO bmi;
+        for (unsigned k = 0; k < sizeof(bmi); ++k) ((unsigned char *)&bmi)[k] = 0;
+        bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+        bmi.bmiHeader.biWidth = width;
+        bmi.bmiHeader.biHeight = -h;
+        bmi.bmiHeader.biPlanes = 1;
+        bmi.bmiHeader.biBitCount = 32;
+        void *bits = 0;
+        HBITMAP bmp = CreateDIBSection(dc, &bmi, DIB_RGB_COLORS, &bits, 0, 0);
+        *cell = (unsigned char *)Alloc((unsigned)(adv * h));
+        if (bmp && bits && *cell) {
+            HGDIOBJ oldBmp = SelectObject(dc, bmp);
+            SetTextColor(dc, 0x00FFFFFF);
+            SetBkColor(dc, 0);
+            SetBkMode(dc, OPAQUE);
+            SetTextAlign(dc, TA_BASELINE);
+            unsigned char *b = (unsigned char *)bits;
+            for (int k = 0; k < width * h * 4; ++k) b[k] = 0;
+            ExtTextOutW(dc, pad, f.base, 0, 0, text, (UINT)units, 0);
+            GdiFlush();
+            for (int y = 0; y < h; ++y)
+                for (int x = 0; x < adv; ++x) (*cell)[y * adv + x] = font.alpha[b[(y * width + pad + x) * 4 + 1]];
+            SelectObject(dc, oldBmp);
+            out = adv;
+        }
+        if (bmp) DeleteObject(bmp);
+    }
+    SelectObject(dc, oldFont);
+    DeleteObject(hf);
+    DeleteDC(dc);
+    return out;
+}
+
+// The glyph of the run raw[start .. end), made now when create (else only when made already); false: it is drawn a
+// character at a time.
+static bool RunGlyph(FontRec *f, const unsigned char *raw, unsigned start, unsigned end, bool create, Rect &out) {
+    if (!f || f->index < 0 || end <= start || end - start > sh::kMaxRunBytes) return false;
+    if (!f->runs) f->runs = (RunSlot *)Alloc(sizeof(RunSlot) * kRunSlots);
+    if (!f->runs) return false;
+    unsigned n = end - start, h = HashKey(0, 0);
+    for (unsigned i = 0; i < n; ++i) { h ^= raw[start + i]; h *= 16777619u; }
+    RunSlot *slot = 0;
+    for (unsigned probe = 0; probe < kRunSlots && !slot; ++probe) {
+        RunSlot &s = f->runs[(h + probe) & (kRunSlots - 1)];
+        if (!s.bytes) { slot = &s; break; }
+        if (s.hash != h || s.len != n) continue;
+        unsigned i = 0;
+        while (i < n && s.bytes[i] == raw[start + i]) ++i;
+        if (i < n) continue;
+        if (!s.fits) return false;
+        Rect r = { s.x, s.y, s.x + s.w, s.y + f->lineHeight };
+        out = r;
+        return true;
+    }
+    if (!slot || !create) return false;
+    slot->bytes = (unsigned char *)Alloc(n);
+    if (!slot->bytes) return false;
+    for (unsigned i = 0; i < n; ++i) slot->bytes[i] = raw[start + i];
+    slot->hash = h; slot->len = n; slot->fits = false;
+    static unsigned cps[sh::kMaxRunBytes];
+    static wchar_t text[2 * sh::kMaxRunBytes + 2];
+    unsigned count = ut::Decode(raw + start, n, cps, sh::kMaxRunBytes);
+    int units = 0;
+    for (unsigned i = 0; i < count; ++i) {
+        unsigned cp = cps[i];
+        if (cp >= 0x10000) { text[units++] = (wchar_t)(0xD800 + ((cp - 0x10000) >> 10)); text[units++] = (wchar_t)(0xDC00 + ((cp - 0x10000) & 0x3FF)); }
+        else text[units++] = (wchar_t)cp;
+    }
+    const wchar_t *face = FaceForRun(cps, count);
+    unsigned char *cell = 0;
+    int w = face ? RenderRun(face, *f, text, units, &cell) : -1;
+    GlyphSlot place;
+    place.w = -1;
+    if (w > 0 && PlaceGlyph(*f, &place, cell, w)) {
+        slot->x = place.x; slot->y = place.y; slot->w = place.w; slot->fits = true;
+        ++B200Unicode_Status.shapedRuns;
+    }
+    Release(cell);
+    if (!slot->fits) return false;
+    Rect r = { slot->x, slot->y, slot->x + slot->w, slot->y + f->lineHeight };
+    out = r;
+    return true;
+}
+
+// At the character u (`it` just after it): when a shaped run starts here and is drawn whole, its glyph, and `it`
+// moved past it (src/vf2_game_text._pieces).
+static bool RunPiece(FontRec *f, ut::Units &it, const ut::Unit &u, const unsigned char *raw, bool create, Rect &g,
+                     unsigned *size) {
+    if (!f || f->index < 0 || !sh::Group(u.cps[0])) return false;
+    unsigned end = sh::RunEnd(it, u);
+    if (!end || !RunGlyph(f, raw, u.start, end, create, g)) return false;
+    it.pos = end;
+    *size = end - u.start;
+    return true;
+}
+
 // ================================================================ long names (b200names.inc)
 #ifdef B200UNICODE_CLIP
 static const unsigned char *Expand(unsigned, const unsigned char *, unsigned char *, unsigned, bool) { return 0; }
@@ -1059,8 +1194,12 @@ static void Prepare(FontRec *f, unsigned impl, const unsigned char *text, unsign
     ut::Unit u;
     Rect r;
     const ut::Unit *mapped;
-    while (it.Next(u) && u.start + u.size <= limit)
-        if (!u.IsNewline() && !JustMapped(u, text, &mapped)) GlyphFor(f, impl, u, text, true, r);
+    unsigned size;
+    while (it.Next(u) && u.start + u.size <= limit) {
+        if (u.IsNewline() || JustMapped(u, text, &mapped)) continue;
+        if (RunPiece(f, it, u, text, true, r, &size)) continue;                     // a shaped run, drawn whole
+        GlyphFor(f, impl, u, text, true, r);
+    }
 }
 
 static unsigned FontOf(void *window, void *font) {
@@ -1089,7 +1228,8 @@ static void __fastcall UniDrawString(void *window, void *, const char *text, int
     while (it.Next(u)) {
         if (u.IsNewline()) { y += IMPL_FIELD(impl, 0x04); x = x0; continue; }
         Rect g;
-        if (!GlyphFor(f, impl, u, raw, false, g)) continue;
+        unsigned size;
+        if (!RunPiece(f, it, u, raw, false, g, &size) && !GlyphFor(f, impl, u, raw, false, g)) continue;
         int w = g.r - g.l;
         if (!w) continue;
         BlitGlyph(window, surf, g, x, y, color);
@@ -1097,8 +1237,16 @@ static void __fastcall UniDrawString(void *window, void *, const char *text, int
     }
 }
 
-struct JustState { bool active; unsigned impl; unsigned count; ut::Unit units[128]; const unsigned char *raw; };
+struct JustState { bool active; unsigned impl; unsigned count; ut::Unit units[128]; bool run[128];
+                   const unsigned char *raw; };
 static JustState Just;
+
+// The glyph of mapped byte b's character (a run: raw[start .. start + size), drawn whole).
+static bool MappedGlyph(FontRec *f, unsigned impl, unsigned b, Rect &g) {
+    const ut::Unit &m = Just.units[b];
+    return Just.run[b] ? RunGlyph(f, Just.raw, m.start, m.start + m.size, false, g)
+                       : GlyphFor(f, impl, m, Just.raw, false, g);
+}
 
 // Inside DrawStringJustified's call (the only stock caller of DrawChars, which it calls on a literal " " to measure a
 // space), a byte 80h..FFh of the mapped copy is the character it stands for.
@@ -1127,13 +1275,21 @@ static int __fastcall UniDrawChars(void *window, void *, const char *text, int c
     it.Init(raw, ut::Length(raw));
     ut::Unit u;
     while (it.Next(u)) {
-        if ((int)(used + u.size) > count) break;
-        used += u.size;
-        if (u.IsNewline()) { y += IMPL_FIELD(impl, 0x04); x = x0; continue; }
         Rect g;
         const ut::Unit *mapped = 0;
-        bool ok = JustMapped(u, raw, &mapped) ? GlyphFor(f, impl, *mapped, Just.raw, false, g)
-                                               : GlyphFor(f, impl, u, raw, false, g);
+        unsigned size = u.size;
+        bool ok;
+        if (JustMapped(u, raw, &mapped)) {
+            ok = MappedGlyph(f, impl, (unsigned)(mapped - Just.units), g);
+        } else {
+            ut::Units before = it;
+            ok = RunPiece(f, it, u, raw, false, g, &size);
+            if (ok && (int)(used + size) > count) { it = before; break; }           // a run is never cut by count
+            if (!ok) ok = GlyphFor(f, impl, u, raw, false, g);
+        }
+        if ((int)(used + size) > count) break;
+        used += size;
+        if (u.IsNewline()) { y += IMPL_FIELD(impl, 0x04); x = x0; continue; }
         if (!ok) continue;
         int w = g.r - g.l;
         if (!w) continue;
@@ -1151,7 +1307,25 @@ static int __fastcall UniGetWidth(void *font, void *, const char *text, float sc
     if (const unsigned char *e = Expand(impl, (const unsigned char *)text, whole, sizeof(whole), false))
         text = (const char *)e;                                                     // whole names
     WidthCtx c = { Ensure(impl), impl, (const unsigned char *)text };
-    return ut::GetWidth((const unsigned char *)text, scale, IMPL_FIELD(impl, 0x08), &CtxWidth, &c);
+    // ut::GetWidth's arithmetic, a shaped run being one piece of its whole width (src/vf2_game_text.get_width)
+    const unsigned char *raw = (const unsigned char *)text;
+    int kerning = IMPL_FIELD(impl, 0x08), widest = 0, cur = 0;
+    ut::Units it;
+    it.Init(raw, ut::Length(raw));
+    ut::Unit u;
+    while (it.Next(u)) {
+        if (u.IsNewline()) {
+            if (cur && cur > widest) widest = cur;
+            cur = 0;
+            continue;
+        }
+        Rect g;
+        unsigned size;
+        int w = RunPiece(c.f, it, u, raw, true, g, &size) ? g.r - g.l : CtxWidth(&c, u);
+        cur += (int)ut::F32(ut::F32((float)(kerning + w)) * scale);
+    }
+    if (widest > cur) cur = widest;
+    return cur ? cur - kerning : 0;
 }
 
 static ut::LineState LineScratch;
@@ -1178,7 +1352,7 @@ static void __fastcall UniCharRect(void *impl, void *, int ch, int *rect) {
         FontRec *f = Find((unsigned)impl);
         Rect g;
         if (Just.active && Just.impl == (unsigned)impl && b >= 0x80 && b - 0x80 < Just.count && f &&
-            GlyphFor(f, (unsigned)impl, Just.units[b - 0x80], Just.raw, false, g)) {
+            MappedGlyph(f, (unsigned)impl, b - 0x80, g)) {
             rect[0] = g.l; rect[1] = g.t; rect[2] = g.r; rect[3] = g.b;
             return;
         }
@@ -1235,15 +1409,33 @@ static int __fastcall UniDrawJustified(void *self, void *, const char *text, int
             if (Mode == 2 && !u.IsNewline()) GlyphFor(f, impl, u, raw, true, g);
             continue;
         }
+        if (Just.count < 128 && sh::Group(u.cps[0])) {
+            unsigned end = sh::RunEnd(it, u), take = 0;
+            // the longest start of the run, ending where a space follows, that is drawn whole and fits the width
+            for (unsigned e = end; e > u.start && !take; --e) {
+                if (e != end && !(raw[e] == ' ' && raw[e - 1] != ' ')) continue;
+                if (RunGlyph(f, raw, u.start, e, true, g) && (width <= 0 || g.r - g.l <= width)) take = e;
+            }
+            if (take) {
+                ut::Unit &m = Just.units[Just.count];
+                m = u;
+                m.size = take - u.start;
+                Just.run[Just.count] = true;
+                copy[k++] = (unsigned char)(0x80 + Just.count++);
+                it.pos = take;
+                continue;
+            }
+        }
         unsigned slot = 0xFFFFFFFF;
         for (unsigned j = 0; j < Just.count && slot == 0xFFFFFFFF; ++j) {
+            if (Just.run[j]) continue;
             const ut::Unit &v = Just.units[j];
             if (v.ncp != u.ncp) continue;
             unsigned i = 0;
             while (i < u.ncp && i < ut::kMaxClusterCps && v.cps[i] == u.cps[i]) ++i;
             if (i == u.ncp || i == ut::kMaxClusterCps) slot = j;
         }
-        if (slot == 0xFFFFFFFF && Just.count < 128) { slot = Just.count; Just.units[Just.count++] = u; }
+        if (slot == 0xFFFFFFFF && Just.count < 128) { slot = Just.count; Just.run[slot] = false; Just.units[Just.count++] = u; }
         if (slot == 0xFFFFFFFF) slot = 127;          // more than 128 different characters: the last one's glyph
         GlyphFor(f, impl, Just.units[slot], raw, true, g);
         copy[k++] = (unsigned char)(0x80 + slot);

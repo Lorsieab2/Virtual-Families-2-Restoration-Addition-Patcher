@@ -5,8 +5,20 @@
 #include "b200unicode_text.h"
 #include "b200icu.h"
 #include "b200words.h"
+#include "b200shape.h"
 
 #define EXPORT extern "C" __declspec(dllexport)
+
+// The shaped runs of a text (b200shape.h RunEnd at every character): ends[k] = the byte end of the run starting at
+// unit k, or 0. Returns the unit count.
+EXPORT unsigned UtRuns(const unsigned char *s, unsigned n, unsigned *ends, unsigned cap) {
+    ut::Units it;
+    it.Init(s, n);
+    ut::Unit u;
+    unsigned k = 0;
+    while (k < cap && it.Next(u)) ends[k++] = sh::RunEnd(it, u);
+    return k;
+}
 
 
 // starts, sizes, counts: one per unit; cps: kMaxClusterCps per unit. Returns the unit count.

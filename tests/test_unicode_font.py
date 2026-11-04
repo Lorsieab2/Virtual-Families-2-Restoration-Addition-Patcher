@@ -392,7 +392,8 @@ class RealGdi:
 
         def text_out(em):
             dc, x, y, options, rect, s, n, dx = (em.arg(i) for i in range(8))
-            assert options == R.ETO_GLYPH_INDEX and rect == 0 and dx == 0
+            # glyph numbers (a character), or UTF-16 text (a shaped run: Uniscribe shapes it)
+            assert options in (R.ETO_GLYPH_INDEX, 0) and rect == 0 and dx == 0
             glyphs = (c.c_uint16 * n)(*struct.unpack(f"<{n}H", em.read(s, 2 * n)))
             real_bits, fake_bits, size = self.dibs[self.selected[dc]]
             c.memmove(real_bits, em.read(fake_bits, size), size)
