@@ -189,8 +189,11 @@ def built(tmp_path_factory):
 GAME_FOLDER = "C:\\Game\\Virtual Families 2 Patcher Files\\"
 
 
-@pytest.mark.parametrize("mode,sub", [(1, "Unicode Text"), (2, "Unicode Font Text")])
-def test_the_dll_loads_the_bundled_fonts_privately_and_draws_them_like_the_patcher(built, tmp_path, mode, sub):
+@pytest.mark.parametrize("mode,sub,chosen", [(1, "Unicode Text", None), (2, "Unicode Font Text", "Segoe UI"),
+                                             (2, "Unicode Font Text", "Unifont")])
+def test_the_dll_loads_the_bundled_fonts_privately_and_draws_them_like_the_patcher(built, tmp_path, mode, sub, chosen):
+    """chosen = Unifont: Use Unicode Font with a bundled face chosen as the font; it is drawn regular in the bold
+    fonts in the game as in the preview (the DLL's WeightFor compares names, the chosen face is its own buffer)."""
     import vf2_game_text as T
     import vf2_glyph_maker as M
     from test_b200_unicode_dll import DrawWorld, GAME_IMAGES
@@ -210,6 +213,13 @@ def test_the_dll_loads_the_bundled_fonts_privately_and_draws_them_like_the_patch
         return real_add(em)
     w.e.imports["AddFontResourceExW"] = add_font
     w.e.imports["GetPrivateProfileIntW"] = lambda em: (mode, 16)        # [Patches] Mode= of the setting's ini
+
+    def profile_string(em):                                              # [Font] Face= / [UnicodeFont] Face=
+        buf, size = em.arg(3), em.arg(4)
+        value = chosen if chosen and em.wstr(em.arg(1)).lower() == "face" else ""
+        em.write(buf, (value[:size - 1] + "\0").encode("utf-16-le"))
+        return len(value[:size - 1]), 24
+    w.e.imports["GetPrivateProfileStringW"] = profile_string
     folder = w.e.alloc(256)
     w.e.write(folder, (GAME_FOLDER + "\0").encode("utf-16-le"))
     assert w.e.call(w.e.dll_export("B200Unicode_TestReadSettings"), (folder,)) == mode
@@ -219,7 +229,7 @@ def test_the_dll_loads_the_bundled_fonts_privately_and_draws_them_like_the_patch
     fonts = M.load_fonts(GAME_IMAGES)
     for name in T.FONT_NAMES:
         base, sheet = fonts[name]
-        font = T.with_unicode_font(base, "Segoe UI") if mode == 2 else base
+        font = T.with_unicode_font(base, chosen) if mode == 2 else base
         # Tangut, the new Armenian letter, Linear B (Unifont Upper), Seal (Last Resort), then mixed with the game's own
         for text in ("\U00017000", "\u0558", "\U00010000", "\U0003D000", "Ab\U00017000\u0558!"):
             raw = T.encode(text)

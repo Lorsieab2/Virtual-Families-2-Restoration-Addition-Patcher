@@ -330,7 +330,9 @@ static bool IsAssigned(unsigned cp) { return ut::InRanges(UT_ASSIGNED, UT_ASSIGN
 // The weight a face is drawn at for a game font of `weight` (src/vf2_glyph_render.weight_for): Unifont's 64-unit
 // outlines smear into solid blocks under GDI's synthetic bold, so the two Unifont faces are always drawn regular.
 static int WeightFor(const wchar_t *face, int weight) {
-    return face == kChain[kBundledFirst + 1] || face == kChain[kBundledFirst + 2] ? FW_NORMAL : weight;
+    // by name: in Use Unicode Font `face` may be the chosen face's own buffer (OverrideFace), not a kChain entry
+    return lstrcmpiW(face, kChain[kBundledFirst + 1]) == 0 || lstrcmpiW(face, kChain[kBundledFirst + 2]) == 0
+               ? FW_NORMAL : weight;
 }
 
 struct CmapCache { const wchar_t *face; int weight; unsigned char *table; unsigned size; unsigned sub12, sub13, sub4; bool loaded; };

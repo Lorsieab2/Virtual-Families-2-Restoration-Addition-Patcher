@@ -421,10 +421,11 @@ _bundled = [None]        # the folder the bundled fonts were loaded from (None: 
 
 
 def bundled_fonts_folder():
-    """The repo's runtime/fonts, else the shipped bundle's payload/Fonts beside the patcher's folder; None if neither."""
+    """The repo's runtime/fonts, else the shipped bundle's payload/Fonts (in the patcher's own folder, or beside it);
+    None if neither."""
     from pathlib import Path
     here = Path(__file__).resolve().parent
-    for folder in (here.parent / "runtime" / "fonts", here.parent / "payload" / "Fonts"):
+    for folder in (here.parent / "runtime" / "fonts", here / "payload" / "Fonts", here.parent / "payload" / "Fonts"):
         if (folder / BUNDLED_FONTS[-1]).is_file():
             return folder
     return None
