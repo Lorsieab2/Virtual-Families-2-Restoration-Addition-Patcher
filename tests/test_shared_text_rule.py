@@ -154,7 +154,8 @@ class ChildrenSidecarTests(unittest.TestCase):
 
 
 class FamilyHistoryLogTests(unittest.TestCase):
-    """vf2_family_history: a log line holds a name in its stored form (vf2history_b200.dll copies the save's bytes)."""
+    """vf2_family_history: the log is UTF-8 (vf2history_b200.dll reads each stored name per sequence); a log an
+    earlier build wrote holds the stored form, and both read back the same."""
 
     def test_log_text_and_log_bytes_round_trip(self):
         for name in NAMES + (OLD_TEXT,):
@@ -162,8 +163,9 @@ class FamilyHistoryLogTests(unittest.TestCase):
             with self.subTest(name=name):
                 self.assertEqual(fh.log_text(fh.log_bytes(text)), text)
 
-    def test_latin1_lines_stay_single_bytes(self):
-        self.assertEqual(fh.log_bytes(f"  Name: {LATIN1}\r\n"), f"  Name: {LATIN1}\r\n".encode("latin-1"))
+    def test_records_are_written_in_utf8(self):
+        self.assertEqual(fh.log_bytes(f"  Name: {LATIN1}\r\n"), f"  Name: {LATIN1}\r\n".encode("utf-8"))
+        self.assertEqual(fh.log_text(f"  Name: {LATIN1}\r\n".encode("latin-1")), f"  Name: {LATIN1}\r\n")
 
     def test_a_dll_log_with_mixed_lines(self):
         raw = (b"[2026-11-01 09:30:00] Family Renamed 1\r\n  Old name: " + OLD_BYTES + b"\r\n  New name: "

@@ -702,6 +702,52 @@ def test_a_typed_name_is_never_wider_than_the_widest_stock_name(draw_world, name
     assert w.e.read(buf, 19).split(b"\0")[0] == T.encode(start)
 
 
+@pytest.mark.parametrize("after", ["\u0301", "\u0e31\u0e35", "\u200d\u2764", "\ufe0f"])
+def test_a_mark_after_a_character_refused_for_width_is_refused_too(draw_world, after):
+    """A character refused because it would draw the name past the box's width: every following code point of the
+    same character (combining marks such as Thai's U+0E31 and U+0E35, a ZWJ and what it joins, a variation selector,
+    an emoji modifier) is refused too, and never hangs on the box's last character. The next new character is
+    typed as usual. (Live, B209: "\u0e2a\u0e27\u0e31\u0e2a\u0e14\u0e35" past the width became "\u0e2a\u0e31\u0e35".)"""
+    w, fonts = draw_world
+    font_obj, f, _sheet = w.font("Segoe24")
+    font, _s = fonts["Segoe24"]
+    widest = max(f.glyphs[f.charmap[b]][3] - f.glyphs[f.charmap[b]][1] for b in range(0x20, 0x7F))
+    cap = 18 * (widest + f.kerning) - f.kerning
+    ctl, buf = _box(w, 18)
+    w.e.w32(ctl + 0x3C, font_obj)
+    typed = ""
+    while T.get_width(font, T.encode(typed + WIDE)) <= cap:
+        typed += WIDE
+    w.e.write(buf, T.encode(typed) + b"\0")
+    assert len(T.encode(typed + WIDE)) <= 18 and len(T.encode(typed + after)) <= 18, "only the width refuses"
+    for ch in WIDE + after:
+        w.e.call(w.h["handle_key"], (5, ord(ch) | S.KEY_MARK, 0), ecx=ctl, edx=0)
+        assert w.e.read(buf, 19).split(b"\0")[0] == T.encode(typed), (ch, after)
+    w.e.call(w.h["handle_key"], (5, 8, 8), ecx=ctl, edx=0)                    # a backspace: the next mark is the
+    w.e.call(w.h["handle_key"], (5, 0x0301 | S.KEY_MARK, 0), ecx=ctl, edx=0)   # box's own last character's
+    assert w.e.read(buf, 19).split(b"\0")[0] == T.encode(typed[:-1] + "\u0301")
+    assert w.e.read(buf + 19, 16) == b"\xAB" * 16
+
+
+def test_a_mark_after_a_character_refused_for_bytes_is_refused_too(typing_world):
+    """The byte limit the same way: a refused base's combining mark, a ZWJ and the emoji it joins, a variation
+    selector, and a box that starts empty (a mark with nothing before it is never kept)."""
+    w = typing_world
+
+    def typed(limit, start, keys):
+        ctl, buf = _box(w, limit, T.encode(start))
+        for ch in keys:
+            w.e.call(w.h["handle_key"], (5, ord(ch) | S.KEY_MARK, 0), ecx=ctl, edx=0)
+        return T.decode(w.e.read(buf, limit + 1).split(b"\0")[0])
+
+    # each mark below has room in the box's bytes: only the rule refuses it
+    assert typed(4, "ab", "\U0001F600\u0301") == "ab"                     # a combining mark
+    assert typed(5, "ab", "\U0001F468\u200d\U0001F469") == "ab"           # a ZWJ and the emoji it joins
+    assert typed(5, "ab", "\U0001F600\ufe0f") == "ab"                     # a variation selector
+    assert typed(3, "", "\U0001F600\u0301") == ""                         # an empty box: nothing to hang on
+    assert typed(5, "ab", "\U0001F600\u0301\u00e9\u0301") == "ab\u00e9\u0301"   # the next character goes in as usual
+
+
 THAI = "\u0e2a\u0e27\u0e31\u0e2a\u0e14\u0e35\u0e04\u0e23\u0e31\u0e1a\u0e02\u0e2d\u0e1a\u0e04\u0e38\u0e13\u0e21\u0e32\u0e01"
 
 

@@ -135,9 +135,27 @@ struct Text {
         buf[n] = 0;
         return *this;
     }
+    // Game text (a name, a title) in the log's UTF-8: read with the stored form's per-sequence rule (a valid UTF-8
+    // sequence stays, any other byte is its Windows-1252 character), at most `max` bytes, tabs and line ends dropped.
+    Text &Utf8(const char *s, unsigned max) {
+        const unsigned char *u = (const unsigned char *)s;
+        unsigned len = 0;
+        while (u && len < max && u[len]) ++len;
+        unsigned cp, k;
+        unsigned char seq[4];
+        for (unsigned i = 0; i < len; i += k) {
+            k = ut::ReadChar(u, len, i, &cp);
+            if (cp == '\t' || cp == '\r' || cp == '\n') continue;
+            unsigned m = ut::PutUtf8(cp, seq);
+            if (n + m >= cap) break;
+            for (unsigned j = 0; j < m; ++j) buf[n++] = (char)seq[j];
+        }
+        buf[n] = 0;
+        return *this;
+    }
     Text &Whole(const char *s, unsigned max) {  // a name field: the whole name its short form stands for, else itself
         const char *w = WholeName(s, max);
-        return w ? Name(w, kNameBoxBytes) : Name(s, max);
+        return w ? Utf8(w, kNameBoxBytes) : Utf8(s, max);
     }
     Text &U(unsigned v) {
         char d[12];
@@ -898,25 +916,32 @@ static void FlushWaiting() {
 // ---- remarriage: the spouse a person married before in the same generation and why they left ("died" or
 // "divorced"), from this slot's own Family History (the save forgets a spouse who left or died before any child,
 // and a remarriage overwrites the record's second parent). Records after the last eviction only.
-static bool Value(const char *p, const char *label, char *out, unsigned cap) {   // "  <label>: <value>"
+// The names in the log are whole (or, in a log written before whole names, short forms), in UTF-8 (a log an
+// earlier build wrote holds the stored form: read per sequence, the same text). `head` (the save's stored name) is
+// compared as its whole name in UTF-8. earlier gets the whole name as the log wrote it, in UTF-8 (kNameBytes room: a stored
+// byte is at most three UTF-8 bytes).
+static const unsigned kNameBytes = 3 * kNameBoxBytes + 1;
+static char EarlierA[kNameBytes], EarlierB[kNameBytes], EarlierHead[kNameBytes], ValueRaw[kNameBytes];
+
+static bool Value(const char *p, const char *label, char *out, unsigned cap) {   // "  <label>: <value>", in UTF-8
     if (!StartsWith(p, label)) return false;
     p += Length(label);
     unsigned k = 0;
-    while (*p && *p != '\r' && *p != '\n') { if (k + 1 < cap) out[k++] = *p; ++p; }
-    out[k] = 0;
+    while (*p && *p != '\r' && *p != '\n') { if (k + 1 < kNameBytes) ValueRaw[k++] = *p; ++p; }
+    ValueRaw[k] = 0;
+    Text t;
+    t.Init(out, cap);
+    t.Utf8(ValueRaw, k);
     return true;
 }
 
-// The names in the log are whole (or, in a log written before whole names, short forms): `head` (the save's stored
-// name) is compared as its whole name. earlier gets the whole name as the log wrote it (kNameBytes room).
-static const unsigned kNameBytes = kNameBoxBytes + 1;
-static char EarlierA[kNameBytes], EarlierB[kNameBytes];
-
-static bool EarlierSpouse(int slot, int gen, const char *head, char *earlier, char *how) {
+static bool EarlierSpouse(int slot, int gen, const char *stored, char *earlier, char *how) {
     char path[MAX_PATH + 64];
     earlier[0] = how[0] = 0;
-    const char *whole = WholeName(head, 25);
-    if (whole) head = whole;
+    Text h;
+    h.Init(EarlierHead, kNameBytes);
+    h.Whole(stored, 25);
+    const char *head = EarlierHead;
     char kind[16], g[12];
     char *a = EarlierA, *b = EarlierB;
     kind[0] = a[0] = b[0] = g[0] = 0;
@@ -1204,7 +1229,7 @@ static void OnMarriage(const Person &head, const Person &spouse, int gen) {
     Member(t, "  ", "Family member", head, "Age");
     Member(t, "  ", "Married", spouse, "Age");
     if (again) {
-        t.S("  Remarried: yes").NL().S("  Earlier spouse: ").Name(earlier, kNameBoxBytes);
+        t.S("  Remarried: yes").NL().S("  Earlier spouse: ").Utf8(earlier, kNameBytes);
         if (how[0]) t.S(" (").S(how).S(")");
         t.NL();
     }
@@ -1294,7 +1319,7 @@ static void OnLeftHome(const unsigned char *v, int why) {
             else { char c[2] = { *s++, 0 }; t.S(c); }
         }
     } else if (why == LEFT_TALENT_SCOUT) {
-        t.S("Left home with ").Name(gInEvent ? gEventTitle : Word(HIST_STR_TALENT_SCOUT), 200).S(" (").S(gEventKind).S(")");
+        t.S("Left home with ").Utf8(gInEvent ? gEventTitle : Word(HIST_STR_TALENT_SCOUT), 200).S(" (").S(gEventKind).S(")");
     } else {
         t.S("Sent to Boarding School");
     }
@@ -1326,7 +1351,7 @@ static void OnRename(const Person &p, const char *name) {
 static void EventRecord(int slot, const char *kind, const char *title, int choice) {
     Text t;
     if (!Begin(t)) return;
-    t.S("  ").S(kind).S(": ").Name(title, 200).NL();
+    t.S("  ").S(kind).S(": ").Utf8(title, 200).NL();
     if (choice >= 0) t.S("  Choice: ").S(choice ? "B" : "A").NL();
     Generation(t, Generations());
     Write(slot, "Random Event", Body);
@@ -1468,7 +1493,7 @@ static bool Joined(TreeVillagerBoolFn next, void *tree, void *villager, unsigned
         Text h;
         h.Init(how, sizeof(how));
         h.S("Adopted (");
-        if (gInEvent) h.S(gEventKind).S(": ").Name(gEventTitle, 200); else h.S(Word(title));
+        if (gInEvent) h.S(gEventKind).S(": ").Utf8(gEventTitle, 200); else h.S(Word(title));
         h.S(")");
         OnArrived((const unsigned char *)villager, how);
     }

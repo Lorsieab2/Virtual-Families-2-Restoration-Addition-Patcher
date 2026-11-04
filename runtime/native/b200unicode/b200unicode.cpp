@@ -1560,10 +1560,13 @@ static void MarkSetIn(unsigned impl, bool on) {
     if (on) SetIn[free < kSetIn ? free : (impl >> 4) % kSetIn] = impl;    // full: replace one (it then may be cut)
 }
 
+static unsigned RefusedBox;          // the box whose last typed character was refused (see typing, below)
+
 typedef void (__thiscall *SetTextFn)(void *impl, const char *text);
 // ldwTextControlImpl::SetText's first 5 bytes jump here; the stock function runs through the trampoline.
 static void __fastcall UniSetText(void *impl, void *, const char *text) {
     MarkSetIn((unsigned)impl, true);
+    if (RefusedBox == (unsigned)impl) RefusedBox = 0;    // a new text: nothing typed into it was refused
     NameSetText((unsigned)impl, &text);                  // a name box given a short form opens with the whole name
     ((SetTextFn)(void *)SetTextTrampoline)(impl, text);
 }
@@ -1588,16 +1591,29 @@ static bool FitsWidth(unsigned font, unsigned char *text, int n, int max) {
 }
 
 // ================================================================ typing
-// A name box whose last typed character was refused (its 1,200 bytes): a mark typed next (a code
-// point that joins the character before it) belongs to the refused character, so it is refused too and never lands
-// on the box's last character. A paste cuts at whole characters the same way (b200clip.inc), so typing and a paste
-// leave the same text (tests/test_clip_text_boxes.py).
-static unsigned NameRefusedBox;
+// A box whose last typed character was refused (its byte limit, or a box's width): every code point typed next that
+// belongs to the refused character (a combining mark, a joiner and what it joins, a variation selector, an emoji
+// modifier, a flag's second letter) is refused too, so it never lands on the box's last character or starts a
+// character with nothing before it. RefusedCps is the refused character as typed so far. A paste goes in whole
+// characters the same way (b200clip.inc), so typing and a paste leave the same text (tests/test_clip_text_boxes.py).
+static unsigned RefusedN, RefusedCps[ut::kMaxClusterCps + 1];
 
-static bool JoinsLast(const unsigned *cps, unsigned n) {     // cps[n - 1] is not the start of a character
+static void Refuse(unsigned box, const unsigned *cps, unsigned n) {     // cps[n - 1] was refused: its character
     unsigned start = 0, last = 0;
     while (start < n) { last = start; start = ut::ClusterEnd(cps, n, start); }
-    return n > 0 && last < n - 1;
+    if (n - last > ut::kMaxClusterCps) last = n - ut::kMaxClusterCps;
+    RefusedBox = box;
+    RefusedN = n - last;
+    for (unsigned i = 0; i < RefusedN; ++i) RefusedCps[i] = cps[last + i];
+}
+
+static bool JoinsRefused(unsigned box, unsigned cp) {          // cp continues the refused character: refused too
+    if (RefusedBox != box || !RefusedN) return false;
+    RefusedCps[RefusedN] = cp;
+    if (ut::ClusterEnd(RefusedCps, RefusedN + 1, 0) != RefusedN + 1) return false;
+    if (RefusedN < ut::kMaxClusterCps) ++RefusedN;
+    ++B200Unicode_Status.refused;
+    return true;
 }
 
 static bool __fastcall UniHandleKey(void *ctl, void *, int type, int code, int sym) {
@@ -1623,19 +1639,16 @@ static bool __fastcall UniHandleKey(void *ctl, void *, int type, int code, int s
             unsigned cp = (unsigned)code & 0x1FFFFF;
             if (*(unsigned char *)(c + 0x2D)) return true;              // a number-only box
             if (cp < 0x20 || cp > 0x10FFFF || (cp >= 0xD800 && cp <= 0xDFFF)) return true;
+            if (JoinsRefused(c, cp)) return true;                        // a mark of a refused character
             cps[count++] = cp;
         }
-        bool name = IsNameBox(c);
-        if (name && sym != 8 && NameRefusedBox == c && JoinsLast(cps, count)) {
-            NameRefusedBox = c;                                           // the mark of a refused character
-            ++B200Unicode_Status.refused;
-            return true;
-        }
+        bool name = IsNameBox(c), typed = sym != 8;
         int k = ut::Encode(cps, count, next, (unsigned)max < sizeof(next) ? (unsigned)max : sizeof(next) - 1);
-        if (k < 0) { if (name && sym != 8) NameRefusedBox = c; ++B200Unicode_Status.refused; return true; }
-        if (name) NameRefusedBox = 0;
+        if (k < 0 && !typed) { ++B200Unicode_Status.refused; return true; }
+        if (k < 0) { Refuse(c, cps, count); ++B200Unicode_Status.refused; return true; }
         // a name box scrolls (b200names.inc); another box takes no character that would draw it past its width
-        if (sym != 8 && !name && !FitsWidth(*(unsigned *)(c + 0x3C), next, k, max)) { ++B200Unicode_Status.refused; return true; }
+        if (typed && !name && !FitsWidth(*(unsigned *)(c + 0x3C), next, k, max)) { Refuse(c, cps, count); ++B200Unicode_Status.refused; return true; }
+        RefusedBox = 0;
         for (int i = 0; i < k; ++i) buf[i] = (char)next[i];
         buf[k] = 0;
         if (sym != 8) ++B200Unicode_Status.typed;
@@ -1648,17 +1661,18 @@ static bool __fastcall UniHandleKey(void *ctl, void *, int type, int code, int s
         const char *buf = *(const char **)(c + 0x30);
         int max = *(int *)(c + 0x28);
         static unsigned char with[1300];
-        unsigned n = buf ? ut::Length((const unsigned char *)buf) : 0;
-        if (IsNameBox(c) && buf && (int)n >= max) NameRefusedBox = c;    // the stock code refuses it: the box is full
+        unsigned n = buf ? ut::Length((const unsigned char *)buf) : 0, letter = (unsigned)sym;
+        if (JoinsRefused(c, letter)) return true;                        // it joins a refused character (after a ZWJ)
+        if (buf && (int)n >= max) Refuse(c, &letter, 1);                 // the stock code refuses it: the box is full
         if (buf && n + 1 < sizeof(with) && (int)n < max) {
             for (unsigned i = 0; i < n; ++i) with[i] = (unsigned char)buf[i];
             with[n] = (unsigned char)sym;
-            if (IsNameBox(c)) {
-                NameRefusedBox = 0;
-            } else if (!FitsWidth(*(unsigned *)(c + 0x3C), with, (int)n + 1, max)) {
+            if (!IsNameBox(c) && !FitsWidth(*(unsigned *)(c + 0x3C), with, (int)n + 1, max)) {
+                Refuse(c, &letter, 1);
                 ++B200Unicode_Status.refused;
                 return true;
             }
+            RefusedBox = 0;
         }
     }
     return ((HandleKeyFn)SITE(TEXT_HANDLE_KEY))(ctl, type, code, sym);

@@ -235,19 +235,20 @@ def _rename(h: History, old: str, new: str, sex: str) -> None:
 
 
 def log_text(raw: bytes) -> str:
-    """A Family History file's text. vf2history_b200.dll writes each name in the stored form (its bytes: the whole
-    name from the slot's Names file, in the form the save would hold, or the save's own bytes when the file does not
-    hold it; logs written before whole names hold the short forms), so every line is read with the patcher's one text rule
-    (vf2_game_text.decode): a line of Latin-1 / Windows-1252 bytes as before, a line of UTF-8 as UTF-8. A 0 byte
+    """A Family History file's text. vf2history_b200.dll writes UTF-8 (each name read from its stored form per
+    sequence: the whole name from the slot's Names file, or the save's own bytes when the file does not hold it; logs
+    written before whole names hold the short forms). A log an earlier build wrote holds the stored form itself (an
+    accented Latin letter as one Windows-1252 byte), so every line is read with the patcher's one text rule
+    (vf2_game_text.decode), per sequence: UTF-8 stays, any other byte is its Windows-1252 character. A 0 byte
     (never written) is kept as a character."""
     return "\n".join("\0".join(game_text.decode(part) for part in line.split(b"\0"))
                      for line in bytes(raw).split(b"\n"))
 
 
 def log_bytes(text: str) -> bytes:
-    """The bytes of a record the patcher adds to a Family History file: line by line in the stored form
-    (vf2_game_text.encode), as the DLL writes the names, so log_text reads it back exactly."""
-    return b"\n".join(game_text.encode(line) for line in text.split("\n"))
+    """The bytes of a record the patcher adds to a Family History file: UTF-8, as the DLL writes it, so log_text
+    reads it back exactly."""
+    return text.encode("utf-8", "surrogatepass")
 
 
 def whole_names(h: History, book, slot: int) -> None:

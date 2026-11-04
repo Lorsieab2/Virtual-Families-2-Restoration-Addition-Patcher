@@ -119,8 +119,9 @@ class FileSystem:
         return self.files.get(self.key(path))
 
     def text(self, path):
+        """A Family History file read strictly as UTF-8 (the log's encoding: an invalid byte fails the read)."""
         raw = self.read(path)
-        return None if raw is None else raw.decode("latin-1")
+        return None if raw is None else raw.decode("utf-8")
 
     def exists(self, path):
         return self.key(path) in self.files
@@ -903,13 +904,14 @@ class HistoryWorld:
         reg = UC_X86_REG_EDI if site == "message" else UC_X86_REG_ESI
         e = self.e
         frame = e.alloc(0x2000) + 0x1000
-        e.write(frame - 0x18, name.encode("ascii") + b"\0")
+        raw = name if isinstance(name, bytes) else name.encode("ascii")
+        e.write(frame - 0x18, raw + b"\0")
         e.setreg(UC_X86_REG_ESP, e.sp_top - 0x400)
         e.setreg(UC_X86_REG_EBP, frame)
         e.setreg(reg, self.villager(slot))
         e.uc.emu_start(p, p + 0x15)
         assert e.reg(UC_X86_REG_EIP) == p + 0x15
-        e.write(self.villager(slot) + S.VILLAGER_NAME, name.encode("ascii")[:24].ljust(25, b"\0"))
+        e.write(self.villager(slot) + S.VILLAGER_NAME, raw[:24].ljust(25, b"\0"))
 
     def evict(self):
         p = self.p("od_evict")
@@ -1446,11 +1448,6 @@ def scenario_a_loss_the_log_never_saw_is_not_guessed(w: HistoryWorld):
 
 
 # ====================================================================== whole names (the slot's Names file)
-def _stored(text: str) -> str:
-    """A name's stored bytes as the log files are read here (latin-1, byte for byte: HistoryWorld.records)."""
-    return T.encode(text).decode("latin-1")
-
-
 def _short(whole: str, room: int, taken: dict) -> bytes:
     """The save's field for `whole`: its short form in the stored form, recorded in `taken` (short -> whole)."""
     short = N.short_form(whole, room, taken)
@@ -1492,7 +1489,7 @@ def scenario_whole_names_in_the_log(w: HistoryWorld):
     assert w.last() == ("Death 1", death_lines(ben, 26, MALE, "Disease", "Parent (married in)", ana))
     w.set_villager(2, short_cal, MALE, age=700)
     w.marry(0, 2)
-    assert w.last() == ("Marriage 2", remarriage_lines(ana, 25, FEMALE, _stored(cal), 35, MALE, ben, "died"))
+    assert w.last() == ("Marriage 2", remarriage_lines(ana, 25, FEMALE, cal, 35, MALE, ben, "died"))
     # Dan's short form is not in the file the DLL read: the file, written since (as the Unicode text DLL writes it
     # when the name is typed), is read again when his name is next logged
     w.fs.write(NAMES_FILE.format(slot=1), N.render(entries))
@@ -1501,7 +1498,7 @@ def scenario_whole_names_in_the_log(w: HistoryWorld):
     w.report_death_timeflow()
     assert w.last()[0] == "Death 2" and w.last()[1][0] == f"  Name: {dan}"
     w.evict()
-    assert w.last() == ("Evict Family 1", [f"  Family members: {ana}, {_stored(cal)}", "  Generation: 1"])
+    assert w.last() == ("Evict Family 1", [f"  Family members: {ana}, {cal}", "  Generation: 1"])
     assert w.fs.guards_intact(), "a heap buffer was written past its end"
     out = w.e.alloc(4 * 12)
     w.e.call(w.e.dll_export("B200History_TestBuffers"), (out,))
@@ -1518,6 +1515,54 @@ def scenario_whole_names_in_the_log(w: HistoryWorld):
     assert [d[0] for d in h.deaths] == [ben, dan]
     FH.whole_names(h, N.Book(Path("C:\\nowhere")), 1)
     assert [m.spouse for m in h.marriages] == [ben, cal], "a whole name is left as it is by the reader"
+
+
+def scenario_names_are_logged_in_utf8(w: HistoryWorld):
+    """Since B208 a name is stored per character: an accented Latin letter is ONE Windows-1252 byte, every other
+    character UTF-8 (b"Zo\xeb \xf0\x9f\x98..."). The log is UTF-8: each name is read per sequence and written as UTF-8
+    (the header's player name, members, the remarriage's earlier spouse, a rename's old and new names). A log an
+    earlier build wrote with the raw byte is still read the same (a remarriage is found across both forms)."""
+    player = "Zoë \U0001F600 مرحبا"
+    zoe = "Zoë \U0001F600\U0001F44D\U0001F3FD"
+    renamed = "Zoé ❤️ ش"
+    stored_player, stored_zoe, stored_renamed = T.encode(player), T.encode(zoe), T.encode(renamed)
+    assert stored_player.startswith(b"Zo\xeb \xf0\x9f\x98") and len(stored_player) <= 19
+    assert stored_zoe.startswith(b"Zo\xeb ") and stored_renamed.startswith(b"Zo\xe9 ") and len(stored_zoe) <= 24
+    w.set_player(stored_player)
+    w.household((stored_zoe, FEMALE, 500), ("Ben", MALE, 520))
+    w.set_active(1, 0)
+    w.new_family(0)
+    w.set_active(1, 1)
+    w.marry(0, 1)
+    raw = w.fs.read(w.history_path(1))
+    assert raw.startswith(f"Family: {player} (Save 1)\r\n".encode("utf-8")), raw[:40]
+    assert raw.decode("utf-8").count(zoe) == 3, "every name is valid UTF-8 with the right text"
+    w.kill(1, 0)
+    w.report_death_timeflow()
+    w.set_villager(2, "Cal", MALE, age=700)
+    w.marry(0, 2)
+    assert w.last() == ("Marriage 2", remarriage_lines(zoe, 25, FEMALE, "Cal", 35, MALE, "Ben", "died"))
+    # a log an earlier build wrote: the names as their stored bytes (the raw Windows-1252 byte); a remarriage is
+    # still found in it, and the patcher's reader reads it as the same text
+    old = w.fs.read(w.history_path(1)).replace(zoe.encode("utf-8"), stored_zoe)
+    assert b"Zo\xeb " in old
+    w.fs.write(w.history_path(1), old)
+    w.kill(2, 0)
+    w.report_death_timeflow()
+    w.set_villager(3, "Dan", MALE, age=640)
+    w.marry(0, 3)
+    tail = w.fs.read(w.history_path(1))[len(old):].decode("utf-8")
+    assert f"  Earlier spouse: Cal (died)\r\n  Current spouse of {zoe}: Dan\r\n" in tail, tail
+    w.rename(0, stored_renamed)
+    tail = w.fs.read(w.history_path(1))[len(old):].decode("utf-8")
+    assert f"  Old name: {zoe}\r\n  New name: {renamed}\r\n" in tail, tail
+    text = FH.log_text(w.fs.read(w.history_path(1)))
+    assert "�" not in text and text.splitlines()[0] == f"Family: {player} (Save 1)"
+    h = FH.parse(text)
+    assert [(m.head, m.spouse) for m in h.marriages] == [(renamed, "Ben"), (renamed, "Cal"), (renamed, "Dan")], \
+        "the reader reads both forms as one name (and the rename names every record by the new name)"
+    assert FH.log_bytes(f"  Old name: {zoe}\r\n") == f"  Old name: {zoe}\r\n".encode("utf-8"), \
+        "the patcher adds its records in UTF-8, as the DLL writes them"
 
 
 def scenario_a_missing_names_file_logs_the_stored_name(w: HistoryWorld):
@@ -1563,7 +1608,8 @@ def scenario_a_names_record_with_a_wrong_checksum_is_skipped(w: HistoryWorld):
     assert w.fs.guards_intact()
 
 
-ALL = [scenario_whole_names_in_the_log, scenario_a_missing_names_file_logs_the_stored_name,
+ALL = [scenario_whole_names_in_the_log, scenario_names_are_logged_in_utf8,
+       scenario_a_missing_names_file_logs_the_stored_name,
        scenario_a_names_record_with_a_wrong_checksum_is_skipped,
        scenario_rename_in_the_details_box, scenario_same_sex_marriage, scenario_a_loss_the_log_never_saw_is_not_guessed,
        scenario_new_family_and_marriage, scenario_conception_and_birth_single, scenario_the_father_after_a_load,
