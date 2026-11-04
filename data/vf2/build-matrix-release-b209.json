@@ -44,5 +44,11 @@
     "island_events_cheat_upgrades_behavior_patches_mobile_renovations": "outputs/VF2-B208-matrix-island_events_cheat_upgrades_behavior_patches_mobile_renovations",
     "island_events_holiday_ornaments_behavior_patches_mobile_renovations": "outputs/VF2-B208-matrix-island_events_holiday_ornaments_behavior_patches_mobile_renovations",
     "island_events_cheat_upgrades_holiday_ornaments_mobile_renovations": "outputs/VF2-B208-matrix-island_events_cheat_upgrades_holiday_ornaments_mobile_renovations"
+  },
+  "bundle_exported_from": {
+    "revision": "010c68f",
+    "ref": "main",
+    "pull_request": 526,
+    "note": "The 32 executables are built from built_from; the companion DLLs and the bundle are exported from this commit. #523 to #526 changed only the companion DLLs, the translation template and (TEST) French file, and tests; nothing in the executables."
   }
 }
