@@ -436,6 +436,19 @@ class TranslationsWindow:
             return ""
         parsed = tfmt.parse_bytes(item.path.read_bytes(), self.game)
         summary = tfmt.validate(parsed, self.entries(self.game, ask=False)).summary()
+        wide = []
+        try:
+            import vf2_game_text as gt
+            fonts = {n: gt.load_font(n) for n in screen_edge().DRAWN_FONTS}
+            for row in parsed.rows:
+                if row.translation:
+                    wide += [(row.key, px, font) for _line, px, font in screen_edge().too_wide(fonts, row.translation)]
+        except Exception:               # the check never stops on the screen's measure
+            wide = []
+        if wide:
+            summary += (f"\n\n{len(wide)} line(s) wider than the game's {screen_edge().SCREEN_W}-pixel screen (the game "
+                        "moves or cuts them; the editor's Wrap to fit breaks them):\n"
+                        + "\n".join(f"  {key}: {px} pixels in {font}" for key, px, font in wide[:30]))
         messagebox.showinfo(TITLE, summary[:6000], parent=self.window)
         return summary
 
@@ -757,6 +770,11 @@ class CreditDialog:
 
 # --------------------------------------------------------------------------- the editor
 
+def screen_edge():
+    import vf2_screen_edge
+    return vf2_screen_edge
+
+
 PLACEHOLDER_RE = re.compile(tfmt.CONVERSION_RE.pattern + r"|\{[^{}]*\}")
 PREVIEW_COLOUR = (255, 255, 255)
 PREVIEW_BACKGROUND = (58, 58, 58)
@@ -870,6 +888,7 @@ class TranslationEditor:
         tools = ttk.Frame(edit)
         tools.pack(fill="x", pady=(4, 0))
         ttk.Button(tools, text="Copy English", command=self.copy_english).pack(side="left")
+        ttk.Button(tools, text="Wrap to fit", command=self.wrap_to_fit).pack(side="left", padx=(8, 0))
         self.insert_row = ttk.Frame(tools)
         self.insert_row.pack(side="left", padx=(12, 0))
         self.message = tk.StringVar(master=win, value="")
@@ -1038,6 +1057,11 @@ class TranslationEditor:
                for c in row.translation):
             warnings.append("some letters are outside Latin-1: the game shows them with the patcher's Unicode font "
                             "setting on, and as ? without it")
+        wide = self.too_wide(row.translation)
+        if wide:
+            line, pixels, font = wide[0]
+            warnings.append(f"a line is {pixels} pixels wide in {font}, wider than the game's {screen_edge().SCREEN_W}-"
+                            "pixel screen: the game moves it or cuts it with \u2026; Wrap to fit breaks it")
         if errors:
             self.message.set("This line will show English: " + "; ".join(errors))
             self.message_label.configure(foreground="#c00")
@@ -1048,6 +1072,42 @@ class TranslationEditor:
             self.message.set("OK" if row.translation else "Not translated yet (the game shows the English).")
             self.message_label.configure(foreground="#2a7a2a")
         return errors
+
+    # ---------------------------------------------------------------- the screen's width
+    def screen_fonts(self) -> dict:
+        """The four game fonts, measured as the game draws them (vf2_game_text; the screen edge's check)."""
+        if getattr(self, "_screen_fonts", None) is None:
+            import vf2_game_text as gt
+            try:
+                self._screen_fonts = {n: gt.load_font(n) for n in screen_edge().DRAWN_FONTS}
+            except Exception:           # the check never stops the editor
+                self._screen_fonts = {}
+        return self._screen_fonts
+
+    def too_wide(self, text: str) -> list:
+        """The lines of `text` wider than the game's screen in a game font (vf2_screen_edge.too_wide)."""
+        fonts = self.screen_fonts()
+        if not text or not fonts:
+            return []
+        try:
+            return screen_edge().too_wide(fonts, text)
+        except Exception:
+            return []
+
+    def wrap_to_fit(self) -> None:
+        """Wrap to fit: each line wider than the screen broken where the game's own wrapping breaks it, never inside
+        a placeholder (vf2_screen_edge.wrap_to_fit)."""
+        if self.current is None:
+            return
+        text = self.translation_text.get("1.0", "end-1c")
+        fonts = self.screen_fonts()
+        if not text or not fonts:
+            return
+        wrapped = screen_edge().wrap_to_fit(fonts, text)
+        if wrapped != text:
+            self.translation_text.delete("1.0", "end")
+            self.translation_text.insert("1.0", wrapped)
+            self.changed()
 
     # ---------------------------------------------------------------- the preview
     def schedule_preview(self) -> None:

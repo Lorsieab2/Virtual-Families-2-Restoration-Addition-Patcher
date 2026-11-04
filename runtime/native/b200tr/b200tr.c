@@ -1,4 +1,4 @@
-/* vf2tr_b200.dll -- Translations: the player's chosen translation in Virtual Families 2.
+﻿/* vf2tr_b200.dll -- Translations: the player's chosen translation in Virtual Families 2.
 
    WHAT.  The executable's loader (theGame::Init's first call) loads this DLL last, after the Unicode text DLLs, only
    while the Translations byte (.vf2trns) is 1, and calls B200Tr_Startup().  It reads the translation the patcher's
@@ -993,6 +993,7 @@ static int install_from_text(const char *text, int text_n) {
 }
 
 static int started = 0;
+static void install_screen_edge(void);       /* b200tr_screen.inc */
 
 static void finish(int ok) {
     installed = ok;
@@ -1050,6 +1051,9 @@ __declspec(dllexport) int __cdecl B200Tr_Startup(void) {
         ok = 0;
     }
     finish(ok);
+    if (installed) {
+        __try { install_screen_edge(); } __except (EXCEPTION_EXECUTE_HANDLER) { }
+    }
     write_log();
     return installed;
 }
@@ -1154,6 +1158,13 @@ __declspec(dllexport) const char *__cdecl B200Tr_EnglishOf(const char *shown) {
         if (by_id[k] != NULL && (by_id[k]->out == shown || bsame(by_id[k]->out, shown))) return by_id[k]->rec->text;
     return shown;
 }
+
+#include "b200tr_screen.inc"   /* nothing runs off the screen (no Unicode text DLL) */
+
+#ifdef B200TR_TEST
+/* the screen edge's two jumps, installed as Startup does after a translation installed: 1 when they are in */
+__declspec(dllexport) int __cdecl B200Tr_TestScreenEdge(void) { install_screen_edge(); return screen_edge; }
+#endif
 
 BOOL WINAPI DllMain(HINSTANCE instance, DWORD reason, LPVOID reserved) {
     (void)reserved;

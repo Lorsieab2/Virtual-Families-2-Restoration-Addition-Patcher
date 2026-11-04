@@ -38,11 +38,16 @@ def test_the_translations_dll_makes_its_trampolines_executable_before_writing_an
     """vf2tr_b200.dll (runtime/native/b200tr/b200tr.c, C): every static `XTrampoline[..]` array is built by
     make_trampoline(), which VirtualProtects it PAGE_EXECUTE_READWRITE before it copies a byte; install_guards() makes
     every trampoline before it writes any entry jmp (tests/test_b200_translations_dll.py states it in full)."""
-    text = (NATIVE.parent / "b200tr" / "b200tr.c").read_text(encoding="utf-8-sig")
+    # b200tr_screen.inc (B209): the screen edge's two trampolines, made the same way, before its two entry jmps
+    text = (NATIVE.parent / "b200tr" / "b200tr.c").read_text(encoding="utf-8-sig") + \
+        (NATIVE.parent / "b200tr" / "b200tr_screen.inc").read_text(encoding="utf-8")
     declared = set(re.findall(r"static\s+unsigned\s+char\s+(\w*Trampoline)\s*\[", text))
-    assert declared == {"StrncpyTrampoline", "SprintfTrampoline"}, declared
+    assert declared == {"StrncpyTrampoline", "SprintfTrampoline", "DrawStringTrampoline", "JustifiedTrampoline"}, declared
     made = re.findall(r"trampolines\[\d\] = (\w*Trampoline)", text)
     assert set(made) == declared
+    screen = text[text.index("static void install_screen_edge(void) {"):]
+    screen = screen[:screen.index("\n}\n")]
+    assert screen.index("make_trampoline(") < screen.index("write_code(entries[k], jmp, 5)")
     body = text[text.index("static int make_trampoline("):]
     body = body[:body.index("\n}\n")]
     assert re.search(r"VirtualProtect\(\s*tramp\s*,[^;]*PAGE_EXECUTE_READWRITE", body)

@@ -516,7 +516,8 @@ release bundle, like almost everything else)
     Direct2D), never recoloured by the text's colour; a see-through text makes them see-through too. Without
     Direct2D they are drawn in one colour, the text's, as before. Arabic, Hebrew, the Indic scripts, Thai and the
     other scripts whose letters join or run right to left are drawn shaped and in reading order, a word or a phrase
-    at a time, as Windows draws them;
+    at a time, as Windows draws them. A translated or non-English text that would run off the screen is moved to
+    the screen's edge, or cut with "…" when it is wider than the screen;
   - **typing**: the game's text boxes take every character the keyboard sends (accented keys, dead keys, Alt
     codes, an input method); the original game drops all of them (`CheckForEvents` only passes a one-byte
     `SDL_TEXTINPUT`). A character is added only if the whole name still fits the box; Backspace removes a whole

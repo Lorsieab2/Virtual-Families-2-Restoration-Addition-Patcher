@@ -201,3 +201,108 @@ def test_a_dialogs_box_is_moved_to_the_edge_and_a_tall_paragraph_is_cut(world):
     assert _on_screen(tall) and max(b[1] + b[3] for b in tall) <= SH
     wide = draw(CJK, -50, 10, 2000)                                        # a box wider than the screen
     assert _on_screen(wide)
+
+
+# ---------------------------------------------------------------------------------------------- the Translations DLL alone
+@pytest.fixture(scope="module")
+def tr_world(tmp_path_factory):
+    """vf2tr_b200.dll's own test build with a translation installed, no Unicode text DLL: the real executable, the
+    game's stock DrawString / DrawStringJustified / GetWidth / GetNextJustifiedLine, the screen 1024 x 768."""
+    import os
+    import subprocess
+    vc = os.environ.get("VF2_VCVARS32")
+    exe_path = os.environ.get("VF2_UNICODE_EXE") or os.environ.get("VF2_B200_CORE_EXE")
+    core = os.environ.get("VF2_B200_CORE_EXE")
+    if not vc or not exe_path or not core or not (GAME_IMAGES / "Segoe24.png").is_file():
+        pytest.skip("needs VF2_VCVARS32, the executables and the original game folder")
+    pytest.importorskip("unicorn")
+    out = tmp_path_factory.mktemp("trscreen")
+    r = subprocess.run(["cmd.exe", "/d", "/c", str(ROOT / "runtime" / "native" / "build_b200tr.bat"), "test"],
+                       env=dict(os.environ, VF2_TR_BUILD_DIR=str(out)), capture_output=True, text=True)
+    dll = out / "vf2tr_b200_test.dll"
+    assert dll.is_file(), r.stdout + r.stderr
+    import b200_translations_scenarios as TS
+    from test_b200_unicode_dll import DrawWorld as D
+    w = TS.World(exe_path, dll, core=core)
+    import vf2_picture_image as P
+
+    class Draw:                                        # DrawWorld's SDL and font seams, over this world's emulator
+        _surface, _create, _map, _get, _upper_blit, font = (D._surface, D._create, D._map, D._get, D._upper_blit,
+                                                             D.font)
+    d = Draw()
+    d.e, d.P, d.surfaces, d.blits, d.fonts = w.e, P, {}, [], {}
+    w.e.bind_exe_imports({"SDL_UpperBlit": d._upper_blit})
+    w.e.imports["HeapFree"] = lambda em: (1, 12)
+    d.window = w.e.alloc(0x100)
+    w.e.w32(d.window + 0x30, d._surface(SW, SH, b"\0" * SW * SH * 4))
+    for off, v in ((0x60, 0), (0x64, 0), (0x68, 4096), (0x6C, 4096)):
+        w.e.w32(d.window + off, v)
+    assert w.install(TS.make_file(w, {113: "R\u00e9essayer"})) == 1
+    order = len(w.protect_calls)
+    assert w.e.call(w.e.dll_export("B200Tr_TestScreenEdge")) == 1
+    import gen_b200_unicode_sites as G
+    from test_b200_unicode_dll import OBJS
+    resolved = G.resolve(G.Exe(Path(exe_path)), G.load_pins(OBJS))
+    sites = dict(resolved["sites"], FONT_VTABLE=resolved["font_vtable"])
+    real_font = d.font
+
+    def font(name):                                    # the font object with its own vtable, as ldwFont::Load makes it
+        obj = real_font(name)
+        w.e.w32(w.e.r32(obj[0] + 4), sites["FONT_VTABLE"])
+        return obj
+    d.font = font
+    return w, d, sites, order
+
+
+def test_the_translations_dll_alone_writes_two_jumps_after_executable_trampolines(tr_world):
+    w, _d, sites, order = tr_world
+    e = w.e
+    for name in ("DRAW_STRING", "DRAW_JUSTIFIED"):
+        at = sites[name]
+        assert e.read(at, 1) == b"\xE9"
+        target = (at + 5 + struct.unpack("<i", e.read(at + 1, 4))[0]) & 0xFFFFFFFF
+        assert target >= 0x30000000                                  # into the DLL
+    protects = w.protect_calls[order:]
+    rwx_tramps = [p for p in protects if p[2] == 0x40 and p[0] >= 0x30000000]
+    entry_writes = [p for p in protects if p[0] in (sites["DRAW_STRING"], sites["DRAW_JUSTIFIED"])]
+    assert len(rwx_tramps) == 2 and entry_writes and max(p[3] for p in rwx_tramps) < min(p[3] for p in entry_writes)
+
+
+def test_the_translations_dll_alone_keeps_drawstring_on_the_screen(tr_world):
+    """With a translation and no Unicode DLL, the game's own DrawString (Windows-1252, stock fonts) moved to the edge
+    or cut with "..." exactly as the model, pixel for pixel."""
+    from test_colour_emoji import _patcher_blits, _same
+    w, d, sites, _order = tr_world
+    e = w.e
+    import vf2_glyph_maker as M
+    fonts = M.load_fonts(GAME_IMAGES)
+    for name in ("Segoe24", "Segoe36Bold"):
+        font_obj, _f, _s = d.font(name)
+        font = T.stock_font(fonts[name][0])
+        sheet = fonts[name][1]
+        for text, x, y in (("Une longue ligne traduite " * 6, SW - 120, 20), ("Caf\u00e9 cr\u00e8me", SW - 30, 40),
+                           ("Bonjour", -20, SH - 5), ("W" * 300, 10, 10)):
+            raw = text.encode("cp1252")
+            p = e.alloc(len(raw) + 1)
+            e.write(p, raw + b"\0")
+            d.blits = []
+            e.call(sites["DRAW_STRING"], (p, x, y, 0xFFFFFFFF, font_obj), ecx=d.window, edx=0)
+            game = list(d.blits)
+            shown, mx, my = E.on_screen(font, text, x, y, translation=True, ellipsis="...")
+            mine = _patcher_blits(font, sheet, shown.encode("cp1252"), (255, 255, 255), mx, my)
+            _same(game, mine, (name, text[:10], x))
+            assert _on_screen(game), (name, text[:10])
+
+
+def test_the_translations_dll_alone_moves_a_dialogs_box(tr_world):
+    w, d, sites, _order = tr_world
+    e = w.e
+    font_obj, _f, _s = d.font("Segoe24")
+    self_ = e.alloc(16)
+    e.w32(self_, d.window)
+    text = ("Une tr\u00e8s longue phrase de dialogue qui continue encore et encore. " * 6).encode("cp1252")
+    p = e.alloc(len(text) + 1)
+    e.write(p, text + b"\0")
+    d.blits = []
+    e.call(sites["DRAW_JUSTIFIED"], (p, SW - 100, 50, 300, 0xFFFFFFFF, font_obj, 0, 0, 0), ecx=self_, edx=0)
+    assert d.blits and _on_screen(d.blits) and min(b[0] for b in d.blits) >= SW - 300

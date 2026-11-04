@@ -30,7 +30,7 @@ def width(font: T.GameFont, text: str) -> int:
     return T.get_width(font, T.encode(text))
 
 
-def fit_line(font: T.GameFont, line: str, room: int) -> str | None:
+def fit_line(font: T.GameFont, line: str, room: int, ellipsis: str = ELLIPSIS) -> str | None:
     """b200screen.inc FitLine: the line when it fits, else its longest start of whole characters, trailing spaces
     dropped, then "…"; None when not even "…" fits."""
     if width(font, line) <= room:
@@ -41,12 +41,12 @@ def fit_line(font: T.GameFont, line: str, room: int) -> str | None:
     for u in T.units(raw):
         at += len(u.raw)
         start = T.decode(raw[:at]).rstrip(" ")
-        if width(font, start + ELLIPSIS) > room:
+        if width(font, start + ellipsis) > room:
             break
         best, any_fit = start, True
-    if not any_fit and width(font, ELLIPSIS) > room:
+    if not any_fit and width(font, ellipsis) > room:
         return None
-    return best + ELLIPSIS
+    return best + ellipsis
 
 
 def clamp_wanted(text: str, translation: bool) -> bool:
@@ -54,8 +54,10 @@ def clamp_wanted(text: str, translation: bool) -> bool:
 
 
 def on_screen(font: T.GameFont, text: str, x: int, y: int, *, translation: bool = False,
-              screen=(SCREEN_W, SCREEN_H)):
-    """b200screen.inc OnScreen: (text, x, y) DrawString draws; text None: the English is shown instead."""
+              screen=(SCREEN_W, SCREEN_H), ellipsis: str = ELLIPSIS):
+    """b200screen.inc OnScreen: (text, x, y) DrawString draws; text None: the English is shown instead. The Translations
+    DLL alone (no Unicode text DLL: b200tr_screen.inc) does the same with ellipsis "..." (the stock fonts have no
+    "…")."""
     sw, sh = screen
     if not text or not clamp_wanted(text, translation):
         return text, x, y
@@ -72,8 +74,8 @@ def on_screen(font: T.GameFont, text: str, x: int, y: int, *, translation: bool 
         out = []
         for k, line in enumerate(parts[:fit]):
             if k + 1 == fit and len(parts) > fit:
-                line += ELLIPSIS
-            fitted = fit_line(font, line, sw)
+                line += ellipsis
+            fitted = fit_line(font, line, sw, ellipsis)
             if fitted is None:
                 return None, x, y
             out.append(fitted)
