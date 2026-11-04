@@ -151,15 +151,18 @@ class Pin:
                           byte-verified).
     skip: leading bytes that are wildcards because another companion DLL may have written its 5-byte
           jmp there (this DLL never writes them).
+    wild: (offset, length) runs that are wildcards because the patch build changes them (B209: the string
+          table's largest id, which grows with the patcher's own records).
     """
 
-    def __init__(self, name, va, hexbytes, how, note, skip=0):
+    def __init__(self, name, va, hexbytes, how, note, skip=0, wild=()):
         self.name = name
         self.va = va
         self.bytes = bytes.fromhex(hexbytes)
         self.how = how
         self.note = note
         self.skip = skip
+        self.wild = wild
 
 
 SEARCH = "search"
@@ -420,7 +423,9 @@ PINS = [
         "558BEC8B4D0885C97509B8E0534F005DC204008D41FF3DF10F000077238B048D1800700085C07418390875148B480C85"
         "C974068BC15DC204008B40085DC20400B8A0EA52005DC20400"
     ), SEARCH, "theStringManager::GetString(id): static, stdcall (ret 4); the override text, else the "
-               "text; a missing id returns the fixed fallback string at +41h."),
+               "text; a missing id returns the fixed fallback string at +41h. The cmp of the largest id (+17h) "
+               "is a wildcard: the patcher's own records raise it (0xFF1 in B200, more from B209).",
+        wild=((0x17, 4),)),
 ]
 
 # Function entries the DLL calls or relies on: name -> pin (the entry is the pin's first byte).
