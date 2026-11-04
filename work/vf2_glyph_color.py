@@ -181,7 +181,7 @@ def draw(text: str, em: int, baseline: int, height: int, face: str = EMOJI_FACE)
     import vf2_glyph_render as R
     gdi32 = R._api()
     _d2d, dw, rt, brush = made
-    units = len(text.encode("utf-16-le")) // 2
+    units = sum(2 if ord(c) > 0xFFFF else 1 for c in text)          # UTF-16 units
     fmt, layout = ctypes.c_void_p(), ctypes.c_void_p()
     dc = bmp = None
     try:
