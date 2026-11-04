@@ -47,11 +47,27 @@ def patched() -> bytes:
 def test_the_patch_data_is_well_formed():
     data = ts.patch_data()
     ids = [r["id"] for r in data["table"]]
-    assert len(ids) == len(set(ids)) and min(ids) > data["original_ids_to"] - 100 and max(ids) < 0xFF3
+    # the B209 records (the texts the generated code used to copy or draw itself) are the last ids
+    assert len(ids) == len(set(ids)) and min(ids) > data["original_ids_to"] - 100 and max(ids) == 0xFFA
     assert all(r["key"] and r["source"] for r in data["table"])
     assert [r["id"] for r in data["table"] if not r["english"]] == [3779, 3780]     # empty in the game: not in a template
     assert {r["id"] for r in data["changed"]} == {5, 17, 44, 45, 46, 47, 134, 401, 403, 1157}
-    assert len(data["table"]) == 1418
+    assert len(data["table"]) == 1426
+    by_id = {r["id"]: r for r in data["table"]}
+    assert [(by_id[i]["key"], by_id[i]["english"], by_id[i]["source"]) for i in range(0xFF3, 0xFFB)] == [
+        ("eString_VF2PrivateRomanticTime", "Having private adult romantic time", "Behavior Patches"),
+        ("eEventThePowerFailureResultB2Patched", "The food was not ok.", "Island Events"),
+        ("eString_OldestVillagerCounter", "Oldest Villager: ", "the patcher"),
+        ("eString_GenerationCounter", "Generation: ", "the patcher"),
+        ("eString_AdoptChoiceQuestion", "Would you like to adopt a baby or an older child?", "the patcher"),
+        ("eString_AdoptBabyButton", "Adopt Baby", "the patcher"),
+        ("eString_AdoptChildButton", "Adopt Child (Age 2-8)", "the patcher"),
+        ("eString_MobileRenovationBathroom2Required",
+         "Bathroom 2 must be renovated first before this can be bought.", "Mobile Renovations"),
+    ]
+    # the stock line Island Events used to rewrite keeps its stock words everywhere: it is not a changed line
+    assert 2494 not in {r["id"] for r in data["changed"]}
+    assert data["literals"] and all(r["name"].startswith("time.") for r in data["literals"])
     names = [r["name"] for r in data["literals"]]
     assert len(names) == len(set(names)) and all(re.fullmatch(r"[a-z0-9_.-]+", n) for n in names)
     keys = [e.key for e in ts.patch_entries()]
@@ -169,14 +185,21 @@ def test_the_time_controls_english_is_unchanged():
 
 
 EXE_LITERAL = re.compile(r'\b(?:strncpy|strcpy|SetText|DrawString|AddText|ButtonSetText|sprintf)\s*\([^;\n]*"([A-Z][^"\n]{3,})"')
+# a dialog built on an English text, and a char array holding one (the counters' labels, a dialog's button labels)
+EXE_LITERAL_MORE = (re.compile(r'theMessageBoxDlg\s+\w+\(\s*"([A-Z][^"]{3,})"', re.S),
+                    re.compile(r'\bchar\s+\w+\[\d*\]\s*=\s*"([A-Z][^"\n]{1,})"'))
 
 
 def test_every_text_generated_executable_code_shows_is_accounted_for():
-    """work/patch_mobile_furniture_pack.py emits C++ for the executable. A visible English text that code copies
-    itself (not through the string table) must be a `patch/exe.` line (LITERALS in tools/gen_vf2_patch_strings.py)."""
+    """work/patch_mobile_furniture_pack.py emits C++ for the executable. A visible English text that code copies,
+    draws or shows itself (not through the string table) must be a `patch/exe.` line (LITERALS in
+    tools/gen_vf2_patch_strings.py). Since B209 there is none: every such text is a record (PATCH_TEXT_ROWS)."""
     gen = pytest.importorskip("gen_vf2_patch_strings")
     text = (ROOT / "work" / "patch_mobile_furniture_pack.py").read_text(encoding="utf-8")
     found = {m.group(1) for m in EXE_LITERAL.finditer(text)}
+    for rx in EXE_LITERAL_MORE:
+        found |= {m.group(1) for m in rx.finditer(text)}
+    assert not found and not gen.LITERALS, found
     registered = {e for (e, _w, _n, _m) in gen.LITERALS.values()}
     assert found <= registered, f"visible text in generated code with no template line: {sorted(found - registered)}"
     assert registered <= found, f"a registered text no longer in the generated code: {sorted(registered - found)}"
@@ -193,7 +216,7 @@ def test_the_reader_finds_the_table_in_the_original_game():
 
 def test_the_reader_finds_the_table_in_a_patched_game():
     table = ts.read_table(patched())
-    assert len(table) >= 3557 and max(table) <= 0xFF2
+    assert len(table) >= 3557 and max(table) <= 0xFFA
     assert table[113][1] == b"Try Again" and table[5][1] == b"{name} sees their adorable pet."
 
 
@@ -233,6 +256,24 @@ def test_the_template_covers_every_matrix_executable():
             assert id_ in have or id_ == 36 or not text.strip(), f"line {id_} of {path} is in no template"
 
 
+def test_no_stock_line_has_other_words_in_only_some_executables():
+    """B209: a stock line reads the same in every matrix executable, so one translation of it is the same line in every
+    variant. Before, the island-events executables alone rewrote 2494 (Power Failure's spoiled-food result) and a
+    translation of it was refused there; that text is a record of its own now. The lines EVERY executable rewrites
+    are the `changed` ones, and only those."""
+    pattern = os.environ.get("VF2_B207_MATRIX_GLOB") or os.environ.get("VF2_B200_MATRIX_GLOB")
+    paths = sorted(glob.glob(pattern)) if pattern else []
+    if len(paths) < 2:
+        pytest.skip("no matrix (VF2_B207_MATRIX_GLOB / VF2_B200_MATRIX_GLOB)")
+    base = ts.read_table(vanilla())
+    changed = {int(r["id"]) for r in ts.patch_data()["changed"]}
+    for path in paths:
+        table = ts.read_table(Path(path).read_bytes())
+        other = {i for i in base if i in table and table[i][1] != base[i][1]}
+        assert other == changed, (path, sorted(other ^ changed))
+        assert table[2494][1] == b"Everyone gets an upset stomach. The food was not ok.", path
+
+
 def test_a_template_made_from_a_patched_game_is_the_same_set_of_lines():
     a = {e.key for e in ts.entries_for(vanilla())}
     b = {e.key for e in ts.entries_for(patched())}
@@ -257,7 +298,9 @@ def test_a_template_reads_back_with_no_problem_and_notes_the_room():
 def test_a_translation_is_judged_with_the_dlls_numbers():
     entries = ts.entries_for(vanilla())
     lim = ts.limits()
-    exact = next(e for e in entries if e.key.startswith(f"strings/{lim['english_length'][1]}~"))
+    # a line the game copies by its English length, with no placeholder (z letters stand for its text)
+    exact = next(e for i in lim["english_length"] for e in entries
+                 if e.key.startswith(f"strings/{i}~") and "%" not in e.english and "{" not in e.english)
     f = tf.new_file("vf2", [exact], "Français", "fr")
     f.rows[0].translation = "z" * (len(exact.english.encode("utf-8")) + 1)
     report = tf.validate(tf.parse_bytes(tf.to_bytes(f), "vf2"), [exact])

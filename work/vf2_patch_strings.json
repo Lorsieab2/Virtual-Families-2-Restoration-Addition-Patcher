@@ -8562,18 +8562,57 @@
    "key": "eString_MaleHairstyle49LongDesc",
    "english": "Adds male villager hairstyle 49 to the Clothing and Hairstyles store.",
    "source": "Hairstyles"
+  },
+  {
+   "id": 4083,
+   "key": "eString_VF2PrivateRomanticTime",
+   "english": "Having private adult romantic time",
+   "source": "Behavior Patches"
+  },
+  {
+   "id": 4084,
+   "key": "eEventThePowerFailureResultB2Patched",
+   "english": "The food was not ok.",
+   "source": "Island Events"
+  },
+  {
+   "id": 4085,
+   "key": "eString_OldestVillagerCounter",
+   "english": "Oldest Villager: ",
+   "source": "the patcher"
+  },
+  {
+   "id": 4086,
+   "key": "eString_GenerationCounter",
+   "english": "Generation: ",
+   "source": "the patcher"
+  },
+  {
+   "id": 4087,
+   "key": "eString_AdoptChoiceQuestion",
+   "english": "Would you like to adopt a baby or an older child?",
+   "source": "the patcher"
+  },
+  {
+   "id": 4088,
+   "key": "eString_AdoptBabyButton",
+   "english": "Adopt Baby",
+   "source": "the patcher"
+  },
+  {
+   "id": 4089,
+   "key": "eString_AdoptChildButton",
+   "english": "Adopt Child (Age 2-8)",
+   "source": "the patcher"
+  },
+  {
+   "id": 4090,
+   "key": "eString_MobileRenovationBathroom2Required",
+   "english": "Bathroom 2 must be renovated first before this can be bought.",
+   "source": "Mobile Renovations"
   }
  ],
  "literals": [
-  {
-   "name": "exe.private_adult_romantic_time",
-   "english": "Having private adult romantic time",
-   "wide": false,
-   "where": "Behavior Patches: the caption under a same-sex couple's villagers while they try for a baby (VF2PrivateRomanticTimeLabel, strncpy(label, .., 0x27))",
-   "note": "the executable's code copies this text itself, so it is not yet read from a translation: it shows in English until the patch reads it from the string table",
-   "max_length": 38,
-   "is_format": null
-  },
   {
    "name": "time.10x",
    "english": "10x",

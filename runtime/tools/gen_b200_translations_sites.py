@@ -254,13 +254,30 @@ def scan_limits(exe_bytes: bytes, core_bytes: bytes | None = None) -> dict:
     unresolved: list[dict] = []
     copies = 0
 
-    def ids_at(at: int):
-        before = []
+    def decode_before(at: int):
         for back in range(40, 0, -1):
             decoded = list(md.disasm(rd(at - back, back), at - back))
             if decoded and decoded[-1].address + decoded[-1].size == at and sum(i.size for i in decoded) == back:
-                before = decoded
-                break
+                return decoded
+        return []
+
+    def count_before(at: int):
+        """strncpy's count when the compiler pushed it BEFORE the GetString call (the patches' generated code:
+        `push 37h; push id; call Get; mov ecx, eax; call GetString; push eax; push dst; call strncpy`): the immediate
+        push right before the id push, with no call between them; None otherwise."""
+        before = decode_before(at)
+        pushes = [k for k, i in enumerate(before) if i.mnemonic == "push"]
+        if len(pushes) < 2:
+            return None
+        count, id_push = before[pushes[-2]], before[pushes[-1]]
+        if not (count.op_str.startswith("0x") or count.op_str.isdigit()):
+            return None
+        if any(i.mnemonic == "call" for i in before[pushes[-2]:pushes[-1]]):
+            return None
+        return int(count.op_str, 0)
+
+    def ids_at(at: int):
+        before = decode_before(at)
         if not before:
             return None
         pushes = [i for i in before if i.mnemonic == "push"]
@@ -321,10 +338,13 @@ def scan_limits(exe_bytes: bytes, core_bytes: bytes | None = None) -> dict:
                 copy_at = (i.address, target)
                 if target == STRNCPY:
                     imm = next((p for p in reversed(pushed[:-2]) if p.startswith("0x") or p.isdigit()), None)
+                    early = count_before(at) if len(pushed) == 2 else None
                     if len(pushed) >= 3 and (pushed[-3].startswith("0x") or pushed[-3].isdigit()):
                         kind, count = "strncpy", int(pushed[-3], 0)
                     elif imm is not None:
                         kind, count = "strncpy", int(imm, 0)
+                    elif early is not None:
+                        kind, count = "strncpy", early
                     else:
                         kind = "english"
                     break
