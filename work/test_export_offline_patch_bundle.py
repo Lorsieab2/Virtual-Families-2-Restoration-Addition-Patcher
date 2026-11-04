@@ -3681,6 +3681,7 @@ class TestSuiteCopiesInSyncTests(unittest.TestCase):
              "vf2_glyph_color.py",
              "vf2_emoji.py",
              "vf2_shaping.py",
+             "vf2_screen_edge.py",
              "vf2_game_fonts.json",
              "vf2_text_tool.py",
              "vf2_unicode_font.py",

@@ -97,13 +97,14 @@ static unsigned char SetTextTrampoline[16];
 // names (1: the name boxes take 1,200 bytes), nameBoxes (name boxes made), shortForms (GetText gave a short form),
 // namesWritten (Names files written), expanded (texts drawn or measured with whole names), boxCopies (name boxes
 // drawn from a fitted copy); version 4: colourGlyphs (characters drawn in colour by Direct2D, b200colour.inc);
-// version 5: shapedRuns (runs of Arabic, Hebrew, Indic, Thai ... drawn whole, b200shape.h)
+// version 5: shapedRuns (runs of Arabic, Hebrew, Indic, Thai ... drawn whole, b200shape.h); version 6: screenMoves
+// (texts moved to end at the screen's edge), screenCuts (texts cut to the screen with "…"; b200screen.inc)
 struct UnicodeStatus {
     unsigned magic, version, mode, resolved, installed, writeMask, fonts, patcherGlyphs, runtimeGlyphs, boxes, typed,
-        refused, fittedCuts, keptNames, names, nameBoxes, shortForms, namesWritten, expanded, boxCopies, colourGlyphs, shapedRuns;
+        refused, fittedCuts, keptNames, names, nameBoxes, shortForms, namesWritten, expanded, boxCopies, colourGlyphs, shapedRuns, screenMoves, screenCuts;
 };
 extern "C" __declspec(dllexport) volatile UnicodeStatus B200Unicode_Status = {
-    UNI_STATUS_MAGIC, 5u, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+    UNI_STATUS_MAGIC, 6u, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 
 static HMODULE ThisModule;
 static wchar_t Folder[MAX_PATH];
@@ -1283,6 +1284,8 @@ static unsigned FontOf(void *window, void *font) {
     return font ? *(unsigned *)((unsigned)font + 4) : 0;
 }
 
+#include "b200screen.inc"     // nothing runs off the screen
+
 // ldwGameWindowImpl::DrawString(text, x, y, colour, font) per character.
 static void __fastcall UniDrawString(void *window, void *, const char *text, int x, int y, unsigned color, void *font) {
     unsigned impl = FontOf(window, font);
@@ -1293,6 +1296,7 @@ static void __fastcall UniDrawString(void *window, void *, const char *text, int
     if (const unsigned char *e = Expand(impl, raw, whole, sizeof(whole), false)) raw = e;     // whole names
     if ((color >> 24) == 0) color = *(const unsigned *)SITE(WHITE);
     FontRec *f = Ensure(impl);
+    raw = OnScreen(window, f, impl, raw, &x, &y);             // never off the screen (b200screen.inc)
     Prepare(f, impl, raw, 0xFFFFFFFF);
     SDL_Surface *surf = ((GetImageFn)SITE(GET_IMAGE))((void *)impl, color);
     if (!surf) return;
@@ -1459,11 +1463,16 @@ static int __fastcall UniDrawJustified(void *self, void *, const char *text, int
             text = (const char *)e;                     // whole names, each in its short form's width
     }
     const unsigned char *raw = (const unsigned char *)text;
+    void *window = *(void **)self;
+    unsigned impl = FontOf(window, font);
+    if (impl && IMPL_FIELD(impl, 0x0C)) {
+        // never off the screen (b200screen.inc): the box moved, a text taller than the screen cut
+        raw = WrapOnScreen(window, Ensure(impl), impl, raw, &x, &y, &width);
+        text = (const char *)raw;
+    }
     unsigned n = ut::Length(raw);
     bool ascii = true;
     for (unsigned i = 0; i < n && ascii; ++i) if (raw[i] >= 0x80) ascii = false;
-    void *window = *(void **)self;
-    unsigned impl = FontOf(window, font);
     if ((ascii && Mode != 2) || !impl || !IMPL_FIELD(impl, 0x0C)) return stock(self, 0, text, x, y, width, color, font, b1, b2, extra);
     FontRec *f = Ensure(impl);
     if (!f || f->index < 0) return stock(self, 0, text, x, y, width, color, font, b1, b2, extra);

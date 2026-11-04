@@ -479,7 +479,8 @@ class DrawWorld(World):
         assert e.call(e.dll_export("B200Unicode_TestLoadSdl")) == 1
         # the window: +30h the screen, +5Ch no default font, +60h..+6Ch the clip rectangle
         self.window = e.alloc(0x100)
-        e.w32(self.window + 0x30, self._surface(64, 64, b"\0" * 64 * 64 * 4))
+        # the game's 1024 x 768 screen (nothing runs off it: b200screen.inc moves a text that would)
+        e.w32(self.window + 0x30, self._surface(1024, 768, bytes(1024 * 768 * 4)))
         for off, v in ((0x60, 0), (0x64, 0), (0x68, 4096), (0x6C, 4096)):
             e.w32(self.window + off, v)
         self.fonts = {}

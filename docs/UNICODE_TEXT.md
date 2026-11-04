@@ -218,6 +218,29 @@ opening one) and `tests/test_vf2_game_text.py`.
   bundled fonts: Noto Serif Tangut, Unifont, Unifont Upper, Last Resort High-Efficiency. A face is used for a character
   only when its character map has it (formats 4, 12 and Last Resort's many-to-one 13); one that is not installed is
   skipped.
+* **Nothing runs off the screen** (B209; the owner: "i dont care if things run out of boxes, they just need to not run
+  off the screen"; the same rule as Virtual Families 1; `runtime/native/b200unicode/b200screen.inc`, the model
+  `src/vf2_screen_edge.py`).
+  - DrawString: a text that would leave the screen but is partly on it is moved to end at the edge. One wider than
+    the screen is cut, each line, to its longest start of whole characters and "…". One taller than the screen keeps
+    the lines that fit, the last one ending in "…". When not even "…" fits, the English is shown
+    (`B200Tr_EnglishOf`).
+  - DrawStringJustified (dialogs, events, the store): a box wider than the screen becomes the screen's width. Where
+    GetNextJustifiedLine ends a line inside a word (UAX #14 next to CJK, Thai ..., or a word wider than the box), a
+    line break is put, because the game's own wrapping breaks only at spaces. The box is moved to end at the edge. A
+    text that wraps taller than the screen keeps the lines that fit, with "…".
+  - Only text the patches or a translation bring is touched: a byte beyond ASCII, or any text while a translation is
+    installed. The stock English game, and a text wholly off the screen, are drawn exactly as before.
+  - The translation editor warns with the real width in the widest game font (the game's 1024-pixel screen) and has
+    **Wrap to fit**, which breaks at the game's line breaks and never inside a placeholder. Check lists such lines.
+  - `tests/test_screen_edge.py`: in emulation, with the real executable and GDI and a 1024 x 768 screen, the moves
+    and cuts equal the model. Every translatable room at its longest, plus CJK, Arabic and emoji lines at the edges,
+    centred and at the bottom, stays on the screen. The stock DrawStringJustified box is moved, and a tall paragraph
+    is cut.
+  - With Translations on and both Unicode settings off, `vf2tr_b200.dll` does the same itself (`runtime/native/b200tr/b200tr_screen.inc`, as VF1's vf1tr).
+    It finds DrawString, DrawStringJustified, GetWidth and GetNextJustifiedLine by the Unicode text DLL's own pins,
+    and writes two entry jumps only over their stock bytes, after both trampolines are made
+    PAGE_EXECUTE_READWRITE (DEP). The cut is "...", because the stock fonts have no "…".
 * **Shaped and right-to-left scripts** (B209; the shared spec's row 3, the rule of Virtual Villagers and Virtual
   Families 1). Before, Arabic, Hebrew, Syriac, Thaana, the Indic scripts, Thai, Lao, Tibetan, Myanmar, Khmer,
   Mongolian and the other scripts whose letters change shape or run right to left were drawn one whole character at
