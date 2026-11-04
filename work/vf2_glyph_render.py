@@ -369,6 +369,10 @@ def render(text: str, face: str, px: int, weight: int, cell_height: int, top: in
     return pen - int(px), bytes(raw[1::4]), width, int(px)
 
 
+def _units16(text: str) -> int:
+    return sum(2 if ord(c) > 0xFFFF else 1 for c in text)                # UTF-16 units
+
+
 @lru_cache(maxsize=1024)
 def render_run(text: str, face: str, px: int, weight: int, cell_height: int, row: int) -> tuple:
     """A shaped run (vf2_shaping) drawn whole by ExtTextOutW of its text (no glyph numbers: Uniscribe shapes it and
@@ -378,7 +382,7 @@ def render_run(text: str, face: str, px: int, weight: int, cell_height: int, row
     c = _Canvas(4, 4, face, px, weight)
     try:
         size = _SIZE()
-        c.gdi.GetTextExtentPoint32W(c.dc, text, len(text.encode("utf-16-le")) // 2, ctypes.byref(size))
+        c.gdi.GetTextExtentPoint32W(c.dc, text, _units16(text), ctypes.byref(size))
         adv = int(size.cx)
     finally:
         c.close()
@@ -388,7 +392,7 @@ def render_run(text: str, face: str, px: int, weight: int, cell_height: int, row
         c.gdi.SetTextAlign(c.dc, TA_BASELINE)
         ctypes.memset(c.bits, 0, width * cell_height * 4)
         buf = ctypes.create_unicode_buffer(text)
-        c.gdi.ExtTextOutW(c.dc, int(px), int(row), 0, None, buf, len(text.encode("utf-16-le")) // 2, None)
+        c.gdi.ExtTextOutW(c.dc, int(px), int(row), 0, None, buf, _units16(text), None)
         c.gdi.GdiFlush()
         raw = ctypes.string_at(c.bits, width * cell_height * 4)
     finally:
