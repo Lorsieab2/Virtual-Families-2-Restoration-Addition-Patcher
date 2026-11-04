@@ -296,6 +296,11 @@ opening one) and `tests/test_vf2_game_text.py`.
   `vf2_unicode_tables.ASSIGNED`); the rest keep the missing-glyph box. Every assigned code point of Unicode 18.0 is
   drawn by some face of the chain (Last Resort alone covers all of them, with its block symbols): a script no font has
   (Jurchen, Seal, CJK Extension J) shows Last Resort's symbol for its block, not a box.
+  GNU Unifont, a thin 16-pixel design, is made to look like the game's letters (the owner's decision, B209). As a
+  fallback face it is drawn at the size that gives its "H" the height of Segoe UI's "H"; GDI scales its outlines
+  with grey anti-aliasing, which smooths them (`UnifontPx`, `vf2_glyph_render.unifont_px`). For a bold game font its
+  strokes are then thickened by (size + 7) / 14 pixels (synthetic bold; `vf2_glyph_render.embolden`), before the
+  font's alpha levels. Every other face is drawn as before.
 * **Unicode 18.0.0 tables**: `runtime/tools/gen_b200_unicode_tables.py` reads `UnicodeData.txt`
   (`https://www.unicode.org/Public/18.0.0/ucd/`, SHA-256 `0736451de439ae7baf1425136617da495e09ee5afbe6e394374db7009ea08950`,
   Unicode licence `runtime/fonts/UNICODE-LICENSE.txt`) and writes `EXTEND`, `COMPOSE` and `ASSIGNED` for the patcher
