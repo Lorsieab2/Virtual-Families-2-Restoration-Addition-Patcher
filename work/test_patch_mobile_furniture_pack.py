@@ -18,6 +18,7 @@ import validate_b152_custom_achievement_diagnostics as b152_diagnostics
 import validate_b153_runtime_flags as b153_runtime
 from coff_patch import CoffObject
 
+PATCHER_SOURCE = Path(patcher.__file__).read_text(encoding="utf-8")   # the generator's own text (its C templates)
 
 def _strip_sha256_fields(value):
     """Recursively drop "sha256" keys from a JSON-decoded structure.
@@ -3408,10 +3409,10 @@ class MobileRenovationArtTests(unittest.TestCase):
                 patcher.write_outfit_store_helpers({})
                 source = (temp / "vf2_special_upgrade_effects.cpp").read_text(encoding="ascii")
 
-            self.assertIn(
-                '"Bathroom 2 must be renovated first before this can be bought."',
-                source,
-            )
+            # B209: the refusal is a string-table record of its own, so a translation reaches it
+            self.assertIn('"Bathroom 2 must be renovated first before this can be bought."', PATCHER_SOURCE)
+            self.assertNotIn('"Bathroom 2 must be renovated first before this can be bought."', source)
+            self.assertIn("theStringManager::Get()->GetString((StringId)", source)
             # The scene comes from the native CScrollingStoreScene singleton
             # accessor rather than a new HandlePurchaseItem hook parameter:
             # every byte inserted at that dispatch hook shifts several
@@ -11250,8 +11251,10 @@ class CustomAchievementAwardDispatchTests(unittest.TestCase):
                     source,
                 )
                 self.assertIn("digitCount < 8", source)
-                self.assertIn('"Generation: "', source)
-                self.assertIn('char label[32] = "Oldest Villager: ";', source)
+                # B209: both captions are string-table records (at most 55 letters, then the number)
+                self.assertIn("__VF2_GENERATION_COUNTER_STRING_ID__), 55);", PATCHER_SOURCE)
+                self.assertIn("__VF2_OLDEST_VILLAGER_STRING_ID__), 55);", PATCHER_SOURCE)
+                self.assertNotIn('char label[32] = "Oldest Villager: ";', source)
                 self.assertIn("VF2PersistentHealthPlanAndRenovationMask() >> 16", source)
                 self.assertIn("(history & 0xFFFFu) | (boundedAge << 16)", source)
                 self.assertIn("GetWideScreenOffsetX() + 100", source)
@@ -11311,7 +11314,8 @@ class CustomAchievementAwardDispatchTests(unittest.TestCase):
                     source,
                 )
                 self.assertIn("GetWideScreenOffsetX() + 100", source)
-                self.assertIn('char label[32] = "Oldest Villager: ";', source)
+                self.assertNotIn('char label[32] = "Oldest Villager: ";', source)
+                self.assertIn("__VF2_OLDEST_VILLAGER_STRING_ID__), 55);", PATCHER_SOURCE)
 
                 achievement = CoffObject(temp_root / "Achievement.obj")
                 load = achievement.symbol(

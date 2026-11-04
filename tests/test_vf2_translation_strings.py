@@ -297,7 +297,9 @@ def test_a_template_reads_back_with_no_problem_and_notes_the_room():
 def test_a_translation_is_judged_with_the_dlls_numbers():
     entries = ts.entries_for(vanilla())
     lim = ts.limits()
-    exact = next(e for e in entries if e.key.startswith(f"strings/{lim['english_length'][1]}~"))
+    # a line the game copies by its English length, with no placeholder (z letters stand for its text)
+    exact = next(e for i in lim["english_length"] for e in entries
+                 if e.key.startswith(f"strings/{i}~") and "%" not in e.english and "{" not in e.english)
     f = tf.new_file("vf2", [exact], "Français", "fr")
     f.rows[0].translation = "z" * (len(exact.english.encode("utf-8")) + 1)
     report = tf.validate(tf.parse_bytes(tf.to_bytes(f), "vf2"), [exact])

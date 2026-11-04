@@ -114,8 +114,10 @@ def test_the_limits_are_a_table_of_the_games_copies():
     assert LIMITS["never"] == {"36": "the decimal point (eString_Decimal): numbers are written with it"}
     assert all(1 <= int(i) <= 0xFFA for i in LIMITS["strncpy_room"]) and all(v > 0 for v in LIMITS["strncpy_room"].values())
     # the B209 records the generated code copies into fixed fields: the caption strncpy(.., 0x27), the two counters'
-    # labels (.., 55), the Adoption Services buttons (.., 63): the count less the NUL
-    assert [LIMITS["strncpy_room"][str(i)] for i in (0xFF3, 0xFF5, 0xFF6, 0xFF8, 0xFF9)] == [38, 54, 54, 62, 62]
+    # labels (.., 55): the count less the NUL. (The Adoption Services choice's records 0xFF7..0xFF9 have no copy in
+    # any build: patch_vf3_style_child_adoption_chooser is not called by the generator, so no executable holds it.)
+    assert [LIMITS["strncpy_room"][str(i)] for i in (0xFF3, 0xFF5, 0xFF6)] == [38, 54, 54]
+    assert all(str(i) not in LIMITS["strncpy_room"] for i in (0xFF7, 0xFF8, 0xFF9))
     assert all(i not in LIMITS["english_length"] for i in (0xFF3, 0xFF5, 0xFF6, 0xFF7, 0xFF8, 0xFF9, 0xFFA))
     header = (SRC / "b200tr_limits.h").read_text()
     for k, v in LIMITS["strncpy_room"].items():
@@ -686,12 +688,13 @@ def test_every_line_the_patches_add_translates_to_other_words_the_game_looks_up(
     st = world.status()
     assert st["refused"] == 0, world.log()
     assert st["used"] == len(chosen) and st["patchLines"] == len(literals), st
-    other_words = 0
+    same_words = 0
     for i in patch_ids:
         got = world.get_string(i)
         assert got == want[table[i].key].encode("cp1252"), (i, table[i].english, got)
-        other_words += got != table[i].english.encode("cp1252")
-    assert other_words >= len(patch_ids) - 2             # a line with no letter outside its placeholders reads the same
+        same_words += got == table[i].english.encode("cp1252")
+    # only a line with no letter outside its placeholders reads the same
+    assert same_words == sum(1 for i in patch_ids if _sentinel(table[i].english) == table[i].english) <= 5
     for e in literals:
         if e.wide:
             assert world.text_w(e.english) == want[e.key], e.key
@@ -705,8 +708,8 @@ def test_every_line_the_patches_add_translates_to_other_words_the_game_looks_up(
 
 def _caption_site(world):
     """In the executable's code, the one place that hands GetString(CAPTION_ID) to strncpy(label, .., 0x27):
-    VF2PrivateRomanticTimeLabel's tail. Returns (link VA of `push CAPTION_ID`, the register that holds the villager,
-    the registers popped before `ret`)."""
+    VF2PrivateRomanticTimeLabel's tail. Returns (link VA of the `push 27h` before `push CAPTION_ID`, the register that
+    holds the villager, the registers popped before `ret`)."""
     from capstone import CS_ARCH_X86, CS_MODE_32, Cs
     from capstone.x86 import X86_OP_IMM, X86_OP_MEM
     md = Cs(CS_ARCH_X86, CS_MODE_32)
@@ -715,8 +718,11 @@ def _caption_site(world):
     get_string, strncpy = world.sites["GET_STRING"], world.sites["STRNCPY"]
     found = []
     for m in re.finditer(re.escape(b"\x68" + struct.pack("<I", CAPTION_ID)), code):
-        at = t_va + m.start()
-        ins = list(md.disasm(code[m.start():m.start() + 96], at))
+        start = m.start() - 2                                  # the compiler pushes strncpy's count first: push 27h
+        if code[start:m.start()] != b"\x6A" + bytes([LABEL_COUNT]):
+            continue
+        at = t_va + start
+        ins = list(md.disasm(code[start:start + 96], at))
         calls = [i for i in ins if i.mnemonic == "call" and i.operands[0].type == X86_OP_IMM]
         targets = [i.operands[0].imm for i in calls]
         if get_string not in targets or strncpy not in targets:
@@ -780,7 +786,7 @@ def test_the_romantic_time_caption_is_a_table_line_the_label_code_reads(b209_wor
     assert _install(world, {CAPTION_ID: "é" * 19}) == 1          # 38 bytes as counted, 19 in the game: the whole room
     assert run(world) == (b"\xe9" * 19).ljust(LABEL_COUNT + 1, b"\0")
     world = b209_world()
-    assert _install(world, {CAPTION_ID: "x" * 39}) == 1          # one byte over the field: refused, English
+    assert _install(world, {CAPTION_ID: "x" * 39, 113: RETRY}) == 1   # one byte over the field: refused, English
     assert world.status()["refused"] == 1 and run(world) == CAPTION_ENGLISH.encode().ljust(LABEL_COUNT + 1, b"\0")
 
 
@@ -797,13 +803,17 @@ def test_the_spoiled_food_result_is_the_patchers_own_record_and_the_stock_line_k
     either line installs on this executable."""
     world = b209_world()
     by_id = _by_id(world)
-    assert by_id[SPOILED_ID][1] == SPOILED_KEY.encode() and by_id[SPOILED_ID][2] == SPOILED_ENGLISH.encode()
-    assert by_id[2494][1] == b"eEventThePowerFailureResultB2" and by_id[2494][2] == STOCK_2494
-    code = next(s[2] for s in world.exe.sections if s[0] == ".text")
-    sites = [m.start() for m in re.finditer(re.escape(b"\xB8" + struct.pack("<I", SPOILED_ID)), code)]   # mov eax, id
-    near = [s for s in sites if struct.pack("<I", 0x9BC) in code[s - 128:s + 128] and struct.pack("<I", 0x9BD) in code[s - 128:s + 128]]
-    assert len(near) == 1, sites
-    assert struct.pack("<I", 0x9BE) not in code[near[0] - 128:near[0] + 128]
+    assert by_id[SPOILED_ID][1] == SPOILED_KEY and by_id[SPOILED_ID][2] == SPOILED_ENGLISH.encode()
+    assert by_id[2494][1] == "eEventThePowerFailureResultB2" and by_id[2494][2] == STOCK_2494
+    if any(i > 2664 and k.startswith("eEvent") and k != SPOILED_KEY for i, k, _t, _va in world.records()):
+        # an Island Events executable: the detour's code is there (the all-enabled variant the release run gives)
+        code = next(s[2] for s in world.exe.sections if s[0] == ".text")
+        # the id as an instruction's immediate (mov eax/edx, id; the compiler may pick cmov between two registers)
+        sites = [m.start() for m in re.finditer(re.escape(struct.pack("<I", SPOILED_ID)), code)]
+        near = [s for s in sites if struct.pack("<I", 0x9BC) in code[s - 128:s + 128]
+                and struct.pack("<I", 0x9BD) in code[s - 128:s + 128]]
+        assert len(near) == 1, sites
+        assert struct.pack("<I", 0x9BE) not in code[near[0] - 128:near[0] + 128]
     assert _install(world, {2494: "Tout le monde a mal au ventre. La nourriture n'était pas bonne.",
                             SPOILED_ID: "La nourriture n'était pas bonne."}) == 1
     assert world.status()["refused"] == 0 and world.status()["used"] == 2

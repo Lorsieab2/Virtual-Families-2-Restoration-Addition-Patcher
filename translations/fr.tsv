@@ -4068,7 +4068,14 @@ strings/4079~050d0ab2	Male Hairstyle 48	Coiffure homme n° 48	eString_MaleHairs
 strings/4080~ed9f0a8f	Adds male villager hairstyle 48 to the Clothing and Hairstyles store.	Ajoute la coiffure masculine n° 48 à la boutique de vêtements et coiffures.	eString_MaleHairstyle48LongDesc
 strings/4081~765d0984	Male Hairstyle 49	Coiffure homme n° 49	eString_MaleHairstyle49ShortDesc
 strings/4082~353bc490	Adds male villager hairstyle 49 to the Clothing and Hairstyles store.	Ajoute la coiffure masculine n° 49 à la boutique de vêtements et coiffures.	eString_MaleHairstyle49LongDesc
-patch/exe.private_adult_romantic_time~6d3a21f7	Having private adult romantic time	Moment intime entre adultes	Behavior Patches: the caption under a same-sex couple's villagers while they try for a baby (VF2PrivateRomanticTimeLabel, strncpy(label, .., 0x27)); the executable's code copies this text itself, so it is not yet read from a translation: it shows in English until the patch reads it from the string table
+strings/4083~6d3a21f7	Having private adult romantic time	Moment intime entre adultes	eString_VF2PrivateRomanticTime; at most 38 letters (an accented letter counts 2, a non-Latin one 2 or 3); added by Behavior Patches
+strings/4084~3d6bec6b	The food was not ok.	La nourriture n'était pas bonne.	eEventThePowerFailureResultB2Patched
+strings/4085~462813db	Oldest Villager: 	Villageois le plus âgé : 	eString_OldestVillagerCounter; at most 54 letters (an accented letter counts 2, a non-Latin one 2 or 3); added by the patcher
+strings/4086~00a7773a	Generation: 	Génération : 	eString_GenerationCounter; at most 54 letters (an accented letter counts 2, a non-Latin one 2 or 3); added by the patcher
+strings/4087~30fba0d4	Would you like to adopt a baby or an older child?	Voulez-vous adopter un bébé ou un enfant plus âgé ?	eString_AdoptChoiceQuestion
+strings/4088~7fd34fbc	Adopt Baby	Adopter un bébé	eString_AdoptBabyButton
+strings/4089~86f5f90b	Adopt Child (Age 2-8)	Adopter un enfant (2-8 ans)	eString_AdoptChildButton
+strings/4090~521a4286	Bathroom 2 must be renovated first before this can be bought.	La salle de bain 2 doit d'abord être rénovée avant cet achat.	eString_MobileRenovationBathroom2Required
 patch/time.10x~687f5e47	10x	10x	Time Controls: the Settings menu button and its dialog; a dialog's text, at most 80 letters
 patch/time.5x~ff6a421c	5x	5x	Time Controls: the Settings menu button and its dialog; a dialog's text, at most 80 letters
 patch/time.close~7d9eb7ac	Close	Fermer	Time Controls: the Settings menu button and its dialog; a dialog's text, at most 80 letters
