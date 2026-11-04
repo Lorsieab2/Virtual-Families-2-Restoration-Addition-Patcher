@@ -324,6 +324,9 @@ class NamesWorld(DrawWorld):
     def __init__(self, exe_path, dll, glyph_dir):
         super().__init__(exe_path, dll, glyph_dir)
         e = self.e
+        # a game font's baseline row is measured with GDI (Segoe UI's ascent) the first time the font is drawn
+        from test_unicode_font import RealGdi
+        self.real_gdi = RealGdi(e, {})
         import gen_b200_unicode_sites as G
         self.exe_path = exe_path
         _status, writes = self.plan(1)
