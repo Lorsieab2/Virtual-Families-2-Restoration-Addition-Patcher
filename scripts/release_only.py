@@ -39,7 +39,7 @@ RELEASE_ONLY = (
     "work/test_patch_mobile_furniture_pack.py::TextFixStringManagerTests::"
     "test_power_failure_text_is_stock_without_island_events",
     "work/test_patch_mobile_furniture_pack.py::TextFixStringManagerTests::"
-    "test_power_failure_spoiled_text_is_retargeted_in_island_event_builds",
+    "test_power_failure_spoiled_text_is_its_own_record_in_island_event_builds",
     "work/test_patch_mobile_furniture_pack.py::TextFixStringManagerTests::"
     "test_holiday_collection_screen_uses_ornament_only_strings",
     "work/test_patch_mobile_furniture_pack.py::TextFixStringManagerTests::"
