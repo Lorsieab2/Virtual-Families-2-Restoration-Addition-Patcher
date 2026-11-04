@@ -217,7 +217,25 @@ opening one) and `tests/test_vf2_game_text.py`.
   Symbols 2, Noto Sans CJK JP, Noto Sans CJK SC, Noto Sans Math, Noto Sans Cuneiform, Noto Color Emoji, then the
   bundled fonts: Noto Serif Tangut, Unifont, Unifont Upper, Last Resort High-Efficiency. A face is used for a character
   only when its character map has it (formats 4, 12 and Last Resort's many-to-one 13); one that is not installed is
-  skipped. (Emoji are still drawn in one colour, the text's; colour emoji are not built yet.)
+  skipped.
+* **Colour emoji** (B209; the shared spec's row 3, the same rule as Virtual Families 1 and Fish and Plant Tycoon).
+  A whole character drawn from a colour font is drawn by DirectWrite and Direct2D in its own colours
+  (`runtime/native/b200unicode/b200colour.inc`, `src/vf2_glyph_color.py`). That covers an emoji shown as a picture
+  (`src/vf2_emoji.py`: Emoji_Presentation, U+FE0F, a keycap, a skin tone or a tag character, and never U+FE0E),
+  taken from the first colour font of the chain that has it (Segoe UI Emoji, then Noto Color Emoji). It also
+  covers any character whose chain face has a COLR, CBDT, sbix or SVG table.
+  - It is drawn at the regular weight and the game font's em, on its baseline row, with grayscale anti-aliasing.
+    The cell is the advance, cut as the black-and-white letters are.
+  - A drawing with no colour of its own (a flag's two letters) is drawn by GDI and tinted as any letter.
+  - The cell goes into the font's sheet with its own colours. The game's tint (its colour ANDed with every pixel) is
+    never applied to it: every tinted copy of the sheet holds the cell unchanged (`StampColour`, run by DrawString
+    and DrawChars and before DrawStringJustified). The text's alpha still applies.
+  - Without Direct2D or DirectWrite (`LoadLibraryExW` from System32 fails, or a factory cannot be made), nothing of
+    this runs, and every character is drawn by GDI in one colour as before.
+  - `tests/test_colour_emoji.py` runs the DLL's own drawing through 32-bit rundll32 with this machine's real
+    Direct2D and compares every pixel with the Python. It also runs the game's DrawString with the real executable
+    in emulation: every other glyph is pixel-identical and tinted, the emoji are untinted in any text colour (a new
+    one too), and a failed start draws everything by GDI.
 * Every Windows face is drawn on the game font's baseline (TA_BASELINE at `gdi.top` + Segoe UI's ascent, the row
   Use Unicode Font already used: `unicode_baseline`, the DLL's `FontRec.base`). For Segoe UI faces that is the very
   same drawing as before; a face with another ascent (the bundled fonts, Cambria Math) now sits where the game's

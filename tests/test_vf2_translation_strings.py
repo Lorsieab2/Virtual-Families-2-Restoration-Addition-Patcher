@@ -112,6 +112,7 @@ ALLOWED_FILE_TEXT = (
     r"^(Use Unicode Font|Render Unicode with In-Game Fonts) installed$",   # the Unicode DLL's log line (a ternary)
     r"^The quick brown fox jumps over the lazy dog",            # the Unicode DLL's font-fit sample, never shown
     r"^slot %u: ",                                               # the rest of a Log() call on a later line
+    r"^en-us$",                                                  # DirectWrite's locale name (colour emoji), never shown
     r"^VF2 Names 1", r"^VF2KIDS|^VF2B200",                       # the sidecar files' own headers
     r"^(?=.*[\\.%:/])[\\.%:/\s\w-]*$",                           # a path, an extension, a format of numbers
 )

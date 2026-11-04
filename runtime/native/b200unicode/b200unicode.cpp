@@ -95,13 +95,13 @@ static unsigned char SetTextTrampoline[16];
 // set-in name too long for the box instead of cutting it; version 2); version 3, the long names (b200names.inc):
 // names (1: the name boxes take 1,200 bytes), nameBoxes (name boxes made), shortForms (GetText gave a short form),
 // namesWritten (Names files written), expanded (texts drawn or measured with whole names), boxCopies (name boxes
-// drawn from a fitted copy)
+// drawn from a fitted copy); version 4: colourGlyphs (characters drawn in colour by Direct2D, b200colour.inc)
 struct UnicodeStatus {
     unsigned magic, version, mode, resolved, installed, writeMask, fonts, patcherGlyphs, runtimeGlyphs, boxes, typed,
-        refused, fittedCuts, keptNames, names, nameBoxes, shortForms, namesWritten, expanded, boxCopies;
+        refused, fittedCuts, keptNames, names, nameBoxes, shortForms, namesWritten, expanded, boxCopies, colourGlyphs;
 };
 extern "C" __declspec(dllexport) volatile UnicodeStatus B200Unicode_Status = {
-    UNI_STATUS_MAGIC, 3u, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+    UNI_STATUS_MAGIC, 4u, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 
 static HMODULE ThisModule;
 static wchar_t Folder[MAX_PATH];
@@ -534,7 +534,12 @@ struct FontRec {
     int px, base;             // Use Unicode Font: the fitted pixel size and the baseline row (FitOverride)
     SDL_Surface *sheet;
     GlyphSlot *slots;
+    // colour emoji (b200colour.inc): their cells on the sheet, and how many of them each tinted copy holds unchanged
+    struct Cell { int x, y, w, probeX, probeY; } *colour;     // probe: its most opaque pixel
+    unsigned colourCount;
+    struct Stamp { SDL_Surface *surface; unsigned count; } stamps[16];
 };
+static const unsigned kColourCells = 1024;
 static FontRec Fonts[16];
 static unsigned FontCount;
 
@@ -621,6 +626,7 @@ static bool GrowSheet(FontRec &f, int extra) {
     IMPL_FIELD(f.impl, 0x18) = sheet->h;
     f.sheet = sheet;
     RebuildTints(f.impl, sheet);
+    for (unsigned i = 0; i < 16; ++i) f.stamps[i].surface = 0;      // every tinted copy is new: stamp them again
     return true;
 }
 
@@ -657,6 +663,71 @@ static bool PlaceGlyph(FontRec &f, GlyphSlot *slot, const unsigned char *alpha, 
         SdlUnlock(t);
     }
     slot->x = gx; slot->y = gy; slot->w = w;
+    return true;
+}
+
+// Every colour cell into every tinted copy of the sheet, unchanged (the game's tint ANDs its colour with each pixel,
+// which would recolour an emoji): each copy is stamped once per cell; a copy the game made since (a new text colour),
+// or one whose first cell no longer matches the sheet, is stamped whole.
+static void StampColour(FontRec &f) {
+    if (!f.colourCount || !f.sheet) return;
+    SDL_Surface *sheet = f.sheet;
+    for (unsigned *node = *(unsigned **)(f.impl + 0x41C); node; node = (unsigned *)node[2]) {
+        SDL_Surface *t = (SDL_Surface *)node[1];
+        if (!t || t == sheet || t->w != sheet->w || t->h < sheet->h || t->format->BytesPerPixel != 4) continue;
+        FontRec::Stamp *st = 0;
+        for (unsigned i = 0; i < 16 && !st; ++i) if (f.stamps[i].surface == t) st = &f.stamps[i];
+        unsigned from = 0;
+        if (st) {
+            const FontRec::Cell &c = f.colour[0];
+            int y = c.probeY, x = c.probeX;
+            unsigned a = *(const unsigned *)((const unsigned char *)sheet->pixels + y * sheet->pitch + 4 * x);
+            unsigned b = *(const unsigned *)((const unsigned char *)t->pixels + y * t->pitch + 4 * x);
+            if (a == b) from = st->count;
+            if (from >= f.colourCount) continue;
+        } else {
+            unsigned slot = 0;
+            for (unsigned i = 0; i < 16; ++i) if (!f.stamps[i].surface) { slot = i; break; }
+            if (f.stamps[slot].surface) slot = (unsigned)(((unsigned)t >> 4) % 16);     // all in use: replace one
+            st = &f.stamps[slot];
+            st->surface = t;
+        }
+        SdlLock(t); SdlLock(sheet);
+        for (unsigned k = from; k < f.colourCount; ++k) {
+            const FontRec::Cell &c = f.colour[k];
+            for (int y = 0; y < f.lineHeight; ++y) {
+                const unsigned *s = (const unsigned *)((const unsigned char *)sheet->pixels + (c.y + y) * sheet->pitch) + c.x;
+                unsigned *d = (unsigned *)((unsigned char *)t->pixels + (c.y + y) * t->pitch) + c.x;
+                for (int x = 0; x < c.w; ++x) d[x] = s[x];
+            }
+        }
+        SdlUnlock(sheet); SdlUnlock(t);
+        st->count = f.colourCount;
+    }
+}
+
+// A colour cell (straight R, G, B, A) into the sheet with its own colours, and into every tinted copy unchanged.
+static bool PlaceColour(FontRec &f, GlyphSlot *slot, const unsigned char *rgba, int w) {
+    if (w <= 0 || w > f.sheetW) return false;
+    if (!f.colour) f.colour = (FontRec::Cell *)Alloc(sizeof(FontRec::Cell) * kColourCells);
+    if (!f.colour || f.colourCount >= kColourCells) return false;
+    static unsigned char none[512 * 64];                 // clear: PlaceGlyph reserves the room
+    if ((unsigned)(w * f.lineHeight) > sizeof(none) || !PlaceGlyph(f, slot, none, w)) return false;
+    SDL_Surface *s = f.sheet;
+    SdlLock(s);
+    for (int y = 0; y < f.lineHeight; ++y) {
+        unsigned *row = (unsigned *)((unsigned char *)s->pixels + (slot->y + y) * s->pitch);
+        for (int x = 0; x < w; ++x) {
+            const unsigned char *p = rgba + (y * w + x) * 4;
+            row[slot->x + x] = SdlMapRGBA(s->format, p[0], p[1], p[2], p[3]);
+        }
+    }
+    SdlUnlock(s);
+    int best = -1, bx = 0, by = 0;
+    for (int k = 0; k < w * f.lineHeight; ++k) if (rgba[4 * k + 3] > best) { best = rgba[4 * k + 3]; bx = k % w; by = k / w; }
+    FontRec::Cell c = { slot->x, slot->y, w, slot->x + bx, slot->y + by };
+    f.colour[f.colourCount++] = c;
+    StampColour(f);
     return true;
 }
 
@@ -767,6 +838,8 @@ static FontRec *Ensure(unsigned impl) {
     if (FontCount >= sizeof(Fonts) / sizeof(Fonts[0])) return 0;
     FontRec &f = Fonts[FontCount++];
     f.impl = impl; f.index = -1; f.sheet = 0; f.slots = 0; f.patcherSurf = 0; f.patcher = 0; f.patcherCount = 0;
+    f.colour = 0; f.colourCount = 0;
+    for (unsigned i = 0; i < 16; ++i) f.stamps[i].surface = 0;
     const int *table = (const int *)IMPL_FIELD(impl, 0x10);
     int lineHeight = IMPL_FIELD(impl, 0x04);
     if (!table || !IMPL_FIELD(impl, 0x0C)) return &f;
@@ -868,6 +941,10 @@ static void FitOverride(FontRec &f, unsigned impl) {
     f.px = em < lo ? lo : em > hi ? hi : em;
 }
 
+#ifndef B200UNICODE_CLIP
+#include "b200colour.inc"     // colour emoji: Direct2D / DirectWrite, never tinted
+#endif
+
 // src/vf2_game_text.GameFont.glyph. create: false = never make a glyph now (while the game holds a tinted sheet).
 static bool GlyphFor(FontRec *f, unsigned impl, const ut::Unit &u, const unsigned char *raw, bool create, Rect &out) {
     bool known = f && f->index >= 0;
@@ -902,6 +979,16 @@ static bool GlyphFor(FontRec *f, unsigned impl, const ut::Unit &u, const unsigne
     if (s->w < 0) {
         if (!create) return false;
         static unsigned char cell[512 * 64];
+#ifndef B200UNICODE_CLIP
+        static unsigned char rgba[4 * 512 * 64];
+        int cw = ColourGlyph(u, *f, rgba, sizeof(rgba));                          // a colour emoji (b200colour.inc)
+        if (cw > 0 && PlaceColour(*f, s, rgba, cw)) {
+            ++B200Unicode_Status.colourGlyphs;
+            Rect r = { s->x, s->y, s->x + s->w, s->y + f->lineHeight };
+            out = r;
+            return true;
+        }
+#endif
         const UniFont &font = UNI_FONTS[f->index];
         int w = RenderRuntime(u, font, f->px, f->base, true, cell, sizeof(cell));     // both modes: on the baseline
         if (w < 0) { w = MissingBox(font, cell, sizeof(cell)); ++B200Unicode_Status.boxes; }
@@ -994,6 +1081,7 @@ static void __fastcall UniDrawString(void *window, void *, const char *text, int
     Prepare(f, impl, raw, 0xFFFFFFFF);
     SDL_Surface *surf = ((GetImageFn)SITE(GET_IMAGE))((void *)impl, color);
     if (!surf) return;
+    if (f && f->index >= 0) StampColour(*f);                  // colour emoji keep their colours in this tint too
     int kern = IMPL_FIELD(impl, 0x08), x0 = x;
     ut::Units it;
     it.Init(raw, ut::Length(raw));
@@ -1032,6 +1120,7 @@ static int __fastcall UniDrawChars(void *window, void *, const char *text, int c
     Prepare(f, impl, raw, count > 0 ? (unsigned)count : 0);
     SDL_Surface *surf = ((GetImageFn)SITE(GET_IMAGE))((void *)impl, color);
     if (!surf) return 0;
+    if (f && f->index >= 0) StampColour(*f);                  // colour emoji keep their colours in this tint too
     int kern = IMPL_FIELD(impl, 0x08), x0 = x;
     unsigned used = 0;
     ut::Units it;
@@ -1160,6 +1249,11 @@ static int __fastcall UniDrawJustified(void *self, void *, const char *text, int
         copy[k++] = (unsigned char)(0x80 + slot);
     }
     copy[k] = 0;
+    if (f->colourCount) {
+        // the stock function blits from the tinted copy of its colour: make it now and keep colour emoji untinted
+        ((GetImageFn)SITE(GET_IMAGE))((void *)impl, (color >> 24) ? color : *(const unsigned *)SITE(WHITE));
+        StampColour(*f);
+    }
     Just.active = true;
     int r = stock(self, 0, (const char *)copy, x, y, width, color, font, b1, b2, extra);
     Just = saved;
@@ -1646,6 +1740,53 @@ extern "C" __declspec(dllexport) unsigned __cdecl B200Unicode_TestReadSettings(c
 extern "C" __declspec(dllexport) void __cdecl B200Unicode_TestWordLists() { InstallWordLists(); }
 // the bundled fonts as Startup loads them, for the mode and folder TestReadSettings set
 extern "C" __declspec(dllexport) void __cdecl B200Unicode_TestBundledFonts() { InstallBundledFonts(); }
+#endif
+#ifndef B200UNICODE_CLIP
+// colour emoji: [LoadColour, ColourCell]'s addresses (the emulator carries them out with this machine's real
+// Direct2D, or answers that it failed to start)
+extern "C" __declspec(dllexport) void __cdecl B200Unicode_TestColour(unsigned *out) {
+    out[0] = (unsigned)&LoadColour;
+    out[1] = (unsigned)&ColourCell;
+}
+// rundll32 vf2unicode_b200_test.dll,B200Unicode_RunColour <out>|<face>|<em>|<baseline>|<height>|<letters>: each
+// letter (its code points in hex joined by "+", letters separated by "/") drawn by ColourCell; writes for each
+// "w height" and, when w > 0, its straight RGBA rows. One process pays Direct2D's start-up once.
+#pragma comment(linker, "/EXPORT:B200Unicode_RunColourW=_B200Unicode_RunColourW@16")
+extern "C" void CALLBACK B200Unicode_RunColourW(HWND, HINSTANCE, LPWSTR line, int) {
+    wchar_t *field[6];
+    int k = 0;
+    while (*line == L' ' || *line == L'"') ++line;
+    for (int e = lstrlenW(line); e > 0 && (line[e - 1] == L'"' || line[e - 1] == L' '); --e) line[e - 1] = 0;
+    field[k++] = line;
+    for (wchar_t *p = line; *p && k < 6; ++p) if (*p == L'|') { *p = 0; field[k++] = p + 1; }
+    if (k < 6) return;
+    struct Num { static int Of(const wchar_t *p) { int v = 0; while (*p >= L'0' && *p <= L'9') v = v * 10 + (*p++ - L'0'); return v; } };
+    HANDLE h = CreateFileW(field[0], GENERIC_WRITE, 0, 0, CREATE_ALWAYS, 0, 0);
+    if (h == INVALID_HANDLE_VALUE) return;
+    int em = Num::Of(field[2]), baseline = Num::Of(field[3]), height = Num::Of(field[4]);
+    static unsigned char rgba[4 * 512 * 64];
+    for (wchar_t *p = field[5]; *p;) {
+        wchar_t text[40];
+        int units = 0;
+        while (*p && *p != L'/' && units < 36) {
+            unsigned v = 0;
+            while ((*p >= L'0' && *p <= L'9') || (*p >= L'A' && *p <= L'F'))
+                { v = v * 16 + (unsigned)(*p <= L'9' ? *p - L'0' : *p - L'A' + 10); ++p; }
+            if (v >= 0x10000) { text[units++] = (wchar_t)(0xD800 + ((v - 0x10000) >> 10)); text[units++] = (wchar_t)(0xDC00 + ((v - 0x10000) & 0x3FF)); }
+            else text[units++] = (wchar_t)v;
+            if (*p == L'+') ++p; else break;
+        }
+        text[units] = 0;
+        while (*p && *p != L'/') ++p;
+        if (*p == L'/') ++p;
+        int w = ColourCell(field[1], em, baseline, height, text, units, rgba, sizeof(rgba));
+        DWORD wrote;
+        int head[2] = { w, height };
+        WriteFile(h, head, sizeof head, &wrote, 0);
+        if (w > 0) WriteFile(h, rgba, (DWORD)(w * height * 4), &wrote, 0);
+    }
+    CloseHandle(h);
+}
 #endif
 // SDL2.dll / SDL2_image.dll' functions, as Startup finds them
 extern "C" __declspec(dllexport) int __cdecl B200Unicode_TestLoadSdl() { return LoadSdl() ? 1 : 0; }
