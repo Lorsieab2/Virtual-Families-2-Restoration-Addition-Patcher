@@ -598,14 +598,17 @@ static bool NameGetText(unsigned impl, const unsigned char *src, unsigned n, cha
         if (b->kind == 'F' && !(gs && d == gs + UNI_GS_NICKNAME)) record = false;  // a label read into a local
     }
     static unsigned char out[64];
-    if (IsSetIn(impl)) {
-        if (b->expanded >= 0 && (unsigned)b->expanded < NameCount && Names[b->expanded].shortLen <= room) {
-            const NameEntry &e = Names[b->expanded];
-            for (unsigned i = 0; i < e.shortLen; ++i) dst[i] = (char)e.shortForm[i];
-            return true;
-        }
-        return false;                    // a name the game set: the stock rule (UniGetText)
+    // the whole name the box opened with, unchanged: its own short form back. A text that differs from it (however it
+    // was changed) gets its own short form below, never the old one.
+    bool opened = b->expanded >= 0 && (unsigned)b->expanded < NameCount &&
+                  SameBytes(Names[b->expanded].whole, Names[b->expanded].wholeLen, src, n);
+    if (opened && Names[b->expanded].shortLen <= room) {
+        const NameEntry &e = Names[b->expanded];
+        for (unsigned i = 0; i < e.shortLen; ++i) dst[i] = (char)e.shortForm[i];
+        return true;
     }
+    if (IsSetIn(impl) && (opened || b->expanded < 0)) return false;    // a name the game set: the stock rule
+
     if (room >= sizeof(out)) return false;
     unsigned k = StoreName(src, n, room, slot, record, out);
     if (!k) return false;

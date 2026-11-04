@@ -731,6 +731,50 @@ def _opens_as(w, short: bytes) -> bytes:
     return w.text(impl)
 
 
+def test_a_renamed_name_with_the_same_start_gets_its_own_short_form(world):
+    """A member named A (a short form, its whole name in the Names file) is opened, and the player erases it and
+    types A's start with another ending (fixing a typo at the end of a long name), or replaces only the ending:
+    GetText gives a short form of its own (never A's), so the game stores the change and the Names file holds both.
+    The box's text is what counts: a text that differs from the whole name the box opened with never gets that
+    name's short form, even when nothing told the DLL the player changed it."""
+    w, _fonts = world
+    e = w.e
+    w.forget()
+    w.fs.clear()
+    start = "שלום नमस्ते "
+    a = start + "สัี"
+    endings = {"erase all": "สวัสดี", "the ending": "ครับ",
+               "unseen": "ดี"}
+    short_a = _short_form_of(w, a, index=7)
+    assert short_a == T.encode(N.short_form(a, N.MEMBER_ROOM, {}))
+    seen = {short_a}
+    for how, ending in endings.items():
+        ctl, impl = w.box(w.returns[7], 0x12)
+        w.set_text(impl, short_a)                                  # the scene shows the member: A, whole
+        assert w.text(impl) == T.encode(a)
+        if how == "erase all":
+            for _ in range(len(a)):
+                e.call(w.h["handle_key"], (5, 0, 8), ecx=impl, edx=0)
+            w.type(impl, start + ending)
+        elif how == "the ending":
+            e.call(w.h["handle_key"], (5, 0, 8), ecx=impl, edx=0)  # "สัี" is one character
+            w.type(impl, ending)
+        else:                                                      # changed without a key the DLL saw
+            e.write(e.r32(impl + 0x30), T.encode(start + ending) + bytes(1))
+        assert T.decode(w.text(impl)) == start + ending, how
+        out = e.alloc(0x20, fill=0)
+        e.call(w.s["GET_TEXT"], (out, 0x13), ecx=ctl)
+        short = e.read(out, 0x13).split(bytes(1))[0]
+        assert short and short not in seen, (how, short)          # its own short form: the game stores the change
+        seen.add(short)
+        assert _opens_as(w, short) == T.encode(start + ending), how
+    ctl, impl = w.box(w.returns[7], 0x12)
+    w.set_text(impl, short_a)                                      # A again, unchanged: A's own short form back
+    out = e.alloc(0x20, fill=0)
+    e.call(w.s["GET_TEXT"], (out, 0x13), ecx=ctl)
+    assert e.read(out, 0x13).split(bytes(1))[0] == short_a
+
+
 def test_the_dll_writes_version_2_with_crcs_the_patcher_reads(world):
     """The DLL's Names file is byte for byte what vf2_names.render writes: "VF2 Names 2", CRC-32 on each record."""
     w, _fonts = world

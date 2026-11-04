@@ -98,7 +98,9 @@ installs the Unicode text without the long names (`B200Unicode_Status.names = 0`
 
 and the first part's hooks do more: HandleKey stops a name box at its bytes (1,200, no character cap),
 and lets a name box scroll instead of refusing a character wider than the box; SetText opens a short form as the
-whole name; GetText of a name box gives the short form (`ShortFor`, the rule of `vf2_names.short_form`) and
+whole name; GetText of a name box gives the short form (`ShortFor`, the rule of `vf2_names.short_form`; the
+short form the box opened with only while its text is still that whole name, so a changed name with the same
+start gets one of its own: `test_a_renamed_name_with_the_same_start_gets_its_own_short_form`) and
 records the whole name in the Names file of the slot the destination belongs to (the slot menu's field k: slot k;
 the new family's name and a member's name: the slot being played, gs+25B20h; a local the game only compares:
 nothing); DrawString and GetWidth draw and measure the whole name wherever a short form is drawn, fitted with "…"
