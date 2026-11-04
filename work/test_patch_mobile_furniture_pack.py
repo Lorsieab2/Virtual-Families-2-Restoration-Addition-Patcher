@@ -8494,19 +8494,26 @@ class TextFixStringManagerTests(unittest.TestCase):
         self.assertFalse([row for row in updates if "upset stomach" in row["old"]])
         self.assertNotIn("power_failure_b2", helper)
         spoiled_id = patcher.power_failure_spoiled_food_string_id()
-        self.assertIn(f'vf2eventstr_key_{spoiled_id:X}[] = "eEventThePowerFailureResultB2Patched";', helper)
-        self.assertIn(f'vf2eventstr_text_{spoiled_id:X}[] = "The food was not ok.";', helper)
+        self.assertIn(f'vf2patchtextstr_key_{spoiled_id:X}[] = "eEventThePowerFailureResultB2Patched";', helper)
+        self.assertIn(f'vf2patchtextstr_text_{spoiled_id:X}[] = "The food was not ok.";', helper)
         # chained past the hairstyle rows, the highest block: no established id moves
         self.assertEqual(
             patcher.private_romantic_time_string_id(),
             patcher.head_string_ids_for_entry(patcher.HEAD_STORE_ENTRY_COUNT - 1)[1] + 1,
         )
         self.assertEqual(spoiled_id, patcher.private_romantic_time_string_id() + 1)
+        # every B209 patch text is a record in every executable, in PATCH_TEXT_ROWS order
+        ids = [patcher.patch_text_string_id(key) for key, _text in patcher.PATCH_TEXT_ROWS]
+        self.assertEqual(ids, list(range(ids[0], ids[0] + len(ids))))
+        for key, text in patcher.PATCH_TEXT_ROWS:
+            self.assertIn(f'[] = "{patcher.c_string(key)}";', helper)
+            self.assertIn(f'[] = "{patcher.c_string(text)}";', helper)
 
     def test_power_failure_text_is_stock_without_island_events(self):
         updates, _obj, helper = self._power_failure_text_fix(False)
         self.assertFalse([row for row in updates if "upset stomach" in row["old"]])
         self.assertNotIn("power_failure_b2", helper)
+        self.assertIn("eEventThePowerFailureResultB2Patched", helper)     # the record is in every executable
         self.assertNotIn("eEventThePowerFailureResultB2Patched", helper)
 
     def test_all_custom_achievement_strings_are_exact_and_stable(self):

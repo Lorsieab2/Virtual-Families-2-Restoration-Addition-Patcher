@@ -19,6 +19,7 @@ import glob
 import json
 import os
 import re
+import struct
 import subprocess
 import sys
 from pathlib import Path
@@ -111,8 +112,10 @@ def test_the_unicode_contract():
 def test_the_limits_are_a_table_of_the_games_copies():
     assert LIMITS["executables"] >= 1 and LIMITS["get_string_calls"] > 600
     assert LIMITS["never"] == {"36": "the decimal point (eString_Decimal): numbers are written with it"}
-    assert all(1 <= int(i) <= 0xFF4 for i in LIMITS["strncpy_room"]) and all(v > 0 for v in LIMITS["strncpy_room"].values())
-    assert LIMITS["strncpy_room"]["4083"] == 38          # the Behavior Patches caption (B209): strncpy(.., 0x27)
+    assert all(1 <= int(i) <= 0xFFA for i in LIMITS["strncpy_room"]) and all(v > 0 for v in LIMITS["strncpy_room"].values())
+    # the B209 records the generated code copies into fixed fields: the caption strncpy(.., 0x27), the two counters'
+    # labels (.., 55), the Adoption Services buttons (.., 63)
+    assert [LIMITS["strncpy_room"][str(i)] for i in (0xFF3, 0xFF5, 0xFF6, 0xFF8, 0xFF9)] == [38, 55, 55, 63, 63]
     header = (SRC / "b200tr_limits.h").read_text()
     for k, v in LIMITS["strncpy_room"].items():
         assert "{ %d, %d }," % (int(k), v) in header
@@ -580,3 +583,226 @@ def test_a_patch_text_longer_than_its_room_shows_english(world):
     assert world.text_w("Pause") == "Pause"                                          # 81 bytes: refused, English
     assert world.status()["used"] == 2 and world.status()["refused"] == 0          # both read; the room is checked when handed out
     assert world.text_w("Resume") == "x" * 80
+
+
+# ===================================================================== B209: every patch text is a record of its own
+# The two records B209 added (src/vf2_patch_strings.json): the Behavior Patches caption the generated code used to
+# copy itself, and Island Events' spoiled-food result that used to rewrite the stock line 2494.
+import vf2_translation_strings as ts  # noqa: E402
+
+CAPTION_KEY, SPOILED_KEY = "eString_VF2PrivateRomanticTime", "eEventThePowerFailureResultB2Patched"
+CAPTION_ID, SPOILED_ID = (next(int(r["id"]) for r in ts.patch_data()["table"] if r["key"] == k)
+                          for k in (CAPTION_KEY, SPOILED_KEY))
+CAPTION_ENGLISH, SPOILED_ENGLISH = "Having private adult romantic time", "The food was not ok."
+STOCK_2494 = b"Everyone gets an upset stomach. The food was not ok."
+LABEL_OFFSET, LABEL_COUNT = 0x1BBA8, 0x27                  # CVillager's action caption; strncpy(label, .., 0x27)
+
+
+def b209_exe() -> str:
+    """An executable built from this branch or later with the B209 records: the biggest table among the matrix
+    executables (VF2_B200_MATRIX_GLOB / VF2_B207_MATRIX_GLOB: the all-enabled variant has every line), else
+    VF2_FINAL_EXE or VF2_UNICODE_EXE; skipped when none holds them (a B208 or earlier executable)."""
+    paths = []
+    for key in ("VF2_B200_MATRIX_GLOB", "VF2_B207_MATRIX_GLOB"):
+        if os.environ.get(key):
+            paths += sorted(glob.glob(os.environ[key]))
+    for key in ("VF2_FINAL_EXE", "VF2_UNICODE_EXE"):
+        if os.environ.get(key) and Path(os.environ[key]).is_file():
+            paths.append(os.environ[key])
+    best, best_n = None, -1
+    for p in paths:
+        try:
+            table = ts.read_table(Path(p).read_bytes())
+        except ts.StringsError:
+            continue
+        if CAPTION_ID in table and SPOILED_ID in table and len(table) > best_n:
+            best, best_n = p, len(table)
+    if best is None:
+        pytest.skip("no executable with the B209 records (VF2_B200_MATRIX_GLOB / VF2_FINAL_EXE built from this branch)")
+    return best
+
+
+@pytest.fixture(scope="module")
+def b209_world(test_dll):
+    import b200_translations_scenarios as T
+    core_exe()
+    return lambda: T.World(b209_exe(), test_dll, core=CORE_EXE)
+
+
+def _sentinel(english: str) -> str:
+    """The English with every letter outside a {placeholder} or a %-conversion made z (Z): the same length and the
+    same placeholders, so it fits every room and every check, and other words."""
+    out, i, depth = [], 0, 0
+    while i < len(english):
+        c = english[i]
+        if c == "{":
+            depth += 1
+        elif c == "}":
+            depth = max(0, depth - 1)
+        if depth == 0 and c == "%":
+            m = re.match(r"%[-+ 0#]*\d*(?:\.\d+)?[A-Za-z%]", english[i:])
+            if m:
+                out.append(m.group(0))
+                i += len(m.group(0))
+                continue
+        out.append(("Z" if c.isupper() else "z") if depth == 0 and c.isascii() and c.isalpha() else c)
+        i += 1
+    return "".join(out)
+
+
+def test_the_sentinel_keeps_the_placeholders_and_changes_the_words():
+    assert _sentinel("{name} sees their adorable pet.") == "{name} zzzz zzzzz zzzzzzzz zzz."
+    assert _sentinel("%s. Speed: %s. 50%% off") == "%s. Zzzzz: %s. 50%% zzz"
+    assert _sentinel("{name} got that promotion {he/she} was hoping for! ") == "{name} zzz zzzz zzzzzzzzz {he/she} zzz zzzzzz zzz! "
+    assert len(_sentinel(CAPTION_ENGLISH)) == len(CAPTION_ENGLISH) and _sentinel(CAPTION_ENGLISH) != CAPTION_ENGLISH
+
+
+def test_every_line_the_patches_add_translates_to_other_words_the_game_looks_up(b209_world):
+    """Item 6 of the owner's B209 list: a patch's text is translated as itself, not copied from anywhere. Every line a
+    patch adds or rewrites, and every text the companion DLLs show, is translated to a sentinel; the REAL DLL installs
+    the file on the REAL all-enabled executable and the game's own GetString hands back the sentinel for every id (the
+    DLLs' texts come back through B200Tr_TextW / TextA). Nothing is refused."""
+    world = b209_world()
+    exe_bytes = Path(b209_exe()).read_bytes()
+    data = ts.patch_data()
+    original_to = int(data["original_ids_to"])
+    changed = {int(r["id"]) for r in data["changed"]}
+    entries = ts.entries_for(exe_bytes)
+    table = {int(tf.split_key(e.key)[1]): e for e in entries if e.key.startswith("strings/")}
+    patch_ids = sorted(i for i in table if i > original_to or i in changed)
+    literals = [e for e in entries if e.key.startswith("patch/")]
+    assert CAPTION_ID in patch_ids and SPOILED_ID in patch_ids and len(patch_ids) >= 1400 and len(literals) >= 20
+    chosen = [table[i] for i in patch_ids] + literals
+    f = tf.new_file("vf2", chosen, "Français", "fr", "(TEST)")
+    want = {}
+    for row in f.rows:
+        row.translation = want[row.key] = _sentinel(row.english)
+    report = tf.validate(tf.parse_bytes(tf.to_bytes(f), "vf2"), chosen)
+    assert not report.errors and report.translated == len(chosen)
+    assert world.install(tf.to_bytes(f)) == 1
+    st = world.status()
+    assert st["refused"] == 0, world.log()
+    assert st["used"] == len(chosen) and st["patchLines"] == len(literals), st
+    other_words = 0
+    for i in patch_ids:
+        got = world.get_string(i)
+        assert got == want[table[i].key].encode("cp1252"), (i, table[i].english, got)
+        other_words += got != table[i].english.encode("cp1252")
+    assert other_words >= len(patch_ids) - 2             # a line with no letter outside its placeholders reads the same
+    for e in literals:
+        if e.wide:
+            assert world.text_w(e.english) == want[e.key], e.key
+        else:
+            assert world.text_a(e.english, e.max_length) == want[e.key].encode("cp1252"), e.key
+    # the two B209 records, and the stock line Island Events used to rewrite keeps its stock words in this variant
+    assert world.get_string(CAPTION_ID) == _sentinel(CAPTION_ENGLISH).encode()
+    assert world.get_string(SPOILED_ID) == _sentinel(SPOILED_ENGLISH).encode()
+    assert _by_id(world)[2494][2] == STOCK_2494
+
+
+def _caption_site(world):
+    """In the executable's code, the one place that hands GetString(CAPTION_ID) to strncpy(label, .., 0x27):
+    VF2PrivateRomanticTimeLabel's tail. Returns (link VA of `push CAPTION_ID`, the register that holds the villager,
+    the registers popped before `ret`)."""
+    from capstone import CS_ARCH_X86, CS_MODE_32, Cs
+    from capstone.x86 import X86_OP_IMM, X86_OP_MEM
+    md = Cs(CS_ARCH_X86, CS_MODE_32)
+    md.detail = True
+    name, t_va, code = next((s[0], s[1], s[2]) for s in world.exe.sections if s[0] == ".text")
+    get_string, strncpy = world.sites["GET_STRING"], world.sites["STRNCPY"]
+    found = []
+    for m in re.finditer(re.escape(b"\x68" + struct.pack("<I", CAPTION_ID)), code):
+        at = t_va + m.start()
+        ins = list(md.disasm(code[m.start():m.start() + 96], at))
+        calls = [i for i in ins if i.mnemonic == "call" and i.operands[0].type == X86_OP_IMM]
+        targets = [i.operands[0].imm for i in calls]
+        if get_string not in targets or strncpy not in targets:
+            continue
+        if not any(i.mnemonic == "push" and i.operands[0].type == X86_OP_IMM and i.operands[0].imm == LABEL_COUNT for i in ins):
+            continue
+        ret = next((k for k, i in enumerate(ins) if i.mnemonic == "ret"), None)
+        if ret is None:
+            continue
+        tail = ins[:ret + 1]
+        # the terminator: mov byte ptr [reg + 1BBCFh], 0 names the register that holds the villager
+        term = [i for i in tail if i.mnemonic == "mov" and i.operands[0].type == X86_OP_MEM
+                and i.operands[0].mem.disp == LABEL_OFFSET + LABEL_COUNT and i.operands[1].type == X86_OP_IMM
+                and i.operands[1].imm == 0]
+        if len(term) != 1:
+            continue
+        reg = term[0].reg_name(term[0].operands[0].mem.base)
+        pops = [i.reg_name(i.operands[0].reg) for i in tail if i.mnemonic == "pop"]
+        found.append((at, reg, pops))
+    assert len(found) == 1, found
+    return found[0]
+
+
+def test_the_romantic_time_caption_is_a_table_line_the_label_code_reads(b209_world):
+    """The REAL code of VF2PrivateRomanticTimeLabel (from `push CAPTION_ID` to its `ret`: GetString, strncpy into
+    the villager's caption, the terminator) runs on a villager of the emulation with the REAL DLL's override in place:
+    the caption holds the translation, NUL-terminated at 0x27; without a translation it holds the English. Before
+    B209 that code copied the English itself and no translation could reach it."""
+    from unicorn.x86_const import UC_X86_REG_EAX, UC_X86_REG_ECX, UC_X86_REG_ESP
+    from unicorn import x86_const
+    from b200_time_emu import SENTINEL
+
+    def run(world):
+        e = world.e
+        at, reg, pops = _caption_site(world)
+        villager = e.alloc(0x1CC10, 0x7E)
+        esp = e.sp_top
+        esp -= 4
+        e.w32(esp, villager)                               # the argument (cdecl: left for the caller)
+        esp -= 4
+        e.w32(esp, SENTINEL)                               # the return address: the harness's end marker
+        for _ in pops:                                     # the registers the function saved on entry
+            esp -= 4
+            e.w32(esp, 0)
+        regs = {UC_X86_REG_ESP: esp, UC_X86_REG_EAX: 0x1000, UC_X86_REG_ECX: 0x1000,
+                getattr(x86_const, f"UC_X86_REG_{reg.upper()}"): villager}
+        e.run_frame(world.live(at), regs, [])
+        return e.read(villager + LABEL_OFFSET, LABEL_COUNT + 1)
+
+    world = b209_world()
+    assert gen_scan_room(world) == 38                      # the compiled code hands the line to strncpy(.., 0x27)
+    label = run(world)                                     # no translation: the English, as the game always showed
+    assert label == CAPTION_ENGLISH.encode().ljust(LABEL_COUNT + 1, b"\0")
+    world = b209_world()
+    french = "Moment intime entre adultes"
+    assert _install(world, {CAPTION_ID: french}) == 1 and world.status()["refused"] == 0
+    assert world.get_string(CAPTION_ID) == french.encode("cp1252")
+    label = run(world)
+    assert label == french.encode("cp1252").ljust(LABEL_COUNT + 1, b"\0")
+    world = b209_world()
+    assert _install(world, {CAPTION_ID: "é" * 19}) == 1          # 38 bytes as counted, 19 in the game: the whole room
+    assert run(world) == (b"\xe9" * 19).ljust(LABEL_COUNT + 1, b"\0")
+    world = b209_world()
+    assert _install(world, {CAPTION_ID: "x" * 39}) == 1          # one byte over the field: refused, English
+    assert world.status()["refused"] == 1 and run(world) == CAPTION_ENGLISH.encode().ljust(LABEL_COUNT + 1, b"\0")
+
+
+def gen_scan_room(world) -> int:
+    gen = pytest.importorskip("gen_b200_translations_sites")
+    scan = gen.scan_limits(world.exe.data, Path(CORE_EXE).read_bytes())
+    assert CAPTION_ID not in scan["english_length"] and CAPTION_ID not in scan["format"]
+    return scan["strncpy_room"][CAPTION_ID]
+
+
+def test_the_spoiled_food_result_is_the_patchers_own_record_and_the_stock_line_keeps_its_words(b209_world):
+    """Island Events' Power Failure: VF2PowerFailureGetResultDescription answers the stock A (0x9BC) and B1 (0x9BD)
+    ids and the patcher's own B2 record, never the stock 0x9BE, whose record keeps its stock words; a translation of
+    either line installs on this executable."""
+    world = b209_world()
+    by_id = _by_id(world)
+    assert by_id[SPOILED_ID][1] == SPOILED_KEY.encode() and by_id[SPOILED_ID][2] == SPOILED_ENGLISH.encode()
+    assert by_id[2494][1] == b"eEventThePowerFailureResultB2" and by_id[2494][2] == STOCK_2494
+    code = next(s[2] for s in world.exe.sections if s[0] == ".text")
+    sites = [m.start() for m in re.finditer(re.escape(b"\xB8" + struct.pack("<I", SPOILED_ID)), code)]   # mov eax, id
+    near = [s for s in sites if struct.pack("<I", 0x9BC) in code[s - 128:s + 128] and struct.pack("<I", 0x9BD) in code[s - 128:s + 128]]
+    assert len(near) == 1, sites
+    assert struct.pack("<I", 0x9BE) not in code[near[0] - 128:near[0] + 128]
+    assert _install(world, {2494: "Tout le monde a mal au ventre. La nourriture n'était pas bonne.",
+                            SPOILED_ID: "La nourriture n'était pas bonne."}) == 1
+    assert world.status()["refused"] == 0 and world.status()["used"] == 2
+    assert world.get_string(SPOILED_ID) == "La nourriture n'était pas bonne.".encode("cp1252")
+    assert world.get_string(2494).startswith(b"Tout le monde")

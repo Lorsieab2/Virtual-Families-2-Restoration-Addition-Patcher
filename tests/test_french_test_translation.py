@@ -86,12 +86,24 @@ def test_the_real_dll_installs_every_line(parsed, tmp_path):
     assert dll.is_file(), r.stdout + r.stderr
     import b200_translations_scenarios as T
     data = FR.read_bytes()
+    # the only lines the DLL may refuse: a line this executable has not (an executable built before the line was
+    # added: every line is in a template, whatever executable it was made from), or one whose words it rewrote.
+    # Since B209 no executable rewrites a stock line of its own (Island Events' spoiled-food result is a record of its
+    # own, strings/4084), so on an all-enabled B209 executable nothing is refused.
+    table = ts.read_table(Path(OTHER).read_bytes())
+    expect_refused = 0
+    for row in parsed.rows:
+        parts = tf.split_key(row.key)
+        if parts and parts[0] == "strings":
+            record = table.get(int(parts[1]))
+            if record is None or record[1].decode("cp1252") != row.english:
+                expect_refused += 1
     for unicode_active in (True, False):
         world = T.World(OTHER, dll, core=CORE)
         assert world.install(data, unicode_active=unicode_active) == 1
         st = world.status()
-        # three stock lines (2494, 2523, 2529) have other words in the executables with Island Events
-        assert st["refused"] <= 3, world.log()
+        assert st["refused"] == expect_refused, world.log()
+        assert st["used"] + st["refused"] == len(parsed.rows), st
         assert st["used"] >= 4060, st
         got = world.get_string(113)
         assert got and got != b"Try Again"
