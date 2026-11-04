@@ -699,7 +699,9 @@ def test_every_line_the_patches_add_translates_to_other_words_the_game_looks_up(
         if e.wide:
             assert world.text_w(e.english) == want[e.key], e.key
         else:
-            assert world.text_a(e.english, e.max_length) == want[e.key].encode("cp1252"), e.key
+            # a format's plain '%' is handed out as "%%" (the brokerage line of the game's own words ends with one)
+            shown = tf.runtime_text(want[e.key], e.english, e.is_format)
+            assert world.text_a(e.english, e.max_length) == shown.encode("cp1252"), e.key
     # the two B209 records, and the stock line Island Events used to rewrite keeps its stock words in this variant
     assert world.get_string(CAPTION_ID) == _sentinel(CAPTION_ENGLISH).encode()
     assert world.get_string(SPOILED_ID) == _sentinel(SPOILED_ENGLISH).encode()
@@ -819,3 +821,249 @@ def test_the_spoiled_food_result_is_the_patchers_own_record_and_the_stock_line_k
     assert world.status()["refused"] == 0 and world.status()["used"] == 2
     assert world.get_string(SPOILED_ID) == "La nourriture n'était pas bonne.".encode("cp1252")
     assert world.get_string(2494).startswith(b"Tout le monde")
+
+
+# ===================================================================== B209: the original game's own words
+# Words the original game's code hands over itself (push / mov of the address of its English), not lines of the
+# table: the title screen's Manage Games and the rest of GAME_WORDS (runtime/tools/gen_vf2_patch_strings.py). Each is
+# a patch/game.* line; vf2tr_b200.dll points those instructions at the translation (install_game_words).
+def _game_words() -> dict:
+    gen = pytest.importorskip("gen_vf2_patch_strings")
+    return gen.GAME_WORDS
+
+
+def game_word_sites(exe) -> dict[str, list[int]]:
+    """The DLL's search, in Python, on an executable file: {English: [link VA of each immediate]}. The English with
+    its NUL outside the code (and outside uninitialised data), then every push imm32 / mov r32, imm32 of the code whose
+    immediate is its address."""
+    out = {}
+    code = [s for s in exe.sections if s[3] & 0x20000000]
+    data = [s for s in exe.sections if not s[3] & (0x20000000 | 0x80)]
+    for english, _where, _room, _refs in _game_words().values():
+        needle = english.encode("cp1252") + b"\0"
+        found = []
+        for _n, va, raw, _c, vsize in data:
+            raw = raw[:vsize] if vsize else raw
+            for m in re.finditer(re.escape(needle), raw):
+                imm = struct.pack("<I", va + m.start())
+                for _n2, cva, craw, _c2, cvs in code:
+                    craw = craw[:cvs] if cvs else craw
+                    for c in re.finditer(re.escape(imm), craw):
+                        op = craw[c.start() - 1] if c.start() else -1
+                        if op == 0x68 or 0xB8 <= op <= 0xBF:
+                            found.append(cva + c.start())
+        out[english] = found
+    return out
+
+
+def test_the_game_words_header_is_the_generators_table():
+    gen = pytest.importorskip("gen_vf2_patch_strings")
+    assert (SRC / "b200tr_game_words.h").read_text(encoding="utf-8") == gen.game_words_header()
+    text = (SRC / "b200tr.c").read_text(encoding="utf-8-sig")
+    assert '#include "b200tr_game_words.h"' in text
+    install = text[text.index("static int install_from_text("):]
+    install = install[:install.index("\n}\n")]
+    # after the overrides, inside the install itself (the harness's TestInstall runs it too)
+    assert install.index("->rec->override = by_id[k]->out;") < install.index("install_game_words();")
+    names = {r["name"]: r for r in ts.patch_data()["literals"]}
+    for name, (english, _where, room, refs) in gen.GAME_WORDS.items():
+        assert names[name]["english"] == english and names[name]["max_length"] == room and 1 <= refs <= 8
+        assert names[name]["is_format"] is (True if "%" in english else None)
+    assert gen.GAME_WORDS["game.manage_games"][0] == "Manage Games"
+
+
+def test_the_game_words_are_found_the_same_in_every_matrix_executable():
+    """The DLL writes only when it finds a word's instructions exactly as many times as GAME_WORDS says: in every
+    executable of the matrix (VF2_B200_MATRIX_GLOB) each is found that many times."""
+    pytest.importorskip("pefile")
+    pattern = os.environ.get("VF2_B200_MATRIX_GLOB")
+    paths = sorted(glob.glob(pattern)) if pattern else []
+    if not paths:
+        pytest.skip("VF2_B200_MATRIX_GLOB is not set to the matrix executables")
+    import gen_b200_translations_sites as G
+    for p in paths:
+        sites = game_word_sites(G.Exe(Path(p).read_bytes()))
+        for english, _w, _room, refs in _game_words().values():
+            assert len(sites[english]) == refs, (p, english, sites[english])
+
+
+def _call_target(world, call_link):
+    if world.exe.read(call_link, 1) != b"\xE8":
+        return None
+    return (call_link + 5 + struct.unpack("<i", world.exe.read(call_link + 1, 4))[0]) & 0xFFFFFFFF
+
+
+def _run_to_consumer(world, imm_link):
+    """The REAL game code from the instruction that hands a word over to the call that takes it (a button's SetText,
+    a text box, Say, sprintf, a message box): the first call that finds the address among its stack arguments. A call
+    on the way (operator new) returns a fresh block instead of running. Two register sets are tried (a level of 1 or
+    more, and 0: the Adoption candidate's "Lvl 1" / "Lvl 2" pick). Returns (the address handed over, the call's link
+    VA)."""
+    from capstone import CS_ARCH_X86, CS_MODE_32, Cs
+    from unicorn import UC_HOOK_CODE
+    from unicorn.x86_const import (UC_X86_REG_EAX, UC_X86_REG_EBP, UC_X86_REG_EBX, UC_X86_REG_ECX, UC_X86_REG_EDI,
+                                   UC_X86_REG_EDX, UC_X86_REG_EIP, UC_X86_REG_ESI, UC_X86_REG_ESP)
+    md = Cs(CS_ARCH_X86, CS_MODE_32)
+    e = world.e
+    imm = e.r32(world.live(imm_link))
+    for zero in (False, True):
+        frame = e.alloc(0x10000)
+        e.setreg(UC_X86_REG_ESP, frame + 0x8000)
+        e.setreg(UC_X86_REG_EBP, frame + 0xC000)
+        for r in (UC_X86_REG_EAX, UC_X86_REG_EBX, UC_X86_REG_ECX, UC_X86_REG_EDX, UC_X86_REG_ESI, UC_X86_REG_EDI):
+            e.setreg(r, 0 if zero and r in (UC_X86_REG_ESI, UC_X86_REG_EBX) else e.alloc(0x8000) + 0x4000)
+        got = {}
+
+        def step(uc, address, size, user):
+            ins = next(md.disasm(e.read(address, 16), address))
+            if ins.mnemonic != "call":
+                return
+            esp = e.reg(UC_X86_REG_ESP)
+            if imm in [e.r32(esp + 4 * k) for k in range(8)]:
+                got["call"] = address - world.delta
+                uc.emu_stop()
+                return
+            e.setreg(UC_X86_REG_EAX, e.alloc(0x400))
+            e.setreg(UC_X86_REG_EIP, address + ins.size)
+        h = e.uc.hook_add(UC_HOOK_CODE, step)
+        try:
+            e.uc.emu_start(world.live(imm_link - 1), 0, count=200)
+        finally:
+            e.uc.hook_del(h)
+        if "call" in got:
+            return imm, got["call"]
+    raise AssertionError(f"no call took the word handed over at {imm_link:#x}")
+
+
+def test_without_a_game_word_translated_the_code_hands_over_the_english(world):
+    sites = game_word_sites(world.exe)
+    for english, _w, _room, refs in _game_words().values():
+        assert len(sites[english]) == refs, (english, sites[english])
+    before = {a: world.e.read(world.live(a) - 1, 5) for v in sites.values() for a in v}
+    assert _install(world, {113: RETRY}) == 1
+    assert {a: world.e.read(world.live(a) - 1, 5) for a in before} == before          # not a byte changed
+    for english, at in sites.items():
+        for a in at:
+            imm, _call = _run_to_consumer(world, a)
+            assert world.e.read(imm, len(english) + 1) == english.encode("cp1252") + b"\0", english
+
+
+def test_every_game_word_translated_reaches_the_code_that_shows_it(world):
+    """The owner's B209 rule: with a translation chosen, every text a player sees shows it, each through a key of its
+    own. Every one of the original game's own words (GAME_WORDS) translated to a sentinel: the REAL DLL installs it
+    on the REAL executable; every instruction that handed the word over now hands the sentinel, the REAL game code
+    from that instruction brings it to the call that shows it, and a format the game fills with sprintf fills."""
+    words = _game_words()
+    sites = game_word_sites(world.exe)
+    want = {f"patch/{name}": _sentinel(english) for name, (english, _w, _r, _n) in words.items()}
+    assert all(want[f"patch/{name}"] != words[name][0] for name in words)
+    assert _install(world, {**want, 113: RETRY}) == 1
+    st = world.status()
+    assert st["refused"] == 0 and st["patchLines"] == len(words), world.log()
+    filled = set()
+    for name, (english, _where, _room, refs) in words.items():
+        sentinel = want[f"patch/{name}"]
+        assert len(sites[english]) == refs
+        for a in sites[english]:
+            op = world.e.read(world.live(a) - 1, 1)[0]
+            assert op == 0x68 or 0xB8 <= op <= 0xBF                                  # the same instruction
+            imm, call = _run_to_consumer(world, a)
+            # a format's plain '%' is written "%%" (the brokerage line ends with one)
+            shown = tf.runtime_text(sentinel, english, True if "%" in english else None)
+            assert world.e.read(imm, len(shown) + 1) == shown.encode("cp1252") + b"\0", (english, hex(call))
+            if _call_target(world, call) == world.sites["SPRINTF"]:
+                # the game fills it (the career's name, a number) as it filled the English
+                arg = world.cstring(b"Scientist") if "%s" in english else 7
+                expect = sentinel.replace("%s", "Scientist").replace("%d", "7")
+                assert world.sprintf(imm, arg) == expect.encode("cp1252"), english
+                filled.add(english)
+    # the title's version line, Adoption / Dating's two levels, Redeem Credit's coins and two brokerage lines
+    assert filled == {e for (e, _w, _r, _n) in words.values() if "%" in e}, filled
+    assert world.get_string(113) == RETRY.encode("cp1252")
+
+
+def test_a_game_word_too_long_for_its_room_stays_english(world):
+    sites = game_word_sites(world.exe)
+    english = world.e.r32(world.live(sites["Manage Games"][0]))
+    assert _install(world, {"patch/game.manage_games": "x" * 61, 113: RETRY}) == 1     # its room is 60 bytes
+    st = world.status()
+    assert st["refused"] == 1 and st["patchLines"] == 0 and "too long" in world.log(), world.log()
+    assert world.e.r32(world.live(sites["Manage Games"][0])) == english
+    assert world.get_string(113) == RETRY.encode("cp1252")
+
+
+def test_the_title_screens_manage_games_shows_the_french(world):
+    """The gap seen live on B209 with the (TEST) French file: the title screen's Manage Games stayed English."""
+    sites = game_word_sites(world.exe)
+    french = "Gérer les parties"
+    assert _install(world, {"patch/game.manage_games": french, 113: RETRY}) == 1
+    assert world.status()["refused"] == 0
+    imm, call = _run_to_consumer(world, sites["Manage Games"][0])
+    assert world.e.read(imm, len(french) + 1) == french.encode("cp1252") + b"\0"
+    world2_text = world.text_a("Manage Games", 60)                       # the same line a DLL would be handed
+    assert world2_text == french.encode("cp1252")
+
+
+# ===================================================================== B209: sprintf into a frame buffer of known size
+def test_the_sprintf_rooms_are_frame_buffers_of_the_scan():
+    """gen_b200_translations_sites.scan_sprintf_rooms: each format of the table is pushed by the game's code and
+    every one of its calls writes into a buffer of the caller's frame; the Details screen's level line has 256 bytes."""
+    rooms = LIMITS["sprintf_room"]
+    assert rooms["%s (%i)"] == 256 and all("%s" in k and v > 0 for k, v in rooms.items())
+    assert '{ "%s (%i)", 256 },' in (SRC / "b200tr_limits.h").read_text()
+    assert "%s" not in rooms                  # a call of the bare "%s" writes where the scan cannot tell
+
+
+def _niveau_site(world):
+    """The Details screen's level line (theVillagerScene::UpdateScene): `push eax` (the level's name), `lea eax,
+    [ebp - 204h]`, `push "%s (%i)"`, `push eax`, `call sprintf`. Returns (link VA of the first push, of the call)."""
+    found = []
+    fmt = b"%s (%i)\0"
+    for _n, va, raw, ch, _vs in world.exe.sections:
+        if ch & 0x20000000:
+            continue
+        for m in re.finditer(re.escape(fmt), raw):
+            imm = struct.pack("<I", va + m.start())
+            for _n2, cva, craw, ch2, _v2 in world.exe.sections:
+                if not ch2 & 0x20000000:
+                    continue
+                for c in re.finditer(re.escape(b"\x68" + imm), craw):
+                    at = cva + c.start()
+                    pre = world.exe.read(at - 7, 7)
+                    if pre[0] == 0x50 and pre[1:3] == b"\x8D\x85" and world.exe.read(at + 5, 2) == b"\x50\xE8":
+                        found.append((at - 7, at + 6))
+    assert len(found) == 1, found
+    return found[0]
+
+
+def _run_niveau(world):
+    from unicorn.x86_const import UC_X86_REG_EAX, UC_X86_REG_EBP, UC_X86_REG_ESP
+    start, call = _niveau_site(world)
+    assert _call_target(world, call) == world.sites["SPRINTF"]
+    e = world.e
+    name = world.get_string_ptr(1896)
+    frame = e.alloc(0x2000, 0x7E)
+    ebp, esp = frame + 0x1800, frame + 0x200
+    e.w32(esp, 1)                                             # the level, pushed before the name
+    e.setreg(UC_X86_REG_ESP, esp)
+    e.setreg(UC_X86_REG_EBP, ebp)
+    e.setreg(UC_X86_REG_EAX, name)
+    e.uc.emu_start(world.live(start), world.live(call + 5))
+    return world._bytes(ebp - 0x204)
+
+
+def test_the_details_screens_level_shows_the_whole_french_word(world):
+    """Live on B209: the Details screen's Niveau row showed "Débutan (1)": the guard on sprintf cut the translated
+    "Débutant " to the 7 bytes of "Novice ". The REAL code of the level line runs with the REAL DLL: its buffer
+    holds 256 bytes (the scan proves it), so the whole word is written."""
+    assert world.english(1896) == "Novice "
+    assert _install(world, {1896: "Débutant ", 113: RETRY}) == 1 and world.status()["refused"] == 0
+    assert _run_niveau(world) == "Débutant  (1)".encode("cp1252")     # the line ends with a space
+    # a format the scan does not know still gives at most the English length
+    out = world.get_string_ptr(1896)
+    assert world.sprintf(world.cstring(b"[%s]"), out) == b"[" + "Débutant ".encode("cp1252")[:7] + b"]"
+
+
+def test_the_details_screens_level_in_english_is_unchanged(world):
+    assert _install(world, {113: RETRY}) == 1
+    assert _run_niveau(world) == b"Novice  (1)"

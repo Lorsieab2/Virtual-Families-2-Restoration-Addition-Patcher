@@ -8614,6 +8614,132 @@
  ],
  "literals": [
   {
+   "name": "game.brokerage_settings",
+   "english": "Your brokerage has increased your interest rate by %d",
+   "wide": false,
+   "where": "Redeem Credit in Settings: the server's answer (%d is the number)",
+   "note": "the original game's own words, drawn by the game, at most 160 letters; the % places are filled with the words or numbers shown",
+   "max_length": 160,
+   "is_format": true
+  },
+  {
+   "name": "game.brokerage_store",
+   "english": "Your brokerage has increased your interest rate by %d%",
+   "wide": false,
+   "where": "Redeem Credit in the store: the server's answer (%d is the number; the original game ends this line with a lone %)",
+   "note": "the original game's own words, drawn by the game, at most 160 letters; the % places are filled with the words or numbers shown",
+   "max_length": 160,
+   "is_format": true
+  },
+  {
+   "name": "game.career_level_1",
+   "english": "%s, Lvl 1",
+   "wide": false,
+   "where": "Adoption and Dating: a candidate's career and level (%s is the career)",
+   "note": "the original game's own words, drawn by the game, at most 80 letters; the % places are filled with the words or numbers shown",
+   "max_length": 80,
+   "is_format": true
+  },
+  {
+   "name": "game.career_level_2",
+   "english": "%s, Lvl 2",
+   "wide": false,
+   "where": "Adoption and Dating: a candidate's career and level (%s is the career)",
+   "note": "the original game's own words, drawn by the game, at most 80 letters; the % places are filled with the words or numbers shown",
+   "max_length": 80,
+   "is_format": true
+  },
+  {
+   "name": "game.code_not_valid",
+   "english": "The code that was entered is not valid.",
+   "wide": false,
+   "where": "Redeem Credit (the store's hidden corner, Settings): the server's answer",
+   "note": "the original game's own words, drawn by the game, at most 250 letters",
+   "max_length": 250,
+   "is_format": null
+  },
+  {
+   "name": "game.coins_added",
+   "english": "%d coins have been added to your balance.",
+   "wide": false,
+   "where": "Redeem Credit (the store's hidden corner, Settings): the server's answer (%d is the number)",
+   "note": "the original game's own words, drawn by the game, at most 160 letters; the % places are filled with the words or numbers shown",
+   "max_length": 160,
+   "is_format": true
+  },
+  {
+   "name": "game.copyright",
+   "english": "Copyright 2012-2014, Last Day of Work.",
+   "wide": false,
+   "where": "the title screen: the copyright line",
+   "note": "the original game's own words, drawn by the game, at most 120 letters",
+   "max_length": 120,
+   "is_format": null
+  },
+  {
+   "name": "game.couch_or_bed",
+   "english": "They need a couch or a bed...",
+   "wide": false,
+   "where": "the house: the message when two villagers have nowhere to cuddle",
+   "note": "the original game's own words, drawn by the game, at most 200 letters",
+   "max_length": 200,
+   "is_format": null
+  },
+  {
+   "name": "game.decor",
+   "english": "Decor",
+   "wide": false,
+   "where": "the house: the Decor button",
+   "note": "the original game's own words, drawn by the game, at most 60 letters",
+   "max_length": 60,
+   "is_format": null
+  },
+  {
+   "name": "game.done",
+   "english": "Done",
+   "wide": false,
+   "where": "Settings opened from the game menu: the button that closes it",
+   "note": "the original game's own words, drawn by the game, at most 60 letters",
+   "max_length": 60,
+   "is_format": null
+  },
+  {
+   "name": "game.manage_games",
+   "english": "Manage Games",
+   "wide": false,
+   "where": "the title screen: the Manage Games button",
+   "note": "the original game's own words, drawn by the game, at most 60 letters",
+   "max_length": 60,
+   "is_format": null
+  },
+  {
+   "name": "game.redeem_problem",
+   "english": "There was a problem redeeming the code.\nMake sure you are connected to the internet and try again.",
+   "wide": false,
+   "where": "Redeem Credit (the store's hidden corner, Settings): no answer from the server",
+   "note": "the original game's own words, drawn by the game, at most 250 letters",
+   "max_length": 250,
+   "is_format": null
+  },
+  {
+   "name": "game.special_training",
+   "english": "Special training is needed to collect this",
+   "wide": false,
+   "where": "the house: the message when a villager cannot pick up a collectable",
+   "note": "the original game's own words, drawn by the game, at most 200 letters",
+   "max_length": 200,
+   "is_format": null
+  },
+  {
+   "name": "game.version",
+   "english": "Version 1.2.4, %s",
+   "wide": false,
+   "where": "the title screen: the version line (%s is the distributor, LDW)",
+   "note": "the original game's own words, drawn by the game, at most 120 letters; the % places are filled with the words or numbers shown",
+   "max_length": 120,
+   "is_format": true
+  },
+  {
    "name": "time.10x",
    "english": "10x",
    "wide": true,

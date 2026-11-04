@@ -11,6 +11,8 @@ the ones a companion DLL uses as printf formats.
 * `literals`: the patches' text that is not a table record: every text a companion DLL marks with TRW(L"...") (wide: a
   Windows dialog or message box) or TRA("...", room) (narrow: drawn by the game), and the text of generated
   executable code (LITERALS below). The DLL asks vf2tr_b200.dll for each by its English (B200Tr_TextW / B200Tr_TextA).
+  And the original game's own words its code hands over itself, not as table records (GAME_WORDS below): vf2tr_b200.dll
+  points the game's code at their translation (runtime/native/b200tr/b200tr_game_words.h).
 
 The tool reads the tables with src/vf2_translation_strings.read_table, the very reader the Translations window uses.
 It also writes runtime/native/b200tr/b200tr_patch_formats.h: the hashes of the texts a DLL fills with %s places (the DLL
@@ -48,6 +50,73 @@ ESCAPES = {"n": "\n", "r": "\r", "t": "\t", "\\": "\\", '"': '"', "'": "'"}
 # caption "Having private adult romantic time" was the last one; it is eString_VF2PrivateRomanticTime now).
 # tests/test_vf2_translation_strings.py scans the generator for a copied text and fails here if one comes back.
 LITERALS: dict[str, tuple[str, str, str, int]] = {}
+
+# The original game's own words that are not table records: its code hands the game the address of its English
+# itself (push / mov of the address), so a table override never reaches them. vf2tr_b200.dll gives each of those
+# instructions the translation's address instead (runtime/native/b200tr/b200tr_game_words.h, written from this
+# table). {name: (english, where, room in bytes, the number of instructions that hand it over)}. The room is what
+# the place it goes to holds: a button, a text box and a message box keep a copy of any length; CDealerSay::Say
+# strncpy's into 255 bytes; a sprintf FORMAT goes into a frame buffer gen_b200_translations_sites.frame_space proves
+# at least 186 bytes (the title screen), 143 (Adoption, Dating: with the career's English) or 180 (Redeem Credit),
+# with its %s / %d filled. Left out (the audit of every literal the original code hands over):
+# the Community Event vote dialog's words; it opens only while logged in to LDW's server, which no longer runs.
+GAME_WORDS: dict[str, tuple[str, str, int, int]] = {
+    "game.manage_games": ("Manage Games", "the title screen: the Manage Games button", 60, 1),
+    "game.version": ("Version 1.2.4, %s", "the title screen: the version line (%s is the distributor, LDW)", 120, 1),
+    "game.copyright": ("Copyright 2012-2014, Last Day of Work.", "the title screen: the copyright line", 120, 1),
+    "game.decor": ("Decor", "the house: the Decor button", 60, 1),
+    "game.done": ("Done", "Settings opened from the game menu: the button that closes it", 60, 1),
+    "game.career_level_1": ("%s, Lvl 1", "Adoption and Dating: a candidate's career and level (%s is the career)",
+                            80, 2),
+    "game.career_level_2": ("%s, Lvl 2", "Adoption and Dating: a candidate's career and level (%s is the career)",
+                            80, 2),
+    "game.special_training": ("Special training is needed to collect this",
+                              "the house: the message when a villager cannot pick up a collectable", 200, 1),
+    "game.couch_or_bed": ("They need a couch or a bed...",
+                          "the house: the message when two villagers have nowhere to cuddle", 200, 1),
+    "game.code_not_valid": ("The code that was entered is not valid.",
+                            "Redeem Credit (the store's hidden corner, Settings): the server's answer", 250, 2),
+    "game.coins_added": ("%d coins have been added to your balance.",
+                         "Redeem Credit (the store's hidden corner, Settings): the server's answer (%d is the number)",
+                         160, 2),
+    "game.brokerage_store": ("Your brokerage has increased your interest rate by %d%",
+                             "Redeem Credit in the store: the server's answer (%d is the number; the original game "
+                             "ends this line with a lone %)", 160, 1),
+    "game.brokerage_settings": ("Your brokerage has increased your interest rate by %d",
+                                "Redeem Credit in Settings: the server's answer (%d is the number)", 160, 1),
+    "game.redeem_problem": ("There was a problem redeeming the code.\nMake sure you are connected to the internet "
+                            "and try again.",
+                            "Redeem Credit (the store's hidden corner, Settings): no answer from the server", 250, 2),
+}
+GAME_WORDS_H = ROOT / "runtime" / "native" / "b200tr" / "b200tr_game_words.h"
+
+
+def game_word_rows() -> list[dict]:
+    """GAME_WORDS as `literals` rows: drawn by the game, a printf format when the English has a % place."""
+    out = []
+    for name, (english, where, room, _refs) in GAME_WORDS.items():
+        fmt = "%" in english
+        note = f"the original game's own words, drawn by the game, at most {room} letters"
+        if fmt:
+            note += "; the % places are filled with the words or numbers shown"
+        out.append({"name": name, "english": english, "wide": False, "where": where, "note": note,
+                    "max_length": room, "is_format": True if fmt else None})
+    return out
+
+
+def _c_text(s: str) -> str:
+    return '"' + s.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n") + '"'
+
+
+def game_words_header() -> str:
+    rows = "".join(f"    {{ {_c_text(e)}, {refs}, {room} }},\n" for (e, _w, room, refs) in GAME_WORDS.values())
+    return (
+        "/* Written by runtime/tools/gen_vf2_patch_strings.py (GAME_WORDS); do not edit. */\n#pragma once\n"
+        "/* The original game's own words that are no line of the table: the English, how many instructions of the\n"
+        "   game's code hand its address over (push imm32 / mov r32, imm32), and the room of a translation in bytes. */\n"
+        "typedef struct { const char *english; unsigned char refs; unsigned short room; } b200tr_game_word;\n"
+        f"#define B200TR_GAME_WORD_COUNT {len(GAME_WORDS)}\n"
+        f"static const b200tr_game_word B200TR_GAME_WORDS[] = {{\n{rows}    {{ 0, 0, 0 }}\n}};\n")
 
 SOURCES = (
     (r"OutfitBody", "Outfits"), (r"Hairstyle", "Hairstyles"), (r"CheatUpgrade", "Cheat Upgrades"),
@@ -137,7 +206,7 @@ def build(vanilla: bytes, patched: list[bytes]) -> dict:
             changed.append({"id": i, "english": next(iter(words)).decode("cp1252"), "vanilla": base[i][1].decode("cp1252")})
     literals = marked_texts() + [
         {"name": n, "english": e, "wide": False, "where": w, "note": note, "max_length": m, "is_format": None}
-        for n, (e, w, note, m) in LITERALS.items()]
+        for n, (e, w, note, m) in LITERALS.items()] + game_word_rows()
     return {
         "comment": "Written by runtime/tools/gen_vf2_patch_strings.py from the original executable and the patched "
                    "ones; do not edit.",
@@ -169,13 +238,16 @@ def main(argv=None) -> int:
     data = build(args.vanilla.read_bytes(), [p.read_bytes() for p in args.exes])
     text = json.dumps(data, indent=1, ensure_ascii=False) + "\n"
     header = formats_header(data)
+    words = game_words_header()
     if args.write:
         OUT.write_text(text, encoding="utf-8", newline="\n")
         FORMATS_H.write_text(header, encoding="utf-8", newline="\n")
+        GAME_WORDS_H.write_text(words, encoding="utf-8", newline="\n")
         print(f"wrote {OUT}: {len(data['table'])} added lines, {len(data['changed'])} rewritten, "
               f"{len(data['literals'])} other texts")
         return 0
-    same = OUT.read_text(encoding="utf-8") == text and FORMATS_H.read_text(encoding="utf-8") == header
+    same = (OUT.read_text(encoding="utf-8") == text and FORMATS_H.read_text(encoding="utf-8") == header
+            and GAME_WORDS_H.is_file() and GAME_WORDS_H.read_text(encoding="utf-8") == words)
     print("up to date" if same else "OUT OF DATE")
     return 0 if same else 1
 
