@@ -316,7 +316,10 @@ opening one) and `tests/test_vf2_game_text.py`.
   stored name that ends with "..." is looked up in the slot's Names file the way the draw path looks it up (the
   current slot's file first, then the others'; the file read again when a short form is not yet known, since the
   Unicode text DLL writes it the moment a name is typed). A name the file does not hold, or no file, is logged
-  exactly as the save holds it; the patcher's readers (`vf2_family_history.whole_names`, the Family Tree Maker)
+  as the save holds it. The log is UTF-8: every name and game text it writes is read per sequence (a valid UTF-8
+  sequence stays, any other byte is its Windows-1252 character) and written as UTF-8, so a name stored with an
+  accented Latin letter as one byte ("Zo" EBh) reads "Zoë" in any editor; a log an earlier build wrote with those
+  bytes is read the same way (the remarriage lookup, the patcher's readers). The patcher's readers (`vf2_family_history.whole_names`, the Family Tree Maker)
   still expand old short forms from the Names file. The two record buffers are heap buffers of 64 KB each, every
   write into them bounded (`tests/b200_history_scenarios.py`: a 1,200-character and a 1,200-byte name logged whole
   through the game's own hooks, with guard bytes after every heap buffer).
@@ -328,6 +331,8 @@ opening one) and `tests/test_vf2_game_text.py`.
   80h..A1h, so the euro, curly quotes and the no-break space are left out, never turned into a blank). The limit is `runtime/native/b200unicode/b200name_limit.h`, the
   one C copy of `NAME_BOX_BYTES`, written by `runtime/tools/gen_b200_name_limit.py` from `src/vf2_game_text.py` and
   checked by `tests/test_name_limit.py`.
-* Typing in a name box agrees with a paste: a mark typed right after a character the box refused (its
-  bytes) belongs to that character and is refused too, so it never lands on the box's last
-  character (`tests/test_clip_text_boxes.py`, `test_typing_and_a_paste_agree`).
+* Typing in any box agrees with a paste: when a typed character is refused (the box's bytes, or a box's width),
+  every following code point of the same character (a combining mark, a ZWJ and what it joins, a variation
+  selector, an emoji modifier) is refused too, so it never lands on the box's last character or starts a character
+  with nothing before it (`tests/test_b200_unicode_dll.py`, `test_a_mark_after_a_character_refused_*`;
+  `tests/test_clip_text_boxes.py`, `test_typing_and_a_paste_agree`).

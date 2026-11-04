@@ -576,7 +576,7 @@ def test_a_name_box_paste_is_cut_at_whole_characters(unicode):
 
 
 @pytest.mark.parametrize("text", ["a" * 1201, "\u00e9" * 1201, CUNEIFORM * 301, "q\u0301" * 401, FAMILY * 49,
-                                  "Zo\u00eb " * 80, "\u65e5\u672c\u8a9e" * 150])
+                                  "Zo\u00eb " * 80, "\u65e5\u672c\u8a9e" * 150, "a" * 1197 + "\U0001F600\u0301"])
 def test_typing_and_a_paste_agree(world, unicode, text):
     """The same text typed into a real name box (the game's SetCanEdit from a name box's call, the Unicode text
     DLL's HandleKey) and pasted into one: the same stored text."""
