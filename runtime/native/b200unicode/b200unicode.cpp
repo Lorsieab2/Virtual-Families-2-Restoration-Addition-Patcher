@@ -1237,6 +1237,7 @@ static const unsigned char *Expand(unsigned, const unsigned char *, unsigned cha
 static bool NameGetText(unsigned, const unsigned char *, unsigned, char *, int) { return false; }
 static void NameSetText(unsigned, const char **) {}
 static bool IsNameBox(unsigned) { return false; }
+static unsigned WindowFont() { return 0; }
 static void FlushNames() {}
 #else
 static const unsigned char *Expand(unsigned impl, const unsigned char *text, unsigned char *out, unsigned cap,
@@ -1244,6 +1245,7 @@ static const unsigned char *Expand(unsigned impl, const unsigned char *text, uns
 static bool NameGetText(unsigned impl, const unsigned char *src, unsigned n, char *dst, int size);
 static void NameSetText(unsigned impl, const char **text);
 static bool IsNameBox(unsigned impl);
+static unsigned WindowFont();          // the game window's font (a box without its own is drawn in it), or 0
 static void FlushNames();
 #endif
 
@@ -1590,6 +1592,27 @@ static bool FitsWidth(unsigned font, unsigned char *text, int n, int max) {
     return width <= max * (widest + kerning) - kerning;
 }
 
+// A box that is not a name box takes a typed character only when its text then still fits: the W cap above, and the
+// box itself. While a box is editable (+24h) the stock Draw cuts its text a byte at a time until it fits (Draw+147h..
+// +163h: while GetWidth(text, +58h scale) + x > right; x is left + margin at alignment 0, the centred start at 1, and
+// never past the right edge at 2), so a character that would not fit is refused here, whole (Refuse: its marks with
+// it), instead of being cut there and leaving its marks behind. A box without its own font is measured in the game
+// window's font, as the stock Draw draws it.
+static bool FitsBox(unsigned c, unsigned char *text, int n, int max) {
+    unsigned font = *(unsigned *)(c + 0x3C);
+    if (!font) font = WindowFont();
+    if (!FitsWidth(font, text, n, max)) return false;
+    int align = *(int *)(c + 0x40);
+    if (!font || n <= 0 || !*(unsigned char *)(c + 0x24) || align < 0 || align > 1) return true;
+    unsigned char keep = text[n];
+    text[n] = 0;
+    int width = UniGetWidth((void *)font, 0, (const char *)text, *(float *)(c + 0x58));
+    text[n] = keep;
+    int left = *(int *)(c + 0x08), right = *(int *)(c + 0x10);
+    int x = align == 0 ? left + *(int *)(c + 0x44) : left + (right - left - width) / 2;
+    return width + x <= right;
+}
+
 // ================================================================ typing
 // A box whose last typed character was refused (its byte limit, or a box's width): every code point typed next that
 // belongs to the refused character (a combining mark, a joiner and what it joins, a variation selector, an emoji
@@ -1647,7 +1670,7 @@ static bool __fastcall UniHandleKey(void *ctl, void *, int type, int code, int s
         if (k < 0 && !typed) { ++B200Unicode_Status.refused; return true; }
         if (k < 0) { Refuse(c, cps, count); ++B200Unicode_Status.refused; return true; }
         // a name box scrolls (b200names.inc); another box takes no character that would draw it past its width
-        if (typed && !name && !FitsWidth(*(unsigned *)(c + 0x3C), next, k, max)) { Refuse(c, cps, count); ++B200Unicode_Status.refused; return true; }
+        if (typed && !name && !FitsBox(c, next, k, max)) { Refuse(c, cps, count); ++B200Unicode_Status.refused; return true; }
         RefusedBox = 0;
         for (int i = 0; i < k; ++i) buf[i] = (char)next[i];
         buf[k] = 0;
@@ -1667,7 +1690,7 @@ static bool __fastcall UniHandleKey(void *ctl, void *, int type, int code, int s
         if (buf && n + 1 < sizeof(with) && (int)n < max) {
             for (unsigned i = 0; i < n; ++i) with[i] = (unsigned char)buf[i];
             with[n] = (unsigned char)sym;
-            if (!IsNameBox(c) && !FitsWidth(*(unsigned *)(c + 0x3C), with, (int)n + 1, max)) {
+            if (!IsNameBox(c) && !FitsBox(c, with, (int)n + 1, max)) {
                 Refuse(c, &letter, 1);
                 ++B200Unicode_Status.refused;
                 return true;

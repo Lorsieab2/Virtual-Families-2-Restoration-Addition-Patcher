@@ -343,3 +343,11 @@ opening one) and `tests/test_vf2_game_text.py`.
   the stock code directly, which cut every character typed past the box's width and left the zero-width marks
   after it ("สวัสดี" became "สัี"; `tests/test_name_limit.py`,
   `test_a_name_box_without_its_own_font_keeps_what_is_typed`).
+* Every other editable box (the Family Tree note, the credit code box, the developers' animation tool and day/night
+  test dialog) does not scroll. `UniHandleKey` refuses a typed character (`Refuse`, its marks with it) when the text
+  would no longer fit the box the way the stock Draw measures it while the box is editable (+24h): the hooked
+  GetWidth at the box's scale (+58h) in its font, or the game window's for a box without one, from left + margin
+  (alignment 0) or centred (1), against the right edge; alignment 2 never cuts. So the stock cut loop never cuts
+  typed text (`test_a_box_without_its_own_font_that_is_not_a_name_box_refuses_whole_characters`). Typing goes a
+  code point at a time: a character whose base fits keeps its base when a later modifier does not fit (as at the
+  byte limit); a paste goes in whole characters.

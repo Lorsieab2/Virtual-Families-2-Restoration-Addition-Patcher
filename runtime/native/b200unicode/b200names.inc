@@ -548,16 +548,21 @@ static void __fastcall UniSetCanEdit(void *ctl, void *, int edit, int limit) {
     if (b && (edit & 0xFF)) OpenWhole(impl, b);
 }
 
+// The game window's font: the one the stock Draw uses for a box without its own (ldwGameWindow::Get, GetFont, the
+// stock Draw's own calls), or 0 when the long names' sites are not proved.
+static unsigned WindowFont() {
+    if (!NamesOn) return 0;
+    void *window = ((void *(__cdecl *)())NSITE(WINDOW_GET))();
+    return window ? (unsigned)((void *(__thiscall *)(void *))NSITE(WINDOW_FONT))(window) : 0;
+}
+
 // ldwTextControlImpl::Draw: a name box draws a copy that fits.
 static void __fastcall UniBoxDraw(void *implp, void *) {
     unsigned impl = (unsigned)implp;
     NameBox *b = BoxOf(impl);
     unsigned char *text = *(unsigned char **)(impl + 0x30);
     unsigned font = *(unsigned *)(impl + 0x3C);
-    if (!font && b) {          // no font of its own: the stock Draw uses the game window's (and cuts the text to it)
-        void *window = ((void *(__cdecl *)())NSITE(WINDOW_GET))();
-        font = window ? (unsigned)((void *(__thiscall *)(void *))NSITE(WINDOW_FONT))(window) : 0;
-    }
+    if (!font && b) font = WindowFont();   // no font of its own: the stock Draw uses the window's (and cuts to it)
     unsigned fimpl = font ? *(unsigned *)(font + 4) : 0;
     if (!b || !text || !fimpl || !IMPL_FIELD(fimpl, 0x10) || *(unsigned char *)(impl + 0x2F)) {
         ((BoxDrawFn)(void *)BoxDrawTrampoline)(implp);
