@@ -312,6 +312,10 @@ def _render_names(name_pins: list) -> list:
     for site, pin, how in S.NAME_SITES:
         if how == "entry":
             out.append(f"    {{ UNI_NSITE_{site}, 'L', {index[pin]}, 0x0u }},")
+        elif how[0] == "call":
+            for off, name in by_name[pin]["calls"]:
+                if name == how[1]:
+                    out.append(f"    {{ UNI_NSITE_{site}, 'C', {index[pin]}, 0x{off:X}u }},")
         else:
             for off, name in by_name[pin]["absolutes"]:
                 if name == how[1]:

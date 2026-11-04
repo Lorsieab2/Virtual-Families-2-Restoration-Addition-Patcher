@@ -340,9 +340,9 @@ class NamesWorld(DrawWorld):
         out = e.alloc(4 * 32)
         e.call(e.dll_export("B200Unicode_TestNames"), (out,))
         self.names_on = e.r32(out)
-        sites = [e.r32(out + 4 * (1 + i)) for i in range(4)]
-        self.set_can_edit, self.box_draw, self.instance, self.gs_save = sites
-        self.returns = [e.r32(out + 20 + 4 * i) for i in range(10)]
+        sites = [e.r32(out + 4 * (1 + i)) for i in range(6)]
+        self.set_can_edit, self.box_draw, self.instance, self.gs_save, self.window_get, self.window_font = sites
+        self.returns = [e.r32(out + 28 + 4 * i) for i in range(10)]
         self.proved = G.resolve_names(G.Exe(exe_path), G.load_name_pins(OBJS))
         # the game state
         self.gs = e.alloc(0x26000, fill=0xCD)
@@ -942,27 +942,52 @@ def test_short_forms_draw_as_whole_names(world, fname):
     assert e.call(e.dll_export("B200Unicode_TestExpand"), (font_obj, raw, 0)) == 0
 
 
-def test_a_long_name_box_draws_a_fitted_copy(world):
+def _seam_stock_draw(w, font):
+    """The stock Draw after its first 7 bytes, once per world: it records the text it is handed and, while the box is
+    editable (+24h), cuts it a byte at a time until it fits, as the stock loop does (Draw+147h..+163h: while
+    GetWidth + left + 44h > right, text[--len] = 0). The game window and its font are the given font."""
     from unicorn import UC_HOOK_CODE
     from unicorn.x86_const import UC_X86_REG_EBP, UC_X86_REG_ECX, UC_X86_REG_EIP, UC_X86_REG_ESI, UC_X86_REG_ESP
-    w, fonts = world
     e = w.e
-    font, _sheet = fonts["Segoe24"]
+    if getattr(w, "drawn", None) is not None:
+        return w.drawn
+    w.drawn = []
+    # the Hebrew, Hindi and Thai letters are drawn with GDI (the world's real GDI): the face names are compared
+    from test_unicode_font import _kernel_seams
+    probe = type("Probe", (), {"imports": {}})()
+    _kernel_seams(probe)
+    for name in ("lstrcmpiW", "lstrlenW"):
+        e.imports.setdefault(name, probe.imports[name])
     font_obj, _f, _s = w.font("Segoe24")
-    drawn = []
-    stock_body = w.box_draw + S.BOX_DRAW_STEAL
+    window = e.alloc(0x40)
 
-    def stock(uc, address, size, user):                           # the stock Draw after its first 7 bytes
+    def stock(uc, address, size, user):
         impl = e.reg(UC_X86_REG_ECX)
-        drawn.append(e.cstr(e.r32(impl + 0x30)).encode("latin-1"))
+        text = e.r32(impl + 0x30)
+        raw = e.cstr(text).encode("latin-1")
+        w.drawn.append(raw)
+        right, left = e.r32(impl + 0x10), e.r32(impl + 0x08) + e.r32(impl + 0x44)
+        while raw and e.read(impl + 0x24, 1)[0] and T.get_width(font, raw) + left > right:
+            raw = raw[:-1]
+            e.write(text + len(raw), bytes(1))
         ebp = e.reg(UC_X86_REG_EBP)
         e.setreg(UC_X86_REG_ESI, e.r32(e.reg(UC_X86_REG_ESP)))     # the esi it pushed
         e.setreg(UC_X86_REG_ESP, ebp + 8)
         e.setreg(UC_X86_REG_EIP, e.r32(ebp + 4))
         e.setreg(UC_X86_REG_EBP, e.r32(ebp))
-    if not getattr(w, "draw_seamed", False):
-        e.uc.hook_add(UC_HOOK_CODE, stock, begin=stock_body, end=stock_body)
-        w.draw_seamed = True
+    stock_body = w.box_draw + S.BOX_DRAW_STEAL
+    e.uc.hook_add(UC_HOOK_CODE, stock, begin=stock_body, end=stock_body)
+    e.seam_live(w.window_get, lambda em: (window, 0))
+    e.seam_live(w.window_font, lambda em: (font_obj, 0))
+    return w.drawn
+
+
+def test_a_long_name_box_draws_a_fitted_copy(world):
+    w, fonts = world
+    e = w.e
+    font, _sheet = fonts["Segoe24"]
+    font_obj, _f, _s = w.font("Segoe24")
+    drawn = _seam_stock_draw(w, font)
     whole = "Maximilianus Fitzgerald the Third of Wielkopolska"
     _ctl, impl = w.box(w.returns[7], 0x12, font_obj)
     w.type(impl, whole)
@@ -986,6 +1011,32 @@ def test_a_long_name_box_draws_a_fitted_copy(world):
             want = _fit(font, whole, avail)
         assert drawn == [T.encode(want)]
         assert w.text(impl) == T.encode(whole)                     # the box keeps its whole text
+
+
+def test_a_name_box_without_its_own_font_keeps_what_is_typed(world):
+    """The family member screen's name box has no font of its own (+3Ch is 0): the stock Draw draws it in the game
+    window's font and, while it is typed into, cuts the text a byte at a time until it fits the box (the loop at
+    Draw+147h..+163h: width + left + 44h > right). Live (B209), every Thai consonant typed past the box's width was
+    cut by that loop after HandleKey had taken it, and only the zero-width marks stayed ("สวัสดี" became "สัี").
+    The DLL draws a fitted copy in the window's font, so the stock loop never cuts the box's own text. The
+    stock Draw's body is the cut loop itself (_seam_stock_draw), run after every keystroke."""
+    w, fonts = world
+    e = w.e
+    font, _sheet = fonts["Segoe24"]
+    assert w.window_get == w.proved["sites"]["WINDOW_GET"] and w.window_font == w.proved["sites"]["WINDOW_FONT"]
+    _seam_stock_draw(w, font)
+    live = "שלום नमस्ते สวัสดี"
+    _ctl, impl = w.box(w.returns[7], 0x12, 0)
+    assert e.r32(impl + 0x3C) == 0
+    e.write(impl + 0x24, b"\x01\x01")                              # editable, being typed into
+    e.w32(impl + 0x08, 0)
+    e.w32(impl + 0x10, 120)                                        # narrower than the whole name
+    e.w32(impl + 0x44, 4)
+    assert T.get_width(font, T.encode(live)) + 4 > 120
+    for ch in live:
+        e.call(w.h["handle_key"], (5, ord(ch) | S.KEY_MARK, 0), ecx=impl, edx=0)
+        e.call(w.h["box_draw"], (), ecx=impl, edx=0)                 # the next frame draws the box
+    assert T.decode(w.text(impl)) == live
 
 
 def test_a_changed_long_names_byte_keeps_the_unicode_text(exe, dlls):
