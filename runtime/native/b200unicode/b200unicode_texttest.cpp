@@ -4,6 +4,7 @@
 #include <windows.h>
 #include "b200unicode_text.h"
 #include "b200icu.h"
+#include "b200words.h"
 
 #define EXPORT extern "C" __declspec(dllexport)
 
@@ -56,9 +57,15 @@ static ut::LineState State;
 EXPORT int UtIcu(int on) {
     if (!on) { ut::Icu() = 0; ut::IcuLoader() = 0; return 0; }
     icu::Install();
+    if (icu::Open && icu::First && icu::Next && icu::Close && icu::Property) ut::Icu() = &icu::kApi;   // on again
     ut::IcuLoader() = &icu::Install;
     return ut::Icu() != 0 ? 1 : 0;
 }
+
+// the word lists' folder (with its trailing backslash; empty: no lists), as the DLL's Startup sets it
+EXPORT void UtWords(const wchar_t *folder) { words::Install(folder); }
+// whether list i was read (looked for), and how many words it has
+EXPORT unsigned UtWordsRead(int i) { return words::Lists[i].looked ? 1u + words::Lists[i].count : 0u; }
 
 EXPORT unsigned UtNextLine(const unsigned char *src, unsigned char *out, int maxBytes, int maxWidth, int keep,
                            float scale, int kerning, int *doubleBreak) {

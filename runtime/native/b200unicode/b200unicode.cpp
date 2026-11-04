@@ -34,7 +34,8 @@
 #include "b200unicode_sites.h"
 #include "b200unicode_text.h"
 #include "b200icu.h"
-#include "b200name_limit.h"     // kNameBoxBytes: the one name limit (src/vf2_game_text.py)
+#include "b200words.h"         // without icu.dll: the ICU word lists for Thai, Lao, Khmer and Burmese
+#include "b200name_limit.h"    // kNameBoxBytes: the one name limit (src/vf2_game_text.py)
 #include "b200names_file.h"     // the Names file: header, CRC-32, one record (also read by the Family History DLL)
 
 // ================================================================ SDL (SDL2.dll / SDL2_image.dll, as the game links)
@@ -1497,6 +1498,16 @@ static unsigned ReadSettings() {
 #endif
 }
 
+#ifndef B200UNICODE_CLIP
+// The word lists each setting ships in its own folder beside the DLL, read only when a Thai, Lao, Khmer or Burmese
+// line is wrapped on a Windows without icu.dll (b200words.h).
+static void InstallWordLists() {
+    wchar_t lists[MAX_PATH];
+    if (InFolder(Mode == 2 ? L"Unicode Font Text\\Word Lists\\" : L"Unicode Text\\Word Lists\\", lists))
+        words::Install(lists);
+}
+#endif
+
 extern "C" __declspec(dllexport) void __cdecl B200Unicode_Startup() {
     static bool started = false;
     if (started) return;
@@ -1514,6 +1525,7 @@ extern "C" __declspec(dllexport) void __cdecl B200Unicode_Startup() {
     if (Mode != 3) { Log("Copy and Paste in Text Boxes is off: the game is stock"); return; }
 #else
     if (Mode != 1 && Mode != 2) { Log("Unicode text is off: the game is stock"); return; }
+    InstallWordLists();
 #endif
     if (!LoadSdl()) { Log("SDL2.dll's functions were not found: installing nothing"); return; }
     static Plan plan;
@@ -1583,6 +1595,10 @@ extern "C" __declspec(dllexport) unsigned __cdecl B200Unicode_TestReadSettings(c
     Mode = ReadSettings();
     return Mode;
 }
+#ifndef B200UNICODE_CLIP
+// the word lists as Startup installs them, for the mode and folder TestReadSettings set
+extern "C" __declspec(dllexport) void __cdecl B200Unicode_TestWordLists() { InstallWordLists(); }
+#endif
 // SDL2.dll / SDL2_image.dll' functions, as Startup finds them
 extern "C" __declspec(dllexport) int __cdecl B200Unicode_TestLoadSdl() { return LoadSdl() ? 1 : 0; }
 // the real SDL_PollEvent the hook calls (Apply sets it from the import slot)

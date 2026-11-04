@@ -56,6 +56,22 @@ inline const IcuApi *&Icu() { static const IcuApi *api = 0; return api; }
 // so a game that never wraps such text never loads it.
 inline void (*&IcuLoader())() { static void (*load)() = 0; return load; }
 
+// Word lists for the scripts written without spaces between words (b200words.h; src/vf2_line_break.py): used only
+// without ICU, which has the same lists built in. The host sets the two functions; 0 = no lists.
+static const unsigned kWordListCount = 4;     // Thai, Lao, Khmer, Burmese (Myanmar)
+inline bool (*&WordLookup())(int list, const unsigned *cps, unsigned n) { static bool (*f)(int, const unsigned *, unsigned) = 0; return f; }
+inline unsigned (*&WordListMax())(int list) { static unsigned (*f)(int) = 0; return f; }
+
+// The word list of a code point's script, or -1 (src/vf2_line_break.word_list_of).
+inline int WordListOf(unsigned cp) {
+    if (cp >= 0x0E00 && cp <= 0x0E7F) return 0;                                            // Thai
+    if (cp >= 0x0E80 && cp <= 0x0EFF) return 1;                                            // Lao
+    if ((cp >= 0x1780 && cp <= 0x17FF) || (cp >= 0x19E0 && cp <= 0x19FF)) return 2;        // Khmer
+    if ((cp >= 0x1000 && cp <= 0x109F) || (cp >= 0xA9E0 && cp <= 0xA9FF) || (cp >= 0xAA60 && cp <= 0xAA7F))
+        return 3;                                                                          // Myanmar
+    return -1;
+}
+
 inline int FallbackClass(unsigned cp) {
     int lo = 0, hi = (int)kLineBreakRangeCount - 1;
     while (lo <= hi) {
@@ -382,6 +398,39 @@ inline void ComputeBreaks(const unsigned char *src, unsigned n, LineState &st) {
         if (before == ' ' || before == '\n' || after == ' ' || after == '\n') continue;
         if (!(NoSpaceLetter(before) || NoSpaceLetter(after) || last == 0x200B)) continue;
         st.brk[i] = (useIcu ? st.bound[st.at16[i]] != 0 : (last == 0x200B || FallbackMayBreak(before, after))) ? 1 : 0;
+    }
+    // Without ICU, a run of Thai, Lao, Khmer or Burmese letters breaks only between its words (b200words.h): from
+    // the run's start the longest listed word that ends at a whole character, else one character, and so on.
+    if (useIcu || !WordLookup() || !WordListMax()) return;
+    unsigned word[64];
+    for (unsigned a = 0; a < count;) {
+        int list = WordListOf(st.first[a]);
+        unsigned b = a + 1;
+        if (list >= 0) while (b < count && WordListOf(st.first[b]) == list) ++b;
+        unsigned longest = list >= 0 && b - a > 1 ? WordListMax()(list) : 0;
+        if (longest > 64) longest = 64;
+        if (longest) {
+            for (unsigned i = a + 1; i < b; ++i) st.brk[i] = 0;
+            for (unsigned pos = a; pos < b;) {
+                unsigned best = pos + 1, wn = 0;
+                bool full = false;
+                for (unsigned k = pos; k < b && !full; ++k) {
+                    for (unsigned q = st.at16[k]; q < st.at16[k + 1]; ++q) {
+                        unsigned cp = st.text16[q];
+                        if (cp >= 0xD800 && cp <= 0xDBFF && q + 1 < st.at16[k + 1]) {
+                            cp = 0x10000 + ((cp - 0xD800) << 10) + (st.text16[q + 1] - 0xDC00u);
+                            ++q;
+                        }
+                        if (wn >= longest) { full = true; break; }
+                        word[wn++] = cp;
+                    }
+                    if (!full && WordLookup()(list, word, wn)) best = k + 1;
+                }
+                if (best < b) st.brk[best] = 1;
+                pos = best;
+            }
+        }
+        a = b;
     }
 }
 

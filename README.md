@@ -1179,6 +1179,10 @@ These three do more than change eligibility or wording:
   exporter, runner, and GUI tests.
 - `work/assets/holiday_collectibles/` - curated Holiday Ornament source art and reproducible runtime assets.
 - `patcher_assets/optional_patches/` - checked-in source art and audio for the optional asset patches.
+- `runtime/word-lists/` - the word lists used to break Thai, Lao, Khmer and Burmese lines between words on a Windows
+  without `icu.dll`. They are ICU 77-1's own (ICU, Unicode, Inc. and others; the Lao word list by Brian Eugene Wilson
+  and Robert Martin Campbell; the Myanmar Karen Word Lists; Libtabe and IPADIC for Chinese and Japanese), under the
+  Unicode licence and the notices in `runtime/word-lists/ICU-LICENSE.txt`, which ships with them.
 - `data/vf2/` - target-identity records, build matrices, furniture/image tables, and the native contracts the tests pin.
 - `docs/offline-patcher.md` - technical patcher documentation.
 - `docs/villager-behavior-plans.md` - behavior ID and label-family reference.
