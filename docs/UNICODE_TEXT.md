@@ -124,7 +124,9 @@ or merged with another, is skipped; B207's `VF2 Names 1` (three columns, no CRC)
 written makes the file version 2. Written through a temporary file and MoveFileEx, at once when a name leaves its
 box; a record that could not be written, or that was made while no save slot was known, stays pending and is tried
 again at a later draw (at most every 2 seconds; a record with no slot goes to the slot being played once there is
-one). The one rule for reading it is `runtime/native/b200unicode/b200names_file.h`, shared by the Unicode text DLL
+one), and at once after every save of the game (theGameState's Save vtable slot, chained to whatever it held, the
+Time Controls DLL's handler included), so a name stored just before the game saves and quits is never lost. Never
+from the DLL's detach. The one rule for reading it is `runtime/native/b200unicode/b200names_file.h`, shared by the Unicode text DLL
 and the Family History DLL, and `src/vf2_names.py`. A line is never removed: a short form no longer in the save is harmless (a new one is never made equal
 to it), and the game's previous save `<N+20>` stays readable. A line that is not valid (no mark, too long for its
 room, a control character, more than 1,200 bytes) is left out; a file that cannot be read is

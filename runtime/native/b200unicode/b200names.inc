@@ -313,11 +313,12 @@ static bool SaveSlot(unsigned slot) {
 }
 
 // A record made while no slot was known, or whose file could not be written, stays pending and is tried again, at most
-// every 2 seconds, from a draw (UniDrawString): a slot-less record goes to the slot being played once there is one.
-static void FlushNames() {
+// every 2 seconds, from a draw (UniDrawString), and at once after every save of the game (UniGameSave): a slot-less
+// record goes to the slot being played once there is one.
+static void FlushNamesNow(bool force) {
     if (!PendingNames || !NamesOn) return;
     unsigned now = GetTickCount();
-    if (LastFlush && now - LastFlush < 2000) return;
+    if (!force && LastFlush && now - LastFlush < 2000) return;
     LastFlush = now ? now : 1;
     unsigned current = CurrentSlot();
     bool want[6] = { false, false, false, false, false, false };
@@ -332,6 +333,19 @@ static void FlushNames() {
     }
     for (unsigned s = 1; s <= 5; ++s) if (want[s] && !SaveSlot(s)) left = true;
     PendingNames = left;
+}
+static void FlushNames() { FlushNamesNow(false); }
+
+// theGameState's vtable +38h, Save(slot): the slot's previous function (the stock Save, or the Time Controls DLL's
+// handler, which calls it), then every pending Names record is written, so a name stored just before the game saves
+// and quits is in its Names file.
+typedef bool (__thiscall *GameSaveFn)(void *state, int slot);
+static GameSaveFn NextSave;
+static unsigned GsVtable;
+static bool __fastcall UniGameSave(void *state, void *, int slot) {
+    bool ok = NextSave(state, slot);
+    FlushNamesNow(true);
+    return ok;
 }
 
 // The short form a name box gives the game for its text (stored form w, n bytes) into dst's room; records the
@@ -631,6 +645,16 @@ static bool ResolveNames() {
         if (at + *(const int *)(at - 4) != NSITE(SET_CAN_EDIT)) { Log("a name box call is not SetCanEdit"); return false; }
         NameReturns[i] = at;
     }
+    // theGameState's Save slot holds theGameState::Save, or a handler outside the executable (Time Controls)
+    static const char gsName[] = UNI_GS_TYPE_NAME;
+    GsVtable = VtableOf(gsName, sizeof(gsName), data, dataCount, rodata, rodataCount);
+    if (!GsVtable) { Log("long names: theGameState's vtable is not found exactly once"); return false; }
+    unsigned save = *(const unsigned *)(GsVtable + UNI_GS_SAVE_VSLOT);
+    if (save != NSITE(GS_SAVE) && (!save || (save >= imageBase && save < imageEnd))) {
+        Log("long names: theGameState's Save slot holds another function");
+        return false;
+    }
+    NextSave = (GameSaveFn)save;
     return true;
 }
 
@@ -648,5 +672,6 @@ static void PlanNames(Plan &plan) {
     Trampoline(BoxDrawTrampoline, NSITE(BOX_DRAW), UNI_BOX_DRAW_STEAL);
     PlanJump(plan, NSITE(SET_CAN_EDIT), (const void *)&UniSetCanEdit, UNI_SET_CAN_EDIT_STEAL);
     PlanJump(plan, NSITE(BOX_DRAW), (const void *)&UniBoxDraw, UNI_BOX_DRAW_STEAL);
+    PlanSlot(plan, GsVtable + UNI_GS_SAVE_VSLOT, (const void *)&UniGameSave);
     NamesOn = plan.ok;
 }

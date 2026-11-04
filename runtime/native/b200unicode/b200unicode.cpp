@@ -1386,7 +1386,7 @@ static int __cdecl UniPollEvent(void *event) {
 #endif
 
 // ================================================================ plan and install
-static const unsigned kMaxWrites = 12;
+static const unsigned kMaxWrites = 13;
 struct HookWrite { unsigned va, len; bool data; unsigned char bytes[12], original[12]; };
 struct Plan { HookWrite writes[kMaxWrites]; unsigned count; bool ok; };
 

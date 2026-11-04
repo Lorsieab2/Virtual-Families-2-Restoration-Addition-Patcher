@@ -103,8 +103,12 @@ def load_pins(objs: Path, functions=None) -> list:
 
 
 def load_name_pins(objs: Path) -> list:
-    """The long names' pins (S.NAME_FUNCTIONS)."""
-    return load_pins(objs, S.NAME_FUNCTIONS)
+    """The long names' pins (S.NAME_FUNCTIONS); a pin's first S.NAME_PIN_SKIP bytes are not compared."""
+    pins = load_pins(objs, S.NAME_FUNCTIONS)
+    for p in pins:
+        skip = S.NAME_PIN_SKIP.get(p["name"], 0)
+        p["mask"] = bytes([1] * skip) + p["mask"][skip:]
+    return pins
 
 
 def name_box_returns(name_pins: list) -> list:
@@ -241,7 +245,10 @@ def resolve_names(exe: Exe, name_pins: list) -> dict:
         if (at + exe.u32(at - 4)) & 0xFFFFFFFF != sites["SET_CAN_EDIT"]:
             raise SiteError(f"the name box call before {at:#x} is not SetCanEdit")
         returns.append((kind, at))
-    return {"pins": loc, "sites": sites, "boxes": returns}
+    gvt = vtable(exe, S.GS_TYPE_NAME)
+    if exe.u32(gvt + S.GS_SAVE_VSLOT) != sites["GS_SAVE"]:
+        raise SiteError("theGameState's vtable +38h is not theGameState::Save")
+    return {"pins": loc, "sites": sites, "boxes": returns, "gs_vtable": gvt}
 
 
 def resolve(exe: Exe, pins: list) -> dict:
@@ -288,7 +295,9 @@ def _render_names(name_pins: list) -> list:
            f"#define UNI_GS_PLAYER_NAMES 0x{S.GS_PLAYER_NAMES:X}u",
            f"#define UNI_GS_PLAYER_STRIDE 0x{S.GS_PLAYER_STRIDE:X}u",
            f"#define UNI_FAMILY_ROOM {S.FAMILY_ROOM}u",
-           f"#define UNI_MEMBER_ROOM {S.MEMBER_ROOM}u", "", "enum UniNameSite {"]
+           f"#define UNI_MEMBER_ROOM {S.MEMBER_ROOM}u",
+           f'#define UNI_GS_TYPE_NAME "{S.GS_TYPE_NAME}"',
+           f"#define UNI_GS_SAVE_VSLOT 0x{S.GS_SAVE_VSLOT:X}u", "", "enum UniNameSite {"]
     out += [f"    UNI_NSITE_{n}," for n in names] + ["    UNI_NSITE_COUNT", "};", "", "enum UniNamePinId {"]
     out += [f"    UNI_NPIN_{p['name'].upper()}," for p in name_pins] + ["    UNI_NPIN_COUNT", "};", ""]
     for p in name_pins:
