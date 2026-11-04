@@ -303,6 +303,26 @@ def test_editor_autosave_progress_filter_and_person_choice(window):
     editor.close()
 
 
+def test_editor_warns_with_the_real_width_and_wraps_to_fit(window):
+    """A line wider than the game's 1,024-pixel screen in a game font: the editor says how wide (vf2_screen_edge,
+    measured with the game's own letters); Wrap to fit breaks it at the game's line breaks, the placeholder whole."""
+    import vf2_screen_edge as E
+    editor = window.open_editor(window.test["path"])
+    iid = next(i for i, r in editor.visible.items() if r.english.startswith("{name}"))
+    editor.tree.selection_set(iid)
+    editor.show_row()
+    long = "{name} est malade. " + "Il faut appeler le médecin du village tout de suite " * 4
+    editor.translation_text.insert("1.0", long)
+    editor.changed()
+    message = editor.message.get()
+    assert "pixels wide in Segoe" in message and "1024-pixel screen" in message and "Wrap to fit" in message
+    editor.wrap_to_fit()
+    wrapped = editor.translation_text.get("1.0", "end-1c")
+    assert "\n" in wrapped and "{name}" in wrapped and not E.too_wide(editor.screen_fonts(), wrapped)
+    assert "pixels wide" not in editor.message.get()
+    editor.close()
+
+
 def test_editor_marks_new_and_changed_lines_after_an_update(window):
     changed = tfmt.Entry(tfmt.make_key("strings", "1050", "Done!"), "Done!")
     newer = [changed] + ENTRIES[1:] + [tfmt.Entry(tfmt.make_key("strings", "2", "Status: "), "Status: ")]

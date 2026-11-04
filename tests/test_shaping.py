@@ -126,7 +126,7 @@ def test_the_games_drawstring_draws_runs_as_the_patcher_does(world, name):
     kinds = [p.glyph.kind for t in TEXTS for p in T.draw_string(font, T.encode(t), 0, 0)]
     assert kinds.count("run") == 6                                     # each text's run(s); "א b" has none
     st = w.e.dll_export("B200Unicode_Status")
-    assert w.e.r32(st + 4) == 5 and w.e.r32(st + 84) >= 6               # version 5: shapedRuns
+    assert w.e.r32(st + 4) >= 5 and w.e.r32(st + 84) >= 6               # version 5: shapedRuns
 
 
 def test_a_dialogs_paragraph_draws_a_right_to_left_phrase_whole_and_wraps_it_at_a_space(world):

@@ -44,6 +44,7 @@ GUI_TOOL_FILES = (
     "vf2_glyph_color.py",        # Game Font Text: colour emoji (Direct2D), as the Unicode text DLL draws them
     "vf2_emoji.py",              # Game Font Text: which characters are colour emoji
     "vf2_shaping.py",            # its shaped and right-to-left runs (the Unicode text DLL has the same rule)
+    "vf2_screen_edge.py",        # Translations: the screen's width check and Wrap to fit (the DLL's rule)
     "vf2_game_fonts.json",       # Game Font Text: the four game fonts' metrics (numbers only, no game art)
     "vf2_text_tool.py",          # Game Font Text: the window
     "vf2_unicode_font.py",       # Unicode Font: the window that picks Use Unicode Font's font
