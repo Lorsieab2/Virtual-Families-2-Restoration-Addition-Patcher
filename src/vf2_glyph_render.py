@@ -315,6 +315,30 @@ def weight_for(face: str, weight: int) -> int:
     return FW_NORMAL if face in ("Unifont", "Unifont Upper") else weight
 
 
+UNIFONT_FACES = ("Unifont", "Unifont Upper")
+
+
+@lru_cache(maxsize=256)
+def unifont_px(px: int) -> int:
+    """The size a fallback GNU Unifont is drawn at for a game font of px (the DLL's UnifontPx; the owner's decision):
+    the one that gives its "H" the height of Segoe UI's "H", the rows with a grey of 128 or more."""
+    def ink(face):
+        _adv, grey, w, _ox = render("H", face, px, FW_NORMAL, 3 * max(1, px), 0)
+        return sum(1 for y in range(3 * max(1, px)) if max(grey[y * w:(y + 1) * w]) >= 128)
+    s, u = ink(FALLBACK_CHAIN[0]), ink(UNIFONT_FACES[0])
+    return (px * s * 2 + u) // (2 * u) if s > 0 and u > 0 else px
+
+
+def embolden(grey: bytes, w: int, h: int, d: int) -> bytes:
+    """Each row's strokes thickened d pixels to the right (the DLL's synthetic bold of Unifont for a bold game font)."""
+    out = bytearray(grey)
+    for y in range(h):
+        row = grey[y * w:(y + 1) * w]
+        for x in range(w):
+            out[y * w + x] = max(row[max(0, x - d):x + 1])
+    return bytes(out)
+
+
 def font_for(cp: int, chain=FALLBACK_CHAIN) -> str | None:
     load_bundled_fonts()
     for face in chain:

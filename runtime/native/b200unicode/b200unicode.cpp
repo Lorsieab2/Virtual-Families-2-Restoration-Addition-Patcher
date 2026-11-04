@@ -442,6 +442,66 @@ static const wchar_t *FaceFor(unsigned base) {
     return 0;
 }
 
+// GNU Unifont, a thin 16-pixel design, is made to look like the game's letters (the owner's decision, B209;
+// src/vf2_glyph_render.unifont_px / embolden): as a fallback face it is drawn at the size that gives its "H" the
+// height of Segoe UI's "H" (GDI scales its outlines with grey anti-aliasing: smoothing), and for a bold game font its
+// strokes are thickened by (size + 7) / 14 pixels to the right (synthetic bold), before the font's alpha levels.
+static bool IsUnifont(const wchar_t *face) {
+    return lstrcmpiW(face, kChain[kBundledFirst + 1]) == 0 || lstrcmpiW(face, kChain[kBundledFirst + 2]) == 0;
+}
+
+// The rows of "H" (glyph by glyph number, top at row 0, pen at x = px) with a grey of 128 or more.
+static int InkHeight(const wchar_t *face, int px) {
+    int width = 10 * (px > 1 ? px : 1), h = 3 * (px > 1 ? px : 1), rows = 0;
+    unsigned g = GlyphIndex(CmapOf(face, FW_NORMAL), 'H');
+    HDC dc = g ? CreateCompatibleDC(0) : 0;
+    if (!dc) return 0;
+    BITMAPINFO bmi;
+    for (unsigned k = 0; k < sizeof(bmi); ++k) ((unsigned char *)&bmi)[k] = 0;
+    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bmi.bmiHeader.biWidth = width;
+    bmi.bmiHeader.biHeight = -h;
+    bmi.bmiHeader.biPlanes = 1;
+    bmi.bmiHeader.biBitCount = 32;
+    void *bits = 0;
+    HBITMAP bmp = CreateDIBSection(dc, &bmi, DIB_RGB_COLORS, &bits, 0, 0);
+    if (bmp && bits) {
+        HGDIOBJ oldBmp = SelectObject(dc, bmp);
+        HFONT f = MakeFont(face, px, FW_NORMAL);
+        HGDIOBJ oldFont = SelectObject(dc, f);
+        SetTextColor(dc, 0x00FFFFFF);
+        SetBkColor(dc, 0);
+        SetBkMode(dc, OPAQUE);
+        SetTextAlign(dc, 0);
+        unsigned char *b = (unsigned char *)bits;
+        for (int k = 0; k < width * h * 4; ++k) b[k] = 0;
+        WORD gi = (WORD)g;
+        ExtTextOutW(dc, px, 0, ETO_GLYPH_INDEX, 0, (LPCWSTR)&gi, 1, 0);
+        GdiFlush();
+        for (int y = 0; y < h; ++y) {
+            bool ink = false;
+            for (int x = 0; x < width && !ink; ++x) ink = b[(y * width + x) * 4 + 1] >= 128;
+            if (ink) ++rows;
+        }
+        SelectObject(dc, oldFont);
+        DeleteObject(f);
+        SelectObject(dc, oldBmp);
+    }
+    if (bmp) DeleteObject(bmp);
+    DeleteDC(dc);
+    return rows;
+}
+
+static int UnifontPx(int px) {
+    static int cache[256];
+    if (px <= 0 || px >= 256) return px;
+    if (!cache[px]) {
+        int s = InkHeight(kChain[0], px), u = InkHeight(kChain[kBundledFirst + 1], px);
+        cache[px] = s > 0 && u > 0 ? (px * s * 2 + u) / (2 * u) : px;
+    }
+    return cache[px];
+}
+
 // src/vf2_glyph_render.render + src/vf2_game_text.runtime_glyph: the cluster drawn glyph by glyph on a 10 x px canvas
 // (pen from x = px, the text's top at ty; baseline: the text's baseline at ty, TA_BASELINE - Use Unicode Font), cut to
 // its advance, grey -> the sheet's alpha levels. alpha gets width * lineHeight bytes (at most cap). Returns the
@@ -453,6 +513,8 @@ static int RenderRuntime(const ut::Unit &u, const UniFont &font, int px, int ty,
         if (!ut::IsExtend(u.cps[i]) || u.ncp == 1) { base = u.cps[i]; break; }
     const wchar_t *face = FaceFor(base);
     if (!face) return -1;
+    bool unifont = IsUnifont(face);
+    if (unifont && face != OverrideFace) px = UnifontPx(px);         // a fallback Unifont: the game's letter height
     int h = font.lineHeight, width = 10 * (px > 1 ? px : 1);
     int weight = WeightFor(face, font.weight);
     CmapCache *cm = CmapOf(face, weight);
@@ -489,6 +551,20 @@ static int RenderRuntime(const ut::Unit &u, const UniFont &font, int px, int ty,
     }
     GdiFlush();
     int adv = pen - px;
+    if (unifont && font.weight >= 600) {
+        // a bold game font: each row's strokes thickened d pixels to the right (synthetic bold), the cell as much wider
+        int d = (px + 7) / 14;
+        static unsigned char row[4096];
+        for (int y = 0; y < h && width <= 4096; ++y) {
+            for (int x = 0; x < width; ++x) row[x] = b[(y * width + x) * 4 + 1];
+            for (int x = 0; x < width; ++x) {
+                unsigned char m = row[x];
+                for (int k = 1; k <= d && k <= x; ++k) if (row[x - k] > m) m = row[x - k];
+                b[(y * width + x) * 4 + 1] = m;
+            }
+        }
+        adv += d;
+    }
     if (adv > width - px) adv = width - px;
     if (adv < 0) adv = 0;
     if ((unsigned)(adv * h) <= cap) {

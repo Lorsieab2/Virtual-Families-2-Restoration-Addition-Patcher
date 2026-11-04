@@ -245,3 +245,33 @@ def test_the_dll_loads_the_bundled_fonts_privately_and_draws_them_like_the_patch
             for (x, _y, _w, _h, a), (_x, _yy, _ww, _hh, b) in zip(game, mine):
                 assert a[3::4] == b[3::4], (name, text, x)
             assert w.width(name, raw) == T.get_width(font, raw), (name, text)
+
+
+def test_a_fallback_unifont_has_the_game_letters_height_and_a_bold_fonts_weight():
+    """The owner's decision (B209): GNU Unifont, a thin 16-pixel design, is drawn at the size that gives its "H" the
+    height of Segoe UI's "H", and for a bold game font its strokes are thickened (synthetic bold) before the font's
+    alpha levels; every other face is drawn as before."""
+    import vf2_glyph_render as R
+    import vf2_game_text as T
+    if not R.available():
+        pytest.skip("needs Windows' GDI")
+    R.load_bundled_fonts()
+
+    def ink(face, px):
+        _a, grey, w, _o = R.render("H", face, px, R.FW_NORMAL, 3 * px, 0)
+        return sum(1 for y in range(3 * px) if max(grey[y * w:(y + 1) * w]) >= 128)
+    for name in T.FONT_NAMES:
+        font = T.load_font(name)
+        px = font.gdi["px"]
+        big = R.unifont_px(px)
+        assert big > px and abs(ink("Unifont", big) - ink("Segoe UI", px)) <= 1, name
+        g = font.glyph(T.units(T.encode("\U0001ccfa"))[0])          # Unifont Upper only
+        assert g.source == "Unifont Upper", name
+        plain, _grey, _w, _ox = R.render("\U0001ccfa", "Unifont Upper", big, R.FW_NORMAL, font.line_height,
+                                         T.unicode_baseline(font), True)
+        if font.gdi["weight"] >= 600:
+            assert g.width == plain + (big + 7) // 14, name                 # thickened, the cell as much wider
+        else:
+            assert g.width == plain, name
+    hangul = T.load_font("Segoe24Bold").glyph(T.units(T.encode("\uac00"))[0])
+    assert hangul.source != "Unifont"                                        # other faces: unchanged
