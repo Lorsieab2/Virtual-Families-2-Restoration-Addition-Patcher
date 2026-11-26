@@ -3673,6 +3673,7 @@ class TestSuiteCopiesInSyncTests(unittest.TestCase):
             "vf2_game_speed.py",
             "vf2_game_mechanics.py",
             "vf2_game_mechanics_window.py",
+            "vf2_game_mechanics_family.py",
             "vf2_save_reader.py",
             "vf2_game_text.py",
             "vf2_names.py",

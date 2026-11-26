@@ -6,8 +6,9 @@ of the resizable window, each group under its heading and every line a bullet.  
 after the bullet -- VERIFIED-E, VERIFIED-C or UNCONFIRMED (src/vf2_game_mechanics.py) -- in capitals and in its
 own colour, so it is always visible.  Times are real times at the game's normal speed.
 
-It only shows text: it reads no save, writes nothing (no save, install, log, data or settings file), and runs
-nothing else, so it may be open while the game runs.  Closing it destroys only the window.
+It only shows text: it reads only the save of the family chosen at the top (for the Family members group,
+src/vf2_game_mechanics_family.py), writes nothing (no save, install, log, data or settings file), and runs nothing
+else, so it may be open while the game runs.  Closing it destroys only the window.
 """
 from __future__ import annotations
 
@@ -29,8 +30,21 @@ LABEL_COLOURS = {gm.VERIFIED_E: "#1b6e20", gm.VERIFIED_C: "#245a9a", gm.UNCONFIR
 NOTE_RED = LABEL_COLOURS[gm.UNCONFIRMED]
 
 
-def open_game_mechanics(parent: tk.Misc) -> tk.Toplevel:
-    """Open the window over `parent` and return it."""
+NO_FAMILY = "No family save was found in the save folders, so there is nobody to list."
+
+
+def family_page(family) -> list[gm.Fact]:
+    """The Family members group for `family` (a vf2_game_mechanics_family.Family, or None for none found)."""
+    import vf2_game_mechanics_family as people
+    if family is None:
+        return [gm.Fact(gm.FAMILY, NO_FAMILY, gm.VERIFIED_C, "src/vf2_game_mechanics_window.py")]
+    return people.facts(family.path)
+
+
+def open_game_mechanics(parent: tk.Misc, families=()) -> tk.Toplevel:
+    """Open the window over `parent` and return it.  `families` (vf2_game_mechanics_family.find_families) are the
+    families the chooser at the top offers; the Family members group lists the chosen one's people."""
+    families = list(families)
     window = tk.Toplevel(parent)
     window.title(TITLE)
     with contextlib.suppress(tk.TclError):
@@ -51,6 +65,12 @@ def open_game_mechanics(parent: tk.Misc) -> tk.Toplevel:
     note.pack(anchor="w", pady=(4, 8))
     top.bind("<Configure>", lambda event: (intro.configure(wraplength=max(200, event.width - 8)),
                                            note.configure(wraplength=max(200, event.width - 8))))
+    chooser = ttk.Frame(outer)
+    chooser.pack(fill="x", pady=(0, 6))
+    ttk.Label(chooser, text="Family:").pack(side="left")
+    family_box = ttk.Combobox(chooser, state="readonly", values=[f.label for f in families] or [NO_FAMILY])
+    family_box.pack(side="left", fill="x", expand=True, padx=(6, 0))
+    family_box.current(0)
     links = ttk.Frame(outer)
     links.pack(fill="x", pady=(0, 6))
     buttons = ttk.Frame(outer)
@@ -74,18 +94,33 @@ def open_game_mechanics(parent: tk.Misc) -> tk.Toplevel:
         page.tag_configure(label, foreground=colour, font=fonts["label"])
 
     marks: dict[str, str] = {}
-    for kind, label, text in gm.render_lines():
-        if kind == "heading":
-            marks[text] = page.index("end-1c")
-            page.insert("end", text + "\n", "heading")
-            continue
-        sub = text.startswith(gm.SUB_BULLET)
-        mark = gm.SUB_BULLET if sub else gm.BULLET
-        style = "sub" if sub else "line"
-        page.insert("end", mark, style)
-        page.insert("end", label, (style, label))
-        page.insert("end", "  " + text[len(mark):] + "\n", style)
-    page.configure(state="disabled")
+    rules = gm.facts()
+
+    def fill() -> None:
+        """Write the page: the rules, and the chosen family's members in their group."""
+        index = family_box.current()
+        items = gm.in_order(rules + family_page(families[index] if 0 <= index < len(families) else None))
+        top_line = page.index("@0,0")
+        page.configure(state="normal")
+        page.delete("1.0", "end")
+        marks.clear()
+        for kind, label, text in gm.render_lines(items):
+            if kind == "heading":
+                marks[text] = page.index("end-1c")
+                page.insert("end", text + "\n", "heading")
+                continue
+            sub = text.startswith(gm.SUB_BULLET)
+            mark = gm.SUB_BULLET if sub else gm.BULLET
+            style = "sub" if sub else "line"
+            page.insert("end", mark, style)
+            page.insert("end", label, (style, label))
+            page.insert("end", "  " + text[len(mark):] + "\n", style)
+        page.configure(state="disabled")
+        page.yview(top_line)
+        window.family_page = items             # for the tests
+
+    fill()
+    family_box.bind("<<ComboboxSelected>>", lambda _event: fill())
 
     def jump(group: str) -> None:
         page.see("end")
@@ -109,4 +144,5 @@ def open_game_mechanics(parent: tk.Misc) -> tk.Toplevel:
     window.mechanics_marks = marks
     window.mechanics_links = links
     window.mechanics_jump = jump
+    window.family_box = family_box
     return window

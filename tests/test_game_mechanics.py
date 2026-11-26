@@ -22,7 +22,7 @@ class PageTests(unittest.TestCase):
 
     def test_groups_are_the_owners_list_in_order(self):
         self.assertEqual(gm.GROUPS, (
-            "Time and ageing", "Hidden keys, clicks and cheats", "Needs and upkeep", "Health and sickness", "Old age", "Pregnancy and babies",
+            "Time and ageing", "Hidden keys, clicks and cheats", "Family members", "Needs and upkeep", "Health and sickness", "Old age", "Pregnancy and babies",
             "Careers", "Money and interest", "Leaving home", "Dating, marriage and the next generation",
             "Random Events", "Weather", "Messes and malfunctions", "Collectibles", "The store: prices and buying",
             "Food and Medicine", "Flea Market", "Special Upgrades", "Services", "Home Renovation", "Career upgrades",

@@ -303,7 +303,8 @@
         "Every time is real time at the game's normal speed. Every chance is the game's own exact chance.",
         "Each line is marked VERIFIED-E (the game's own code was run and counted), VERIFIED-C (read from the game's own code) or UNCONFIRMED (not yet shown either way).",
         "Click a topic's button at the top to jump to it.",
-        "It only shows text: it reads no save and changes nothing, so the game may be running."
+        "Choose a family at the top: Family members lists each person as its save holds them (age, health, sickness, needs, career, likes, spouse, parents, children, pregnancy).",
+        "It only shows text: it reads the chosen family's save and changes nothing, so the game may be running."
       ]
     },
     "family_tree": {
