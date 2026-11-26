@@ -33,8 +33,11 @@ executable (every patcher option byte 0). It is modelled on the Virtual Villager
 
 ## What it does not do
 
-It reads no save and writes nothing: no save, install, log, data or settings file. It shows the same page for
-every family. Closing it destroys only the window; the Tools tab opens one at a time.
+It writes nothing: no save, install, log, data or settings file. The rules are the same page for every family; the
+only file it reads is the save of the family chosen at the top, for the Family members group
+(`src/vf2_game_mechanics_family.py`: every person with the values their villager record holds, read with
+`vf2_save_reader`, and the whole names from the patcher's Names file). Closing it destroys only the window; the
+Tools tab opens one at a time.
 
 ## Words
 

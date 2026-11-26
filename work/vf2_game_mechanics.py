@@ -1,7 +1,8 @@
 """Game Mechanics (the Tools tab's window, src/vf2_game_mechanics_window.py): Virtual Families 2's hidden rules.
 
 For the curious, and read-only: every line is a rule of the game as the B200 core executable runs it, in plain
-words and real time, grouped as GROUPS.  Nothing here reads or writes a save, an install, a log or a data file.
+words and real time, grouped as GROUPS.  Nothing here reads or writes a save, an install, a log or a data file; the
+Family members group's people are read from the chosen save by src/vf2_game_mechanics_family.py, which only reads.
 
 Where each line comes from (docs/game-mechanics/spec.md, the research spec of the B200 core executable
 `Virtual Families 2 - B200.exe`, sha256 5cad4050..., in which every patcher option byte is 0):
@@ -69,7 +70,8 @@ UNCONFIRMED = "UNCONFIRMED"
 LABELS = (VERIFIED_E, VERIFIED_C, UNCONFIRMED)
 
 INTRO = ("For the curious: Virtual Families 2's hidden rules, as the game's own code runs them. Every time is a "
-         "real time at the game's normal speed. It only reads: nothing is changed, so the game may be running. "
+         "real time at the game's normal speed. Family members lists every person of the family you choose, as its "
+         "save holds them. It only reads: nothing is changed, so the game may be running. "
          "The page describes the game with the patcher applied, and gives the unpatched game's behaviour "
          "wherever it differs.")
 WITH_PATCHER = "With the patcher: "
@@ -104,8 +106,12 @@ PETS = "Pets"
 CLOTHING = "Clothing and Hairstyles"
 ACTIONS = "Actions"
 INDEX = "Chance and timer index"
+# Every person of the family chosen at the top of the window, one by one (src/vf2_game_mechanics_family.py; the
+# owner approved the port of the Virtual Villagers patcher's per-villager group, 2026-11-26). facts() holds only its
+# first line: the people are the chosen save's.
+FAMILY = "Family members"
 STORE_GROUPS = (STORE, FOOD, FLEA, UPGRADES, SERVICES, RENOVATION, CAREER_UPGRADES, FURNITURE, PETS, CLOTHING, ACTIONS)
-GROUPS = (TIME, HIDDEN, NEEDS, HEALTH, OLD_AGE, PREGNANCY, CAREERS_GROUP, MONEY, LEAVING, DATING, EVENTS, WEATHER, MESSES,
+GROUPS = (TIME, FAMILY, HIDDEN, NEEDS, HEALTH, OLD_AGE, PREGNANCY, CAREERS_GROUP, MONEY, LEAVING, DATING, EVENTS, WEATHER, MESSES,
           COLLECTIBLES) + STORE_GROUPS + (INDEX,)
 
 BULLET, SUB_BULLET = "• ", "    – "
@@ -1213,7 +1219,19 @@ def facts() -> list[Fact]:
             ("time away made up: at most 31,000 seconds of real time at Normal speed, or 24 hours when more than 24 "
              "hours away.", E)):
         add(_f(INDEX, text, label, "spec 17", sub=True))
-    return out
+
+    # ------------------------------------------------------------------ Family members (the chosen save's people)
+    add(_f(FAMILY, "The family chosen at the top of the window, one person at a time, as its save holds them: age, "
+                   "health and sickness, the Details screen's bars and the hidden needs, food groups, career and "
+                   "salary, likes and dislikes, \"Wants kids?\" and fertility, spouse, parents, children and a "
+                   "pregnancy. Each value is read from the save; the rules it follows are in the other groups.", C,
+           "src/vf2_game_mechanics_family.py"))
+    return in_order(out)
+
+
+def in_order(items: list[Fact]) -> list[Fact]:
+    """`items` in GROUPS order, each group's lines in the order given."""
+    return sorted(items, key=lambda fact: GROUPS.index(fact.group))
 
 
 # Random Events of the core build (spec 11 table), in family words.  Each line's label: VERIFIED-E (run as linked)

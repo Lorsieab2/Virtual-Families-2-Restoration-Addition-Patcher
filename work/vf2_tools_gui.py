@@ -207,7 +207,10 @@ class ToolsTabMixin:
                     existing.deiconify()
                     existing.lift()
                     return existing
-        window = vf2_game_mechanics_window.open_game_mechanics(self.root)
+        import vf2_game_mechanics_family
+        folders = vf2_save_backup.find_save_folders(vf2_save_backup.documents_folder())
+        window = vf2_game_mechanics_window.open_game_mechanics(
+            self.root, vf2_game_mechanics_family.find_families(folders))
         self._game_mechanics_window = window
         return window
 

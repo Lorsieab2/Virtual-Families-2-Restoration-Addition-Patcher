@@ -174,7 +174,11 @@ actions, as before. **Tools** holds:
   `tests/test_game_mechanics_b200_exe.py` (set `VF2_B200_CORE_EXE`): time away (up to 31,000 s in full, 31,000 s
   up to 24 h away, 24 h when longer), a paused clock that stops, the Grains-slot extra food group for family
   members without a career, interest of at most 2 missed days, Brokerage bought again giving 1%, malfunctions that
-  roll while paused, and a Flea Market that never rotates in B200. It reads no save and writes nothing.
+  roll while paused, and a Flea Market that never rotates in B200. Its **Family members** group lists every person
+  of the family chosen at the top of the window, as the save holds them: age, health, symptoms and infections, the
+  Details screen's bars and the hidden needs, food groups, career, level, progress and salary, likes and dislikes,
+  "Wants kids?" and fertility, spouse, parents, children, a pregnancy and the whole name from the patcher's Names
+  file (`src/vf2_game_mechanics_family.py`, tests `tests/test_game_mechanics_family.py`). It writes nothing.
   `python scripts/export_game_mechanics_claims.py <folder>` writes every line with its label and evidence.
   Code: `src/vf2_game_mechanics.py` (the lines) and `src/vf2_game_mechanics_window.py`; the window:
   `docs/game-mechanics-window.md`; tests: `tests/test_game_mechanics.py`.
