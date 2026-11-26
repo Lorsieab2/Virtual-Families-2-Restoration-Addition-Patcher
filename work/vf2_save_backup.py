@@ -75,6 +75,7 @@ BEFORE_RESTORE = "(before restore)"
 BEFORE_RENAME = "(before rename)"    # Rename Family makes this backup before it writes the new name
 BEFORE_SPEED_CHANGE = "(before speed change)"   # Game Speed makes this backup before it writes the new speed
 BEFORE_COPY = "(before copy)"        # Copy Player Slot makes this backup before it copies a family
+BEFORE_MOVE = "(before move)"        # Move Player Slot (the Copy Player Slot window) backs up before it moves
 INCOMPLETE = " INCOMPLETE"
 IN_PROGRESS = " (in progress)"
 DELETING = " (deleting)"
@@ -83,7 +84,7 @@ DELETE_RETRY_SECONDS = 0.5
 
 _BACKUP_NAME = re.compile(
     r"^Backup (\d{4}-\d{2}-\d{2} \d{2}-\d{2}-\d{2})(?: \((\d+)\))?"
-    r"(?: (\(before restore\)|\(before rename\)|\(before speed change\)|\(before copy\)))?$"
+    r"(?: (\(before restore\)|\(before rename\)|\(before speed change\)|\(before copy\)|\(before move\)))?$"
 )
 # The game's save files are exactly "Virtual Families 2" + N + ".ldw" (one space, N without leading zeros):
 # 0 is the shared settings, 1-5 are families, N + 20 is the previous save of slot N (made for 1-5 only).
@@ -744,6 +745,7 @@ class BackupInfo:
     before_rename: bool = False
     before_speed_change: bool = False
     before_copy: bool = False
+    before_move: bool = False
 
     @property
     def label(self) -> str:
@@ -756,6 +758,8 @@ class BackupInfo:
             text += " " + BEFORE_SPEED_CHANGE
         elif self.before_copy:
             text += " " + BEFORE_COPY
+        elif self.before_move:
+            text += " " + BEFORE_MOVE
         return text
 
 
@@ -826,7 +830,7 @@ def list_backups(save_folder: Path) -> list[BackupInfo]:
         size = sum((entry / relative).stat().st_size for relative in files)
         found.append((when, sequence, BackupInfo(entry, when, label == BEFORE_RESTORE, len(files), size, slots_in(files),
                                                      label == BEFORE_RENAME, label == BEFORE_SPEED_CHANGE,
-                                                     label == BEFORE_COPY)))
+                                                     label == BEFORE_COPY, label == BEFORE_MOVE)))
     found.sort(key=lambda item: (item[0], item[1]), reverse=True)
     return [info for _when, _sequence, info in found]
 

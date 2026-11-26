@@ -512,6 +512,62 @@ class ToolsTabTests(unittest.TestCase):
         self.assertEqual(self.app.status_var.get(), "Copy Player Slot: nothing was copied.")
         dialog.destroy()
 
+    # -- Copy Player Slot: Move and Delete -----------------------------------
+
+    def test_move_asks_with_the_full_list_and_no_changes_nothing_yes_moves(self):
+        import vf2_save_reader as reader
+        self._real_saves()
+        before = self._snapshot()
+        dialog = self.app.copy_player_slot()
+        dialog._vf2_mode_var.set("move")
+        dialog.update()
+        self.assertEqual(str(dialog._vf2_copy_button.cget("text")), "Move...")
+        self._pick_target(dialog, "Save 4 (empty)")
+        self.assertEqual(dialog._vf2_problem_var.get(), "")
+        self.assertEqual(str(dialog._vf2_copy_button.cget("state")), "normal")
+        shown = []
+        with mock.patch.object(self.app, "_confirm_preview",
+                               lambda parent, title, text, lines, question: shown.append((title, lines)) or False):
+            dialog._vf2_start()
+        self.assertEqual(shown[0][0], "Move Player Slot")
+        self.assertIn("Virtual Families 21.ldw  ->  Virtual Families 24.ldw", shown[0][1])
+        self.assertEqual(self._snapshot(), before)
+        self.assertFalse((self.folder / "Backups").exists())
+        self.assertEqual(self.app.status_var.get(), "Move Player Slot: nothing was moved.")
+        with mock.patch.object(self.app, "_confirm_preview", return_value=True):
+            dialog._vf2_start()
+        self.assertFalse((self.folder / "Virtual Families 21.ldw").exists())
+        self.assertEqual((self.folder / "Virtual Families 24.ldw").read_bytes(), before[Path("Virtual Families 21.ldw")])
+        self.assertEqual(reader.read_settings(self.folder / "Virtual Families 20.ldw").player_names[0], "NEW PLAYER")
+        self.assertTrue(sb.list_backups(self.folder)[0].before_move)
+        self.assertIn("moved from Save 1 to Save 4", self.app.status_var.get())
+        dialog.destroy()
+
+    def test_delete_lists_every_slot_with_files_and_asks_twice(self):
+        import vf2_delete_slot as ds
+        self._real_saves()
+        before = self._snapshot()
+        dialog = self.app.copy_player_slot()
+        dialog._vf2_mode_var.set("delete")
+        dialog.update()
+        self.assertEqual(str(dialog._vf2_copy_button.cget("text")), "Delete...")
+        listed = [dialog._vf2_slot_list.get(k) for k in range(dialog._vf2_slot_list.size())]
+        self.assertEqual(listed, [label for _slot, label in ds.deletable_slots(self.folder)])
+        self.assertEqual(listed[0], "Save 1: Lorsieab2")
+        asked, shown = [], []
+        with mock.patch.object(self.app, "_confirm_preview",
+                               lambda parent, title, text, lines, question: shown.append(question) or True), \
+                mock.patch.object(self.app, "_confirm_copy",
+                                  lambda parent, text, title="": asked.append((title, text)) or False), \
+                mock.patch.object(ds, "_shell", side_effect=AssertionError("never the real Recycle Bin")):
+            dialog._vf2_start()
+        self.assertEqual(shown, ["Delete it?"])
+        self.assertEqual(asked[0][0], "Delete Player Slot")
+        self.assertTrue(asked[0][1].startswith("Delete Lorsieab2 from Save 1?"))
+        self.assertEqual(self._snapshot(), before)
+        self.assertEqual(self.app.status_var.get(), "Delete Player Slot: nothing was deleted.")
+        dialog.destroy()
+
     # -- Game Speed ---------------------------------------------------------
 
     def _speed_saves(self):
