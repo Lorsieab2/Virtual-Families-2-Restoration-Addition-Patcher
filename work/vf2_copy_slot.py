@@ -101,6 +101,7 @@ EXPORTS_FOLDER = "Family Tree"                          # Save <N>\Family Tree: 
 TREE_FORMAT = "Virtual Families 2 Patcher family tree"   # vf2_tree_memory.FORMAT
 FLAG_FIRST = reader.HEADER_SIZE + 0x79                   # the settings file's in-use flag of slot 1 (gs+0x25B99)
 REPLACED = "replaced by copy"
+REPLACED_MOVE = "replaced by move"         # Move Player Slot (vf2_move_slot) sets a target's files aside under this
 
 # The two sidecar formats (runtime/native/b200kids/b200kids.cpp and b200outfits.cpp, "the sidecar"): magic, version 1
 # at +8, "VF2B200\0" at +12, the file's size at +20, the save file's FNV-1a 64 at +24 and its size at +32, and the
@@ -357,10 +358,21 @@ class CopyPlan:
 _UNSAFE = re.compile(r'[\\/:*?"<>|]')
 
 
-def aside_name(when: datetime, target: int, old_name: str) -> str:
-    """"Replaced by copy <YYYY-MM-DD HH-MM-SS> - Save <N> - <old name>" (the name all the patchers share)."""
+def aside_name(when: datetime, target: int, old_name: str, kind: str = REPLACED) -> str:
+    """"Replaced by copy <YYYY-MM-DD HH-MM-SS> - Save <N> - <old name>" (the name all the patchers share; Move
+    Player Slot's ``kind`` is REPLACED_MOVE, "Replaced by move ...")."""
     shown = _UNSAFE.sub("_", old_name).strip(" .") or "(no name)"
-    return f"{REPLACED.capitalize()} {when:%Y-%m-%d %H-%M-%S} - Save {target} - {shown}"
+    return f"{kind.capitalize()} {when:%Y-%m-%d %H-%M-%S} - Save {target} - {shown}"
+
+
+_ASIDE_SLOT = re.compile(r"^Replaced by (?:copy|move) \d{4}-\d{2}-\d{2} \d{2}-\d{2}-\d{2} - Save ([1-5]) - ", re.I)
+
+
+def aside_slot(name: str) -> int | None:
+    """The slot whose files a "Replaced by copy/move <date> - Save <N> - <name>" folder holds (only the FIRST
+    "- Save <N> -" is the slot: a family may be named "A - Save 1 - B"), or None for any other folder."""
+    match = _ASIDE_SLOT.match(name or "")
+    return int(match.group(1)) if match else None
 
 
 def target_family_name(folder: Path, target: int) -> str:
@@ -376,12 +388,12 @@ def target_family_name(folder: Path, target: int) -> str:
     return "(no name)"
 
 
-def aside_folder(folder: Path, when: datetime, target: int, old_name: str) -> Path:
+def aside_folder(folder: Path, when: datetime, target: int, old_name: str, kind: str = REPLACED) -> Path:
     """<save folder>\\Backups\\<aside_name> (" (2)", ... when taken): where a replaced family's files and an empty
     slot's leftovers go, keeping their paths. Nothing reads it: the game opens only exact save names in the save
     folder, the DLLs only their own sidecar paths, Back Up Saves copies everything but Backups and offers only
     "Backup <date>" folders for a restore, and the patcher's readers look only at the slot's own paths."""
-    base = folder / save_backup.BACKUPS_FOLDER / aside_name(when, target, old_name)
+    base = folder / save_backup.BACKUPS_FOLDER / aside_name(when, target, old_name, kind)
     candidate, k = base, 2
     while candidate.exists():
         candidate = base.with_name(f"{base.name} ({k})")

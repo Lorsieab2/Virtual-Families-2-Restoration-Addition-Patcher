@@ -71,6 +71,8 @@ REQUIRED_RUNNERS = {
     "vf2_how_to_use.json",
     "vf2_rename_family.py",
     "vf2_copy_slot.py",
+    "vf2_move_slot.py",      # Move Player Slot (the Copy Player Slot window's Move choice)
+    "vf2_delete_slot.py",    # Delete Player Slot (its Delete choice)
     "vf2_game_speed.py",
     "vf2_game_mechanics.py",
     "vf2_game_mechanics_window.py",
