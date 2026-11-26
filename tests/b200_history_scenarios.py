@@ -1447,6 +1447,44 @@ def scenario_a_loss_the_log_never_saw_is_not_guessed(w: HistoryWorld):
     assert w.last()[1][10:12] == ["  Remarried: yes", "  Earlier spouse: Cal"]
 
 
+def _append_records(w: HistoryWorld, *records):
+    """Records added to Save 1's log as earlier events wrote them (CRLF lines, a blank line after each)."""
+    path = w.history_path()
+    w.fs.write(path, w.fs.read(path) + "".join("\r\n".join(r) + "\r\n\r\n" for r in records).encode("utf-8"))
+
+
+def scenario_a_namesake_childs_death_is_not_the_divorced_spouses(w: HistoryWorld):
+    """Ana divorces Ben; their son, also Ben, dies; Ana remarries. The earlier spouse left by divorce: the son's
+    Death (Family role: Child) is never read as the earlier spouse's."""
+    founded(w)
+    w.divorce()
+    _append_records(w, [STAMP + "Death 1", "  Name: Ben", "  Age at death: 6", "  Sex: Male",
+                        "  Cause of death: Illness", "  Head: 3", "  Body: 4", "  Family role: Child",
+                        "  Generation: 1"])
+    w.set_villager(2, "Dan", MALE, age=640)
+    w.marry(0, 2)
+    assert w.last() == ("Marriage 2", remarriage_lines("Ana", 25, FEMALE, "Dan", 32, MALE, "Ben", "divorced"))
+
+
+def scenario_a_marriage_before_the_generation_began_is_not_an_earlier_spouse(w: HistoryWorld):
+    """From the 30th generation every generation says "Generation: 30" (the tree keeps 30 records), so the number
+    alone cannot tell them apart: a marriage before the record that began this generation belongs to another
+    generation, even with the same names, and the heir's first marriage is not a remarriage."""
+    w.household(("Ana", FEMALE, 500), ("Ben", MALE, 520))
+    w.set_active(1, 0)
+    w.new_family(0)
+    _append_records(w,
+                    [STAMP + "Marriage 1", "  Family member: Zed", "  Married: Ana",
+                     "  Current spouse of Zed: Ana", "  Generation: 1"],
+                    [STAMP + "New Generation 1", "  Name: Ana", "  Age: 19", "  Sex: Female",
+                     "  Head: 3", "  Body: 4", "  How: Heir (inherited the house)", "  Generation: 1"])
+    w.set_active(1, 1)
+    w.marry(0, 1)
+    heading, lines = w.last()
+    assert heading == "Marriage 2", heading
+    assert not any(line.startswith(("  Remarried", "  Earlier spouse")) for line in lines), lines
+
+
 # ====================================================================== whole names (the slot's Names file)
 def _short(whole: str, room: int, taken: dict) -> bytes:
     """The save's field for `whole`: its short form in the stored form, recorded in `taken` (short -> whole)."""
@@ -1612,6 +1650,8 @@ ALL = [scenario_whole_names_in_the_log, scenario_names_are_logged_in_utf8,
        scenario_a_missing_names_file_logs_the_stored_name,
        scenario_a_names_record_with_a_wrong_checksum_is_skipped,
        scenario_rename_in_the_details_box, scenario_same_sex_marriage, scenario_a_loss_the_log_never_saw_is_not_guessed,
+       scenario_a_namesake_childs_death_is_not_the_divorced_spouses,
+       scenario_a_marriage_before_the_generation_began_is_not_an_earlier_spouse,
        scenario_new_family_and_marriage, scenario_conception_and_birth_single, scenario_the_father_after_a_load,
        scenario_twins, scenario_triplets, scenario_child_dies, scenario_spouse_dies_and_remarriage,
        scenario_spouse_with_a_child_dies_and_remarriage, scenario_head_dies_and_the_widow_remarries,
