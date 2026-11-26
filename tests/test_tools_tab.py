@@ -559,7 +559,8 @@ class ToolsTabTests(unittest.TestCase):
                                lambda parent, title, text, lines, question: shown.append(question) or True), \
                 mock.patch.object(self.app, "_confirm_copy",
                                   lambda parent, text, title="": asked.append((title, text)) or False), \
-                mock.patch.object(ds, "_shell", side_effect=AssertionError("never the real Recycle Bin")):
+                mock.patch.object(ds, "_shell", side_effect=AssertionError("never the real Recycle Bin")), \
+                mock.patch.object(ds, "warm_recycle_bin"):
             dialog._vf2_start()
         self.assertEqual(shown, ["Delete it?"])
         self.assertEqual(asked[0][0], "Delete Player Slot")

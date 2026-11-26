@@ -32,7 +32,8 @@ class FakeBin:
     def __init__(self, folder: Path, refuse: int | None = None):
         self.root = folder.parent / "bin"
         self.folder = folder
-        self.calls: list[list[Path]] = []
+        self.calls: list[list[Path]] = []        # what each call was handed: files, or whole folders
+        self.files: list[Path] = []              # every file those held
         self.kept: dict[Path, Path] = {}
         self.refuse = refuse
 
@@ -41,6 +42,7 @@ class FakeBin:
         if self.refuse is not None and len(self.calls) > self.refuse:
             raise OSError("the stand-in Recycle Bin refused")
         for path in paths:
+            self.files += sorted(p for p in path.rglob("*") if p.is_file()) if path.is_dir() else [path]
             place = self.root / str(len(self.kept))
             place.parent.mkdir(parents=True, exist_ok=True)
             shutil.move(str(path), str(place))
@@ -145,6 +147,91 @@ class DeleteTests(Base):
         result = self.delete(recycle=FakeBin(self.folder, refuse=0))
         self.assertEqual(result.recycled, [])
         self.assertEqual(self.snapshot(backups=True), before)
+
+
+class FastTests(Base):
+    """The Virtual Villagers patcher's PR #876 (the owner, 2026-11-25: "almost instant"): one Recycle Bin call for
+    each part (the save folder, each backup, each set-aside folder), a folder holding nothing but 30 or more of the
+    slot's files sent whole -- the same files, every one still checked afterwards."""
+
+    def many_logs(self, count=300):
+        for n in range(count):
+            self.put(f"{PATCHER}/Save 1/Logs/Family History/Family History {n + 3}.txt", b"Family: Lorsieab2 (Save 1)\r\n")
+
+    def test_one_call_for_each_part_and_a_slot_folder_goes_whole(self):
+        self.many_logs()
+        plan = ds.plan_delete(self.folder, 1)
+        fake = FakeBin(self.folder)
+        result = self.delete(recycle=fake)
+        self.assertIsNone(result.problem)
+        self.assertEqual(len(fake.calls), len([g for g in plan.groups if g.files]))
+        history = self.folder / PATCHER / "Save 1" / "Logs"
+        self.assertIn(history, fake.calls[0])                      # 300+ files, one item
+        self.assertLess(len(fake.calls[0]), 40)
+        # Exactly the planned files went: no more, no fewer.
+        self.assertEqual(sorted(str(p).casefold() for p in fake.files), sorted(str(p).casefold() for p in plan.files))
+        self.assertEqual(sorted(map(str, result.recycled)), sorted(map(str, plan.files)))
+        self.assertEqual(result.not_recycled, [])
+
+    def test_a_folder_with_a_picture_another_file_or_few_files_is_never_sent_whole(self):
+        self.many_logs(ds.WHOLE_FOLDER_FROM)
+        slot = self.folder / PATCHER / "Save 1"
+        plan = ds.plan_delete(self.folder, 1)
+        (main,) = [g for g in plan.groups if g.where == ""]
+        items = [place for place, _held in ds._recycle_items(main.root, main.files)]
+        self.assertNotIn(slot, items)                               # its Family Tree picture stays
+        self.assertNotIn(slot / "Family Tree", items)
+        self.assertIn(slot / "Logs", items)                         # the logs beside it still go whole
+        small = slot / "Data" / "Family Tree"                       # two files: sent one by one
+        self.assertNotIn(small, items)
+        self.assertTrue({p for p in main.files if small in p.parents} <= set(items))
+        # A file the plan does not list keeps its folder from going whole.
+        logs = [p for p in main.files if (slot / "Logs") in p.parents]
+        items = [place for place, _held in ds._recycle_items(main.root, logs[1:])]
+        self.assertNotIn(slot / "Logs", items)
+        self.assertNotIn(logs[0], items)
+        self.assertEqual({p for _place, held in ds._recycle_items(main.root, logs[1:]) for p in held}, set(logs[1:]))
+        fake = FakeBin(self.folder)
+        result = self.delete(recycle=fake)
+        self.assertIsNone(result.problem)
+        picture = slot / "Family Tree" / "Virtual Families 2 Family Tree - Save 1.png"
+        self.assertEqual(picture.read_bytes(), b"\x89PNG picture")
+        self.assertNotIn(str(picture).casefold(), {str(p).casefold() for p in fake.files})
+
+    def test_files_left_behind_by_a_call_that_said_yes_are_reported_exactly(self):
+        fake = FakeBin(self.folder)
+        stuck = self.folder / "Virtual Families 21.ldw"
+
+        def leaves_the_save(paths):              # Windows says yes, but one file is still there
+            fake([p for p in paths if p != stuck])
+
+        plan = ds.plan_delete(self.folder, 1)
+        result = self.delete(recycle=leaves_the_save)
+        self.assertIn("could not send every file", result.problem)
+        later = {str(p) for g in plan.groups if g.where for p in g.files}       # the backups', never sent
+        self.assertEqual(sorted(map(str, result.not_recycled)), sorted(later | {str(stuck)}))
+        self.assertEqual(sorted(map(str, result.recycled + result.not_recycled)), sorted(map(str, plan.files)))
+        self.assertEqual(len(fake.calls), 1)     # stopped: no backup was touched
+        self.assertTrue(stuck.is_file())
+
+    def test_a_running_game_sends_nothing(self):
+        self.many_logs()
+        before = self.snapshot(backups=True)
+        fake = FakeBin(self.folder)
+        with self.assertRaises(ds.GameRunning):
+            self.delete(processes=tc.Running(), recycle=fake)
+        self.assertEqual(fake.calls, [])
+        self.assertEqual(self.snapshot(backups=True), before)
+
+    def test_the_drive_question_is_asked_early_only_for_the_real_recycle_bin(self):
+        from unittest import mock
+        with mock.patch.object(ds, "warm_recycle_bin") as warm:
+            ds.confirm_and_delete(lambda *a: False, lambda *a: False, lambda work: work(), self.folder, 1,
+                                  processes=tc.NoGame(), recycle=FakeBin(self.folder))
+            warm.assert_not_called()
+            ds.confirm_and_delete(lambda *a: False, lambda *a: False, lambda work: work(), self.folder, 1,
+                                  processes=tc.NoGame())
+            warm.assert_called_once_with(self.folder)
 
 
 class DeletableSlotsTests(Base):
