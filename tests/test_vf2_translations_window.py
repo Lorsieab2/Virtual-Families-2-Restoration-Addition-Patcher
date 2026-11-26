@@ -587,6 +587,113 @@ def test_recycle_reports_a_failure(tmp_path, result, aborted, message):
     assert path.exists()
 
 
+class _Drives:
+    """A stand-in for SHQueryRecycleBinW: records every drive asked; ``result`` is its HRESULT."""
+
+    def __init__(self, result=0):
+        self.asked, self.result = [], result
+
+    def __call__(self, root):
+        self.asked.append(root)
+        return self.result
+
+
+@pytest.fixture
+def fresh_drives():
+    tr._recycle_bin_roots.clear()            # every test asks afresh
+    yield
+    tr._recycle_bin_roots.clear()
+
+
+def _made(folder: Path, *names: str) -> list[Path]:
+    out = []
+    for name in names:
+        (folder / name).write_bytes(b"x")
+        out.append(folder / name)
+    return out
+
+
+def _bin(calls: list):
+    """A stand-in SHFileOperationW: records the flags and takes the temp files away, as the Recycle Bin would."""
+    def operation(pointer):
+        import ctypes
+        op = pointer._obj
+        calls.append(op.fFlags)
+        address, at = op.pFrom, 0
+        while True:
+            part = ctypes.wstring_at(address + at * ctypes.sizeof(ctypes.c_wchar))
+            if not part:
+                break
+            Path(part).unlink()
+            at += len(part) + 1
+        return 0
+    return operation
+
+
+def test_many_files_one_drive_question_and_one_call(tmp_path, fresh_drives):
+    """The Virtual Villagers patcher's PR #876: "is there a Recycle Bin?" once per drive, never once per file, and
+    a fixed drive once per run; every path in one SHFileOperationW call."""
+    calls, drives = [], _Drives()
+    with mock.patch.object(tr, "_drive_is_fixed", return_value=True):
+        tr.recycle(_made(tmp_path, *[f"f{n}.txt" for n in range(50)]), _bin(calls), drives)
+        tr.recycle(_made(tmp_path, "g1.txt", "g2.txt"), _bin(calls), drives)
+    assert len(drives.asked) == 1
+    assert len(calls) == 2 and all(flags & tr.FOF_ALLOWUNDO for flags in calls)
+    assert not any(tmp_path.iterdir())
+
+
+def test_a_drive_that_is_not_fixed_is_asked_every_time(tmp_path, fresh_drives):
+    calls, drives = [], _Drives()
+    with mock.patch.object(tr, "_drive_is_fixed", return_value=False):
+        tr.recycle(_made(tmp_path, "a.txt"), _bin(calls), drives)
+        tr.recycle(_made(tmp_path, "b.txt"), _bin(calls), drives)
+    assert len(drives.asked) == 2
+
+
+def test_a_drive_with_no_recycle_bin_sends_nothing(tmp_path, fresh_drives):
+    path = tmp_path / "a.txt"
+    path.write_bytes(b"x")
+    operation = mock.Mock(return_value=0)
+    with pytest.raises(tr.RecycleBinUnavailable, match="no Recycle Bin"):
+        tr.recycle([path], operation, _Drives(result=-2147024893))
+    operation.assert_not_called()
+    assert path.exists()
+
+
+def test_the_drive_question_asked_early_is_not_asked_again(tmp_path, fresh_drives, monkeypatch):
+    monkeypatch.setattr(tr.os, "name", "nt")
+    calls, drives = [], _Drives()
+    with mock.patch.object(tr, "_drive_is_fixed", return_value=True):
+        tr.prepare_recycle_bin(tmp_path, drives).join(10)
+        assert tr.prepare_recycle_bin(tmp_path, drives) is None          # answered: nothing more to ask
+        tr.recycle(_made(tmp_path, "a.txt"), _bin(calls), drives)
+    assert len(drives.asked) == 1 and len(calls) == 1
+    tr._recycle_bin_roots.clear()
+    refused = _Drives(result=-2147024893)
+    path = _made(tmp_path, "b.txt")[0]
+    operation = mock.Mock(return_value=0)
+    with mock.patch.object(tr, "_drive_is_fixed", return_value=True):
+        tr.prepare_recycle_bin(tmp_path, refused).join(10)                # no error escapes the early question
+        with pytest.raises(tr.RecycleBinUnavailable):
+            tr.recycle([path], operation, refused)
+    operation.assert_not_called()
+    assert path.exists()
+
+
+def test_a_whole_folder_can_be_recycled(tmp_path):
+    folder = tmp_path / "Logs"
+    folder.mkdir()
+    (folder / "a.txt").write_bytes(b"x")
+    seen = []
+
+    def operation(pointer):
+        seen.append(pointer._obj.fFlags)
+        return 0
+    with pytest.raises(OSError, match="did not move"):         # the stand-in leaves it: reported, never removed
+        tr.recycle([folder], operation)
+    assert seen and folder.is_dir()
+
+
 def test_recycle_a_missing_file_touches_nothing(tmp_path):
     here = tmp_path / "here.txt"
     here.write_bytes(b"x")
