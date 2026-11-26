@@ -161,6 +161,20 @@
         "The keys do nothing anywhere else. On by default; it works with or without the Unicode text settings."
       ]
     },
+    "revive": {
+      "section": "Patching",
+      "title": "Revive",
+      "setting": true,
+      "guide": [
+        "Adds Revive a Family Member to the store's Special Upgrades: $25,000, or free with Free and Guaranteed Cheats.",
+        "Buying it shows each family member of this generation who died, one at a time. Revive brings that one back as the same person; Next shows the next.",
+        "They keep their name, looks, likes, career and whether they want kids. Moods and needs start fresh.",
+        "Someone who died at 18 or older returns at 18; someone younger returns at the age they died.",
+        "Only the dead: never a divorced spouse, a child away from home or an evicted family. A spouse whose partner remarried returns as a child of the family tree.",
+        "Choosing no one, or a full house, gives the money back. Use Revive Records on the Tools tab for people who died before this patch.",
+        "On by default."
+      ]
+    },
     "title_screen_player_name_box": {
       "section": "Patching",
       "title": "Title Screen Player Name Box",
@@ -305,7 +319,7 @@
         "Someone who died at 18 or older returns at 18; someone who died younger returns at the age they died.",
         "Only people who died are recorded: never a divorced spouse, a child away from home or an evicted family. Only the current generation, for now.",
         "Your backups are recorded even while the game runs; the family's own saves wait until you quit the game. Running it again changes nothing already recorded.",
-        "Bringing someone back is a Special Upgrades purchase in the game, still to come in a later version."
+        "Bringing someone back is the Special Upgrades row Revive a Family Member in the game (the Revive setting)."
       ]
     },
     "game_mechanics": {

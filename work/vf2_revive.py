@@ -1,7 +1,7 @@
 """Revive: the snapshots of the family members who died, for bringing one back (owner, 2026-11-26).
 
-The design is C:\\vf2w\\revive-design.md (the port of the Virtual Villagers patcher's "Revive Buried/Disappeared
-Villagers"); the owner's decisions it follows:
+The design is the port of the Virtual Villagers patcher's "Revive Buried/Disappeared Villagers" (docs/revive.md);
+the owner's decisions it follows:
 
 * a revived family member is the SAME person: name (with the whole name of the Names file), sex, head and body,
   likes and dislikes, career, fertility and "Wants kids?" (procreation desire); moods and needs start fresh;
@@ -27,8 +27,9 @@ What this module holds (none of it changes a save, a log or the Names file):
   the whole run rolled back when any write fails;
 * the rules the in-game purchase follows (who may be revived, the age, the role they return in, the price).
 
-The in-game half (the capture at each death, the rotation with the game's own save, the Special Upgrades row) is not
-built yet; see docs/revive.md.
+The in-game half -- the capture at each death, the rotation with the game's own save and the Special Upgrades row
+"Revive a Family Member" -- is the companion DLL vf2revive_b200.dll (runtime/native/b200revive, the same file format)
+and the executable's own code (work/patch_mobile_furniture_pack.py, REVIVE_*); see docs/revive.md.
 
 Snapshot file (little-endian):
     0 "VF2REVIV"   8 version (1)   12 "VF2B200\\0"   20 file size   24 save FNV-1a 64 (8)   32 save size
@@ -50,10 +51,9 @@ import vf2_save_reader as reader
 
 # ---------------------------------------------------------------- the rules
 
-# The price of one revival, in the store's own money. The owner confirms it before any release (proposed 2026-11-26:
-# the patcher's own big Special Upgrades -- Brokerage Account, Food Club, Health Plan -- are $10,000 each, and
-# Adoption Services, the stock way a family member joins, is $4,000).
-REVIVE_PRICE = 10_000
+# The price of one revival, in the store's own money: $25,000 (the owner, 2026-11-26); free with Free and Guaranteed
+# Cheats. The executable's row holds the same price (work/patch_mobile_furniture_pack.py REVIVE_PRICE).
+REVIVE_PRICE = 25_000
 AGE_18_UNITS = 360                      # 18 years x 20 age units: the game's 18-year mark ("Set Age to 18")
 UNITS_PER_YEAR = reader.AGE_UNITS_PER_YEAR
 
@@ -750,16 +750,18 @@ def refusal(save: reader.FamilySave, s: Snapshot, history=None) -> str | None:
 
 
 def return_role(save: reader.FamilySave, s: Snapshot) -> str:
-    """How they come back: "spouse" only when they were the married-in parent and that place is still empty; a
-    spouse whose partner has remarried comes back as a "family member"; a parent or child as "parent" / "child"."""
+    """How they come back (the executable's VF2RevivePlan): "spouse" when they were the married-in parent and that
+    place is still theirs or empty; a spouse whose partner has remarried comes back as a family member, a "child"
+    entry of the Family Tree (the owner, 2026-11-26); a parent as "parent"; a child, or anyone the six children's
+    places no longer hold, as a "child"."""
     cur = save.family_tree.current
     if s.role == ROLE_SPOUSE:
         if cur is not None and cur.parent2.present and cur.parent2.slot != -1:
-            return "family member"
+            return "child"
         return "spouse"
     if s.role == ROLE_PARENT:
         return "parent"
-    return "child" if s.role >= ROLE_CHILD else "family member"
+    return "child"
 
 
 def summary(t: Target) -> list[str]:

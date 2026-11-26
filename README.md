@@ -163,7 +163,7 @@ actions, as before. **Tools** holds:
   one that did not match is left as it is. Slow and Fast are not offered: the game sets
   no speed but 10 and the +999 pause. Code: `src/vf2_game_speed.py`; tests: `tests/test_game_speed.py`.
 - **Revive Records...** (new, 2026-11-26) records each family member of the current generation who died, for the
-  Revive purchase still to be built in the game (`docs/revive.md`). It is the backfill for people who died before
+  in-game Revive purchase (the **Revive** setting, below; `docs/revive.md`). It is the backfill for people who died before
   the patch: read-only sources in the owner's order (their own dead record still in the save, the game's previous
   save and the patcher's Backups, the Family Tree entry, the Family History log and the Names file), every field
   marked exact, inferred or unknown, into `Virtual Families 2 Patcher Data\Revive\<save file>.dat` (N and N + 20,
@@ -645,6 +645,19 @@ release bundle, like almost everything else)
   **Download from GitHub...** (this repository's public `translations/` folder, read-only, no login, validated as
   data) and **Share on GitHub...** (the owner's confirmation text, the credit name typed by hand, never an email).
   Accepted translations ship in `<Patcher Files>\translations\vf2`; a "(TEST)" translation never does.
+- **Revive** (`.vf2rviv`, an Optional patch, **on by default** and in Owner's Defaults; new after B209, **needs the
+  executable rebuilt**) - the Special Upgrades row **Revive a Family Member** ($25,000; free with Free and Guaranteed
+  Cheats; the price cheats apply) brings back a family member of the current generation who died, as the same
+  person: name (and the Names file's whole name), sex, looks, parents, likes and dislikes, career, fertility and
+  "Wants kids?"; moods and needs start fresh. Age: 18 for a death at 18 or older (360 age units), else the age at
+  death. One at a time in the game's own box (**Revive** / **Next**); nothing chosen, or no room, gives the money back.
+  A child's own Family Tree entry is pointed at them again; a spouse whose partner remarried returns as a child entry.
+  Only the dead (never divorced, away or evicted). The companion DLL `vf2revive_b200.dll` takes a snapshot at every
+  death (the executable's `SetHealth` / `AdjustHealth` call it on the path that stores a cause of death) into the
+  same per-save file as Revive Records, rotated with the save; it holds no game address and patches no code. The
+  Family History log gets an `Arrived` record (`How: Revived (Revive a Family Member)`). Emulated (the DLL in its
+  harness, the executable's own health setters, the tree code on all 32 B209 executables); **not live tested**.
+  See `docs/revive.md`; tests: `tests/test_b200_revive.py`.
 - **R Refreshes the Store** (`.vf2rfsh`, an Optional patch and a cheat, **on by default**; new in the final
   B204 rebuild) - in the store, press **R** (or Shift+R) to pick the store's random items again, the
   game's own way and with the game's own odds:

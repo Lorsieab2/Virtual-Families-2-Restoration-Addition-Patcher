@@ -579,6 +579,23 @@ TRANSLATIONS_FLAG_SYMBOL = "_gVF2Translations"
 TRANSLATIONS_DLL_NAME = "vf2tr_b200.dll"
 TRANSLATIONS_INI_NAME = "vf2tr.ini"
 TRANSLATIONS_STARTUP = "B200Tr_Startup"
+# "Revive" (after B209; owner 2026-11-26, docs/revive.md): the companion DLL vf2revive_b200.dll (runtime/native/
+# b200revive) keeps a snapshot of every family member at their death beside the save, and the Special Upgrades row
+# "Revive a Family Member" (REVIVE_ITEM_ID, REVIVE_PRICE; free with Free and Guaranteed Cheats) brings one back as
+# the same person. One dormant byte (.vf2rviv); zero never loads the DLL, lists no Revive row and the death capture
+# calls nothing. The DLL holds no game address: the executable passes a host table to B200Revive_Startup. It is
+# loaded last. The death capture: CVillagerState::SetHealth / AdjustHealth, on the path that stores a cause of death,
+# call VF2ReviveOnDeath (two caves in VillagerState.obj; no other companion DLL pins those functions).
+REVIVE_SETTING = "revive"
+REVIVE_FLAG_SECTION = ".vf2rviv"
+REVIVE_FLAG_SYMBOL = "_gVF2Revive"
+REVIVE_DLL_NAME = "vf2revive_b200.dll"
+REVIVE_INI_NAME = "vf2revive.ini"
+REVIVE_STARTUP = "B200Revive_Startup"
+REVIVE_ITEM_ID = 0x15C
+REVIVE_PRICE = 25000                     # the owner, 2026-11-26
+REVIVE_ICON_ITEM = 0x119                 # the row shows the Health Plan's own icon (native art)
+REVIVE_DEATH_HELPER_SYMBOL = "_VF2ReviveOnDeath"
 OUTFIT_PICTURES_FLAG_SECTION = VANILLA_BUGS_FLAG_SECTION
 OUTFIT_PICTURES_DLL_NAME = "vf2outfits_b200.dll"
 OUTFIT_PICTURES_INI_NAME = "vf2outfits.ini"
@@ -7105,6 +7122,18 @@ PATCH_TEXT_ROWS = (
     ("eString_AdoptChildButton", "Adopt Child (Age 2-8)"),
     # the AI Bathroom 2 refusal (VF2ShowBathroom2RenovationRequiredMessage)
     ("eString_MobileRenovationBathroom2Required", "Bathroom 2 must be renovated first before this can be bought."),
+    # Revive (VF2PurchaseRevive): the Special Upgrades row and its dialogs
+    ("eString_ReviveTitle", "Revive a Family Member"),
+    ("eString_ReviveDescription", "Brings back a family member of this generation who died, as the same person: "
+     "their name, looks, likes, career and wish for children. Someone who died at 18 or older returns at 18; "
+     "someone younger returns at the age they died."),
+    ("eString_ReviveQuestion", "Bring back this family member?"),
+    ("eString_ReviveAge", "age"),
+    ("eString_ReviveButton", "Revive"),
+    ("eString_ReviveNextButton", "Next"),
+    ("eString_ReviveNone", "No family member of this generation can be brought back. Nothing was charged."),
+    ("eString_ReviveNoRoom", "There is no room for another family member. Nothing was charged."),
+    ("eString_ReviveDone", "has come back to the family!"),
 )
 
 
@@ -11804,7 +11833,7 @@ def visible_special_upgrade_desc_id_for(index):
 
 def special_upgrades_added_ids():
     """The rows gServicesList gains after its 6 stock rows, in this variant."""
-    return list(MOBILE_SPECIAL_UPGRADE_ITEM_IDS) + (
+    return list(MOBILE_SPECIAL_UPGRADE_ITEM_IDS) + [REVIVE_ITEM_ID] + (
         [item["item_id"] for item in CHEAT_UPGRADE_ITEMS if not item.get("details_only")]
         if ENABLE_CHEAT_UPGRADES
         else []
@@ -12756,7 +12785,7 @@ def patch_visible_special_upgrades(manifest):
     if original_visible_ids != [0x111, 0x112, 0x113, 0x115, 0x116, 0x114]:
         raise RuntimeError(f"Unexpected visible Special Upgrades base list: {[hex(x) for x in original_visible_ids]}")
 
-    added_service_ids = MOBILE_SPECIAL_UPGRADE_ITEM_IDS + (
+    added_service_ids = MOBILE_SPECIAL_UPGRADE_ITEM_IDS + [REVIVE_ITEM_ID] + (
         [
             item["item_id"]
             for item in CHEAT_UPGRADE_ITEMS
@@ -12783,6 +12812,10 @@ def patch_visible_special_upgrades(manifest):
         0x118: [0x118, visible_special_upgrade_icon_id_for(0x118), 1, 10000, 0, 0x2D, visible_special_upgrade_desc_id_for(1), 0, 0],
         0x119: [0x119, visible_special_upgrade_icon_id_for(0x119), 1, 10000, 0, 0x2E, visible_special_upgrade_desc_id_for(2), 0, 0],
         0x11A: [0x11A, visible_special_upgrade_icon_id_for(0x11A), 1, 77777, 0, 0x2F, visible_special_upgrade_desc_id_for(3), 0, 0],
+        # Revive a Family Member: a repeatable row (never owned), the Health Plan's icon, its own two strings
+        REVIVE_ITEM_ID: [REVIVE_ITEM_ID, visible_special_upgrade_icon_id_for(REVIVE_ICON_ITEM), 1, REVIVE_PRICE, 0,
+                         patch_text_string_id("eString_ReviveTitle"), patch_text_string_id("eString_ReviveDescription"),
+                         0, 0],
     }
     if ENABLE_CHEAT_UPGRADES:
         for index, item in enumerate(CHEAT_UPGRADE_ITEMS):
@@ -14041,7 +14074,15 @@ static void VF2DeactivateWorker(int workerId, int expiryOffset) {{
     if (*selectedVillager == workerId) *selectedVillager = -1;
 }}
 
+// Revive (vf2_special_upgrade_effects.cpp): the row's purchase, after the store took its price.
+extern "C" void __cdecl VF2PurchaseRevive();
+
 extern "C" bool __cdecl VF2RemoveOwnedUpgrade(int itemId) {{
+    // The Revive row rides the first helper every purchase calls: handled here, the stock purchase never runs.
+    if (itemId == {REVIVE_ITEM_ID:#x}) {{
+        VF2PurchaseRevive();
+        return true;
+    }}
     if (!kVF2EnableB150CheatUpgrades && !kVF2EnableAIBathroom2 &&
         !VF2IsMobileRenovationStyle(itemId) &&
         !(itemId >= 0xE1 && itemId <= 0xEA)) return false;
@@ -14116,6 +14157,21 @@ static bool VF2HideFreeGuaranteedCheatRows() {{
     return kVF2FreeGuaranteedCheatRowsListed > 0 && gVF2FreeGuaranteedCheats != 1;
 }}
 
+// Revive (vf2_special_upgrade_effects.cpp): its row is listed only while the Revive setting is on and its DLL runs.
+extern "C" bool __cdecl VF2ReviveRowAvailable();
+
+static bool VF2IsHiddenSpecialUpgradeRow(int itemId) {{
+    if (itemId == {REVIVE_ITEM_ID:#x}) return !VF2ReviveRowAvailable();
+    return VF2HideFreeGuaranteedCheatRows() && VF2IsFreeGuaranteedCheatRow(itemId);
+}}
+
+static int VF2HiddenSpecialUpgradeRows() {{
+    int hidden = 0;
+    for (int i = 0; i < kVF2SpecialUpgradesListCount; ++i)
+        if (VF2IsHiddenSpecialUpgradeRow((int)gServicesList[i])) ++hidden;
+    return hidden;
+}}
+
 // "All outfits and hairstyles always for sale" (see ALL_OUTFITS_* in the generator). 1 = every row of
 // gClothingList; 0 = the six stock rotating rows plus {OUTFIT_ROTATION_EXTRA_ROWS} rows drawn from the added hairstyles and
 // holiday outfits, keyed to the stock outfit pick time so they change when the six outfits do.
@@ -14161,8 +14217,9 @@ static int VF2OutfitRotationExtras(CInventoryManager* inventory, int* out) {{
 
 extern "C" int __cdecl VF2GetExpandedFleaMarketCount(CInventoryManager* inventory, int category) {{
     if (category == kVF2SpecialUpgradesCategory) {{
-        if (!VF2HideFreeGuaranteedCheatRows()) return -1;
-        return kVF2SpecialUpgradesListCount - kVF2FreeGuaranteedCheatRowsListed;
+        int hidden = VF2HiddenSpecialUpgradeRows();
+        if (!hidden) return -1;
+        return kVF2SpecialUpgradesListCount - hidden;
     }}
     if (category == kVF2ClothingCategory) {{
         if (gVF2AllOutfitsForSale == 1) return -1;
@@ -14178,11 +14235,11 @@ extern "C" int __cdecl VF2GetExpandedFleaMarketCount(CInventoryManager* inventor
 
 extern "C" int __cdecl VF2GetExpandedFleaMarketItem(CInventoryManager* inventory, int category, int index) {{
     if (category == kVF2SpecialUpgradesCategory) {{
-        if (!VF2HideFreeGuaranteedCheatRows()) return -1;
+        if (!VF2HiddenSpecialUpgradeRows()) return -1;
         int shown = -1;
         for (int i = 0; i < kVF2SpecialUpgradesListCount; ++i) {{
             int itemId = (int)gServicesList[i];
-            if (VF2IsFreeGuaranteedCheatRow(itemId)) continue;
+            if (VF2IsHiddenSpecialUpgradeRow(itemId)) continue;
             if (++shown == index) return itemId;
         }}
         return 0;
@@ -15671,7 +15728,8 @@ def patch_scrolling_store_scene(manifest):
     visible_special_upgrade_icon_draw_cases = "\n".join(
         f"        case 0x{item_id:X}: frame = {index}; break;"
         for index, item_id in enumerate(VISIBLE_SPECIAL_UPGRADE_ICON_FILES)
-    )
+    ) + (f"\n        case 0x{REVIVE_ITEM_ID:X}: frame = "
+         f"{list(VISIBLE_SPECIAL_UPGRADE_ICON_FILES).index(REVIVE_ICON_ITEM)}; break;")
     inventory_item_info_locks = inventory_item_info_generation_locks()
     inventory_item_info_restore_locks = list(inventory_item_info_locks)
     if ENABLE_MOBILE_RENOVATIONS:
@@ -15967,6 +16025,7 @@ public:
     bool Impregnate(int count, const char *name, int motherBody, int fatherBody, bool adopted);
     void DetachAll();
     void Reset();
+    bool const SaveState(SSaveState &state);
 };
 
 enum ECauseOfDeath {
@@ -16449,6 +16508,355 @@ static void VF2LoadFamilyHistoryDll() {
     if (startup) startup();
 }
 
+// Revive loader and its executable side (see REVIVE_* in the generator; docs/revive.md). Zero = never loads the
+// companion DLL, lists no Revive row and the death capture calls nothing. The DLL (runtime/native/b200revive) gets
+// everything it needs from the host table below, compiled into every variant: it holds no game address.
+extern "C" void *__cdecl memcpy(void *, const void *, unsigned int);
+extern "C" void *__cdecl memset(void *, int, unsigned int);
+extern "C" int __cdecl strncmp(char const *, char const *, unsigned int);
+#pragma section(".vf2rviv", read, write)
+extern "C" __declspec(allocate(".vf2rviv"))
+volatile unsigned char gVF2Revive = 0;
+
+// the real theGameState::Load(int) / Save(int) (not a virtual-call thunk): the DLL chains their vtable slots
+#pragma comment(linker, "/alternatename:_VF2ReviveStockLoadSymbol=?Load@theGameState@@UAE_NH@Z")
+#pragma comment(linker, "/alternatename:_VF2ReviveStockSaveSymbol=?Save@theGameState@@UAE_NH@Z")
+extern "C" void __cdecl VF2ReviveStockLoadSymbol();
+extern "C" void __cdecl VF2ReviveStockSaveSymbol();
+
+struct VF2ReviveHost {
+    unsigned magic;
+    unsigned version;
+    unsigned size;
+    int (__cdecl *saveRecord)(int slot, unsigned char *out);
+    const char *(__cdecl *savePath)(int slot);
+    int (__cdecl *currentSlot)();
+    const unsigned char *(__cdecl *currentFamily)();
+    int (__cdecl *generations)();
+    void **gameStateVtable;
+    void *stockLoad;
+    void *stockSave;
+};
+
+struct VF2ReviveCandidate {
+    int index;
+    int role;
+    int ageUnits;
+    int sex, head, body;
+    char name[28];
+    const unsigned char *entry;
+};
+
+static const int kVF2ReviveHouseholdSlots = 30;
+static const unsigned kVF2ReviveVillagersOffset = 0x1CC70;   // CVillagerManager: the villagers (LoadState)
+static const unsigned kVF2ReviveVillagerStride = 0x1CC0C;
+static const unsigned kVF2ReviveStateOffset = 0x6AF4;        // CVillager: CVillagerState
+
+static int __cdecl VF2ReviveSaveRecord(int slot, unsigned char *out) {
+    if (slot < 0 || slot >= kVF2ReviveHouseholdSlots || !out) return 0;
+    VillagerManager.GetVillager(slot).SaveState(*reinterpret_cast<CVillager::SSaveState *>(out));
+    return 1;
+}
+
+static const char *__cdecl VF2ReviveSavePath(int slot) {
+    void *state = theGameState::Get();
+    if (!state) return "";
+    typedef const char *(__fastcall *MakePathFn)(void *, void *, int);
+    void **vtable = *(void ***)state;
+    return ((MakePathFn)vtable[3])(state, 0, slot);               // ldwGameState vtable +0Ch: MakeGameStatePath
+}
+
+static int __cdecl VF2ReviveCurrentSlot() {
+    unsigned char *state = (unsigned char *)theGameState::Get();
+    return state ? *(int *)(state + 0x25B20) : 0;
+}
+
+static const unsigned char *__cdecl VF2ReviveCurrentFamily() {
+    return (const unsigned char *)FamilyTree.GetCurrentFamily();
+}
+
+static int __cdecl VF2ReviveGenerations() {
+    return *(int *)((unsigned char *)&FamilyTree + 4);
+}
+
+static VF2ReviveHost gVF2ReviveHost;
+static void (__cdecl *gVF2ReviveOnDeathFn)(int);
+static int (__cdecl *gVF2ReviveCandidatesFn)(VF2ReviveCandidate *, int);
+static void (__cdecl *gVF2ReviveDoneFn)(int, int, int, const char *);
+static volatile unsigned *gVF2ReviveStatus;
+
+static void VF2LoadReviveDll() {
+    unsigned short path[512];
+    unsigned long length = GetModuleFileNameW(0, path, 400);
+    if (length == 0 || length >= 400) return;
+    unsigned long cut = length;
+    while (cut > 0 && path[cut - 1] != 92) --cut;
+    if (cut == 0) return;
+    const char *tail = "__VF2_REVIVE_RELATIVE_PATH__";
+    unsigned long out = cut;
+    for (const char *c = tail; *c; ++c) path[out++] = (unsigned short)(unsigned char)*c;
+    path[out] = 0;
+    void *module = LoadLibraryW(path);
+    if (!module) return;
+    void (__cdecl *startup)(const VF2ReviveHost *) =
+        (void (__cdecl *)(const VF2ReviveHost *))GetProcAddress(module, "B200Revive_Startup");
+    gVF2ReviveOnDeathFn = (void (__cdecl *)(int))GetProcAddress(module, "B200Revive_OnDeath");
+    gVF2ReviveCandidatesFn = (int (__cdecl *)(VF2ReviveCandidate *, int))GetProcAddress(module, "B200Revive_Candidates");
+    gVF2ReviveDoneFn = (void (__cdecl *)(int, int, int, const char *))GetProcAddress(module, "B200Revive_Done");
+    gVF2ReviveStatus = (volatile unsigned *)GetProcAddress(module, "B200Revive_Status");
+    void *state = theGameState::Get();
+    if (!startup || !gVF2ReviveOnDeathFn || !gVF2ReviveCandidatesFn || !gVF2ReviveDoneFn || !gVF2ReviveStatus || !state) {
+        gVF2ReviveStatus = 0;
+        return;
+    }
+    gVF2ReviveHost.magic = 0x31485652u;
+    gVF2ReviveHost.version = 1;
+    gVF2ReviveHost.size = sizeof(VF2ReviveHost);
+    gVF2ReviveHost.saveRecord = VF2ReviveSaveRecord;
+    gVF2ReviveHost.savePath = VF2ReviveSavePath;
+    gVF2ReviveHost.currentSlot = VF2ReviveCurrentSlot;
+    gVF2ReviveHost.currentFamily = VF2ReviveCurrentFamily;
+    gVF2ReviveHost.generations = VF2ReviveGenerations;
+    gVF2ReviveHost.gameStateVtable = *(void ***)state;
+    gVF2ReviveHost.stockLoad = (void *)&VF2ReviveStockLoadSymbol;
+    gVF2ReviveHost.stockSave = (void *)&VF2ReviveStockSaveSymbol;
+    startup(&gVF2ReviveHost);
+}
+
+// The DLL installed itself (its status block: magic, version, requested, installed, ...).
+static bool VF2ReviveInstalled() {
+    return gVF2Revive == 1 && gVF2ReviveStatus && gVF2ReviveStatus[0] == 0x56525632u && gVF2ReviveStatus[3] == 1;
+}
+
+// The Special Upgrades page lists the Revive row only while the setting is on and the DLL runs.
+extern "C" bool __cdecl VF2ReviveRowAvailable() {
+    return VF2ReviveInstalled();
+}
+
+// CVillagerState::SetHealth / AdjustHealth, on the path that stores a cause of death (VillagerState.obj caves):
+// the household villager whose state this is has just died.
+extern "C" void __cdecl VF2ReviveOnDeath(void *state) {
+    if (!VF2ReviveInstalled() || !state) return;
+    unsigned char *first = (unsigned char *)&VillagerManager + kVF2ReviveVillagersOffset;
+    unsigned char *villager = (unsigned char *)state - kVF2ReviveStateOffset;
+    if (villager < first) return;
+    unsigned offset = (unsigned)(villager - first);
+    if (offset % kVF2ReviveVillagerStride != 0) return;
+    unsigned slot = offset / kVF2ReviveVillagerStride;
+    if (slot >= (unsigned)kVF2ReviveHouseholdSlots) return;
+    gVF2ReviveOnDeathFn((int)slot);
+}
+
+// ---- bringing one back (the Revive a Family Member row)
+// The snapshot entry's layout (src/vf2_revive.py _ENTRY / _BYTES) and the villager record's (CVillager::SaveState).
+static int VF2ReviveI32(const unsigned char *p, unsigned off) { return *(const int *)(p + off); }
+
+static unsigned char *VF2RevivePeep(unsigned char *record, int place) {
+    return place == 0 ? record + 0x04 : place == 1 ? record + 0xDC : record + 0x1B8 + (place - 2) * 0xD8;
+}
+
+static bool VF2ReviveSamePeep(const unsigned char *peep, const VF2ReviveCandidate &c) {
+    return peep[0x1A] && strncmp((const char *)peep, c.name, 25) == 0 && VF2ReviveI32(peep, 0x1C) == c.sex &&
+           VF2ReviveI32(peep, 0x20) == c.head && VF2ReviveI32(peep, 0x24) == c.body;
+}
+
+// Where the family member goes back in the current generation's record. 0 re-point their own entry (slot -1),
+// 1 a new child entry (AddOffspring: a spouse whose partner remarried, a child no longer in the six), 2 the empty
+// married-in place (a spouse whose partner did not remarry), -1 refused.
+static int VF2RevivePlan(const VF2ReviveCandidate &c, unsigned char *record, unsigned char **peepOut) {
+    *peepOut = 0;
+    if (!record) return -1;
+    int count = VF2ReviveI32(record, 0x1B4);
+    if (count < 0) count = 0;
+    if (count > 6) count = 6;
+    if (c.role == 0) {
+        unsigned char *p = VF2RevivePeep(record, 0);
+        if (!VF2ReviveSamePeep(p, c) || VF2ReviveI32(p, 0x28) != -1) return -1;
+        *peepOut = p;
+        return 0;
+    }
+    if (c.role == 1) {
+        unsigned char *p = VF2RevivePeep(record, 1);
+        if (VF2ReviveSamePeep(p, c) && VF2ReviveI32(p, 0x28) == -1) { *peepOut = p; return 0; }
+        if (p[0x1A]) return FamilyTree.EmptyOffspringSlots() > 0 ? 1 : -1;      // the partner remarried
+        *peepOut = p;
+        return 2;
+    }
+    if (c.role >= 2 && c.role - 2 < count) {
+        unsigned char *p = VF2RevivePeep(record, c.role);
+        if (VF2ReviveSamePeep(p, c) && VF2ReviveI32(p, 0x28) == -1) { *peepOut = p; return 0; }
+    }
+    return FamilyTree.EmptyOffspringSlots() > 0 ? 1 : -1;
+}
+
+// The persistent fields of the snapshot over the villager the game's own creator just made (SpawnSpecificPeep, as
+// Adoption Services does): who they are, their looks, parents, likes and dislikes, career, fertility and "Wants
+// kids?" -- each copied exactly as CVillager::LoadState copies it. Age, health, moods, needs, plans and the AI values
+// stay as Init made them (fresh).
+static void VF2ReviveApplySnapshot(unsigned char *v, const VF2ReviveCandidate &c) {
+    const unsigned char *e = c.entry;
+    const unsigned char *r = e + 320;                                // the record as they died (E_RECORD)
+    bool record = e[300 + 18] != 0;                                  // its mark (F_RECORD)
+    unsigned char *bio = v + 0x6A54;
+    *(int *)(bio + 0x04) = c.sex;
+    strncpy((char *)bio + 0x10, c.name, 25);
+    *(int *)(bio + 0x2C) = c.head;
+    *(int *)(bio + 0x30) = c.body;
+    if (e[300 + 15]) {                                               // F_FIRST_NAME
+        *(int *)(bio + 0x08) = VF2ReviveI32(e, 48);
+        *(int *)(bio + 0x0C) = VF2ReviveI32(e, 52);
+    }
+    if (e[300 + 14]) {                                               // F_PARENTS
+        strncpy((char *)bio + 0x34, (const char *)e + 140, 25);
+        strncpy((char *)bio + 0x4E, (const char *)e + 168, 25);
+        *(int *)(bio + 0x68) = VF2ReviveI32(e, 56);
+        *(int *)(bio + 0x6C) = VF2ReviveI32(e, 60);
+        *(int *)(bio + 0x70) = VF2ReviveI32(e, 64);
+        *(int *)(bio + 0x74) = VF2ReviveI32(e, 68);
+    }
+    if (record) {
+        memcpy(v + 0x6B8C, r + 0x140, 0x10);                         // CVillagerSkills (Copy: career, level, salary)
+        memcpy(v + 0x1BC34, r + 0x150, 12);                          // CLikeList, as LoadState copies it
+        memcpy(v + 0x1BC40, r + 0x15C, 12);                          // CDislikeList
+    } else {
+        if (e[300 + 9]) *(int *)(v + 0x6B8C) = VF2ReviveI32(e, 32);  // the career the tree kept
+        if (e[300 + 19]) *(int *)(v + 0x6B90) = VF2ReviveI32(e, 36);
+        if (e[300 + 5]) memcpy(v + 0x1BC34, e + 196, 12);
+        if (e[300 + 6]) memcpy(v + 0x1BC40, e + 208, 12);
+    }
+    unsigned char *state = v + 0x6AF4;
+    if (e[300 + 10]) *(int *)(state + 0x4C) = VF2ReviveI32(e, 40);   // fertility
+    if (e[300 + 11]) *(int *)(state + 0x50) = VF2ReviveI32(e, 44);   // procreation desire ("Wants kids?")
+}
+
+// The live store scene, through its own native singleton accessor (as the Bathroom 2 notice reads it; the class
+// is declared further down this file, so the accessor is named by its own symbol here).
+#pragma comment(linker, "/alternatename:_VF2ReviveStoreScene=?Get@CScrollingStoreScene@@SAPAV1@XZ")
+extern "C" void *__cdecl VF2ReviveStoreScene();
+extern "C" int __cdecl VF2ApplyPriceMultiplier(int price);
+// Free and Guaranteed Cheats (.vf2free, the store-page block): Revive is free while it is 1.
+extern "C" volatile unsigned char gVF2FreeGuaranteedCheats;
+
+static void VF2ReviveMessage(void *scene, const char *text) {
+    char okButton[32];                                               // the game's own "OK" (eOK, 0xA35)
+    strncpy(okButton, theStringManager::Get()->GetString((StringId)0xA35), 31);
+    okButton[31] = '\0';
+    theMessageBoxDlg box(text, 0, false, okButton, 0);
+    box.DoModal((ldwScene *)scene, false);
+}
+
+static void VF2ReviveAppend(char *out, int cap, const char *text) {
+    int n = 0;
+    while (out[n] && n < cap - 1) ++n;
+    while (*text && n < cap - 1) out[n++] = *text++;
+    out[n] = '\0';
+}
+
+static void VF2ReviveAppendNumber(char *out, int cap, int value) {
+    char digits[12];
+    int k = 0;
+    unsigned u = value < 0 ? 0u : (unsigned)value;
+    do { digits[k++] = (char)('0' + u % 10); u /= 10; } while (u && k < 11);
+    char text[12];
+    int n = 0;
+    while (k) text[n++] = digits[--k];
+    text[n] = '\0';
+    VF2ReviveAppend(out, cap, text);
+}
+
+// One revival, all or nothing: false (nothing changed) when there is no room.
+static bool VF2ReviveBringBack(const VF2ReviveCandidate &c) {
+    unsigned char *record = (unsigned char *)FamilyTree.GetCurrentFamily();
+    unsigned char *peep = 0;
+    int plan = VF2RevivePlan(c, record, &peep);
+    if (plan < 0) return false;
+    int slot = VillagerManager.SpawnSpecificPeep(c.ageUnits, (EGender)c.sex, -1);
+    if (slot < 0) return false;
+    unsigned char *v = (unsigned char *)&VillagerManager.GetVillager(slot);
+    VF2ReviveApplySnapshot(v, c);
+    const char *role = "Child";
+    if (plan == 0) {
+        *(int *)(peep + 0x28) = slot;                                // the entry ReportDeath set to -1
+        FamilyTree.UpdatePeepRecord((CFamilyTree::SPeepRecord *)peep);
+        role = c.role == 0 ? "Parent" : c.role == 1 ? "Parent (married in)" : "Child";
+    } else if (plan == 1) {
+        if (!FamilyTree.AddOffspring(*(CVillager *)v)) {
+            v[0x1BB84] = 0;                                          // as VF2AdoptRandomChildChoice undoes a spawn
+            return false;
+        }
+    } else {
+        memset(peep, 0, 0xD8);                                       // the married-in place, as UpdateParents fills it
+        strncpy((char *)peep, c.name, 25);
+        peep[0x1A] = 1;
+        *(int *)(peep + 0x1C) = c.sex;
+        *(int *)(peep + 0x20) = c.head;
+        *(int *)(peep + 0x24) = c.body;
+        *(int *)(peep + 0x28) = slot;
+        *(int *)(peep + 0x2C) = -1;
+        FamilyTree.UpdatePeepRecord((CFamilyTree::SPeepRecord *)peep);
+        role = "Parent (married in)";
+    }
+    // Next Generation, as CFamilyTree::ReportDeath decides it: a parent dead and a child surviving. A revival only
+    // ever makes it possible again (a child back after every child had died); it never takes it away.
+    if (record && !record[1] && FamilyTree.CountSurvivingChildren() > 0) {
+        unsigned char *p1 = VF2RevivePeep(record, 0), *p2 = VF2RevivePeep(record, 1);
+        if ((p1[0x1A] && VF2ReviveI32(p1, 0x28) == -1) || (p2[0x1A] && VF2ReviveI32(p2, 0x28) == -1)) {
+            record[1] = 1;
+            record[2] = 1;
+        }
+    }
+    gVF2ReviveDoneFn(c.index, slot, c.ageUnits, role);
+    return true;
+}
+
+// The row was bought (VF2RemoveOwnedUpgrade, the first helper HandlePurchaseItem calls, after the store took the
+// price CalcPrice gave: the row's price, or 0 with Free and Guaranteed Cheats, times any price cheat). Offer each
+// family member who can come back, one at a time ("Revive" / "Next"); nothing chosen, or no room, gives it back.
+extern "C" void __cdecl VF2PurchaseRevive() {
+    void *scene = VF2ReviveStoreScene();
+    int paid = VF2ApplyPriceMultiplier(gVF2FreeGuaranteedCheats == 1 ? 0 : __VF2_REVIVE_PRICE__);
+    VF2ReviveCandidate list[32];
+    int count = VF2ReviveInstalled() ? gVF2ReviveCandidatesFn(list, 32) : 0;
+    bool revived = false;
+    if (count <= 0) {
+        VF2ReviveMessage(scene, theStringManager::Get()->GetString((StringId)__VF2_REVIVE_NONE_STRING_ID__));
+    }
+    for (int i = 0; i < count && !revived; ++i) {
+        char text[256];
+        text[0] = '\0';
+        VF2ReviveAppend(text, sizeof(text), theStringManager::Get()->GetString((StringId)__VF2_REVIVE_QUESTION_STRING_ID__));
+        VF2ReviveAppend(text, sizeof(text), "\n\n");
+        VF2ReviveAppend(text, sizeof(text), list[i].name);
+        VF2ReviveAppend(text, sizeof(text), " (");
+        VF2ReviveAppend(text, sizeof(text), theStringManager::Get()->GetString((StringId)__VF2_REVIVE_AGE_STRING_ID__));
+        VF2ReviveAppend(text, sizeof(text), " ");
+        VF2ReviveAppendNumber(text, sizeof(text), list[i].ageUnits / 20);
+        VF2ReviveAppend(text, sizeof(text), ")");
+        char reviveButton[64];
+        char nextButton[64];
+        strncpy(reviveButton, theStringManager::Get()->GetString((StringId)__VF2_REVIVE_BUTTON_STRING_ID__), 63);
+        reviveButton[63] = '\0';
+        strncpy(nextButton, theStringManager::Get()->GetString((StringId)__VF2_REVIVE_NEXT_STRING_ID__), 63);
+        nextButton[63] = '\0';
+        theMessageBoxDlg choice(text, 0, true, reviveButton, nextButton);
+        int result = choice.DoModal((ldwScene *)scene, false);
+        if (result != 0) continue;                                    // Next
+        if (!VF2ReviveBringBack(list[i])) {
+            VF2ReviveMessage(scene, theStringManager::Get()->GetString((StringId)__VF2_REVIVE_NO_ROOM_STRING_ID__));
+            break;
+        }
+        revived = true;
+        char done[256];
+        done[0] = '\0';
+        VF2ReviveAppend(done, sizeof(done), list[i].name);
+        VF2ReviveAppend(done, sizeof(done), " ");
+        VF2ReviveAppend(done, sizeof(done), theStringManager::Get()->GetString((StringId)__VF2_REVIVE_DONE_STRING_ID__));
+        VF2ReviveMessage(scene, done);
+    }
+    if (!revived && paid > 0) Money.Adjust((float)paid, false);          // nothing was bought
+    theGameState::Get()->SaveCurrentGame();
+}
+
 // R Refreshes the Store loader (see STORE_REFRESH_* in the generator). Zero = never loads the companion
 // DLL. It is loaded by the same wrapper, after the other companion DLLs, once; nothing else reads the byte.
 #pragma section(".vf2rfsh", read, write)
@@ -16582,6 +16990,7 @@ extern "C" void *__cdecl VF2GameStateGetAfterTimeControlsLoad() {
         if (gVF2UnicodeText == 1) VF2LoadUnicodeDll("__VF2_UNICODE_TEXT_RELATIVE_PATH__");
         else if (gVF2UnicodeFont == 1) VF2LoadUnicodeDll("__VF2_UNICODE_FONT_RELATIVE_PATH__");
         if (gVF2Translations == 1) VF2LoadTranslationsDll();
+        if (gVF2Revive == 1) VF2LoadReviveDll();
     }
     return theGameState::Get();
 }
@@ -18784,6 +19193,7 @@ extern "C" int __stdcall VF2CollectionPageCount(int page) {
 }
 
 extern "C" int __cdecl VF2GetVisibleSpecialUpgradePrice(int itemId) {
+    if (itemId == __VF2_REVIVE_ITEM_ID__) return gVF2FreeGuaranteedCheats == 1 ? 0 : -1;
     int mobileRenovationPrice = VF2GetMobileRenovationStylePrice(itemId);
     if (mobileRenovationPrice != -1) return mobileRenovationPrice;
     int b150Price = VF2GetB150UpgradePrice(itemId);
@@ -19101,6 +19511,12 @@ extern "C" void __cdecl VF2ApplyVisibleSpecialUpgrade(int itemId) {
         TIME_CONTROLS_PATCHER_FOLDER + "\\\\" + TRANSLATIONS_DLL_NAME,
     )
     special_upgrade_helper_cpp = special_upgrade_helper_cpp.replace(
+        "__VF2_REVIVE_RELATIVE_PATH__",
+        TIME_CONTROLS_PATCHER_FOLDER + "\\\\" + REVIVE_DLL_NAME,
+    )
+    special_upgrade_helper_cpp = special_upgrade_helper_cpp.replace("__VF2_REVIVE_ITEM_ID__", hex(REVIVE_ITEM_ID))
+    special_upgrade_helper_cpp = special_upgrade_helper_cpp.replace("__VF2_REVIVE_PRICE__", str(REVIVE_PRICE))
+    special_upgrade_helper_cpp = special_upgrade_helper_cpp.replace(
         "__VF2_TIME_CONTROLS_RELATIVE_PATH__",
         TIME_CONTROLS_PATCHER_FOLDER + "\\\\" + TIME_CONTROLS_DLL_NAME,
     )
@@ -19349,6 +19765,13 @@ static int VF2GetAIBathroom2Price(int itemId) {{
         ("__VF2_ADOPT_CHOICE_QUESTION_STRING_ID__", "eString_AdoptChoiceQuestion"),
         ("__VF2_ADOPT_BABY_BUTTON_STRING_ID__", "eString_AdoptBabyButton"),
         ("__VF2_ADOPT_CHILD_BUTTON_STRING_ID__", "eString_AdoptChildButton"),
+        ("__VF2_REVIVE_QUESTION_STRING_ID__", "eString_ReviveQuestion"),
+        ("__VF2_REVIVE_AGE_STRING_ID__", "eString_ReviveAge"),
+        ("__VF2_REVIVE_BUTTON_STRING_ID__", "eString_ReviveButton"),
+        ("__VF2_REVIVE_NEXT_STRING_ID__", "eString_ReviveNextButton"),
+        ("__VF2_REVIVE_NONE_STRING_ID__", "eString_ReviveNone"),
+        ("__VF2_REVIVE_NO_ROOM_STRING_ID__", "eString_ReviveNoRoom"),
+        ("__VF2_REVIVE_DONE_STRING_ID__", "eString_ReviveDone"),
     ):
         special_upgrade_helper_cpp = special_upgrade_helper_cpp.replace(placeholder, str(patch_text_string_id(key)))
     special_upgrade_helper_cpp = special_upgrade_helper_cpp.replace(
@@ -23435,6 +23858,73 @@ def patch_custom_achievements(manifest):
     }
 
 
+def patch_revive_death_capture(manifest):
+    """Revive: CVillagerState::SetHealth and AdjustHealth call VF2ReviveOnDeath(this) on the path that stores a cause
+    of death (health 0), after storing it and before returning: whole instructions moved into a cave at the end of
+    each function's own section, nothing else of either function changes. The helper does nothing unless the Revive
+    byte is 1 and its DLL installed itself."""
+    obj = CoffObject(PATCHED / "VillagerState.obj")
+    caves = {}
+    for name, offset, stolen, cave_head, cave_tail, push in (
+        # SetHealth: 17h mov [ecx+10h],eax / 1Ah pop ebp / 1Bh ret 8
+        ("?SetHealth@CVillagerState@@QAEXHW4ECauseOfDeath@@@Z", 0x17,
+         b"\x89\x41\x10\x5D\xC2\x08\x00", b"\x89\x41\x10", b"\x5D\xC2\x08\x00", b"\x51"),
+        # AdjustHealth: 55h pop edi / 56h mov [esi+10h],eax / 59h pop esi / 5Ah pop ebp / 5Bh ret 8
+        ("?AdjustHealth@CVillagerState@@QAEXHW4ECauseOfDeath@@@Z", 0x55,
+         b"\x5F\x89\x46\x10\x5E\x5D\xC2\x08\x00", b"\x5F\x89\x46\x10", b"\x5E\x5D\xC2\x08\x00", b"\x56"),
+    ):
+        sym = obj.symbol(name)
+        sec = obj.section(sym.section)
+        raw = sec.raw_ptr + sym.value + offset
+        if bytes(obj.buf[raw:raw + len(stolen)]) != stolen:
+            raise RuntimeError(f"Unexpected {name} death-path bytes")
+        cave = sec.raw_size
+        payload = (cave_head + b"\x60" + push + b"\xE8\x00\x00\x00\x00" + b"\x83\xC4\x04" + b"\x61" + cave_tail)
+        call_at = cave + len(cave_head) + 3            # head, pushad, push, E8: its rel32
+        if payload[call_at - cave - 1] != 0xE8:
+            raise RuntimeError(f"{name} capture cave: the relocation is not on its call's rel32")
+        obj.insert_section_bytes(sym.section, cave, payload)
+        helper = obj.append_undefined_symbol(REVIVE_DEATH_HELPER_SYMBOL)
+        obj.append_relocation(sym.section, call_at, helper, IMAGE_REL_I386_REL32)
+        sym = obj.symbol(name)
+        patch_section_near_jump(obj, sym.section, sym.value + offset, cave, len(stolen), stolen)
+        caves[name] = {"stolen_at": hex(offset), "cave": hex(cave), "bytes": payload.hex()}
+    obj.write(PATCHED / "VillagerState.obj")
+    manifest["ReviveDeathCapture"] = {
+        "status": "patched",
+        "helper": REVIVE_DEATH_HELPER_SYMBOL,
+        "caves": caves,
+        "gate": f"{REVIVE_FLAG_SECTION} byte 1 and the Revive DLL installed (VF2ReviveInstalled)",
+    }
+
+
+def patch_revive_manifest(manifest):
+    """Revive: the dormant .vf2rviv byte and the loader (special upgrade helper C++), loaded last by the Time
+    Controls wrapper; the Special Upgrades row REVIVE_ITEM_ID; the death capture (patch_revive_death_capture)."""
+    if "TimeControls" not in manifest:
+        raise RuntimeError("Revive rides the Time Controls loader; patch it first")
+    manifest["Revive"] = {
+        "status": "dormant loader installed in every executable",
+        "offline_patcher_setting": REVIVE_SETTING,
+        "category": "optional",
+        "default": True,
+        "runtime_flag": {
+            "symbol": REVIVE_FLAG_SYMBOL,
+            "source_section": REVIVE_FLAG_SECTION,
+            "size": 1,
+            "default": "00",
+            "enabled": "01",
+            "linked_location_status": "pending_link_metadata",
+        },
+        "companion_dll": REVIVE_DLL_NAME,
+        "companion_ini": REVIVE_INI_NAME,
+        "startup_export": REVIVE_STARTUP,
+        "store_row": {"item_id": hex(REVIVE_ITEM_ID), "price": REVIVE_PRICE, "free_with": FREE_GUARANTEED_CHEATS_SETTING,
+                      "title": "Revive a Family Member", "icon_item": hex(REVIVE_ICON_ITEM)},
+        "snapshots": "<save folder>\\Virtual Families 2 Patcher Data\\Revive\\<save file>.dat",
+    }
+
+
 def patch_allow_older_pregnancies(manifest):
     """Install a dormant, post-asset-flagged late-age pregnancy path."""
     obj = CoffObject(PATCHED / "VillagerState.obj")
@@ -26995,8 +27485,10 @@ def patch_free_guaranteed_cheats_manifest(manifest):
         "category_id": hex(SPECIAL_UPGRADES_CATEGORY),
         "rows": [hex(item) for item in FREE_GUARANTEED_CHEAT_ITEM_IDS],
         "rows_listed_in_this_variant": free_guaranteed_cheat_rows_listed(),
-        "special_upgrades_rows_flag_on": special_upgrades_list_count(),
-        "special_upgrades_rows_flag_off": special_upgrades_list_count() - free_guaranteed_cheat_rows_listed(),
+        # the Revive row (REVIVE_ITEM_ID) is in gServicesList but listed only while the Revive DLL runs
+        "special_upgrades_rows_flag_on": special_upgrades_list_count() - 1,
+        "special_upgrades_rows_flag_off": special_upgrades_list_count() - 1 - free_guaranteed_cheat_rows_listed(),
+        "revive_row": {"item_id": hex(REVIVE_ITEM_ID), "listed": "only while the Revive DLL runs"},
         "time_warp": "vf2time_b200.dll charges the store's Time Warp price unless this byte is 1",
         "runtime_flag": {
             "symbol": FREE_GUARANTEED_CHEATS_FLAG_SYMBOL,
@@ -43268,6 +43760,8 @@ def main():
     patch_title_box_manifest(manifest)
     # Translations (.vf2trns; the same loader, after the Unicode text DLLs).
     patch_translations_manifest(manifest)
+    # Revive (.vf2rviv; the same loader, last).
+    patch_revive_manifest(manifest)
     # Invisible furniture counts as its stock donor where stock code tests
     # the donor's item id (every executable).
     patch_invisible_furniture_parity(manifest)
@@ -43276,6 +43770,8 @@ def main():
     # post-asset phase changes .vf2preg from 00 to 01 only when selected, so
     # this feature adds no executable-matrix dimension.
     patch_allow_older_pregnancies(manifest)
+    # Revive: the death capture caves (VillagerState.obj, after the older-pregnancy trampoline).
+    patch_revive_death_capture(manifest)
     patch_next_generation_age_gate(manifest)
     # Force Marriage Email is deliberately a normal queued proposal.  Do not
     # install the former cheat-only Reject reroll route; native Accept,

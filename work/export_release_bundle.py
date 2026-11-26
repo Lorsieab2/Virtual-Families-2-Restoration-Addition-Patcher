@@ -94,6 +94,9 @@ def main() -> int:
     parser.add_argument("--store-refresh-dll",
                         default=str(ROOT / "runtime" / "build" / "vf2refresh_b200.dll"),
                         help="Built vf2refresh_b200.dll shipped behind the r_refreshes_store setting")
+    parser.add_argument("--revive-dll",
+                        default=str(ROOT / "runtime" / "build" / "vf2revive_b200.dll"),
+                        help="Built vf2revive_b200.dll (build_b200revive.bat) shipped behind the revive setting")
     # Outfit Pictures has no byte of its own: its loader rides Fix Vanilla Game Bugs' .vf2bugs byte, and the
     # exporter ships the DLL behind that setting (build_b200outfits.bat).
     parser.add_argument("--outfit-pictures-dll",
@@ -189,6 +192,7 @@ def main() -> int:
                         ("--up-to-28-children-dll", args.up_to_28_children_dll),
                         ("--family-history-dll", args.family_history_dll),
                         ("--store-refresh-dll", args.store_refresh_dll),
+                        ("--revive-dll", args.revive_dll),
                         ("--outfit-pictures-dll", args.outfit_pictures_dll),
                         ("--unicode-text-dll", args.unicode_text_dll),
                         ("--clip-dll", args.clip_dll),

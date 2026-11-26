@@ -171,7 +171,7 @@ def test_eighteen_and_older_come_back_at_eighteen_younger_at_their_age(died, bac
 
 
 def test_the_price_is_one_constant():
-    assert rv.REVIVE_PRICE == 10_000
+    assert rv.REVIVE_PRICE == 25_000
 
 
 # ---------------------------------------------------------------- the backfill
@@ -403,7 +403,7 @@ def test_a_spouse_whose_partner_remarried_returns_as_a_family_member(tmp_path):
     b = bytearray(save)
     villager(b, 5, "Hal", head=6, body=6)
     peep(b, 0, 1, "Hal", head=6, body=6, slot=5)
-    assert rv.return_role(r.parse_family_save(bytes(b)), bob) == "family member"
+    assert rv.return_role(r.parse_family_save(bytes(b)), bob) == "child"   # a family member: a child entry
     assert rv.return_role(r.parse_family_save(save), snapshot_of(folder, "Fay Whole-Name-Longer-Than-The-Field")) \
         == "child"
 
