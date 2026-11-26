@@ -120,6 +120,13 @@ vf1fun's Cheat Upgrades and have no Virtual Families 2 counterpart; `Renamed` ha
   Start Over) and `Generation 1`.
 - **Evict Family** keeps the log: everything before the `Evict Family` record belongs to the family that left, and
   the next family's first generation is `Founder (after the eviction)`.
+- **Family role** (Death, Arrived): `Parent`, `Parent (married in)` or `Child` from the current generation's record;
+  children 7 to 28 (Up to 28 Children, not in the record) are `Child` too, read from the executable's `.vf2kidt`
+  table that vf2kids_b200.dll keeps; a parent of the generation before is `Grandparent`; anyone else is
+  `(not in the Family Tree)`.
+- **Divorce of a widowed spouse**: Divorce Spouse takes parent 2 whenever that villager lives, also after parent 1
+  died with children (the game keeps parent 1 in the record with slot -1). Then nobody living is left behind, and
+  the record says `Family member: (none)` with no `Current spouse` line; it never names the dead parent.
 - **Remarriage**: the earlier spouse is the last one the log saw this person marry in the same generation, after the
   record that began it ("Generation" / "New Generation": from the 30th generation every one says 30, so the number
   alone cannot tell them apart); `(died)` or `(divorced)` only when the log has that spouse's Death or Divorce record
