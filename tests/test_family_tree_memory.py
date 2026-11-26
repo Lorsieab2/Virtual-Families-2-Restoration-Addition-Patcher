@@ -295,6 +295,19 @@ def test_the_records_parse(tmp_path):
     assert fh.read(tmp_path, 1) is None
 
 
+def test_a_widowed_spouses_divorce_is_divorced_from_nobody(tmp_path):
+    """vf2history_b200.dll writes "Family member: (none)" when the spouse divorced was already widowed: the tree
+    never says "Divorced from (none)"."""
+    widowed = divorce(1, "Ann", "Female", "Bob", "Male", 24).replace(
+        "  Family member: Ann\n    Sex: Female\n    Head: 1\n    Body: 1\n", "  Family member: (none)\n").replace(
+        "  Current spouse of Ann: (none)\n", "")
+    assert "Family member: (none)" in widowed
+    v = logged_family(tmp_path, HISTORY.replace(divorce(1, "Ann", "Female", "Bob", "Male", 24), widowed))
+    bob = by_name(v, "Bob")
+    assert bob.divorced and "Divorced (the patcher's Divorce Spouse): left the family at 24" in bob.unknowns
+    assert not any("(none)" in u for u in bob.unknowns)
+
+
 def test_the_family_history_fills_in_what_the_save_lost(tmp_path):
     v = logged_family(tmp_path)
     bob, cal, cia = by_name(v, "Bob"), by_name(v, "Cal"), by_name(v, "Cia")

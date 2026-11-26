@@ -1153,6 +1153,65 @@ def scenario_divorce_and_remarriage(w: HistoryWorld):
     assert w.last() == ("Marriage 2", remarriage_lines("Ana", 25, FEMALE, "Dan", 32, MALE, "Ben", "divorced"))
 
 
+def scenario_a_widowed_spouses_divorce_names_no_dead_family_member(w: HistoryWorld):
+    """Ana (parent 1) dies with a child: the REAL ReportDeath keeps her in the record with slot -1, and Ben (parent
+    2) still lives, so Divorce Spouse (it takes parent 2 whenever that villager lives) can divorce him. Nobody living
+    is left behind: the record never names Ana as the one he divorced."""
+    founded(w)
+    w.impregnate(0, 1, (99,))
+    w.deliver(0)
+    w.kill(0, 0)
+    w.report_death_timeflow()
+    assert s32(w.e.r32(w.peep(0) + S.PEEP_SLOT)) == -1, "the game kept the dead head in the record"
+    assert w.e.read(w.peep(1) + S.PEEP_VALID, 1) == b"\x01"
+    w.divorce()
+    assert w.last() == ("Divorce 1", ["  Family member: (none)"] + member("Divorced", "Ben", MALE, 26)
+                        + ["  How: Divorce Spouse", "  Generation: 1"])
+
+
+def extra_children(w: HistoryWorld, *slots):
+    """An executable built with Up to 28 Children has a .vf2kidt section: vf2kids_b200.dll's table of the living
+    children 7..28 (magic "V2KT", version 1, count, 22 slots). The core executable has none and its headers have no
+    room for another section, so the emulated image's .reloc section (unused once the image is mapped) is named
+    .vf2kidt and holds the table."""
+    e, base = w.e, w.e.base
+    nt = base + e.r32(base + 0x3C)
+    count = struct.unpack("<H", e.read(nt + 6, 2))[0]
+    first = nt + 0x18 + struct.unpack("<H", e.read(nt + 0x14, 2))[0]
+    header = next(first + 40 * i for i in range(count) if e.read(first + 40 * i, 8) == b".reloc\0\0")
+    assert e.r32(header + 8) >= 12 + 4 * 22
+    e.write(header, b".vf2kidt")
+    table = list(slots) + [-1] * (22 - len(slots))
+    e.write(base + e.r32(header + 12), struct.pack("<IIi22i", 0x544B3256, 1, len(slots), *table))
+
+
+def scenario_a_seventh_child_who_dies_is_a_child(w: HistoryWorld):
+    """Children 7..28 (Up to 28 Children) are not in the record: Up to 28 Children's table names them. A child of
+    the generation dies: "Family role: Child", not "(not in the Family Tree)"."""
+    founded(w)
+    w.set_villager(9, "Gus", MALE, age=200)
+    extra_children(w, 9)
+    w.kill(9, 0)
+    w.report_death_timeflow()
+    assert w.last() == ("Death 1", death_lines("Gus", 10, MALE, "Disease", "Child"))
+
+
+def scenario_a_grandparent_who_dies_is_a_grandparent(w: HistoryWorld):
+    """A parent of the generation before, still in the house after Next Generation, dies: "Family role:
+    Grandparent", not "(not in the Family Tree)"."""
+    founded(w)
+    w.impregnate(0, 1, (99,))
+    heir = w.spawned[0]
+    w.deliver(0)
+    w.e.w32(w.villager(heir) + S.VILLAGER_AGE, 500)
+    w.next_generation(heir, 0)
+    assert w.generations() == 2 and w.active(0)
+    w.kill(0, 0)
+    w.report_death_timeflow()
+    lines = death_lines("Ana", 25, FEMALE, "Disease", "Grandparent")
+    assert w.last() == ("Death 1", lines[:-1] + ["  Generation: 2"])
+
+
 def scenario_same_sex_marriage(w: HistoryWorld):
     """Two women through the same accepted-marriage call, divorce and remarriage: both named, each with her
     own sex, the same records as any marriage."""
@@ -1655,6 +1714,8 @@ ALL = [scenario_whole_names_in_the_log, scenario_names_are_logged_in_utf8,
        scenario_new_family_and_marriage, scenario_conception_and_birth_single, scenario_the_father_after_a_load,
        scenario_twins, scenario_triplets, scenario_child_dies, scenario_spouse_dies_and_remarriage,
        scenario_spouse_with_a_child_dies_and_remarriage, scenario_head_dies_and_the_widow_remarries,
+       scenario_a_widowed_spouses_divorce_names_no_dead_family_member, scenario_a_seventh_child_who_dies_is_a_child,
+       scenario_a_grandparent_who_dies_is_a_grandparent,
        scenario_remarriage_over_a_dead_spouse_the_log_never_saw, scenario_divorce_and_remarriage,
        scenario_random_events, scenario_random_event_title_is_the_dialogs, scenario_the_choice_is_the_dialogs,
        scenario_children_join_and_leave, scenario_next_generation, scenario_evict_then_new_family_keeps_the_log,

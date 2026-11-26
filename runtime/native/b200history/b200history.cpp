@@ -474,8 +474,37 @@ static void Capture(const unsigned char *v, Person &p) {
 
 static unsigned Years(int units) { return units < 0 ? 0u : (unsigned)units / HIST_UNITS_PER_YEAR; }
 
-// Where the villager stands in the current generation's Family Tree record: 0 parent 1, 1 parent 2,
-// 2.. a child, -1 not in it. The record's slot is checked with the name, as the game's own records go stale.
+// Up to 28 Children (vf2kids_b200.dll) keeps children 7..28 out of the record: the executable's .vf2kidt section
+// holds that DLL's table of the living ones' villager slots (magic "V2KT", version 1, the count, 22 slots). Null
+// when the executable has no such table (built without Up to 28 Children).
+struct ExtraChildren {
+    unsigned magic;
+    unsigned version;
+    int count;
+    int slots[28 - HIST_TREE_CHILDREN];
+};
+
+static const volatile ExtraChildren *ExtraChildrenTable() {
+    const unsigned char *exe = (const unsigned char *)GetModuleHandleW(0);
+    if (!exe) return 0;
+    const IMAGE_NT_HEADERS32 *nt = (const IMAGE_NT_HEADERS32 *)(exe + ((const IMAGE_DOS_HEADER *)exe)->e_lfanew);
+    const IMAGE_SECTION_HEADER *s = IMAGE_FIRST_SECTION(nt);
+    const volatile ExtraChildren *found = 0;
+    unsigned hits = 0;
+    for (unsigned i = 0; i < nt->FileHeader.NumberOfSections; ++i) {
+        if (!SameText((const char *)s[i].Name, ".vf2kidt", 8)) continue;
+        ++hits;
+        if (s[i].Misc.VirtualSize >= sizeof(ExtraChildren)) found = (const volatile ExtraChildren *)(exe + s[i].VirtualAddress);
+    }
+    const unsigned magic = ((unsigned)'T' << 24) | ((unsigned)'K' << 16) | ((unsigned)'2' << 8) | (unsigned)'V';
+    return hits == 1 && found && found->magic == magic && found->version == 1 ? found : 0;
+}
+
+enum { ROLE_GRANDPARENT = -2 };
+
+// Where the villager stands in the Family Tree: 0 parent 1, 1 parent 2, 2.. a child (children 7..28 from Up to 28
+// Children's table), ROLE_GRANDPARENT a parent of the generation before, -1 none of these. A record's slot is
+// checked with the name, as the game's own records go stale.
 static int TreeRole(const Person &p) {
     unsigned char *rec = Record(Generations());
     if (!rec || p.slot < 0) return -1;
@@ -485,11 +514,25 @@ static int TreeRole(const Person &p) {
         if (PeepValid(peep) && I32(peep, HIST_PEEP_SLOT) == p.slot && SameText((const char *)peep, p.name, 25))
             return k;
     }
+    if (const volatile ExtraChildren *extra = ExtraChildrenTable()) {
+        int count = extra->count < 0 ? 0 : extra->count > 28 - (int)HIST_TREE_CHILDREN ? 28 - (int)HIST_TREE_CHILDREN
+                                                                                      : extra->count;
+        for (int i = 0; i < count; ++i)
+            if (extra->slots[i] == p.slot) return 2 + (int)HIST_TREE_CHILDREN + i;
+    }
+    if (unsigned char *before = Record(Generations() - 1)) {
+        for (int k = 0; k < 2; ++k) {
+            unsigned char *peep = Peep(before, k);
+            if (PeepValid(peep) && I32(peep, HIST_PEEP_SLOT) == p.slot && SameText((const char *)peep, p.name, 25))
+                return ROLE_GRANDPARENT;
+        }
+    }
     return -1;
 }
 
 static const char *RoleText(int role) {
-    return role == 0 ? "Parent" : role == 1 ? "Parent (married in)" : role >= 2 ? "Child" : "(not in the Family Tree)";
+    return role == 0 ? "Parent" : role == 1 ? "Parent (married in)" : role >= 2 ? "Child" :
+           role == ROLE_GRANDPARENT ? "Grandparent" : "(not in the Family Tree)";
 }
 
 // ---- the Virtual Villagers patcher's record lines ("  Label: value"), a family member as it writes a villager:
@@ -1248,7 +1291,8 @@ static void OnMarriage(const Person &head, const Person &spouse, int gen) {
 }
 
 // ---- divorce (the patcher's Divorce Spouse): before the spouse leaves, the record still holds the generation's
-// other parent
+// other parent. Divorce Spouse takes parent 2 whenever that villager lives, so a widowed parent 2 (parent 1 died
+// with children: the game keeps parent 1 with slot -1) can be divorced too; then nobody living is left behind.
 static void OnDivorce(const unsigned char *spouseVillager) {
     int slot = CurrentSlot();
     if (!slot) return;
@@ -1257,12 +1301,15 @@ static void OnDivorce(const unsigned char *spouseVillager) {
     unsigned char *rec = Record(Generations());
     unsigned char *head = rec ? Peep(rec, 0) : 0;
     bool known = PeepValid(head);
+    const unsigned char *hv = known ? Villager(I32(head, HIST_PEEP_SLOT)) : 0;
+    bool living = Active(hv) && I32(hv, HIST_VILLAGER_HEALTH) > 0 &&
+                  SameText((const char *)head, (const char *)(hv + HIST_VILLAGER_NAME), 25);
     Text t;
     if (!Begin(t)) return;
-    if (known) PeepLines(t, "Family member", head); else Field(t, "  ", "Family member", "(unknown)");
+    if (living) PeepLines(t, "Family member", head); else Field(t, "  ", "Family member", known ? "(none)" : "(unknown)");
     Member(t, "  ", "Divorced", p, "Age");
     Field(t, "  ", "How", "Divorce Spouse");
-    if (known) t.S("  Current spouse of ").Whole((const char *)head, 25).S(": (none)").NL();
+    if (living) t.S("  Current spouse of ").Whole((const char *)head, 25).S(": (none)").NL();
     Generation(t, Generations());
     Write(slot, "Divorce", Body);
 }
