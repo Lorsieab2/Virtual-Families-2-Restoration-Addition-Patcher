@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The Children and Outfits sidecars stay matched to their saves after every tool that rewrites a save.
+"""The Children, Outfits and Revive sidecars stay matched to their saves after every tool that rewrites a save.
 
 b200kids takes the extra children (7 to 28) from a Children file only when it names the FNV-1a 64 hash and size of
 the loaded save (runtime/native/b200kids/b200kids.cpp AfterLoad); otherwise it keeps only those still at home and
@@ -28,6 +28,7 @@ import vf2_copy_slot as cs  # noqa: E402
 import vf2_game_speed as gs  # noqa: E402
 import vf2_genealogy as gen  # noqa: E402
 import vf2_rename_family as rf  # noqa: E402
+import vf2_revive as rv  # noqa: E402
 import vf2_save_backup as sb  # noqa: E402
 import vf2_save_reader as r  # noqa: E402
 
@@ -66,6 +67,13 @@ def outfits_sidecar(save: bytes) -> bytes:
         struct.pack_into("<i", out, 144 + k * 4, 5 if k == 0 else -1)
     struct.pack_into("<Q", out, 180, cs.fnv1a64(bytes(out[:180])))
     return bytes(out)
+
+
+def revive_sidecar(save: bytes) -> bytes:
+    """A Revive snapshot file (src/vf2_revive.py) describing ``save``: one family member who died."""
+    dead = rv.Snapshot(source=rv.THIS_SAVE, generation=1, role=1, age_at_death=900, sex=0, head=2, body=3,
+                       name=b"Bob", marks={"name": rv.EXACT, "sex": rv.EXACT, "head": rv.EXACT, "body": rv.EXACT})
+    return rv.make_file(save, [dead])
 
 
 def unix_after(data: bytes, seconds: int) -> int:
@@ -118,6 +126,7 @@ class Base(unittest.TestCase):
             save = (self.folder / r.save_file_name(number)).read_bytes()
             self.sidecar("Children", number).write_bytes(kids_sidecar(save))
             self.sidecar("Outfits", number).write_bytes(outfits_sidecar(save))
+            self.sidecar("Revive", number).write_bytes(revive_sidecar(save))
 
     def write(self, number: int, data: bytes) -> Path:
         path = self.folder / r.save_file_name(number)
@@ -163,8 +172,7 @@ class RenameTests(Base):
         result = rf.rename_family(self.folder, 1, "Newname", processes=NoGame(), now=WHEN)
         after = self.snapshot()
         self.assertEqual(sorted(p.name for p in result.rematched),
-                         ["Virtual Families 21.ldw.dat", "Virtual Families 21.ldw.dat",
-                          "Virtual Families 221.ldw.dat", "Virtual Families 221.ldw.dat"])
+                         ["Virtual Families 21.ldw.dat"] * 3 + ["Virtual Families 221.ldw.dat"] * 3)
         for kind in cs.SIDECAR_FOLDERS:
             for number in (1, 21):
                 self.assertTrue(self.matches(kind, number), (kind, number))
@@ -185,7 +193,8 @@ class RenameTests(Base):
         self.assertEqual(self.sidecar("Children", 1).read_bytes(), foreign)
         self.assertEqual(damaged.read_bytes(), damaged_bytes)
         self.assertEqual(sorted(str(p.relative_to(self.folder)) for p in result.rematched),
-                         sorted(str(self.rel(k, n)) for k, n in (("Outfits", 1), ("Children", 21))))
+                         sorted(str(self.rel(k, n)) for k, n in (("Outfits", 1), ("Children", 21), ("Revive", 1),
+                                                                 ("Revive", 21))))
 
     def test_a_failed_rename_puts_every_file_back(self):
         before = self.snapshot()
@@ -216,8 +225,8 @@ class SpeedTests(Base):
         self.sidecar("Outfits", 2).write_bytes(foreign)
         result = gs.set_speed(self.folder, 2, gs.PAUSED, NoGame(), WHEN)
         self.assertEqual(self.sidecar("Outfits", 2).read_bytes(), foreign)
-        self.assertEqual([p.name for p in result.rematched], ["Virtual Families 22.ldw.dat"])
-        self.assertEqual(result.rematched[0].parent.name, "Children")
+        self.assertEqual([p.name for p in result.rematched], ["Virtual Families 22.ldw.dat"] * 2)
+        self.assertEqual([p.parent.name for p in result.rematched], ["Children", "Revive"])
 
     def test_a_failed_speed_change_puts_the_save_and_sidecars_back(self):
         before = self.snapshot()
@@ -249,7 +258,7 @@ class BackupTests(Base):
         foreign = kids_sidecar(b"another save")
         self.sidecar("Children", 2).write_bytes(foreign)
         result = sb.back_up_save_folder(self.folder, NoGame(), WHEN)
-        self.assertEqual(result.rematched_sidecars, [self.rel("Outfits", 2)])
+        self.assertEqual(result.rematched_sidecars, [self.rel("Outfits", 2), self.rel("Revive", 2)])
         self.assertEqual(cs.sidecar_path(result.backup_folder, "Children", 2).read_bytes(), foreign)
 
     def play_on(self) -> None:
@@ -259,6 +268,7 @@ class BackupTests(Base):
         live.write_bytes(newer)
         self.sidecar("Children", 2).write_bytes(kids_sidecar(newer))
         self.sidecar("Outfits", 2).write_bytes(outfits_sidecar(newer))
+        self.sidecar("Revive", 2).write_bytes(revive_sidecar(newer))
 
     def test_a_restored_backup_keeps_every_child(self):
         for slot in (None, 2):
@@ -320,6 +330,7 @@ class OneSlotRestoreTests(Base):
             live.write_bytes(newer)
             self.sidecar("Children", number).write_bytes(kids_sidecar(newer))
             self.sidecar("Outfits", number).write_bytes(outfits_sidecar(newer))
+            self.sidecar("Revive", number).write_bytes(revive_sidecar(newer))
         self.put(f"{PATCHER}/Save 1/Data/Family Tree/new.tree", b"{}")
         plan = sb.plan_restore(self.folder, backup, 1)
         self.assertIn(Path(logs1), plan.replace)

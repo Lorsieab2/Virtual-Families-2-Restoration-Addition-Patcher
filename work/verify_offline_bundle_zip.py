@@ -74,6 +74,7 @@ REQUIRED_RUNNERS = {
     "vf2_move_slot.py",      # Move Player Slot (the Copy Player Slot window's Move choice)
     "vf2_delete_slot.py",    # Delete Player Slot (its Delete choice)
     "vf2_game_speed.py",
+    "vf2_revive.py",         # Revive Records: the snapshots of the family members who died
     "vf2_game_mechanics.py",
     "vf2_game_mechanics_window.py",
     "vf2_game_mechanics_family.py",

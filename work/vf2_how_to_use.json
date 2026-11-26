@@ -295,6 +295,19 @@
         "A family at any other speed is shown but not changed here; change it in the game instead."
       ]
     },
+    "revive_records": {
+      "section": "Tools",
+      "title": "Revive Records",
+      "guide": [
+        "Records each family member who died, so Revive can bring them back as the same person: name, looks, likes, career and whether they want kids.",
+        "For people who died before this patcher, it reads the family's save, the game's previous save, your backups, the family tree, the Family History log and the Names file. It never changes them.",
+        "Each detail is marked exact, inferred (from an older save or the log) or unknown.",
+        "Someone who died at 18 or older returns at 18; someone who died younger returns at the age they died.",
+        "Only people who died are recorded: never a divorced spouse, a child away from home or an evicted family. Only the current generation, for now.",
+        "Your backups are recorded even while the game runs; the family's own saves wait until you quit the game. Running it again changes nothing already recorded.",
+        "Bringing someone back is a Special Upgrades purchase in the game, still to come in a later version."
+      ]
+    },
     "game_mechanics": {
       "section": "Tools",
       "title": "Game Mechanics",

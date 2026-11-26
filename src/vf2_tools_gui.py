@@ -140,6 +140,8 @@ class ToolsTabMixin:
         self._help_button(links, "rename_family").pack(side="left", padx=(3, 0))
         self._link(links, "Game Speed...", self.game_speed).pack(side="left", padx=(18, 0))
         self._help_button(links, "game_speed").pack(side="left", padx=(3, 0))
+        self._link(links, "Revive Records...", self.revive_records).pack(side="left", padx=(18, 0))
+        self._help_button(links, "revive_records").pack(side="left", padx=(3, 0))
         family = ttk.Frame(box)
         family.grid(row=2, column=0, sticky="w", pady=(6, 0))
         self._link(family, "Family Tree Maker...", self.open_family_tree).pack(side="left")
@@ -1268,6 +1270,94 @@ class ToolsTabMixin:
         dialog._vf2_choose = choose
         self._hold(dialog, focus=name_entry)
         return dialog
+
+    # -- Revive Records -----------------------------------------------------
+
+    def revive_records(self) -> tk.Toplevel | None:
+        """Pick save folders, then record every family member who died before the patch (vf2_revive.backfill)."""
+        folders = self._tool_save_folders("Revive Records")
+        if folders is None:
+            return None
+        if not folders:
+            messagebox.showinfo(
+                "Revive Records",
+                f"No {TOOLS_GAME_TITLE} save folders were found in your Documents\\LDW folder.\n\n"
+                "The game makes its save folder the first time it is played.",
+            )
+            return None
+        dialog, frame = self._scrolling_dialog("Revive Records")
+        ttk.Label(frame, text="Choose the save folders to record:", font=("Segoe UI", 10, "bold")).pack(anchor="w")
+        ttk.Label(
+            frame,
+            text=(
+                "Records each family member of the current generation who died, so Revive can bring them back: who "
+                "they were, their looks, likes, career and the age they would return at (18 if they died at 18 or "
+                "older, else the age they died at). Your saves, backups, logs and names are only read. Your backups "
+                "are recorded even while the game runs; a running game's own saves wait until you quit it."
+            ),
+            wraplength=WRAP, justify="left",
+        ).pack(anchor="w", pady=(4, 10))
+        choices: list[tuple[Path, tk.BooleanVar]] = []
+        for folder in folders:
+            label = folder.name
+            if vf2_save_backup.running_game_count(folder):
+                label += "   (running: only its backups are recorded now)"
+            var = tk.BooleanVar(value=vf2_save_backup.is_patcher_save_folder(folder.name))
+            ttk.Checkbutton(frame, text=label, variable=var).pack(anchor="w", padx=(14, 0))
+            choices.append((folder, var))
+        buttons = ttk.Frame(frame)
+        buttons.pack(fill="x", pady=(14, 0))
+
+        def start() -> None:
+            chosen = [folder for folder, var in choices if var.get()]
+            if not chosen:
+                messagebox.showinfo("Revive Records", "Tick at least one save folder.", parent=dialog)
+                return
+            dialog.destroy()
+            self._run_revive_records(chosen)
+
+        ttk.Button(buttons, text="Record Selected", command=start).pack(side="left")
+        ttk.Button(buttons, text="Cancel", command=dialog.destroy).pack(side="left", padx=(8, 0))
+        dialog.protocol("WM_DELETE_WINDOW", dialog.destroy)
+        dialog._vf2_choices = choices
+        dialog._vf2_start = start
+        self._hold(dialog)
+        return dialog
+
+    def _run_revive_records(self, folders: list[Path]) -> list:
+        import vf2_revive
+
+        def work():
+            outcomes = []
+            for folder in folders:
+                try:
+                    outcomes.append((folder, vf2_revive.backfill(folder), None))
+                except (OSError, ValueError) as exc:
+                    outcomes.append((folder, None, str(exc)))
+            return outcomes
+
+        outcomes = self._run_with_wait("Recording the family members who died…", work)
+        self.status_var.set(f"Revive Records: {len(outcomes)} save folder(s) read.")
+        dialog, frame = self._scrolling_dialog("Revive Records")
+        for folder, result, error in outcomes:
+            ttk.Label(frame, text=folder.name, font=("Segoe UI", 10, "bold")).pack(anchor="w", pady=(8, 0))
+            problem = error or (result.error and f"nothing was changed: {result.error}")
+            lines = [f"NOT recorded: {problem}"] if problem else []
+            for t in (result.targets if result is not None and not problem else []):
+                where = (f"Backup {t.folder.name[len('Backup '):]}: " if t.in_backup else "") + t.path.name[:-len(".dat")]
+                state = {"written": "recorded", "set aside and written": "recorded (an unreadable record file was "
+                         "kept beside it)", "unchanged": "already recorded"}.get(t.status, t.status)
+                lines.append(f"{where}: {state}")
+                lines += ["    " + line for line in vf2_revive.summary(t)]
+            if not lines:
+                lines.append("No family member of the current generation has died.")
+            ttk.Label(frame, text="\n".join(lines), wraplength=WRAP, justify="left",
+                      **({"foreground": "#a01010"} if problem else {})).pack(anchor="w", padx=(14, 0))
+        ttk.Button(frame, text="Close", command=dialog.destroy).pack(pady=(16, 0))
+        dialog.protocol("WM_DELETE_WINDOW", dialog.destroy)
+        dialog._vf2_outcomes = outcomes
+        self._hold(dialog)
+        return outcomes
 
     # -- Game Speed ---------------------------------------------------------
 
