@@ -162,6 +162,17 @@ actions, as before. **Tools** holds:
   are re-keyed to it (as Copy Player Slot does), so the game keeps every extra child and the outfit pictures;
   one that did not match is left as it is. Slow and Fast are not offered: the game sets
   no speed but 10 and the +999 pause. Code: `src/vf2_game_speed.py`; tests: `tests/test_game_speed.py`.
+- **Revive Records...** (new, 2026-11-26) records each family member of the current generation who died, for the
+  Revive purchase still to be built in the game (`docs/revive.md`). It is the backfill for people who died before
+  the patch: read-only sources in the owner's order (their own dead record still in the save, the game's previous
+  save and the patcher's Backups, the Family Tree entry, the Family History log and the Names file), every field
+  marked exact, inferred or unknown, into `Virtual Families 2 Patcher Data\Revive\<save file>.dat` (N and N + 20,
+  keyed to the save's hash like the Children file, so Copy / Move / Rename / Game Speed / Back Up re-key it).
+  Idempotent; backups are done while the game runs, the running game's live saves wait; temp-and-replace with a
+  read-back, a replaced file copied to `Revive\Before backfill\<time>` first, a damaged one set aside as
+  `.unreadable-K.dat`, and the whole run rolled back if a write fails. Only the dead: never divorced, away
+  (college, Boarding School, the Talent Scout) or evicted family members. Age rule: died at 18 or older -> returns
+  at 18 (360 age units), younger -> the age at death. Code: `src/vf2_revive.py`; tests: `tests/test_revive.py`.
 - **Game Mechanics...** (the Game section) opens a read-only window of how Virtual Families 2 works underneath,
   laid out as the Virtual Villagers patcher's: a link to each group at the top (time and ageing, needs and upkeep,
   health and sickness, old age, pregnancy and babies, careers, money and interest, leaving home, dating, marriage

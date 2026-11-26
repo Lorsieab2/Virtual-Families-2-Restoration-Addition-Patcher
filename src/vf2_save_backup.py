@@ -94,7 +94,7 @@ _BACKUP_NAME = re.compile(
 _SAVE_NAME = re.compile(r"^Virtual Families 2(0|[1-9]\d*)\.ldw$", re.I)
 _SIDECAR_NAME = re.compile(r"^Virtual Families 2(0|[1-9]\d*)\.ldw\.dat$", re.I)
 _NAMES_NAME = re.compile(r"^Virtual Families 2([1-5])\.ldw\.txt$", re.I)    # vf2_names.names_path
-SIDECAR_FOLDERS = ("children", "outfits")      # b200kids / b200outfits SidecarPath, under the Patcher Data folder
+SIDECAR_FOLDERS = ("children", "outfits", "revive")   # b200kids / b200outfits SidecarPath, vf2_revive.sidecar_path
 PATCHER_FOLDER = "Virtual Families 2 Patcher"   # its "Save <N>" folders: each slot's logs and Family Tree files
 SHARED_FILES = ("wc.dat",)      # beside ldwLog.txt, shared by every family
 

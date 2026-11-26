@@ -109,7 +109,7 @@ class ToolsTabTests(unittest.TestCase):
         links = [str(w.cget("text")) for w in found
                  if w.winfo_class() == "TLabel" and str(w.cget("style")) == "Link.TLabel"]
         self.assertEqual(links, ["Back Up Saves", "Restore Saves...", "Copy Player Slot...", "Rename Family...",
-                                 "Game Speed...",
+                                 "Game Speed...", "Revive Records...",
                                  "Family Tree Maker...", "Game Mechanics...", "Picture Maker...",
                                  "Game Text...", "Unicode Font...", "Translations...", "How to Use..."])
         boxes = [str(w.cget("text")) for w in found if w.winfo_class() == "TLabelframe"]
@@ -667,6 +667,29 @@ class ToolsTabTests(unittest.TestCase):
         self.error.assert_called_once()
         self.assertIn("Close the game first", self.error.call_args[0][1])
         self.assertEqual(self.app.status_var.get(), "Game Speed: nothing was changed.")
+
+    # -- Revive Records -----------------------------------------------------
+
+    def test_revive_records_records_the_dead_and_reads_the_saves_only(self):
+        sys.path.insert(0, str(ROOT / "tests"))
+        import test_revive as tr
+        import vf2_revive
+        (self.folder / "Virtual Families 21.ldw").write_bytes(tr.family())
+        (self.folder / "Virtual Families 25.ldw").unlink()
+        save = (self.folder / "Virtual Families 21.ldw").read_bytes()
+        self.assertIn("revive_records", self.app.help_keys)
+        dialog = self.app.revive_records()
+        try:
+            self.assertEqual({f.name: v.get() for f, v in dialog._vf2_choices}, {FOLDER: True})
+            with mock.patch.object(self.app, "_hold"):
+                dialog._vf2_start()
+        finally:
+            if dialog.winfo_exists():
+                dialog.destroy()
+        self.assertEqual((self.folder / "Virtual Families 21.ldw").read_bytes(), save)
+        records = vf2_revive.read_file(vf2_revive.sidecar_path(self.folder, 1).read_bytes())
+        self.assertEqual(sorted(s.name_text for s in records.entries), ["Bob", tr.FAY_SHORT])
+        self.assertIn("1 save folder", self.app.status_var.get())
 
 
 if __name__ == "__main__":
