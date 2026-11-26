@@ -171,8 +171,8 @@ actions, as before. **Tools** holds:
   Idempotent; backups are done while the game runs, the running game's live saves wait; temp-and-replace with a
   read-back, a replaced file copied to `Revive\Before backfill\<time>` first, a damaged one set aside as
   `.unreadable-K.dat`, and the whole run rolled back if a write fails. Only the dead: never divorced, away
-  (college, Boarding School, the Talent Scout) or evicted family members. Age rule: died at 18 or older -> returns
-  at 18 (360 age units), younger -> the age at death. Code: `src/vf2_revive.py`; tests: `tests/test_revive.py`.
+  (college, Boarding School, the Talent Scout) or evicted family members. Age rule: died younger than 20 -> the
+  age at death; 20 or older, or not known -> 20 (400 age units) with the career, level and salary at death. Code: `src/vf2_revive.py`; tests: `tests/test_revive.py`.
 - **Game Mechanics...** (the Game section) opens a read-only window of how Virtual Families 2 works underneath,
   laid out as the Virtual Villagers patcher's: a link to each group at the top (time and ageing, needs and upkeep,
   health and sickness, old age, pregnancy and babies, careers, money and interest, leaving home, dating, marriage
@@ -648,10 +648,12 @@ release bundle, like almost everything else)
 - **Revive** (`.vf2rviv`, an Optional patch, **on by default** and in Owner's Defaults; new after B209, **needs the
   executable rebuilt**) - the Special Upgrades row **Revive a Family Member** ($25,000; free with Free and Guaranteed
   Cheats; the price cheats apply) brings back a family member of the current generation who died, as the same
-  person: name (and the Names file's whole name), sex, looks, parents, likes and dislikes, career, fertility and
-  "Wants kids?"; moods and needs start fresh. Age: 18 for a death at 18 or older (360 age units), else the age at
-  death. One at a time in the game's own box (**Revive** / **Next**); nothing chosen, or no room, gives the money back.
-  A child's own Family Tree entry is pointed at them again; a spouse whose partner remarried returns as a child entry.
+  person: name (and the Names file's whole name), sex, looks, parents, likes and dislikes, fertility and "Wants
+  kids?"; moods and needs start fresh. Age: the age at death for a death before 20; 20 (400 age units) with the career,
+  level and salary at death for a death at 20 or older (or an unknown age). One at a time in the game's own box
+  (**Revive** / **Next**); nothing chosen, or no room, gives the money back. A child's own Family Tree entry is pointed
+  at them again; a spouse whose partner remarried lives in the house outside the tree's records (not drawn on the
+  game's Family Tree screen yet).
   Only the dead (never divorced, away or evicted). The companion DLL `vf2revive_b200.dll` takes a snapshot at every
   death (the executable's `SetHealth` / `AdjustHealth` call it on the path that stores a cause of death) into the
   same per-save file as Revive Records, rotated with the save; it holds no game address and patches no code. The

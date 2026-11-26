@@ -189,8 +189,9 @@ died, so Revive can bring them back as the same person (name, looks, likes,
 career, whether they want kids). For people who died before this patcher it
 reads the save, the game's previous save, your backups, the family tree, the
 Family History log and the Names file, and never changes them; each detail is
-marked exact, inferred or unknown. Someone who died at 18 or older would return
-at 18, someone younger at the age they died. Divorced spouses, children away
+marked exact, inferred or unknown. Someone who died younger than 20 would
+return at the age they died; at 20 or older (or an unknown age), at 20 with
+their career. Divorced spouses, children away
 from home and evicted families are never recorded. Backups are recorded even
 while the game runs; the family's own saves wait until you quit. Running it
 again changes nothing already recorded. Bringing someone back is the Special

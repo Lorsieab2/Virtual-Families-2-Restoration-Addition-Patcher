@@ -163,10 +163,11 @@ def tree_files(folder: Path) -> dict:
 
 
 # ---------------------------------------------------------------- the age rule
-@pytest.mark.parametrize("died, back", [(0, 0), (60, 60), (340, 340), (359, 359), (360, 360), (361, 360),
-                                        (900, 360), (2000, 360)])
-def test_eighteen_and_older_come_back_at_eighteen_younger_at_their_age(died, back):
-    assert rv.AGE_18_UNITS == 18 * r.AGE_UNITS_PER_YEAR == 360
+@pytest.mark.parametrize("died, back", [(0, 0), (60, 60), (340, 340), (359, 359), (360, 360), (380, 380),
+                                        (399, 399), (400, 400), (401, 400), (900, 400), (2000, 400), (None, 400),
+                                        (-1, 400)])
+def test_twenty_and_older_come_back_at_twenty_younger_at_their_age(died, back):
+    assert rv.ADULT_RETURN_UNITS == 20 * r.AGE_UNITS_PER_YEAR == 400
     assert rv.revival_age_units(died) == back
 
 
@@ -191,7 +192,7 @@ def test_backfill_from_their_own_records_is_exact(tmp_path):
     at = r.gs_to_file(r.GS_VILLAGERS) + 1 * r.VILLAGER_RECORD_SIZE
     assert bob.record == family()[at:at + r.VILLAGER_RECORD_SIZE]
     assert bob.role == rv.ROLE_SPOUSE and bob.generation == 1
-    assert bob.revival_age() == (360, rv.EXACT)
+    assert bob.revival_age() == (400, rv.EXACT)
     fay = people["Fay Whole-Name-Longer-Than-The-Field"]
     assert fay.name == FAY_SHORT.encode() and fay.full_name == FAY.encode()
     assert fay.revival_age() == (60, rv.EXACT)
@@ -211,7 +212,7 @@ def test_backfill_from_the_previous_save_marks_what_may_have_changed(tmp_path):
     for f in ("career_level", "fertility", "procreation_desire", "likes", "dislikes", "record", "age_at_death"):
         assert bob.mark(f) == rv.INFERRED, f
     assert bob.age_at_death == 45 * 20
-    assert bob.revival_age() == (360, rv.EXACT)
+    assert bob.revival_age() == (400, rv.EXACT)
 
 
 def test_backfill_from_the_tree_alone_leaves_the_rest_unknown(tmp_path):
@@ -221,7 +222,7 @@ def test_backfill_from_the_tree_alone_leaves_the_rest_unknown(tmp_path):
     assert bob.source == rv.TREE
     assert {f for f in rv.FIELDS if bob.mark(f) == rv.EXACT} == {
         "name", "full_name", "sex", "head", "body", "likes_text", "dislikes_text", "career", "role", "generation"}
-    assert bob.mark("age_at_death") == rv.UNKNOWN and bob.revival_age() == (None, rv.UNKNOWN)
+    assert bob.mark("age_at_death") == rv.UNKNOWN and bob.revival_age() == (400, rv.EXACT)   # unknown: back at 20
     assert bob.record == b""
 
 
@@ -403,7 +404,7 @@ def test_a_spouse_whose_partner_remarried_returns_as_a_family_member(tmp_path):
     b = bytearray(save)
     villager(b, 5, "Hal", head=6, body=6)
     peep(b, 0, 1, "Hal", head=6, body=6, slot=5)
-    assert rv.return_role(r.parse_family_save(bytes(b)), bob) == "child"   # a family member: a child entry
+    assert rv.return_role(r.parse_family_save(bytes(b)), bob) == "family member"   # in the house, no tree place
     assert rv.return_role(r.parse_family_save(save), snapshot_of(folder, "Fay Whole-Name-Longer-Than-The-Field")) \
         == "child"
 

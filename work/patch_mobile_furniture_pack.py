@@ -16052,6 +16052,7 @@ enum ECareerType {
 class CVillagerSkills {
 public:
     ECareerType const CareerType();
+    void UpdateSalary();
 };
 
 enum EGender {
@@ -16068,7 +16069,9 @@ public:
     bool VillagerExists(int id, bool include_away);
     CVillager *GetVillagerInFocus();
     void SetNoFocus();
-    int const SpawnSpecificPeep(int age, EGender gender, int body);
+    // (name seed, gender, AGE): CVillager::Init stores the third as the bio age (-1: a random 0..29 units) and hands
+    // the first to CVillagerBio::SetRandomName; the store's own Adoption Services calls it with (1, -1, 60h).
+    int const SpawnSpecificPeep(int nameSeed, EGender gender, int age);
     int const SpawnSpecificPeep(
         int age,
         EGender gender,
@@ -16661,8 +16664,10 @@ static bool VF2ReviveSamePeep(const unsigned char *peep, const VF2ReviveCandidat
 }
 
 // Where the family member goes back in the current generation's record. 0 re-point their own entry (slot -1),
-// 1 a new child entry (AddOffspring: a spouse whose partner remarried, a child no longer in the six), 2 the empty
-// married-in place (a spouse whose partner did not remarry), -1 refused.
+// 1 a new child entry (AddOffspring: a child no longer in the six), 2 the empty married-in place (a spouse whose
+// partner did not remarry), 3 no place at all (a spouse whose partner remarried: the owner -- they live in the house
+// as a family member and take no child place, so no count, heir, Next Generation or Up to 28 Children changes),
+// -1 refused.
 static int VF2RevivePlan(const VF2ReviveCandidate &c, unsigned char *record, unsigned char **peepOut) {
     *peepOut = 0;
     if (!record) return -1;
@@ -16678,7 +16683,7 @@ static int VF2RevivePlan(const VF2ReviveCandidate &c, unsigned char *record, uns
     if (c.role == 1) {
         unsigned char *p = VF2RevivePeep(record, 1);
         if (VF2ReviveSamePeep(p, c) && VF2ReviveI32(p, 0x28) == -1) { *peepOut = p; return 0; }
-        if (p[0x1A]) return FamilyTree.EmptyOffspringSlots() > 0 ? 1 : -1;      // the partner remarried
+        if (p[0x1A]) return 3;                                                     // the partner remarried
         *peepOut = p;
         return 2;
     }
@@ -16721,6 +16726,7 @@ static void VF2ReviveApplySnapshot(unsigned char *v, const VF2ReviveCandidate &c
     } else {
         if (e[300 + 9]) *(int *)(v + 0x6B8C) = VF2ReviveI32(e, 32);  // the career the tree kept
         if (e[300 + 19]) *(int *)(v + 0x6B90) = VF2ReviveI32(e, 36);
+        if (e[300 + 9]) ((CVillagerSkills *)(v + 0x6B8C))->UpdateSalary();   // its salary, the game's own
         if (e[300 + 5]) memcpy(v + 0x1BC34, e + 196, 12);
         if (e[300 + 6]) memcpy(v + 0x1BC40, e + 208, 12);
     }
@@ -16770,7 +16776,7 @@ static bool VF2ReviveBringBack(const VF2ReviveCandidate &c) {
     unsigned char *peep = 0;
     int plan = VF2RevivePlan(c, record, &peep);
     if (plan < 0) return false;
-    int slot = VillagerManager.SpawnSpecificPeep(c.ageUnits, (EGender)c.sex, -1);
+    int slot = VillagerManager.SpawnSpecificPeep(1, (EGender)c.sex, c.ageUnits);   // as Adoption Services: seed 1
     if (slot < 0) return false;
     unsigned char *v = (unsigned char *)&VillagerManager.GetVillager(slot);
     VF2ReviveApplySnapshot(v, c);
@@ -16779,6 +16785,8 @@ static bool VF2ReviveBringBack(const VF2ReviveCandidate &c) {
         *(int *)(peep + 0x28) = slot;                                // the entry ReportDeath set to -1
         FamilyTree.UpdatePeepRecord((CFamilyTree::SPeepRecord *)peep);
         role = c.role == 0 ? "Parent" : c.role == 1 ? "Parent (married in)" : "Child";
+    } else if (plan == 3) {
+        role = "Family member";                                      // in the house, not in the tree
     } else if (plan == 1) {
         if (!FamilyTree.AddOffspring(*(CVillager *)v)) {
             v[0x1BB84] = 0;                                          // as VF2AdoptRandomChildChoice undoes a spawn
@@ -18661,7 +18669,7 @@ extern "C" bool __cdecl VF2AdoptRandomChildChoice(void *scene) {
         age = (ldwGameState::GetRandom(7) + 2) * 20;
     }
     EGender gender = (EGender)ldwGameState::GetRandom(2);
-    int index = VillagerManager.SpawnSpecificPeep(age, gender, -1);
+    int index = VillagerManager.SpawnSpecificPeep(1, gender, age);      // (seed, gender, age), as Adoption Services
     if (index < 0) {
         return false;
     }

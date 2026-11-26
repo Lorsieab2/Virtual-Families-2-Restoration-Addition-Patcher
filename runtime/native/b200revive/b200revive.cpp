@@ -12,7 +12,9 @@
 //     Children file). After theGameState::Save(N) the file of the save the game just moved to N+20 goes with it and
 //     a new file is written for N (a temporary file, then a replace); after a Load the file of the loaded save is
 //     read. A damaged file is set aside ("<name>.unreadable-K.dat"), never overwritten;
-//   * the list the Special Upgrades row "Revive a Family Member" offers (B200Revive_Candidates) and, once the
+//   * the list the Special Upgrades row "Revive a Family Member" offers (B200Revive_Candidates: the age they come
+//     back at is the age they died at when younger than 20, else 20 -- 400 age units -- as when it is not known) and,
+//     once the
 //     executable has brought one back, its "Arrived" record in the slot's Family History log (B200Revive_Done).
 //
 // It holds NO game address and patches NO code: everything it needs from the game comes from the host table the
@@ -410,7 +412,7 @@ extern "C" __declspec(dllexport) void __cdecl B200Revive_OnDeath(int slot) {
 struct B200ReviveCandidate {
     int index;                  // the snapshot's index (for B200Revive_Done)
     int role;                   // 0 parent 1, 1 parent 2, 2.. a child, -1 not in the tree
-    int ageUnits;               // the age they return at: 18 (360) if they died at 18 or older, else their age
+    int ageUnits;               // the age they return at: their age at death below 20 (400 units), else 20
     int sex, head, body;
     char name[28];              // the name as the save stores it
     const unsigned char *entry; // the whole snapshot (vf2_revive's entry layout)
@@ -427,12 +429,12 @@ static bool AliveNow(const unsigned char *e) {
     return false;
 }
 
+// Younger than 20 at death: that age; 20 or older, or not known: 20 (the owner's rule).
+static const int kAdultReturnUnits = 400;
 static int ReviveAge(const unsigned char *e) {
-    int role = I32(e, E_ROLE);
-    if (e[E_MARKS + F_AGE] == M_UNKNOWN || I32(e, E_AGE) < 0)
-        return role == 0 || role == 1 ? 360 : -1;          // a parent was an adult: 18 exactly
+    if (e[E_MARKS + F_AGE] == M_UNKNOWN || I32(e, E_AGE) < 0) return kAdultReturnUnits;
     int age = I32(e, E_AGE);
-    return age >= 360 ? 360 : age;
+    return age >= kAdultReturnUnits ? kAdultReturnUnits : age;
 }
 
 extern "C" __declspec(dllexport) int __cdecl B200Revive_Candidates(B200ReviveCandidate *out, int max) {
@@ -452,7 +454,6 @@ extern "C" __declspec(dllexport) int __cdecl B200Revive_Candidates(B200ReviveCan
             continue;                                       // who they were must be known exactly
         if (AliveNow(e)) continue;                          // only the dead
         int age = ReviveAge(e);
-        if (age < 0) continue;
         B200ReviveCandidate &c = out[n++];
         Zero(&c, sizeof(c));
         c.index = (int)i;

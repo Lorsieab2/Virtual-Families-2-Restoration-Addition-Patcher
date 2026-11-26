@@ -100,6 +100,11 @@ def test_the_generator_wires_the_row_the_byte_the_loader_and_the_death_capture()
                    'return gVF2FreeGuaranteedCheats == 1 ? 0 : -1;', 'VF2PurchaseRevive();',
                    'Money.Adjust((float)paid, false)'):
         assert needle in text, needle
+    # the 3-argument SpawnSpecificPeep is (name seed, gender, AGE), as the store's Adoption Services calls it
+    assert "VillagerManager.SpawnSpecificPeep(1, (EGender)c.sex, c.ageUnits)" in text
+    assert "int const SpawnSpecificPeep(int nameSeed, EGender gender, int age);" in text
+    # a spouse whose partner remarried takes no child place: no AddOffspring for them, the tree is left as it is
+    assert re.search(r"if \(p\[0x1A\]\) return 3;\s+// the partner remarried", text)
     # the host table the executable fills is the one the DLL reads, field for field
     host = re.search(r"struct VF2ReviveHost \{(.*?)\};", text, re.S).group(1)
     dll = re.search(r"struct VF2ReviveHost \{(.*?)\};", source(), re.S).group(1)
@@ -169,7 +174,7 @@ def test_a_death_is_captured_exactly_and_kept_beside_the_save(built, tmp_path):
     assert all(bob.mark(k) == rv.EXACT for k in ("name", "sex", "head", "body", "likes", "career", "career_level",
                                                     "fertility", "procreation_desire", "age_at_death", "record"))
     assert (bob.fertility, bob.procreation_desire, bob.career, bob.career_level) == (44, 55, 7, 2)
-    assert bob.revival_age() == (360, rv.EXACT)                  # died at 47: returns at 18
+    assert bob.revival_age() == (400, rv.EXACT)                  # died at 47: returns at 20
     assert fay.revival_age() == (120, rv.EXACT)                  # died at 6: returns at 6
     assert fay.role == rv.ROLE_CHILD + 1
 
@@ -195,11 +200,13 @@ def test_a_load_reads_the_file_and_a_damaged_one_is_set_aside(built, tmp_path):
 
 def test_only_the_dead_of_this_generation_are_offered_with_the_age_rule(built, tmp_path):
     g = Game(built, tmp_path)
-    out = g.run("family", "save", "1", "load", "1", "age", "3", "359", "kill", "3", "0", "age", "2", "360",
+    out = g.run("family", "save", "1", "load", "1", "age", "3", "399", "kill", "3", "0", "age", "2", "400",
                 "kill", "2", "1", "cands")
     got = {c[1]: c for c in cands(out)}
     assert set(got) == {"Fay", "Cal"}                           # Ann and Bob live: never offered
-    assert got["Fay"][5] == "359" and got["Cal"][5] == "360"     # 17 years 19 units: as they died; 18: 18
+    assert got["Fay"][5] == "399" and got["Cal"][5] == "400"     # 19 years 19 units: as they died; 20: 20
+    out = g.run("family", "save", "1", "load", "1", "age", "2", "2000", "kill", "2", "1", "cands")
+    assert {c[1]: c[5] for c in cands(out)} == {"Cal": "400"}   # 100 years: back at 20
     # someone alive again under the same identity is not offered (a namesake of the dead in the house)
     out = g.run("family", "save", "1", "load", "1", "kill", "3", "0", "reuse", "3", "cands")
     assert "cands 1" in out
@@ -221,7 +228,7 @@ def test_a_revival_leaves_the_list_and_is_logged_in_the_family_history(built, tm
     last = fh.entries(text)[-1]
     assert (last.kind, last.number) == ("Arrived", 4)
     assert last.get("Name") == "Bob" and last.get("How") == "Revived (Revive a Family Member)"
-    assert last.get("Age at arrival") == "18" and last.get("Family role") == "Parent (married in)"
+    assert last.get("Age at arrival") == "20" and last.get("Family role") == "Parent (married in)"
     assert last.get("Generation") == "1"
 
 

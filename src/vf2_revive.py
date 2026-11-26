@@ -5,8 +5,9 @@ the owner's decisions it follows:
 
 * a revived family member is the SAME person: name (with the whole name of the Names file), sex, head and body,
   likes and dislikes, career, fertility and "Wants kids?" (procreation desire); moods and needs start fresh;
-* the AGE they come back at: someone who died at 18 or older comes back at 18, the game's own 18-year mark (360 age
-  units, the "Set Age to 18" row's value); someone who died at 17 or younger comes back at the age they died at;
+* the AGE they come back at (the owner, final): someone who died younger than 20 comes back at the age they died
+  at (18 and 19 too); someone who died at 20 or older -- or whose age at death is not known -- comes back at 20, the
+  game's own 20-year mark (400 age units), WITH their career, level and salary at death;
 * only the DEAD can be revived: never a divorced spouse, a child away (college, Boarding School, the Talent Scout) or
   a member of an evicted family; and only the current generation, for now;
 * a dead spouse whose partner has remarried comes back as a family member, not a spouse;
@@ -54,7 +55,7 @@ import vf2_save_reader as reader
 # The price of one revival, in the store's own money: $25,000 (the owner, 2026-11-26); free with Free and Guaranteed
 # Cheats. The executable's row holds the same price (work/patch_mobile_furniture_pack.py REVIVE_PRICE).
 REVIVE_PRICE = 25_000
-AGE_18_UNITS = 360                      # 18 years x 20 age units: the game's 18-year mark ("Set Age to 18")
+ADULT_RETURN_UNITS = 400                # 20 years x 20 age units: the game's 20-year mark
 UNITS_PER_YEAR = reader.AGE_UNITS_PER_YEAR
 
 # ---------------------------------------------------------------- the file
@@ -116,10 +117,12 @@ def sidecar_path(folder: Path, number: int) -> Path:
     return Path(folder) / DATA_FOLDER / FOLDER / (reader.save_file_name(number) + ".dat")
 
 
-def revival_age_units(age_at_death: int) -> int:
-    """The age a revived family member comes back at: 18 (360 units) for anyone who died at 18 or older, else the
-    age they died at, in the game's own age units."""
-    return AGE_18_UNITS if age_at_death >= AGE_18_UNITS else max(0, age_at_death)
+def revival_age_units(age_at_death: int | None) -> int:
+    """The age a revived family member comes back at, in the game's own age units: 20 (400 units) for anyone who died
+    at 20 or older or whose age at death is not known, else the age they died at."""
+    if age_at_death is None or age_at_death < 0 or age_at_death >= ADULT_RETURN_UNITS:
+        return ADULT_RETURN_UNITS
+    return age_at_death
 
 
 @dataclass
@@ -173,11 +176,11 @@ class Snapshot:
 
     def revival_age(self) -> tuple[int | None, int]:
         """(age units, mark) they would come back at; the mark is exact whenever the rule makes the age certain (a
-        death at 18 or older known only to the year still returns at exactly 18)."""
+        death at 20 or older known only to the year, or an unknown age, returns at exactly 20)."""
         if self.mark("age_at_death") == UNKNOWN or self.age_at_death < 0:
-            return None, UNKNOWN
+            return ADULT_RETURN_UNITS, EXACT
         age = revival_age_units(self.age_at_death)
-        if age == AGE_18_UNITS or self.mark("age_at_death") == EXACT:
+        if age == ADULT_RETURN_UNITS or self.mark("age_at_death") == EXACT:
             return age, EXACT
         return age, INFERRED
 
@@ -751,13 +754,13 @@ def refusal(save: reader.FamilySave, s: Snapshot, history=None) -> str | None:
 
 def return_role(save: reader.FamilySave, s: Snapshot) -> str:
     """How they come back (the executable's VF2RevivePlan): "spouse" when they were the married-in parent and that
-    place is still theirs or empty; a spouse whose partner has remarried comes back as a family member, a "child"
-    entry of the Family Tree (the owner, 2026-11-26); a parent as "parent"; a child, or anyone the six children's
-    places no longer hold, as a "child"."""
+    place is still theirs or empty; a spouse whose partner has remarried comes back as a "family member" who lives
+    in the house and takes no place in the Family Tree's records (the owner, 2026-11-26); a parent as "parent"; a
+    child, or anyone the six children's places no longer hold, as a "child"."""
     cur = save.family_tree.current
     if s.role == ROLE_SPOUSE:
         if cur is not None and cur.parent2.present and cur.parent2.slot != -1:
-            return "child"
+            return "family member"
         return "spouse"
     if s.role == ROLE_PARENT:
         return "parent"
