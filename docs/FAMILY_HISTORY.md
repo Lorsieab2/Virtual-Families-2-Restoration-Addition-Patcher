@@ -120,8 +120,11 @@ vf1fun's Cheat Upgrades and have no Virtual Families 2 counterpart; `Renamed` ha
   Start Over) and `Generation 1`.
 - **Evict Family** keeps the log: everything before the `Evict Family` record belongs to the family that left, and
   the next family's first generation is `Founder (after the eviction)`.
-- **Remarriage**: the earlier spouse is the last one the log saw this person marry in the same generation; `(died)`
-  or `(divorced)` only when the log has that spouse's Death or Divorce record after the marriage (nothing guessed).
+- **Remarriage**: the earlier spouse is the last one the log saw this person marry in the same generation, after the
+  record that began it ("Generation" / "New Generation": from the 30th generation every one says 30, so the number
+  alone cannot tell them apart); `(died)` or `(divorced)` only when the log has that spouse's Death or Divorce record
+  after the marriage, in the same generation, and a Death only when it is not a child's (a son named after his father
+  is never the earlier spouse; nothing guessed).
 
 Same-sex marriages: Virtual Families 2 has none, but the patcher's **Allow Same-Sex Marriage** (the Cheat
 Upgrades row Enable Same-Sex Marriage) marries a same-sex couple through the same accepted-marriage call of
