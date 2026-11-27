@@ -108,7 +108,7 @@ def family_sheet(world, people, out_dir: Path) -> list[Path]:
             world.e.w32(world.villager(slot) + W.S.VILLAGER_AGE, age)
             toned = render(world, person, slot, plan, rows, False)
             own = render(world, person, slot, plan, rows, True)
-            scale = 2 if kind != "portraits" else 1
+            scale = 2
             cells.append((name, tone, toned.resize((toned.width * scale, toned.height * scale), Image.NEAREST),
                           own.resize((own.width * scale, own.height * scale), Image.NEAREST)))
         cw = max(max(t.width, o.width) for _n, _t, t, o in cells) + 20

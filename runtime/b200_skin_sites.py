@@ -9,8 +9,8 @@ rel32 displacements are wildcards) and derives every address from where the runs
 runtime/tools/gen_b200_skin_sites.py proves every pin and derivation on the core variant with capstone + pefile,
 resolves every other executable it is given (the 32 B209 matrix variants) and renders the C header.
 
-The DLL is loaded LAST by the Family History DLL (B200History_Startup, after its own install), so every other
-companion loaded before it has written its hooks already:
+The executable's own loader (the dormant .vf2skin byte, B210 on) loads the DLL right after the Family History DLL, so
+every companion loaded before it has written its hooks already:
 
 * Up to 28 Children writes a 5-byte jmp at the entry of CFamilyTree::ChangeName and theGameState::Save / Load:
   those pins mark their first five bytes as wildcards (`skip`), and this DLL never writes them.

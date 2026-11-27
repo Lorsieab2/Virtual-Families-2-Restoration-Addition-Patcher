@@ -100,6 +100,11 @@ class MoveTests(Base):
         self.assertEqual((backups[0].path / "Virtual Families 21.ldw").exists(), True)
         self.assertIsNone(result.set_aside)
 
+    def test_the_question_names_the_revive_and_skin_tones_files(self):
+        from datetime import datetime
+        text = ms.move_text(ms.plan_move(self.folder, 1, 4), datetime(2026, 11, 27, 12, 0, 0))
+        self.assertIn("the Revive snapshots, the skin tones,", text)
+
     def test_slot_numbers_inside_files_are_updated(self):
         result = self.move()
         logs = self.folder / PATCHER / "Save 4" / "Logs" / "Family History"

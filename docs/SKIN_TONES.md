@@ -34,14 +34,17 @@ Villagers / Virtual Families 1 rule for the tone regardless. The random numbers 
 from the clock), never the game's rand(). The father is the household villager whose head and body Impregnate is
 given (the mother's spouse first), as the Family History DLL finds him.
 
-## Loading (no executable change)
+## Loading (its own setting byte, from B210)
 
-The B200 executables have no loader for this DLL. vf2history_b200.dll (Family History) loads `vf2skin_b200.dll` from
-its own folder at the end of B200History_Startup, after its own install, and calls `B200Skin_Startup()`; the skin DLL
-reads its own setting (`vf2skin.ini`, `[Patches] SkinTones=1`). The exporter's records for the DLL, the ini and the
-masks therefore require both `family_history` and `skin_tones`. **At the next matrix rebuild** (B210, for Revive's
-store row) Skin Tones should get its own setting byte and loader line (a `.vf2skin` section, loaded after Family
-History) so it no longer needs the Family History log; nothing else would change.
+Every executable built from B210 on carries a dormant `.vf2skin` byte (0 as built) and one loader line in the
+theGame::Init wrapper, right after the Family History DLL's: with the byte 1 it loads
+`Virtual Families 2 Patcher Filesf2skin_b200.dll` and calls `B200Skin_Startup()`, which reads its own setting
+(`vf2skin.ini`, `[Patches] SkinTones=1`). It does not need the Family History log. The exporter's post-asset toggle
+sets the byte, and its records for the DLL, the ini and the masks require only `skin_tones`; a build without the
+loader (B209 and earlier) has no SkinTones contract and gets no records. (#535 first had the Family History DLL
+load it; superseded.) The DLL loads before Store Refresh, Outfit Pictures, Title Box, Unicode Text, Translations
+and Revive, whose resolvers are proved to find their pins with its writes in place. With the Family History log
+off, the Skin Tones window still changes tones; it adds an "Appearance changed" record only to a log that exists.
 
 ## How it draws
 

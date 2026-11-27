@@ -321,7 +321,7 @@ def replace_text(plan: Plan, when: datetime) -> str:
 def move_text(plan: Plan, when: datetime) -> str:
     """The move's own question, above the list of every file."""
     text = (f"{plan.shown_name} will move from Save {plan.source} to Save {plan.target}, keeping its name, with its "
-            f"save, the game's previous save, Up to 28 Children, the outfit pictures, the Names file, the Family "
+            f"save, the game's previous save, Up to 28 Children, the outfit pictures, the Revive snapshots, the skin tones, the Names file, the Family "
             f"History log and the Family Tree files. Save {plan.source} will be empty. The whole save folder "
             f"({plan.folder}) is backed up first.")
     if plan.removals:

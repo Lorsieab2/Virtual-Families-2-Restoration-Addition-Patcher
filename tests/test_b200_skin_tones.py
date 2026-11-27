@@ -88,10 +88,22 @@ def test_names_agree_everywhere():
                    "B200Skin_ToneOf", "B200Skin_ToneGive", 'L"vf2revive_b200.dll"', '"B200Revive_Members"'):
         assert needle in cpp, needle
     history = (RUNTIME / "native" / "b200history" / "b200history.cpp").read_text()
-    assert 'L"vf2skin_b200.dll"' in history and '"B200Skin_Startup"' in history
-    # the skin DLL is loaded after the Family History DLL's own install, whatever that install did
-    body = history[history.index("void __cdecl B200History_Startup()"):]
-    assert body.index("StartHistory();") < body.index("LoadSkinTones();")
+    assert "vf2skin" not in history, "Skin Tones has its own loader: the Family History DLL never loads it"
+    gen = (ROOT / "work" / "patch_mobile_furniture_pack.py").read_text(encoding="utf-8")
+    for needle in ('SKIN_TONES_FLAG_SECTION = ".vf2skin"', 'SKIN_TONES_DLL_NAME = "vf2skin_b200.dll"',
+                   'SKIN_TONES_INI_NAME = "vf2skin.ini"', 'GetProcAddress(module, "B200Skin_Startup")',
+                   "if (gVF2SkinTones == 1) VF2LoadSkinTonesDll();", '#pragma section(".vf2skin", read, write)',
+                   "volatile unsigned char gVF2SkinTones = 0;", '"__VF2_SKIN_TONES_RELATIVE_PATH__"',
+                   "patch_skin_tones_manifest(manifest)"):
+        assert needle in gen, needle
+    # loaded right after the Family History DLL (it does not need it), before the DLLs whose pins it must leave alone
+    order = [gen.index(f"if ({flag} == 1) VF2Load") for flag in (
+        "gVF2FamilyHistory", "gVF2SkinTones", "gVF2StoreRefresh", "gVF2FixVanillaGameBugs", "gVF2TitleBox",
+        "gVF2Clip", "gVF2UnicodeText", "gVF2Translations", "gVF2Revive")]
+    assert order == sorted(order)
+    assert gen.index("    patch_family_history_manifest(manifest)\n") < gen.index("    patch_skin_tones_manifest(manifest)\n")
+    # the symbol's name, its declaration and the loader wrapper's test: no other generated code reads the byte
+    assert gen.count("gVF2SkinTones") == 3 and gen.count("gVF2SkinTones ==") == 1
     assert S.DLL_NAME == "vf2skin_b200.dll" and S.INI_NAME == "vf2skin.ini" and S.INI_KEY == "SkinTones"
     sys.path.insert(0, str(ROOT / "work"))
     import export_offline_patch_bundle as E
@@ -101,18 +113,39 @@ def test_names_agree_everywhere():
     assert setting["default"] is True and setting["category"] == "optional"
     assert "Default" not in setting["description"] and "Game's own" in setting["description"]
     assert "skin_tones" in E.FINAL_PLAYTEST_DEFAULT_ON_SETTINGS
+    assert E.RUNTIME_FLAG_SECTION_BY_SETTING["skin_tones"] == ".vf2skin"
+    assert "Family History log (its" not in setting["description"] and "**Requires" not in setting["description"]
+
+
+def test_the_generator_manifest_contract():
+    sys.path.insert(0, str(ROOT / "work"))
+    import patch_mobile_furniture_pack as P
+    manifest = {"TimeControls": {}}
+    P.patch_skin_tones_manifest(manifest)
+    c = manifest["SkinTones"]
+    assert c["runtime_flag"]["source_section"] == ".vf2skin" and c["runtime_flag"]["default"] == "00"
+    assert c["runtime_flag"]["enabled"] == "01" and c["runtime_flag"]["size"] == 1
+    assert c["companion_dll"] == S.DLL_NAME and c["companion_ini"] == S.INI_NAME and c["startup_export"] == S.STARTUP_EXPORT
+    assert c["category"] == "optional" and c["default"] is True and c["offline_patcher_setting"] == "skin_tones"
+    with pytest.raises(RuntimeError):
+        P.patch_skin_tones_manifest({})
 
 
 def test_the_exporter_ships_the_dll_the_ini_and_every_mask(tmp_path):
     sys.path.insert(0, str(ROOT / "work"))
     import export_offline_patch_bundle as E
-    assert E.skin_tones_asset_patches(tmp_path, None, {}) == []           # no Family History loader: nothing
+    contract = {"companion_dll": S.DLL_NAME, "companion_ini": S.INI_NAME}
+    assert E.skin_tones_asset_patches(tmp_path, None, {}) == []           # no Skin Tones loader (B209): nothing
+    assert E.skin_tones_asset_patches(tmp_path, None, {"FamilyHistory": {}}) == []   # Family History is not it
     with pytest.raises(ValueError):
-        E.skin_tones_asset_patches(tmp_path, None, {"FamilyHistory": {}})
+        E.skin_tones_asset_patches(tmp_path, None, {"SkinTones": contract})
+    with pytest.raises(ValueError):
+        E.skin_tones_asset_patches(tmp_path, None, {"SkinTones": dict(contract, companion_dll="other.dll")})
     fake = tmp_path / "vf2skin_b200.dll"
     fake.write_bytes(b"MZ" + bytes(100))
     with pytest.raises(ValueError):
-        E.skin_tones_asset_patches(tmp_path, fake, {"FamilyHistory": {}})   # not a PE32 x86 shipped DLL
+        E.skin_tones_asset_patches(tmp_path, fake, {"SkinTones": contract})   # not a PE32 x86 shipped DLL
+    assert E.skin_tones_post_asset_patches([], output_exe_name="x.exe", build_manifest_data={}) == []
 
 
 def test_the_masks_are_shape_only_pictures_of_the_named_size():
@@ -261,6 +294,19 @@ def family(w, *, tones=None):
     for slot, tone in (tones or {}).items():
         assert w.tone_give(slot, tone, tone if tone <= 10 else 0) == 1
     return w
+
+
+def test_the_exporter_records_need_only_skin_tones(built, tmp_path):
+    """The DLL, its ini and every mask, each removed when Skin Tones is off; none needs the Family History log."""
+    sys.path.insert(0, str(ROOT / "work"))
+    import export_offline_patch_bundle as E
+    records = E.skin_tones_asset_patches(tmp_path, built / "vf2skin_b200.dll",
+                                         {"SkinTones": {"companion_dll": S.DLL_NAME, "companion_ini": S.INI_NAME}})
+    targets = {r["file_path"] for r in records}
+    folder = S.PATCHER_FOLDER + "/"
+    assert folder + S.DLL_NAME in targets and folder + S.INI_NAME in targets
+    assert len([x for x in targets if x.startswith(folder + S.MASK_FOLDER + "/")]) == 14 + 16
+    assert all(r["requires"] == ["core_executable", "skin_tones"] and r["remove_when_disabled"] for r in records)
 
 
 def test_the_shipped_dll_has_no_test_entry_point(built):
@@ -446,6 +492,54 @@ def test_the_held_baby_is_cell_3_in_the_babys_tone(built):
     check_recolour(w, carrying[0], "carrying.png", 0, 56, 10)
 
 
+def test_dan_bald_with_crossed_arms_is_toned_everywhere(built):
+    """The owner's check (2026-11-27): Dan, S5 Copper, a bald older man (head 46) in the crossed-arms outfit (body 3).
+    His scalp, face and arms are recoloured in the house (the older heads), the Details portrait (big head, big body
+    with the crossed arms) and the Family Tree (the young big head)."""
+    w = family(world(built))
+    w.set_villager(5, "Dan", 0, head=46, body=3, age=1100)
+    w.set_peep(1, 2, "Dan", 0, 46, 3, slot=5)
+    assert w.tone_give(5, 5, 5) == 1
+    blits = swapped(w.house(5, body_grid=0x245, cell=3, turn=1), w)
+    check_recolour(w, next(b for b in blits if w.made[b["surface"]] == (672, 56)), "male_heads10.png", 46, 56, 5)
+    check_recolour(w, next(b for b in blits if w.made[b["surface"]][0] == 2912), "male_bodies00.png", 3, 91, 5)
+    blits = swapped(w.detail(5), w)
+    check_recolour(w, next(b for b in blits if w.made[b["surface"]] == (594, 94)), "bigheads10.png", 46, 94, 5)
+    body = next(b for b in blits if w.made[b["surface"]] == (328, 164))
+    check_recolour(w, body, "highrez_bodies_final2.png", 3, 164, 5)
+    np = pytest.importorskip("numpy")
+    a, skin = sheet_row("highrez_bodies_final2.png", 3, 164)
+    arms = skin[60:125, :164]                        # the crossed arms of the man's column
+    assert arms.sum() > 300, "the crossed arms are in the mask"
+    made = made_rgba(w, body["surface"]).astype(int)
+    moved = np.abs(made[:, :164][60:125][arms][:, :3] - a[:, :164][60:125][arms][:, :3].astype(int)).sum(-1)
+    assert (moved > 20).mean() > 0.9, "every arm pixel is visibly in the tone"
+    assert len(swapped(w.tree(1, 2), w)) >= 2
+
+
+@pytest.mark.parametrize("sex", [0, 1])
+def test_every_bald_head_and_every_portrait_body_is_recoloured(built, sex):
+    """Heads 46 and 47 (the bald and balding heads), young and old, in the house and in the portraits; and every one
+    of the 50 portrait bodies (the crossed-arms ones too)."""
+    w = family(world(built))
+    stem = "male" if sex == 0 else "female"
+    for head in (46, 47):
+        for age, tile in ((600, "00"), (1100, "10")):
+            w.set_villager(6, "Bea", sex, head=head, body=3, age=age)
+            assert w.tone_give(6, 9, 9) == 1
+            blits = swapped(w.house(6, body_grid=0x245 if sex == 0 else 0x241), w)
+            check_recolour(w, next(b for b in blits if w.made[b["surface"]] == (672, 56)), f"{stem}_heads{tile}.png",
+                           head, 56, 9)
+            blits = swapped(w.detail(6), w)
+            check_recolour(w, next(b for b in blits if w.made[b["surface"]] == (594, 94)), f"bigheads{tile}.png", head,
+                           94, 9)
+    for body in range(50):
+        w.set_villager(6, "Bea", sex, head=5, body=body, age=600)
+        blits = swapped(w.detail(6), w)
+        check_recolour(w, next(b for b in blits if w.made[b["surface"]] == (328, 164)), "highrez_bodies_final2.png",
+                       body, 164, 9)
+
+
 def test_holiday_outfits_and_their_portraits_are_recoloured(built):
     w = family(world(built), tones={1: TONE})
     w.e.w32(w.villager(1) + S.VILLAGER_BODY, 51)
@@ -613,3 +707,21 @@ def test_the_masks_are_a_fresh_run_of_the_mask_tool():
     for name, data in files.items():
         target = M.HEADER if name == "skin_masks.h" else M.OUT / name
         assert target.read_bytes().replace(b"\r\n", b"\n") == data.replace(b"\r\n", b"\n"), name
+
+
+def test_an_executable_built_from_this_branch_has_the_byte_and_the_loader():
+    """VF2_SKIN_EXE: an executable built from this branch (B210 on): the dormant .vf2skin byte (0 as built), the
+    loader's path to the DLL, and every pin of the DLL found in it."""
+    exe = os.environ.get("VF2_SKIN_EXE")
+    if not exe or not Path(exe).is_file():
+        pytest.skip("VF2_SKIN_EXE is not set to an executable built from this branch")
+    import pefile
+    import gen_b200_skin_sites as G
+    data = Path(exe).read_bytes()
+    pe = pefile.PE(data=data, fast_load=True)
+    section = [s for s in pe.sections if s.Name.rstrip(b"\0") == b".vf2skin"]
+    assert len(section) == 1 and section[0].get_data()[0] == 0
+    assert b"Virtual Families 2 Patcher Files" + bytes([92]) + b"vf2skin_b200.dll" + bytes(1) in data
+    assert b"B200Skin_Startup" + bytes(1) in data
+    model = G.validate(core_exe().read_bytes())
+    assert set(G.validate_variant(data, model)) == set(S.ADDRESS_CONSTANTS)
