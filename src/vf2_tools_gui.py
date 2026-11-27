@@ -826,14 +826,14 @@ class ToolsTabMixin:
             frame,
             text=(
                 "Copies a family into another save slot of the same save folder, under a new name, with everything the "
-                "patcher keeps for it: the game's previous save, Up to 28 Children, the outfit pictures, the Family "
+                "patcher keeps for it: the game's previous save, Up to 28 Children, the outfit pictures, the Revive snapshots, the skin tones, the Family "
                 "History log and the Family Tree Maker's tree file. The game must be closed. The save folder is backed "
                 "up first, into <save folder>\\Backups\\Backup <date and time> (before copy). A slot with no save is "
                 "empty, whatever the game's player list says. A slot that holds a family is replaced only after you "
                 "answer Yes to a warning that names it; its files are moved into <save folder>\\Backups\\Replaced by "
                 "copy <date and time> - Save <N> - <name>, never deleted.\n\n"
                 "Move instead takes the family itself, keeping its name, to the other slot with everything tied to its "
-                "slot -- its save and the game's previous save, Up to 28 Children, the outfit pictures, the Names file, "
+                "slot -- its save and the game's previous save, Up to 28 Children, the outfit pictures, the Revive snapshots, the skin tones, the Names file, "
                 "the Family History log and the Family Tree files -- and leaves its slot empty. You see every file "
                 "before saying Yes; the folder is backed up first (before move), and the files the target slot held "
                 "are kept in Backups\\Replaced by move <date and time> - Save <N> - <name>.\n\n"

@@ -485,6 +485,16 @@ FAMILY_HISTORY_FLAG_SYMBOL = "_gVF2FamilyHistory"
 FAMILY_HISTORY_DLL_NAME = "vf2history_b200.dll"
 FAMILY_HISTORY_INI_NAME = "vf2history.ini"
 FAMILY_HISTORY_STARTUP = "B200History_Startup"
+# "Skin Tones" (after B209; owner 2026-11-26, docs/SKIN_TONES.md): the companion DLL vf2skin_b200.dll (runtime/native/
+# b200skin). One dormant byte; zero never loads the DLL. It rides the same theGame::Init wrapper and is loaded right
+# after the Family History DLL (it does not need it), once. The DLL installs nothing unless its own pins match and
+# vf2skin.ini says SkinTones=1. No generated code reads anything of it.
+SKIN_TONES_SETTING = "skin_tones"
+SKIN_TONES_FLAG_SECTION = ".vf2skin"
+SKIN_TONES_FLAG_SYMBOL = "_gVF2SkinTones"
+SKIN_TONES_DLL_NAME = "vf2skin_b200.dll"
+SKIN_TONES_INI_NAME = "vf2skin.ini"
+SKIN_TONES_STARTUP = "B200Skin_Startup"
 # "R Refreshes the Store" (after B204): the companion DLL vf2refresh_b200.dll (runtime/native/b200refresh).
 # One dormant byte; zero never loads the DLL. It rides the same theGame::Init wrapper as the other companion
 # DLLs and is loaded after them, once. The DLL installs nothing unless its own pins match and vf2refresh.ini
@@ -16511,6 +16521,29 @@ static void VF2LoadFamilyHistoryDll() {
     if (startup) startup();
 }
 
+// Skin Tones loader (see SKIN_TONES_* in the generator). Zero = never loads the companion DLL. It is loaded by
+// the same wrapper, right after the Family History DLL, once; nothing else reads the byte.
+#pragma section(".vf2skin", read, write)
+extern "C" __declspec(allocate(".vf2skin"))
+volatile unsigned char gVF2SkinTones = 0;
+
+static void VF2LoadSkinTonesDll() {
+    unsigned short path[512];
+    unsigned long length = GetModuleFileNameW(0, path, 400);
+    if (length == 0 || length >= 400) return;
+    unsigned long cut = length;
+    while (cut > 0 && path[cut - 1] != 92) --cut;
+    if (cut == 0) return;
+    const char *tail = "__VF2_SKIN_TONES_RELATIVE_PATH__";
+    unsigned long out = cut;
+    for (const char *c = tail; *c; ++c) path[out++] = (unsigned short)(unsigned char)*c;
+    path[out] = 0;
+    void *module = LoadLibraryW(path);
+    if (!module) return;
+    int (__cdecl *startup)() = (int (__cdecl *)())GetProcAddress(module, "B200Skin_Startup");
+    if (startup) startup();
+}
+
 // Revive loader and its executable side (see REVIVE_* in the generator; docs/revive.md). Zero = never loads the
 // companion DLL, lists no Revive row and the death capture calls nothing. The DLL (runtime/native/b200revive) gets
 // everything it needs from the host table below, compiled into every variant: it holds no game address.
@@ -17033,6 +17066,7 @@ extern "C" void *__cdecl VF2GameStateGetAfterTimeControlsLoad() {
         if (gVF2TimeControls == 1) VF2LoadTimeControlsDll();
         if (gVF2UpTo28Children == 1) VF2LoadUpTo28ChildrenDll();
         if (gVF2FamilyHistory == 1) VF2LoadFamilyHistoryDll();
+        if (gVF2SkinTones == 1) VF2LoadSkinTonesDll();
         if (gVF2StoreRefresh == 1) VF2LoadStoreRefreshDll();
         if (gVF2FixVanillaGameBugs == 1) VF2LoadOutfitPicturesDll();
         if (gVF2TitleBox == 1) VF2LoadTitleBoxDll();
@@ -19616,6 +19650,10 @@ extern "C" void __cdecl VF2ApplyVisibleSpecialUpgrade(int itemId) {
     special_upgrade_helper_cpp = special_upgrade_helper_cpp.replace(
         "__VF2_FAMILY_HISTORY_RELATIVE_PATH__",
         TIME_CONTROLS_PATCHER_FOLDER + "\\\\" + FAMILY_HISTORY_DLL_NAME,
+    )
+    special_upgrade_helper_cpp = special_upgrade_helper_cpp.replace(
+        "__VF2_SKIN_TONES_RELATIVE_PATH__",
+        TIME_CONTROLS_PATCHER_FOLDER + "\\\\" + SKIN_TONES_DLL_NAME,
     )
     special_upgrade_helper_cpp = special_upgrade_helper_cpp.replace(
         "__VF2_STORE_REFRESH_RELATIVE_PATH__",
@@ -27603,6 +27641,40 @@ def patch_family_history_manifest(manifest):
         "log": "<save folder>\\Virtual Families 2 Patcher\\Save <N>\\Logs\\Family History\\Family History <k>.txt",
         "save_format": "unchanged",
         "flag_off": "the DLL is never loaded: the game is the unmodified build",
+    }
+
+
+def patch_skin_tones_manifest(manifest):
+    """Skin Tones: the dormant .vf2skin byte is compiled into every executable (special upgrade helper C++); the
+    loader is the Time Controls wrapper on theGame::Init's first call, which loads the Skin Tones DLL right after the
+    Family History DLL (it does not need it). Requires patch_time_controls_loader."""
+    if "TimeControls" not in manifest:
+        raise RuntimeError("Skin Tones rides the Time Controls loader; patch it first")
+    manifest["SkinTones"] = {
+        "status": "dormant loader installed in every executable",
+        "offline_patcher_setting": SKIN_TONES_SETTING,
+        "category": "optional",
+        "default": True,
+        "hook": (
+            "theGame::Init's first call (theGameState::Get) -> "
+            "VF2GameStateGetAfterTimeControlsLoad, which loads "
+            f"{TIME_CONTROLS_PATCHER_FOLDER}\\{SKIN_TONES_DLL_NAME} once when the byte is 1, "
+            "right after the Family History DLL"
+        ),
+        "runtime_flag": {
+            "symbol": SKIN_TONES_FLAG_SYMBOL,
+            "source_section": SKIN_TONES_FLAG_SECTION,
+            "size": 1,
+            "default": "00",
+            "enabled": "01",
+            "linked_location_status": "pending_link_metadata",
+        },
+        "companion_dll": SKIN_TONES_DLL_NAME,
+        "companion_ini": SKIN_TONES_INI_NAME,
+        "startup_export": SKIN_TONES_STARTUP,
+        "tones": "<save folder>\\Virtual Families 2 Patcher Data\\Skin Tones\\<save file>.dat",
+        "save_format": "unchanged",
+        "flag_off": "the DLL is never loaded: everyone is drawn in the game's own skin",
     }
 
 
@@ -43948,6 +44020,8 @@ def main():
     patch_up_to_28_children_manifest(manifest)
     # Family History (.vf2hist; the same loader loads its DLL after Up to 28 Children).
     patch_family_history_manifest(manifest)
+    # Skin Tones (.vf2skin; the same loader, right after Family History).
+    patch_skin_tones_manifest(manifest)
     # R Refreshes the Store (.vf2rfsh; the same loader loads its DLL after Family History).
     patch_store_refresh_manifest(manifest)
     # All 36 Flea Market goods (.vf2flea; gates the expanded Flea Market hooks).

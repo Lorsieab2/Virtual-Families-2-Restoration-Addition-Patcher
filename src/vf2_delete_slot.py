@@ -243,7 +243,7 @@ def delete_text(plan: Plan) -> str:
     backups = sum(1 for g in plan.groups if g.where and g.aside is None)
     asides = sum(1 for g in plan.groups if g.aside is not None)
     text = (f"Every file of Save {plan.slot} ({family}) goes to the Recycle Bin: its save, the game's previous save, "
-            f"Up to 28 Children, the outfit pictures, the Names file, the Family History log and the Family Tree "
+            f"Up to 28 Children, the outfit pictures, the Revive snapshots, the skin tones, the Names file, the Family History log and the Family Tree "
             f"files." + backups_words(backups, asides))
     text += (f" Pictures stay where they are. Other slots are not touched. No new backup is made: anything can be "
              f"put back from the Recycle Bin. ({plan.folder})")

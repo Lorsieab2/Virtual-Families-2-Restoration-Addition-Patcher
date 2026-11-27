@@ -606,7 +606,7 @@ SETTINGS = [
     {
         "id": "skin_tones",
         "label": "Skin Tones",
-        "description": "Gives every family member a skin tone, drawn in the game: one of ten, S1 Porcelain to S10 Ebony, or Game's own (the game's own skin). All bare skin is drawn in it (face, neck, arms, hands, legs, feet, bald heads) in the house, in every action and when sitting, in the Holiday outfits, in the Details, Adoption and marriage portraits, in event pop-ups, on the Family Tree and in the menu's family; a baby a mother holds is drawn in the baby's own tone. Hair, eyes, lips and clothes stay as they are. Founders, arrivals, candidates and everybody already in a family get a random tone the first time the family is played with this patch; a baby gets its parents' average tone (one shade lighter or darker at random) 95% of the time and any tone 5% of the time, chosen once when it is conceived; twins and triplets share it. Change anyone's tone with Tools > Skin Tones... while the game is closed (each change is noted in the Family History log). The tones are kept in a small file beside each save (the Virtual Families 2 Patcher Data\\Skin Tones folder in the save folder); the save file itself is not changed. **Requires the Family History log (its companion DLL loads this one).** Installs a small companion DLL and its skin mask pictures (shapes only, no game art) in the Virtual Families 2 Patcher Files folder next to the game; unticking the setting removes them and everyone is drawn in the game's own skin again.",
+        "description": "Gives every family member a skin tone, drawn in the game: one of ten, S1 Porcelain to S10 Ebony, or Game's own (the game's own skin). All bare skin is drawn in it (face, neck, arms, hands, legs, feet, bald heads) in the house, in every action and when sitting, in the Holiday outfits, in the Details, Adoption and marriage portraits, in event pop-ups, on the Family Tree and in the menu's family; a baby a mother holds is drawn in the baby's own tone. Hair, eyes, lips and clothes stay as they are. Founders, arrivals, candidates and everybody already in a family get a random tone the first time the family is played with this patch; a baby gets its parents' average tone (one shade lighter or darker at random) 95% of the time and any tone 5% of the time, chosen once when it is conceived; twins and triplets share it. Change anyone's tone with Tools > Skin Tones... while the game is closed (each change is noted in the Family History log when that log is on). The tones are kept in a small file beside each save (the Virtual Families 2 Patcher Data\\Skin Tones folder in the save folder); the save file itself is not changed. Installs a small companion DLL and its skin mask pictures (shapes only, no game art) in the Virtual Families 2 Patcher Files folder next to the game; unticking the setting removes them and everyone is drawn in the game's own skin again.",
         # On by default, in Select All and Owner's Defaults (owner, 2026-11-26).
         "default": True,
         "category": "optional",
@@ -1243,6 +1243,7 @@ RUNTIME_FLAG_SECTION_BY_SETTING = {
     "time_controls": ".vf2time",
     "up_to_28_children": ".vf2kids",
     "family_history": ".vf2hist",
+    "skin_tones": ".vf2skin",
     "r_refreshes_store": ".vf2rfsh",
     "revive": ".vf2rviv",
     "render_unicode_in_game_fonts": ".vf2utxt",
@@ -1641,18 +1642,22 @@ def skin_tones_asset_patches(
     build_manifest_data: dict[str, Any],
 ) -> list[dict[str, Any]]:
     """The Skin Tones companion DLL, its one-line ini and its mask pictures, placed beside the game only while Skin
-    Tones (and the Family History log, whose DLL loads this one) is on.
+    Tones is on.
 
-    The executable has no loader of its own for this DLL: vf2history_b200.dll loads vf2skin_b200.dll from its own
-    folder after its install, so every record requires family_history as well as skin_tones. The masks
+    The executable carries a dormant loader (.vf2skin byte, 0 in every build); the post-asset toggle sets it to 1 and
+    these files are what that loader loads (right after the Family History DLL; it does not need it). The masks
     (patcher_assets/skin_masks, made by runtime/tools/gen_b200_skin_masks.py: shapes only, no game pixel) each get
-    their own record under "Skin Masks". A build without the Family History loader gets no records.
+    their own record under "Skin Masks". With the setting off the files are removed and the byte stays 0. A build
+    without the loader (B209 and earlier) has no SkinTones contract and gets no records.
     """
-    if not isinstance(build_manifest_data.get("FamilyHistory"), dict):
+    contract = build_manifest_data.get("SkinTones")
+    if not isinstance(contract, dict):
         return []
+    if contract.get("companion_dll") != SKIN_TONES_DLL_NAME or contract.get("companion_ini") != SKIN_TONES_INI_NAME:
+        raise ValueError("Build manifest's SkinTones contract names another companion file.")
     if dll_path is None:
         raise ValueError(
-            "This build has the Family History loader, which loads Skin Tones; pass --skin-tones-dll with the built "
+            "This build has the Skin Tones loader; pass --skin-tones-dll with the built "
             f"{SKIN_TONES_DLL_NAME} (runtime\\native\\build_b200skin.bat) or the setting would do nothing."
         )
     if not dll_path.is_file() or dll_path.name != SKIN_TONES_DLL_NAME:
@@ -1666,7 +1671,7 @@ def skin_tones_asset_patches(
     payload_dir = bundle_dir / "payload" / "SkinTones"
     payload_dir.mkdir(parents=True, exist_ok=True)
     staged = [(payload_dir / SKIN_TONES_DLL_NAME, data, SKIN_TONES_DLL_NAME,
-               "Skin Tones companion DLL, loaded by the Family History DLL."),
+               "Skin Tones companion DLL, loaded by the executable's dormant .vf2skin loader."),
               (payload_dir / SKIN_TONES_INI_NAME, SKIN_TONES_INI_TEXT.encode("ascii"), SKIN_TONES_INI_NAME,
                "Skin Tones switch (SkinTones=1) read by the companion DLL.")]
     for name in masks:
@@ -1687,10 +1692,32 @@ def skin_tones_asset_patches(
             "overwrite_existing": True,
             "allow_missing_target": True,
             "remove_when_disabled": True,
-            "requires": ["core_executable", "family_history", "skin_tones"],
-            "note": note + " Disabling Skin Tones (or the Family History log) removes only this exact file.",
+            "requires": ["core_executable", "skin_tones"],
+            "note": note + " Disabling Skin Tones removes only this exact file.",
         })
     return records
+
+
+def skin_tones_post_asset_patches(
+    executable_sources: list[Path],
+    *,
+    output_exe_name: str,
+    build_manifest_data: dict[str, Any],
+) -> list[dict[str, Any]]:
+    contract = build_manifest_data.get("SkinTones")
+    if not isinstance(contract, dict):
+        return []
+    runtime_flag = contract.get("runtime_flag")
+    if not isinstance(runtime_flag, dict):
+        raise ValueError("Build manifest has an invalid SkinTones contract.")
+    return setting_runtime_flag_post_asset_patches(
+        executable_sources,
+        output_exe_name=output_exe_name,
+        runtime_flag=runtime_flag,
+        section_name=RUNTIME_FLAG_SECTION_BY_SETTING["skin_tones"],
+        setting_id="skin_tones",
+        feature_label="Skin Tones",
+    )
 
 
 def store_refresh_post_asset_patches(
@@ -2726,6 +2753,11 @@ def b152_runtime_flag_post_asset_patches(
             build_manifest_data=build_manifest_data,
         ),
         *family_history_post_asset_patches(
+            executable_sources,
+            output_exe_name=output_exe_name,
+            build_manifest_data=build_manifest_data,
+        ),
+        *skin_tones_post_asset_patches(
             executable_sources,
             output_exe_name=output_exe_name,
             build_manifest_data=build_manifest_data,
@@ -6537,7 +6569,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--unicode-text-dll", help="The built vf2unicode_b200.dll (runtime\\native\\build_b200unicode.bat) to ship behind the render_unicode_in_game_fonts and use_unicode_font settings. Required when the build has the Unicode text loaders.")
     parser.add_argument("--revive-dll", help="The built vf2revive_b200.dll (runtime\\native\\build_b200revive.bat) to ship behind the revive setting. Required when the build has the Revive loader.")
     parser.add_argument("--store-refresh-dll", help="The built vf2refresh_b200.dll (runtime\\native\\build_b200refresh.bat) to ship behind the r_refreshes_store setting. Required when the build has the R Refreshes the Store loader.")
-    parser.add_argument("--skin-tones-dll", help="The built vf2skin_b200.dll (runtime\\native\\build_b200skin.bat) to ship behind the skin_tones setting (loaded by the Family History DLL). Required when the build has the Family History loader.")
+    parser.add_argument("--skin-tones-dll", help="The built vf2skin_b200.dll (runtime\\native\\build_b200skin.bat) to ship behind the skin_tones setting (the .vf2skin loader). Required when the build has the Skin Tones loader.")
     parser.add_argument("--outfit-pictures-dll", help="The built vf2outfits_b200.dll (runtime\\native\\build_b200outfits.bat) to ship behind the fix_vanilla_game_bugs setting. Required when the build has the Outfit Pictures loader.")
     parser.add_argument("--family-history-dll", help="The built vf2history_b200.dll (runtime\\native\\build_b200history.bat) to ship behind the family_history setting. Required when the build has the Family History loader.")
     parser.add_argument("--up-to-28-children-dll", help="The built vf2kids_b200.dll (runtime\\native\\build_b200kids.bat) to ship behind the up_to_28_children setting. Required when the build has the Up to 28 Children loader.")

@@ -706,8 +706,7 @@ release bundle, like almost everything else)
   (`vf2kids_b200.dll`) in the Virtual Families 2 Patcher Files folder does the work; with the setting
   off it is not installed and the executable never loads it. **Not live tested yet** -- see
   `docs/b200-up-to-28-children.md` for the evidence and what is not covered.
-- **Skin Tones** (an Optional patch, **on by default**, in Select All and Owner's Defaults; it **needs the Family
-  History log**, whose DLL loads `vf2skin_b200.dll`): every family member has a skin tone, S1 Porcelain to S10 Ebony
+- **Skin Tones** (`.vf2skin`, from B210; an Optional patch, **on by default**, in Select All and Owner's Defaults): every family member has a skin tone, S1 Porcelain to S10 Ebony
   or Game's own, drawn on all bare skin in the house, the portraits, event pop-ups, the Family Tree and the menu's
   family, and on the babies a mother holds. Change tones with Tools > Skin Tones... while the game is closed. The
   tones live beside each save (Virtual Families 2 Patcher Data\Skin Tones). Design and evidence: docs/SKIN_TONES.md.

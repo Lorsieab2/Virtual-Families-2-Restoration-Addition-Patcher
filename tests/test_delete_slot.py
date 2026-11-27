@@ -299,6 +299,10 @@ class ConfirmationTests(Base):
         cs.save_path(self.folder, 1).write_bytes(b"ldwg damaged")
         self.assertIn("(an unreadable save)", ds.delete_text(ds.plan_delete(self.folder, 1)))
 
+    def test_the_question_names_the_revive_and_skin_tones_files(self):
+        text = ds.delete_text(ds.plan_delete(self.folder, 1))
+        self.assertIn("the Revive snapshots, the skin tones,", text)
+
 
 if __name__ == "__main__":
     unittest.main()

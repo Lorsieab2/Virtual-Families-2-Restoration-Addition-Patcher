@@ -59,8 +59,6 @@ STRIDE = S.VILLAGER_STRIDE
 SAVE_DIR = "C:\\Users\\Tester\\Documents\\LDW\\VF2 History Test"
 ROOT = SAVE_DIR + "\\Virtual Families 2 Patcher\\Save "
 DLL_PATH = "C:\\Game\\Virtual Families 2 Patcher Files\\vf2history_b200.dll"
-SKIN_DLL_PATH = "C:\\Game\\Virtual Families 2 Patcher Files\\vf2skin_b200.dll"
-SKIN_MODULE = 0x6C000000
 INVALID = 0xFFFFFFFF
 NOW = 50_000_000                 # the game clock (seconds)
 SPEED = 10                       # theGameState+25B18h
@@ -99,7 +97,6 @@ class FileSystem:
         self.last_error = 0
         self.log = []
         self.heap = []                  # (address, bytes) of every HeapAlloc
-        self.skin_dll = False           # vf2skin_b200.dll is beside the DLL (LoadLibraryW finds it)
         self.emu = None
 
     @staticmethod
@@ -270,11 +267,6 @@ class FileSystem:
 
         # The process heap: each HeapAlloc gets its bytes and 32 guard bytes after them (guards_intact checks
         # every one: the DLL's record buffers and whole names are never written past their end).
-        def load_library(e):
-            path = e.wstr(e.arg(0))
-            fs.log.append(("LoadLibraryW", path))
-            return (SKIN_MODULE if fs.skin_dll and path.lower() == SKIN_DLL_PATH.lower() else 0), 4
-
         def heap_alloc(e):
             n = e.arg(2)
             p = e.alloc(n + 32)
@@ -290,8 +282,6 @@ class FileSystem:
             "GetLocalTime": local_time, "VirtualProtect": protect, "FlushInstructionCache": lambda e: (1, 12),
             "GetCurrentProcess": lambda e: (INVALID, 0), "GetFileSize": file_size,
             "GetProcessHeap": lambda e: (0x7A000000, 0), "HeapAlloc": heap_alloc, "HeapFree": lambda e: (1, 12),
-            # the Skin Tones DLL beside this one: not there unless a scenario puts it there
-            "LoadLibraryW": load_library,
         })
         self.emu = emu
 
@@ -1894,29 +1884,7 @@ def scenario_setting_on_installs_everything(w: HistoryWorld):
     assert DLL_BASE <= w.e.r32(w.s("GS_VTABLE") + S.GS_LOAD_VSLOT) < DLL_BASE + 0x100000
 
 
-def scenario_the_skin_tones_dll_is_started_after_the_install(w: HistoryWorld):
-    """With vf2skin_b200.dll beside it, B200History_Startup loads it after its own install and calls
-    B200Skin_Startup once."""
-    e = w.e
-    started = []
-
-    def module_name(emu):
-        emu.write(emu.arg(1), DLL_PATH.encode("utf-16-le") + bytes(2))
-        return len(DLL_PATH), 12
-
-    def skin_startup(emu):
-        started.append(w.status()["installed"])
-        return 1, 0
-    e.dyn_procs["B200Skin_Startup"] = skin_startup
-    e.imports.update({"GetModuleFileNameW": module_name, "GetPrivateProfileIntW": lambda emu: (1, 16)})
-    w.fs.skin_dll = True
-    e.call(e.dll_export("B200History_Startup"))
-    assert started == [1], "B200Skin_Startup is called once, after the Family History install"
-    assert [x for x in w.fs.log if x[0] == "LoadLibraryW"] == [("LoadLibraryW", SKIN_DLL_PATH)]
-
-
-OFF = [scenario_setting_off_writes_nothing, scenario_setting_on_installs_everything,
-       scenario_the_skin_tones_dll_is_started_after_the_install]
+OFF = [scenario_setting_off_writes_nothing, scenario_setting_on_installs_everything]
 
 
 # ====================================================================== the executable's own loader

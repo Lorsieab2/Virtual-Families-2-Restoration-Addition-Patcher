@@ -45,8 +45,8 @@
 // The B200 executable is RELOCATED (DYNAMICBASE) and each matrix variant links to different addresses, so this DLL
 // holds NO game address: b200skin_sites.h (generated and proved by runtime/tools/gen_b200_skin_sites.py) holds pinned
 // runs of the B209 core variant with wildcards; Resolve() finds every run in the live image exactly once and derives
-// each address from where they were found. The Family History DLL loads this DLL last (B200History_Startup, while
-// vf2skin_b200.dll is beside it) and calls B200Skin_Startup() once: setting -> resolve -> plan -> apply, all or
+// each address from where they were found. The executable's loader (the dormant .vf2skin byte, from B210) loads
+// this DLL right after the Family History DLL (it does not need it) and calls B200Skin_Startup() once: setting -> resolve -> plan -> apply, all or
 // nothing. Every buffer of code this DLL writes or runs is VirtualProtect-ed PAGE_EXECUTE_READWRITE.
 
 #define WIN32_LEAN_AND_MEAN
@@ -1973,7 +1973,7 @@ static bool Folders() {
     return true;
 }
 
-// Called once by the Family History DLL (B200History_Startup), before the game loop starts.
+// Called once by the executable's loader (the .vf2skin byte), before the game loop starts.
 extern "C" __declspec(dllexport) int __cdecl B200Skin_Startup() {
     static bool started = false;
     if (started) return (int)B200Skin_Status.installed;

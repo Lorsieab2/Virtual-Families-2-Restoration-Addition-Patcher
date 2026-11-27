@@ -770,10 +770,10 @@ Family History log (companion DLL, after B203; not live tested)
 Skin Tones (companion DLL, after B209; not live tested)
 ------------------------------------------------------
 
-- Setting skin_tones, Optional, on by default (Select All, Owner's Defaults);
-  its records require family_history too: vf2history_b200.dll loads
-  vf2skin_b200.dll from its own folder after its install (no executable
-  change; the DLL should get its own setting byte at the next matrix rebuild).
+- Setting skin_tones, Optional, on by default (Select All, Owner's Defaults):
+  a dormant .vf2skin byte and a loader line (right after the Family History
+  DLL's; it does not need it) in every executable from B210; the exporter's
+  records require only skin_tones.
 - Every family member has a skin tone (S1 Porcelain .. S10 Ebony, or Game's
   own), kept per save in "<save folder>\Virtual Families 2 Patcher Data\Skin
   Tones\<save file>.dat" (the Children file's layout, magic VF2SKIN), never in
