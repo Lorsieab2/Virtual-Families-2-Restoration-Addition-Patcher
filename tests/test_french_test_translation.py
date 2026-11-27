@@ -61,6 +61,10 @@ def test_french_typography_everywhere(parsed):
         plain = re.sub(r"\{[^{}]*\}", "", r.translation)
         if re.search(r" [;:!?\u00bb]|\d %|\u00ab ", plain) or '"' in plain or "\u2019" in plain or "\u2026" in plain:
             bad.append(r.key)
+        # a control character is never French: three Revive lines once held \x01 where the "!", "?" or ":" belonged
+        # (right after the no-break space), and nothing above saw it
+        if re.search(r"[\x00-\x08\x0b-\x1f\x7f]", r.translation):
+            bad.append(r.key)
     assert not bad, bad[:5]
 
 

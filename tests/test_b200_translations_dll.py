@@ -112,13 +112,19 @@ def test_the_unicode_contract():
 def test_the_limits_are_a_table_of_the_games_copies():
     assert LIMITS["executables"] >= 1 and LIMITS["get_string_calls"] > 600
     assert LIMITS["never"] == {"36": "the decimal point (eString_Decimal): numbers are written with it"}
-    assert all(1 <= int(i) <= 0xFFA for i in LIMITS["strncpy_room"]) and all(v > 0 for v in LIMITS["strncpy_room"].values())
+    # 0x1003 is the newest record (Revive's), not a capacity: see test_the_reader_finds_the_table_in_a_patched_game
+    assert all(1 <= int(i) <= 0x1003 for i in LIMITS["strncpy_room"]) and all(v > 0 for v in LIMITS["strncpy_room"].values())
     # the B209 records the generated code copies into fixed fields: the caption strncpy(.., 0x27), the two counters'
     # labels (.., 55): the count less the NUL. (The Adoption Services choice's records 0xFF7..0xFF9 have no copy in
     # any build: patch_vf3_style_child_adoption_chooser is not called by the generator, so no executable holds it.)
     assert [LIMITS["strncpy_room"][str(i)] for i in (0xFF3, 0xFF5, 0xFF6)] == [38, 54, 54]
     assert all(str(i) not in LIMITS["strncpy_room"] for i in (0xFF7, 0xFF8, 0xFF9))
     assert all(i not in LIMITS["english_length"] for i in (0xFF3, 0xFF5, 0xFF6, 0xFF7, 0xFF8, 0xFF9, 0xFFA))
+    # Revive's two buttons, strncpy(.., 63) into a 64-byte field: 62 bytes and the NUL. Its other lines are appended
+    # with a bounded copy (VF2ReviveAppend) or shown whole in a message box, so they have no room of their own.
+    assert [LIMITS["strncpy_room"][str(i)] for i in (0xFFF, 0x1000)] == [62, 62]
+    assert all(str(i) not in LIMITS["strncpy_room"] and i not in LIMITS["english_length"]
+               for i in (0xFFB, 0xFFC, 0xFFD, 0xFFE, 0x1001, 0x1002, 0x1003))
     header = (SRC / "b200tr_limits.h").read_text()
     for k, v in LIMITS["strncpy_room"].items():
         assert "{ %d, %d }," % (int(k), v) in header
@@ -238,6 +244,39 @@ def test_the_pins_resolve_in_every_other_executable():
     for other in exes:
         got = gen.validate_variant(Path(other).read_bytes(), Path(core).read_bytes())
         assert got["TABLE"] > 0x400000 and got["COUNT"] >= 0xDE8, other
+
+
+def test_every_id_in_the_table_fits_the_games_own_index():
+    """The string ids have no fixed cap (0xFF3 was only the B200 core's bound): the generator grows the game's index to
+    the highest id + 1. Proved on the executables themselves: every id of the table is below the bound the constructor
+    indexes to, GetString and the template filler refuse exactly the ids past it, and no other variable the code
+    addresses lies inside the index (the only address into it is index[1], where sm.xml's loops start)."""
+    gen = pytest.importorskip("gen_b200_translations_sites")
+    import vf2_translation_strings as ts
+    core = core_exe()
+    exes = [OTHER_EXE] if OTHER_EXE and Path(OTHER_EXE).is_file() else []
+    for name in ("VF2_B207_MATRIX_GLOB", "VF2_B200_MATRIX_GLOB"):
+        if os.environ.get(name):
+            exes += glob.glob(os.environ[name])
+    if not exes:
+        pytest.skip("no patched executable (VF2_UNICODE_EXE, VF2_B200_MATRIX_GLOB)")
+    core_exe_ = gen.Exe(Path(core).read_bytes())
+    for path in sorted(set(exes)):
+        data = Path(path).read_bytes()
+        ex = gen.Exe(data)
+        got = gen.resolve(ex, core_exe_)
+        index, bound = got["INDEX"], got["MAX_ID"]
+        assert max(ts.read_table(data)) < bound, path
+        assert ex.u32(got["GET_STRING"] + 23) == bound - 2 == ex.u32(got["FILL_TEMPLATE"] + 57), path
+        inside = set()
+        for r in ex.relocs:
+            try:
+                t = ex.u32(r)
+            except gen.SiteError:
+                continue
+            if index < t < index + 4 * bound:
+                inside.add(t)
+        assert inside <= {index + 4}, (path, sorted(map(hex, inside)))
 
 
 def test_the_committed_limits_cover_the_executables_scan():

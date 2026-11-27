@@ -122,6 +122,7 @@ SOURCES = (
     (r"OutfitBody", "Outfits"), (r"Hairstyle", "Hairstyles"), (r"CheatUpgrade", "Cheat Upgrades"),
     (r"CustomAchievement", "Patcher Achievements"), (r"MobileRenovation", "Mobile Renovations"),
     (r"^eEvent", "Island Events"), (r"Removable", "Special Upgrades"), (r"VF2|Lounger", "Behavior Patches"),
+    (r"^eString_Revive", "Revive"),
     (r"Gnome|Ornament|Wreath|Christmas|Candle|Candy|Dreidel|Eggnog|Angel|Poster|Painting|Menorah|Snow|Santa|Stocking",
      "Holiday Ornaments and furniture"),
 )

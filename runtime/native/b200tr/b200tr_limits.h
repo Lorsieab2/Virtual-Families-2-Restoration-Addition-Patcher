@@ -319,6 +319,8 @@ static const b200tr_room B200TR_STRNCPY_ROOM[] = {
     { 4083, 38 },
     { 4085, 54 },
     { 4086, 54 },
+    { 4095, 62 },
+    { 4096, 62 },
     { 0, 0 }
 };
 static const unsigned short B200TR_ENGLISH_LENGTH[] = { 8, 9, 19, 20, 36, 71, 87, 88, 89, 90, 91, 92, 93, 94, 98, 118, 150, 151, 152, 182, 192, 202, 210, 270, 555, 556, 557, 558, 559, 560, 562, 563, 564, 565, 566, 567, 574, 577, 578, 580, 581, 652, 846, 847, 848, 849, 850, 851, 852, 853, 854, 857, 858, 859, 860, 861, 862, 863, 864, 865, 866, 867, 868, 869, 870, 871, 872, 873, 874, 875, 876, 877, 878, 879, 880, 881, 882, 883, 884, 885, 886, 887, 888, 889, 890, 891, 892, 893, 894, 895, 896, 897, 898, 899, 900, 901, 902, 903, 904, 905, 906, 907, 908, 909, 910, 911, 912, 913, 914, 915, 916, 917, 1228, 1231, 1734, 1914, 1915, 1926, 1976, 1977, 2604, 0 };
@@ -328,25 +330,25 @@ static const unsigned short B200TR_FORMAT[] = { 8, 9, 20, 98, 118, 150, 151, 652
 /* sprintf formats the game's code pushes itself and the bytes of the frame buffer every call writes into. */
 typedef struct { const char *format; unsigned short room; } b200tr_sprintf_room;
 static const b200tr_sprintf_room B200TR_SPRINTF_ROOM[] = {
-    { "\x0a""\x0a""%s,\x0a""%s", 287 },
+    { "\x0a""\x0a""%s,\x0a""%s", 285 },
     { "%d%s", 143 },
-    { "%d%s12", 143 },
-    { "%s %i", 138 },
+    { "%d%s12", 132 },
+    { "%s %i", 143 },
     { "%s (%i)", 256 },
-    { "%s%d%d%s", 909 },
+    { "%s%d%d%s", 919 },
     { "%s%d.ldw", 143 },
     { "%s%s", 143 },
     { "%s, %d", 256 },
     { "%sX%01dY%01d.jpg", 32 },
     { "Anim Direction: %s  Head Direction: %s", 219 },
     { "Feet link point for anim frame %s = (%d,%d)", 4 },
-    { "Version 1.2.4, %s", 186 },
+    { "Version 1.2.4, %s", 187 },
     { "W:aypoint: %s", 7 },
-    { "id=\x22""%s\x22""", 87 },
+    { "id=\x22""%s\x22""", 78 },
     { "login.php?id=%s&platform=%s&game=vf2&sku=%s", 143 },
     { "markmessage.php?session=%s&message=%d", 143 },
     { "message.php?session=%s&game=%s&platform=%s", 143 },
-    { "poll.php?session=%s", 133 },
+    { "poll.php?session=%s", 135 },
     { "promocode.php?code=%s&game=%s", 143 },
     { "vote.php?session=%s&poll=%d&opinion=%d", 143 },
     { 0, 0 }

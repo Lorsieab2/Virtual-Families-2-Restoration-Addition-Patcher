@@ -222,7 +222,7 @@ def test_a_dead_member_whose_body_changed_since_the_tree_entry_is_found_from_the
 def test_backfill_from_the_previous_save_marks_what_may_have_changed(tmp_path):
     """Bob's record was reused (gone from the save) but the game's previous save holds him alive: who he is is
     exact, the rest is as when saved (inferred), and his age at death is the log's whole years (inferred), which
-    still makes his revival age exactly 18."""
+    still makes his revival age exactly 20 (he died at 45: 20 or older returns at 20)."""
     folder = make_folder(tmp_path, family(bob_record=False), previous=family(bob_alive=True))
     rv.backfill(folder, Processes(), NOW)
     bob = snapshots(folder)["Bob"]
