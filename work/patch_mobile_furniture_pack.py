@@ -7135,8 +7135,8 @@ PATCH_TEXT_ROWS = (
     # Revive (VF2PurchaseRevive): the Special Upgrades row and its dialogs
     ("eString_ReviveTitle", "Revive a Family Member"),
     ("eString_ReviveDescription", "Brings back a family member of this generation who died, as the same person: "
-     "their name, looks, likes, career and wish for children. Someone who died at 18 or older returns at 18; "
-     "someone younger returns at the age they died."),
+     "their name, looks, likes and wish for children. Someone who died younger than 20 returns at that age; "
+     "at 20 or older (or at an unknown age), at 20 with their career."),
     ("eString_ReviveQuestion", "Bring back this family member?"),
     ("eString_ReviveAge", "age"),
     ("eString_ReviveButton", "Revive"),

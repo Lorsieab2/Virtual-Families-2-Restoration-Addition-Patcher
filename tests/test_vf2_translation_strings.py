@@ -82,6 +82,25 @@ def test_the_patch_data_is_well_formed():
     assert all(k.startswith("patch/") for k in keys)
 
 
+def test_the_revive_description_states_the_rule_and_fits_the_store_box():
+    """The owner's rule: died younger than 20 -> back at that age; at 20 or older, or at an unknown age -> back at 20
+    with the career. The store draws a row's description with CScrollingStoreScene::DrawVisibleStoreItem's
+    DrawStringJustified(text, x + 0CDh, y + 23h, width 2CCh, white, GetFont(1) = Segoe24Bold) inside
+    ScrollingStoreItemBox.png (923 x 114), so it has 716 pixels across and 114 - 35 = 79 down: four lines of 19."""
+    import vf2_game_text as gt
+    data = json.loads((ROOT / "src" / "vf2_patch_strings.json").read_text(encoding="utf-8"))
+    english = next(r["english"] for r in data["table"] if r["key"] == "eString_ReviveDescription")
+    assert "younger than 20 returns at that age" in english and "at 20 with their career" in english
+    assert "18" not in english
+    french = next(line.split("\t")[2] for line in (ROOT / "translations" / "fr.tsv").read_text(encoding="utf-8")
+                  .splitlines() if line.endswith("\teString_ReviveDescription"))
+    font = gt.load_font("Segoe24Bold")
+    for text in (english, french):
+        lines = gt.wrap(font, gt.encode(text), 0x2CC)
+        assert len(lines) * font.line_height <= 114 - 0x23, (text, len(lines))
+        assert all(gt.get_width(font, line) <= 0x2CC for line in lines)
+
+
 def test_the_room_table_is_the_dlls():
     lim = ts.limits()
     caption = next(int(i) for i, v in lim["strncpy_room"].items() if v == 38 and int(i) not in lim["english_length"])

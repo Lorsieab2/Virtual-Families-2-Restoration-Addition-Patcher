@@ -8620,7 +8620,7 @@
   {
    "id": 4092,
    "key": "eString_ReviveDescription",
-   "english": "Brings back a family member of this generation who died, as the same person: their name, looks, likes, career and wish for children. Someone who died at 18 or older returns at 18; someone younger returns at the age they died.",
+   "english": "Brings back a family member of this generation who died, as the same person: their name, looks, likes and wish for children. Someone who died younger than 20 returns at that age; at 20 or older (or at an unknown age), at 20 with their career.",
    "source": "Revive"
   },
   {
