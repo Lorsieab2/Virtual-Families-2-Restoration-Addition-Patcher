@@ -3,13 +3,13 @@
   "output_prefix": "VF2-B210-matrix",
   "exe_name": "Virtual Families 2 - B210.exe",
   "seed_set": "VF2-B209-matrix",
-  "note": "Patcher matrix for B210, built from main at c875b71, seeded from the B209 matrix, in 4 parallel parts. B210 adds: Copy Player Slot Move and Delete (#528); the Game Mechanics Family members group (#530); Family History fixes (#529, #531, #534, #536); Revive a Family Member (#532, #533: the .vf2rviv setting byte, its loader and the $25,000 Special Upgrades row); Skin Tones (#535, #537: the .vf2skin setting byte and its loader). All 32 executables are rebuilt for the two new setting bytes and the store row. The 32 variants are the same feature combinations as B209.",
+  "note": "Patcher matrix for B210, built from main at 068cb63, seeded from the B209 matrix, in 4 parallel parts. B210 adds: Copy Player Slot Move and Delete (#528); the Game Mechanics Family members group (#530); Family History fixes (#529, #531, #534, #536); Revive a Family Member (#532, #533: the .vf2rviv setting byte, its loader and the $25,000 Special Upgrades row); Skin Tones (#535, #537: the .vf2skin setting byte and its loader); the B210 release fixes (#539, #540: translation limits for the new strings and the Revive description). All 32 executables are rebuilt for the two new setting bytes and the store row. The 32 variants are the same feature combinations as B209.",
   "built_from": {
-    "revision": "c875b71",
+    "revision": "068cb63",
     "ref": "main",
-    "pull_request": 537,
-    "how_to_verify": "git rev-parse c875b71^{tree} must print 5d48a8abd4524edd41d974fa300c8accb95fcc8d. That single object id covers the whole tree and resolves from the published repository alone.",
-    "tree": "5d48a8abd4524edd41d974fa300c8accb95fcc8d"
+    "pull_request": 540,
+    "how_to_verify": "git rev-parse 068cb63^{tree} must print 22606d5ec3e9fb74ab937339316eae9e50ea4a5a. That single object id covers the whole tree and resolves from the published repository alone.",
+    "tree": "22606d5ec3e9fb74ab937339316eae9e50ea4a5a"
   },
   "seeds": {
     "core": "outputs/VF2-B209-matrix-core",
