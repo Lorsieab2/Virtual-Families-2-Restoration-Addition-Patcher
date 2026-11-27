@@ -1842,6 +1842,25 @@ extern "C" __declspec(dllexport) void __cdecl B200History_Startup() {
     }
 }
 
+// ---- for the Revive DLL (vf2revive_b200.dll), which asks for these when this DLL is loaded
+// A family member is alive again in household slot `slot` (Revive a Family Member): the death this session logged
+// for that slot is forgotten, so a second death of the same person is logged when it happens (a revived child comes
+// back at the very age it died at, so name, sex and age alone would call it the same death).
+extern "C" __declspec(dllexport) void __cdecl B200History_Revived(int slot) {
+    if (slot >= 0 && slot < (int)HIST_HOUSEHOLD_SLOTS) DeathLogged[slot].valid = 0;
+}
+
+// The name the log writes for a stored name (at most 25 bytes, a save's name field): the whole name the slot's Names
+// file holds for a short form, else the name itself, in UTF-8, as every record of this DLL writes it. Returns its
+// length in bytes.
+extern "C" __declspec(dllexport) int __cdecl B200History_LogName(const char *stored, char *out, int cap) {
+    if (!stored || !out || cap < 2) return 0;
+    Text t;
+    t.Init(out, (unsigned)cap);
+    t.Whole(stored, 25);
+    return (int)t.n;
+}
+
 BOOL WINAPI DllMain(HINSTANCE instance, DWORD reason, LPVOID) {
     if (reason == DLL_PROCESS_ATTACH) {
         ThisModule = instance;

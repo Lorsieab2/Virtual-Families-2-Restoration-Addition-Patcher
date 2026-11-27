@@ -8,6 +8,7 @@
 //     family                 Ann (heir, slot 0), Bob (spouse, slot 1), Cal and Fay (children, slots 2 and 3)
 //     age <slot> <units>     kill <slot> <cause>     load <n>     save <n>     cands     done <i> <slot> <role>
 //     status                 vtable                  hostbad
+//     (first) skin / history: load the Skin Tones / Family History stand-in      forgot
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <stdio.h>
@@ -132,6 +133,7 @@ int main(int argc, char **argv) {
     volatile Status *status = (volatile Status *)GetProcAddress(m, "B200Revive_Status");
     if (!startup || !death || !cands || !done || !status || !members) { printf("noexports\n"); return 4; }
     volatile int *given = 0;
+    volatile int *forgot = 0;
     static VF2ReviveHost host = { 0x31485652u, 1, sizeof(VF2ReviveHost), SaveRecord, SavePath, CurrentSlot,
                                   CurrentFamily, Generations, Vtable, (void *)&StockLoad, (void *)&StockSave };
     int a = 2;
@@ -141,6 +143,13 @@ int main(int argc, char **argv) {
         HMODULE s = LoadLibraryA(dll);
         given = s ? (volatile int *)GetProcAddress(s, "B200SkinStandin_Given") : 0;
         printf("skin %d\n", given ? 1 : 0);
+        ++a;
+    }
+    if (a < argc && !strcmp(argv[a], "history")) {       // the Family History stand-in, loaded before the deaths
+        strcpy_s(cut + 1, MAX_PATH - (cut + 1 - dll), "vf2history_b200.dll");
+        HMODULE s = LoadLibraryA(dll);
+        forgot = s ? (volatile int *)GetProcAddress(s, "B200HistoryStandin_Revived") : 0;
+        printf("history %d\n", forgot ? 1 : 0);
         ++a;
     }
     startup(&host);
@@ -202,6 +211,8 @@ int main(int argc, char **argv) {
             for (int i = 0; i < n; ++i)
                 printf("member %s slot %d sex %d head %d body %d\n", out[i].name, out[i].slot, out[i].sex,
                        out[i].head, out[i].body);
+        } else if (!strcmp(c, "forgot")) {
+            if (forgot) printf("forgot %d slot %d\n", forgot[0], forgot[1]);
         } else if (!strcmp(c, "given")) {
             if (given) printf("given %d slot %d tone %d birth %d\n", given[0], given[1], given[2], given[3]);
         } else if (!strcmp(c, "remarry")) {                         // a new spouse in parent 2's place

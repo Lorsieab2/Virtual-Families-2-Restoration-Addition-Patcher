@@ -1087,6 +1087,46 @@ def scenario_child_dies(w: HistoryWorld):
     assert [h for h in w.headings() if h.startswith("Death")] == ["Death 1"]
 
 
+def scenario_a_revived_person_who_dies_again_is_logged_again(w: HistoryWorld):
+    """Revive a Family Member (vf2revive_b200.dll) brings a dead child back in the same slot at the very age it died
+    at; it tells this DLL (B200History_Revived), so the second death is logged when it happens, not at the next
+    load. Without that call the same death is still never logged twice."""
+    founded(w)
+    w.impregnate(0, 1, (99,))
+    baby = w.spawned[0]
+    w.deliver(0)
+    w.e.w32(w.villager(baby) + S.VILLAGER_AGE, 100)
+    w.kill(baby, 0)
+    w.report_death_timeflow()
+    assert [h for h in w.headings() if h.startswith("Death")] == ["Death 1"]
+    # revived in the same slot, the same age: alive again, then the game reports a death again
+    w.e.call(w.e.dll_export("B200History_Revived"), (baby,))
+    w.set_active(baby, 1)
+    w.e.w32(w.villager(baby) + S.VILLAGER_HEALTH, 80)
+    w.e.w32(w.peep(2) + S.PEEP_SLOT, baby)                 # the revival re-points the child's own entry
+    w.kill(baby, 1)
+    w.report_death_timeflow()
+    assert [h for h in w.headings() if h.startswith("Death")] == ["Death 1", "Death 2"]
+    assert w.last() == ("Death 2", death_lines(f"Baby {baby}", 5, baby % 2, "Starvation", "Child"))
+
+
+def scenario_the_log_name_for_revive_is_the_whole_name(w: HistoryWorld):
+    """B200History_LogName: the whole name of a short form from the slot's Names file, in UTF-8; any other name as it
+    is (the Revive DLL's records use it)."""
+    taken: dict = {}
+    whole = "Bartholomew \u00c9lodie Whole-Name-Longer-Than-The-Field"
+    stored = _short(whole, N.MEMBER_ROOM, taken)
+    w.fs.write(NAMES_FILE.format(slot=1), N.render([N.Entry(s, N.MEMBER_ROOM, f) for s, f in taken.items()]))
+    w.set_slot(1)
+    e = w.e
+    out = e.alloc(4096)
+    for field, want in ((stored, whole), (b"Bob", "Bob")):
+        raw = e.alloc(32)
+        e.write(raw, field[:25] + b"\0")
+        n = s32(e.call(e.dll_export("B200History_LogName"), (raw, out, 4096)))
+        assert e.read(out, n).decode("utf-8") == want
+
+
 def remarriage_lines(head, head_age, head_sex, spouse, spouse_age, spouse_sex, earlier, how):
     return (member("Family member", head, head_sex, head_age) + member("Married", spouse, spouse_sex, spouse_age)
             + ["  Remarried: yes", f"  Earlier spouse: {earlier} ({how})", f"  Current spouse of {head}: {spouse}",
@@ -1767,6 +1807,7 @@ ALL = [scenario_whole_names_in_the_log, scenario_names_are_logged_in_utf8,
        scenario_children_join_and_leave, scenario_next_generation, scenario_evict_then_new_family_keeps_the_log,
        scenario_start_over_wipes_the_slot, scenario_new_family_wipes_the_old_one, scenario_backfill_once,
        scenario_a_start_over_stays_in_its_own_slot, scenario_an_eviction_stays_in_its_own_slot,
+       scenario_a_revived_person_who_dies_again_is_logged_again, scenario_the_log_name_for_revive_is_the_whole_name,
        scenario_a_load_with_no_family_writes_nothing, scenario_the_log_rolls_after_2000_records,
        scenario_numbers_continue_across_files, scenario_family_story_end_to_end]
 

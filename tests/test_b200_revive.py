@@ -139,6 +139,7 @@ class Game:
         for name in ("vf2revive_b200.dll", "vf2revive_harness.exe"):
             shutil.copy2(built / name, self.bin / name)
         shutil.copy2(built / "vf2skin_standin.dll", self.bin / "vf2skin_b200.dll")    # loaded only by "skin"
+        shutil.copy2(built / "vf2history_standin.dll", self.bin / "vf2history_b200.dll")   # only by "history"
         (self.bin / "vf2revive.ini").write_bytes(b"[Patches]\r\nRevive=%d\r\n" % (1 if setting else 0))
 
     def run(self, *commands: str) -> list[str]:
@@ -231,6 +232,40 @@ def test_a_revival_leaves_the_list_and_is_logged_in_the_family_history(built, tm
     assert last.get("Name") == "Bob" and last.get("How") == "Revived (Revive a Family Member)"
     assert last.get("Age at arrival") == "20" and last.get("Family role") == "Parent (married in)"
     assert last.get("Generation") == "1"
+
+
+def test_the_revival_record_writes_the_whole_name_and_the_history_dll_forgets_the_death(built, tmp_path):
+    """The Arrived record names the person by the whole name the Family History DLL reads from the slot's Names file
+    (a stand-in here), as every other record does -- the late spouse's record too -- and that DLL is told the slot
+    lives again, so the person's next death is logged when it happens."""
+    for role, shown in (("Parent (married in)", "Parent (married in)"),
+                        ("Family member", "Family member (shown under the current spouse in the Family Tree)")):
+        g = Game(built, tmp_path / role.split()[0])
+        logs = g.saves / "Virtual Families 2 Patcher" / "Save 1" / "Logs" / "Family History"
+        logs.mkdir(parents=True)
+        (logs / "Family History 1.txt").write_bytes(b"Family: Test (Save 1)\r\n\r\n")
+        extra = ("gone", "1", "remarry") if role == "Family member" else ()
+        out = g.run("history", "family", "save", "1", "load", "1", "kill", "1", "2", *extra, "cands")
+        assert "history 1" in out
+        bob = next(c for c in cands(out) if c[1] == "Bob")
+        out = g.run("history", "family", "save", "1", "load", "1", "kill", "1", "2", *extra,
+                    "done", bob[0], "5", role, "forgot")
+        assert "forgot 1 slot 5" in out
+        import vf2_family_history as fh
+        last = fh.entries((logs / "Family History 1.txt").read_text(encoding="utf-8"))[-1]
+        assert last.get("Name") == "Bob Bartholomew \u00c9lodie-Whole-Name-Longer-Than-The-Field"
+        assert last.get("Family role") == shown
+
+
+def test_without_the_history_dll_the_record_keeps_the_stored_name(built, tmp_path):
+    g = Game(built, tmp_path)
+    logs = g.saves / "Virtual Families 2 Patcher" / "Save 1" / "Logs" / "Family History"
+    logs.mkdir(parents=True)
+    (logs / "Family History 1.txt").write_bytes(b"Family: Test (Save 1)\r\n\r\n")
+    out = g.run("family", "save", "1", "load", "1", "kill", "1", "2", "done", "0", "5", "Child", "forgot")
+    assert not any(line.startswith("forgot") for line in out)
+    import vf2_family_history as fh
+    assert fh.entries((logs / "Family History 1.txt").read_text(encoding="utf-8"))[-1].get("Name") == "Bob"
 
 
 def test_no_log_is_started_for_a_slot_without_one(built, tmp_path):
