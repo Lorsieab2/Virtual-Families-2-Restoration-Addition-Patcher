@@ -216,6 +216,29 @@ def test_only_the_dead_of_this_generation_are_offered_with_the_age_rule(built, t
     assert "cands 0" in out                                      # Fay is alive in this house
 
 
+@pytest.mark.parametrize("units", [160, -1])
+def test_an_unknown_age_at_death_is_offered_and_brought_back_at_20(built, tmp_path, units):
+    """The owner's rule: an age at death that is not known (the Revive Records backfill marks it unknown) comes back
+    at 20. The candidate's age is what the "Revive" / "Next" box shows ("age 20") and what the executable passes to
+    SpawnSpecificPeep (c.ageUnits), so it must be 400 units, never the stored age and never "?"."""
+    import dataclasses
+    g = Game(built, tmp_path)
+    g.run("family", "save", "1", "load", "1", "age", "2", "160", "kill", "2", "1", "save", "1")
+    f = g.snapshots(1)
+    cal = next(s for s in f.entries if s.name_text == "Cal")
+    assert cal.age_at_death == 160 and cal.mark("age_at_death") == rv.EXACT
+    unknown = dataclasses.replace(cal, age_at_death=units, marks={**cal.marks, "age_at_death": rv.UNKNOWN})
+    assert unknown.revival_age() == (400, rv.EXACT)                 # the patcher's summary: returns at 20
+    save = (g.saves / "Virtual Families 21.ldw").read_bytes()
+    rv.sidecar_path(g.saves, 1).write_bytes(rv.make_file(save, [unknown if s is cal else s for s in f.entries]))
+    out = g.run("load", "1", "cands")
+    got = {c[1]: c for c in cands(out)}
+    assert got["Cal"][5] == "400"                                    # "Cal (age 20)", spawned at 400 units
+    text = GEN.read_text(encoding="utf-8")
+    assert "VF2ReviveAppendNumber(text, sizeof(text), list[i].ageUnits / 20);" in text   # the box shows c.ageUnits
+    assert "VillagerManager.SpawnSpecificPeep(1, (EGender)c.sex, c.ageUnits)" in text
+
+
 def test_a_revival_leaves_the_list_and_is_logged_in_the_family_history(built, tmp_path):
     g = Game(built, tmp_path)
     logs = g.saves / "Virtual Families 2 Patcher" / "Save 1" / "Logs" / "Family History"
