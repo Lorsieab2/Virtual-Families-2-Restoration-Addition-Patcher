@@ -355,15 +355,14 @@ checked against `manifest.json`, the release notes and the owner's confirmed
 play reports; superseded claims are marked rather than deleted.*
 
 The GUI reads its checkboxes from the shipped manifest, so the exact list follows
-the release you downloaded. The next bundle offers 49 settings: B208's 48 plus **Revive** (on by default). The
-B208 bundle offers 48: B207's 47 plus **Translations** (on by default).
+the release you downloaded. The bundle offers 49 settings (after B209): B208's 48 plus **Revive** (on by default).
 
 That number is not simply the count of settings the patcher defines, which is
 50. The settings list drops any optional setting that has no packaged source
 assets -- in B201, as in B180, the two named just below -- and the export adds
 one setting of its own, `core_assets`, which copies the support files and
 generated assets that are not tied to a single feature. So 50 defined, less 2
-without packaged assets, plus 1 generated, is the 49 the GUI shows. (B208 offered 48: 49 - 2 + 1; B207 offered 47: 48 - 2 + 1, B206's 43 plus **Render Unicode with In-Game
+without packaged assets, plus 1 generated, is the 49 the GUI shows. (B208 offered 48: 49 - 2 + 1, B207's 47 plus **Translations**; B207 offered 47: 48 - 2 + 1, B206's 43 plus **Render Unicode with In-Game
 Fonts**, **Use Unicode Font (overrides in-game fonts)**, **Copy and Paste in Text Boxes** and **Title Screen
 Player Name Box**. The B206 bundle offers 43 settings:
 44 - 2 + 1, B205's 41 plus **Free and Guaranteed Cheats** and **All outfits and hairstyles always for
