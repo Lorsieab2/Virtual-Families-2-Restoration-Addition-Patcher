@@ -48,11 +48,11 @@ def test_the_patch_data_is_well_formed():
     data = ts.patch_data()
     ids = [r["id"] for r in data["table"]]
     # the B209 records (the texts the generated code used to copy or draw itself) are the last ids
-    assert len(ids) == len(set(ids)) and min(ids) > data["original_ids_to"] - 100 and max(ids) == 0xFFA
+    assert len(ids) == len(set(ids)) and min(ids) > data["original_ids_to"] - 100 and max(ids) == 0x1003
     assert all(r["key"] and r["source"] for r in data["table"])
     assert [r["id"] for r in data["table"] if not r["english"]] == [3779, 3780]     # empty in the game: not in a template
     assert {r["id"] for r in data["changed"]} == {5, 17, 44, 45, 46, 47, 134, 401, 403, 1157}
-    assert len(data["table"]) == 1426
+    assert len(data["table"]) == 1435
     by_id = {r["id"]: r for r in data["table"]}
     assert [(by_id[i]["key"], by_id[i]["english"], by_id[i]["source"]) for i in range(0xFF3, 0xFFB)] == [
         ("eString_VF2PrivateRomanticTime", "Having private adult romantic time", "Behavior Patches"),
@@ -65,6 +65,11 @@ def test_the_patch_data_is_well_formed():
         ("eString_MobileRenovationBathroom2Required",
          "Bathroom 2 must be renovated first before this can be bought.", "Mobile Renovations"),
     ]
+    # Revive (after B209): its row and its boxes, chained after them
+    assert [(by_id[i]["key"], by_id[i]["source"]) for i in range(0xFFB, 0x1004)] == [
+        (k, "Revive") for k in ("eString_ReviveTitle", "eString_ReviveDescription", "eString_ReviveQuestion",
+                                "eString_ReviveAge", "eString_ReviveButton", "eString_ReviveNextButton",
+                                "eString_ReviveNone", "eString_ReviveNoRoom", "eString_ReviveDone")]
     # the stock line Island Events used to rewrite keeps its stock words everywhere: it is not a changed line
     assert 2494 not in {r["id"] for r in data["changed"]}
     # the Time Controls dialog's texts, and (B209) the original game's own words its code hands over itself
@@ -124,7 +129,9 @@ NAME_LINE = re.compile(r"\b(GetPrivateProfile\w+|GetProcAddress|GetModuleHandle\
                        r"FindFirst\w*|lstrcat\w*|Copy|Name|SameText|StartsWith)\s*\(")
 # Whole files whose text is English BY DESIGN: the Family History log (a file Family Tree Maker reads back), the
 # Translations DLL's log. The DLLs' own log files are never shown in the game.
-ENGLISH_FILES = {"b200history.cpp"}
+# The Revive DLL writes only its snapshot files and the Family History log's "Arrived" record (English, as the Family
+# History DLL's); its harness is a test stand-in, never shipped.
+ENGLISH_FILES = {"b200history.cpp", "b200revive.cpp", "revive_harness.cpp"}
 LITERAL = re.compile(r'(?<![\w])L?"((?:[^"\\\n]|\\.)*)"')
 
 

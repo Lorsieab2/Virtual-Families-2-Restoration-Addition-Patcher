@@ -3092,7 +3092,9 @@ class MobileRenovationArtTests(unittest.TestCase):
                         )
                         if patcher.ENABLE_CHEAT_UPGRADES
                         else 0
-                    ),
+                    )
+                    # the Revive row: in gServicesList in every variant (listed only while its DLL runs)
+                    + 1,
                 )
 
                 obj = CoffObject(temp / "InventoryManager.obj")
@@ -12275,7 +12277,7 @@ class VF3StyleChildAdoptionChooserPatchTests(unittest.TestCase):
         self.assertIn("FamilyTree.EmptyOffspringSlots() <= 0", helper)
         self.assertIn("ldwGameState::GetRandom(7) + 2", helper)
         self.assertIn("ldwGameState::GetRandom(2)", helper)
-        self.assertIn("VillagerManager.SpawnSpecificPeep(age, gender, -1)", helper)
+        self.assertIn("VillagerManager.SpawnSpecificPeep(1, gender, age)", helper)
         self.assertIn("FamilyTree.AddOffspring(villager)", helper)
         self.assertIn("(EAchievement)0x0C", helper)
         self.assertIn("(EAchievement)0x0D", helper)

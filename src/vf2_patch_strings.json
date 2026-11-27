@@ -8610,6 +8610,60 @@
    "key": "eString_MobileRenovationBathroom2Required",
    "english": "Bathroom 2 must be renovated first before this can be bought.",
    "source": "Mobile Renovations"
+  },
+  {
+   "id": 4091,
+   "key": "eString_ReviveTitle",
+   "english": "Revive a Family Member",
+   "source": "Revive"
+  },
+  {
+   "id": 4092,
+   "key": "eString_ReviveDescription",
+   "english": "Brings back a family member of this generation who died, as the same person: their name, looks, likes, career and wish for children. Someone who died at 18 or older returns at 18; someone younger returns at the age they died.",
+   "source": "Revive"
+  },
+  {
+   "id": 4093,
+   "key": "eString_ReviveQuestion",
+   "english": "Bring back this family member?",
+   "source": "Revive"
+  },
+  {
+   "id": 4094,
+   "key": "eString_ReviveAge",
+   "english": "age",
+   "source": "Revive"
+  },
+  {
+   "id": 4095,
+   "key": "eString_ReviveButton",
+   "english": "Revive",
+   "source": "Revive"
+  },
+  {
+   "id": 4096,
+   "key": "eString_ReviveNextButton",
+   "english": "Next",
+   "source": "Revive"
+  },
+  {
+   "id": 4097,
+   "key": "eString_ReviveNone",
+   "english": "No family member of this generation can be brought back. Nothing was charged.",
+   "source": "Revive"
+  },
+  {
+   "id": 4098,
+   "key": "eString_ReviveNoRoom",
+   "english": "There is no room for another family member. Nothing was charged.",
+   "source": "Revive"
+  },
+  {
+   "id": 4099,
+   "key": "eString_ReviveDone",
+   "english": "has come back to the family!",
+   "source": "Revive"
   }
  ],
  "literals": [

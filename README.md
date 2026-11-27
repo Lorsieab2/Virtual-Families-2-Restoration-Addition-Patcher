@@ -163,7 +163,7 @@ actions, as before. **Tools** holds:
   one that did not match is left as it is. Slow and Fast are not offered: the game sets
   no speed but 10 and the +999 pause. Code: `src/vf2_game_speed.py`; tests: `tests/test_game_speed.py`.
 - **Revive Records...** (new, 2026-11-26) records each family member of the current generation who died, for the
-  Revive purchase still to be built in the game (`docs/revive.md`). It is the backfill for people who died before
+  in-game Revive purchase (the **Revive** setting, below; `docs/revive.md`). It is the backfill for people who died before
   the patch: read-only sources in the owner's order (their own dead record still in the save, the game's previous
   save and the patcher's Backups, the Family Tree entry, the Family History log and the Names file), every field
   marked exact, inferred or unknown, into `Virtual Families 2 Patcher Data\Revive\<save file>.dat` (N and N + 20,
@@ -171,8 +171,8 @@ actions, as before. **Tools** holds:
   Idempotent; backups are done while the game runs, the running game's live saves wait; temp-and-replace with a
   read-back, a replaced file copied to `Revive\Before backfill\<time>` first, a damaged one set aside as
   `.unreadable-K.dat`, and the whole run rolled back if a write fails. Only the dead: never divorced, away
-  (college, Boarding School, the Talent Scout) or evicted family members. Age rule: died at 18 or older -> returns
-  at 18 (360 age units), younger -> the age at death. Code: `src/vf2_revive.py`; tests: `tests/test_revive.py`.
+  (college, Boarding School, the Talent Scout) or evicted family members. Age rule: died younger than 20 -> the
+  age at death; 20 or older, or not known -> 20 (400 age units) with the career, level and salary at death. Code: `src/vf2_revive.py`; tests: `tests/test_revive.py`.
 - **Game Mechanics...** (the Game section) opens a read-only window of how Virtual Families 2 works underneath,
   laid out as the Virtual Villagers patcher's: a link to each group at the top (time and ageing, needs and upkeep,
   health and sickness, old age, pregnancy and babies, careers, money and interest, leaving home, dating, marriage
@@ -355,15 +355,14 @@ checked against `manifest.json`, the release notes and the owner's confirmed
 play reports; superseded claims are marked rather than deleted.*
 
 The GUI reads its checkboxes from the shipped manifest, so the exact list follows
-the release you downloaded. The bundle offers 48 settings (B208): B207's 47 plus **Translations**
-(on by default).
+the release you downloaded. The bundle offers 49 settings (after B209): B208's 48 plus **Revive** (on by default).
 
 That number is not simply the count of settings the patcher defines, which is
-49. The settings list drops any optional setting that has no packaged source
+50. The settings list drops any optional setting that has no packaged source
 assets -- in B201, as in B180, the two named just below -- and the export adds
 one setting of its own, `core_assets`, which copies the support files and
-generated assets that are not tied to a single feature. So 49 defined, less 2
-without packaged assets, plus 1 generated, is the 48 the GUI shows. (B207 offered 47: 48 - 2 + 1, B206's 43 plus **Render Unicode with In-Game
+generated assets that are not tied to a single feature. So 50 defined, less 2
+without packaged assets, plus 1 generated, is the 49 the GUI shows. (B208 offered 48: 49 - 2 + 1, B207's 47 plus **Translations**; B207 offered 47: 48 - 2 + 1, B206's 43 plus **Render Unicode with In-Game
 Fonts**, **Use Unicode Font (overrides in-game fonts)**, **Copy and Paste in Text Boxes** and **Title Screen
 Player Name Box**. The B206 bundle offers 43 settings:
 44 - 2 + 1, B205's 41 plus **Free and Guaranteed Cheats** and **All outfits and hairstyles always for
@@ -645,6 +644,22 @@ release bundle, like almost everything else)
   **Download from GitHub...** (this repository's public `translations/` folder, read-only, no login, validated as
   data) and **Share on GitHub...** (the owner's confirmation text, the credit name typed by hand, never an email).
   Accepted translations ship in `<Patcher Files>\translations\vf2`; a "(TEST)" translation never does.
+- **Revive** (`.vf2rviv`, an Optional patch, **on by default** and in Owner's Defaults; new after B209, **needs the
+  executable rebuilt**) - the Special Upgrades row **Revive a Family Member** ($25,000; free with Free and Guaranteed
+  Cheats; the price cheats apply) brings back a family member of the current generation who died, as the same
+  person: name (and the Names file's whole name), sex, looks, parents, likes and dislikes, fertility and "Wants
+  kids?"; moods and needs start fresh. Age: the age at death for a death before 20; 20 (400 age units) with the career,
+  level and salary at death for a death at 20 or older (or an unknown age). One at a time in the game's own box
+  (**Revive** / **Next**); nothing chosen, or no room, gives the money back. A child's own Family Tree entry is pointed
+  at them again; a spouse whose partner remarried lives in the house outside the tree's records and is drawn under the
+  current spouse on the game's own Family Tree screen (clicking them opens the game's person window). A revived
+  grown-up of 20 with no career can have a baby when they are a parent of the generation.
+  Only the dead (never divorced, away or evicted). The companion DLL `vf2revive_b200.dll` takes a snapshot at every
+  death (the executable's `SetHealth` / `AdjustHealth` call it on the path that stores a cause of death) into the
+  same per-save file as Revive Records, rotated with the save; it holds no game address and patches no code. The
+  Family History log gets an `Arrived` record (`How: Revived (Revive a Family Member)`). Emulated (the DLL in its
+  harness, the executable's own health setters, the tree code on all 32 B209 executables); **not live tested**.
+  See `docs/revive.md`; tests: `tests/test_b200_revive.py`.
 - **R Refreshes the Store** (`.vf2rfsh`, an Optional patch and a cheat, **on by default**; new in the final
   B204 rebuild) - in the store, press **R** (or Shift+R) to pick the store's random items again, the
   game's own way and with the game's own odds:

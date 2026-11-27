@@ -1,12 +1,13 @@
 """Revive: the snapshots of the family members who died, for bringing one back (owner, 2026-11-26).
 
-The design is C:\\vf2w\\revive-design.md (the port of the Virtual Villagers patcher's "Revive Buried/Disappeared
-Villagers"); the owner's decisions it follows:
+The design is the port of the Virtual Villagers patcher's "Revive Buried/Disappeared Villagers" (docs/revive.md);
+the owner's decisions it follows:
 
 * a revived family member is the SAME person: name (with the whole name of the Names file), sex, head and body,
   likes and dislikes, career, fertility and "Wants kids?" (procreation desire); moods and needs start fresh;
-* the AGE they come back at: someone who died at 18 or older comes back at 18, the game's own 18-year mark (360 age
-  units, the "Set Age to 18" row's value); someone who died at 17 or younger comes back at the age they died at;
+* the AGE they come back at (the owner, final): someone who died younger than 20 comes back at the age they died
+  at (18 and 19 too); someone who died at 20 or older -- or whose age at death is not known -- comes back at 20, the
+  game's own 20-year mark (400 age units), WITH their career, level and salary at death;
 * only the DEAD can be revived: never a divorced spouse, a child away (college, Boarding School, the Talent Scout) or
   a member of an evicted family; and only the current generation, for now;
 * a dead spouse whose partner has remarried comes back as a family member, not a spouse;
@@ -27,8 +28,9 @@ What this module holds (none of it changes a save, a log or the Names file):
   the whole run rolled back when any write fails;
 * the rules the in-game purchase follows (who may be revived, the age, the role they return in, the price).
 
-The in-game half (the capture at each death, the rotation with the game's own save, the Special Upgrades row) is not
-built yet; see docs/revive.md.
+The in-game half -- the capture at each death, the rotation with the game's own save and the Special Upgrades row
+"Revive a Family Member" -- is the companion DLL vf2revive_b200.dll (runtime/native/b200revive, the same file format)
+and the executable's own code (work/patch_mobile_furniture_pack.py, REVIVE_*); see docs/revive.md.
 
 Snapshot file (little-endian):
     0 "VF2REVIV"   8 version (1)   12 "VF2B200\\0"   20 file size   24 save FNV-1a 64 (8)   32 save size
@@ -50,11 +52,10 @@ import vf2_save_reader as reader
 
 # ---------------------------------------------------------------- the rules
 
-# The price of one revival, in the store's own money. The owner confirms it before any release (proposed 2026-11-26:
-# the patcher's own big Special Upgrades -- Brokerage Account, Food Club, Health Plan -- are $10,000 each, and
-# Adoption Services, the stock way a family member joins, is $4,000).
-REVIVE_PRICE = 10_000
-AGE_18_UNITS = 360                      # 18 years x 20 age units: the game's 18-year mark ("Set Age to 18")
+# The price of one revival, in the store's own money: $25,000 (the owner, 2026-11-26); free with Free and Guaranteed
+# Cheats. The executable's row holds the same price (work/patch_mobile_furniture_pack.py REVIVE_PRICE).
+REVIVE_PRICE = 25_000
+ADULT_RETURN_UNITS = 400                # 20 years x 20 age units: the game's 20-year mark
 UNITS_PER_YEAR = reader.AGE_UNITS_PER_YEAR
 
 # ---------------------------------------------------------------- the file
@@ -77,9 +78,11 @@ MARK_WORDS = {UNKNOWN: "unknown", INFERRED: "inferred", EXACT: "exact"}
 # Where a snapshot came from, best first. CAPTURED is the game's own capture at the death (the in-game half); the
 # rest are the backfill's sources in the owner's order.
 CAPTURED, THIS_SAVE, OTHER_SAVE, BACKUP, TREE, LOG = 1, 2, 3, 4, 5, 6
+MEMBER = 7          # revived, and living in the house outside the Family Tree's records (the DLL keeps them)
 SOURCE_WORDS = {CAPTURED: "captured at the death", THIS_SAVE: "their own record in this save",
                 OTHER_SAVE: "their record in the game's other save of the slot", BACKUP: "their record in a backup",
-                TREE: "the Family Tree", LOG: "the Family History log"}
+                TREE: "the Family Tree", LOG: "the Family History log",
+                MEMBER: "revived: a family member outside the Family Tree"}
 
 FIELDS = ("name", "full_name", "sex", "head", "body", "likes", "dislikes", "likes_text", "dislikes_text", "career",
           "fertility", "procreation_desire", "age_at_death", "cause", "parents", "first_name", "role", "generation",
@@ -100,7 +103,10 @@ _ENTRY = (
 _BYTES = (                              # offset, size, attribute (raw bytes, NUL padded)
     (84, 28, "name"), (112, 28, "heir_name"), (140, 28, "father"), (168, 28, "mother"), (196, 12, "likes"),
     (208, 12, "dislikes"), (220, 40, "likes_text"), (260, 40, "dislikes_text"), (300, _MARKS, "marks"),
-    (320, reader.VILLAGER_RECORD_SIZE, "record"), (2300, 1204, "full_name"),
+    (320, reader.VILLAGER_RECORD_SIZE, "record"), (2300, 1200, "full_name"),
+    # the last four bytes (the DLL's S_*): the skin tone and birth tone at the death (B200Skin_ToneOf, Skin Tones),
+    # a revived family member's household slot, and flags (1: a tone is kept); read and written back as they are
+    (3500, 4, "spare"),
 )
 ENTRY_SIZE = 3504
 
@@ -116,10 +122,12 @@ def sidecar_path(folder: Path, number: int) -> Path:
     return Path(folder) / DATA_FOLDER / FOLDER / (reader.save_file_name(number) + ".dat")
 
 
-def revival_age_units(age_at_death: int) -> int:
-    """The age a revived family member comes back at: 18 (360 units) for anyone who died at 18 or older, else the
-    age they died at, in the game's own age units."""
-    return AGE_18_UNITS if age_at_death >= AGE_18_UNITS else max(0, age_at_death)
+def revival_age_units(age_at_death: int | None) -> int:
+    """The age a revived family member comes back at, in the game's own age units: 20 (400 units) for anyone who died
+    at 20 or older or whose age at death is not known, else the age they died at."""
+    if age_at_death is None or age_at_death < 0 or age_at_death >= ADULT_RETURN_UNITS:
+        return ADULT_RETURN_UNITS
+    return age_at_death
 
 
 @dataclass
@@ -156,6 +164,7 @@ class Snapshot:
     dislikes_text: bytes = b""
     record: bytes = b""
     full_name: bytes = b""
+    spare: bytes = b"\0\0\0\0"
     marks: dict = field(default_factory=dict)
 
     def mark(self, name: str) -> int:
@@ -173,11 +182,11 @@ class Snapshot:
 
     def revival_age(self) -> tuple[int | None, int]:
         """(age units, mark) they would come back at; the mark is exact whenever the rule makes the age certain (a
-        death at 18 or older known only to the year still returns at exactly 18)."""
+        death at 20 or older known only to the year, or an unknown age, returns at exactly 20)."""
         if self.mark("age_at_death") == UNKNOWN or self.age_at_death < 0:
-            return None, UNKNOWN
+            return ADULT_RETURN_UNITS, EXACT
         age = revival_age_units(self.age_at_death)
-        if age == AGE_18_UNITS or self.mark("age_at_death") == EXACT:
+        if age == ADULT_RETURN_UNITS or self.mark("age_at_death") == EXACT:
             return age, EXACT
         return age, INFERRED
 
@@ -218,6 +227,8 @@ def unpack_entry(raw: bytes) -> Snapshot | None:
             if any(b > EXACT for b in value):
                 return None
             s.marks = {f: value[i] for i, f in enumerate(FIELDS)}
+        elif attr == "spare":
+            setattr(s, attr, value)
         elif attr in ("record", "likes", "dislikes"):
             setattr(s, attr, value)
         else:
@@ -305,6 +316,8 @@ def merge(a: Snapshot, b: Snapshot) -> Snapshot:
             out.marks[f] = b.mark(f)
     if not out.heir_name and b.heir_name:
         out.heir_name, out.heir_sex, out.heir_head, out.heir_body = b.heir_name, b.heir_sex, b.heir_head, b.heir_body
+    if not (out.spare[3] & 1) and len(b.spare) == 4 and b.spare[3] & 1:
+        out.spare = b.spare                      # a skin tone kept at the death
     out.source = min(a.source, b.source)
     return out
 
@@ -750,8 +763,10 @@ def refusal(save: reader.FamilySave, s: Snapshot, history=None) -> str | None:
 
 
 def return_role(save: reader.FamilySave, s: Snapshot) -> str:
-    """How they come back: "spouse" only when they were the married-in parent and that place is still empty; a
-    spouse whose partner has remarried comes back as a "family member"; a parent or child as "parent" / "child"."""
+    """How they come back (the executable's VF2RevivePlan): "spouse" when they were the married-in parent and that
+    place is still theirs or empty; a spouse whose partner has remarried comes back as a "family member" who lives
+    in the house and takes no place in the Family Tree's records (the owner, 2026-11-26); a parent as "parent"; a
+    child, or anyone the six children's places no longer hold, as a "child"."""
     cur = save.family_tree.current
     if s.role == ROLE_SPOUSE:
         if cur is not None and cur.parent2.present and cur.parent2.slot != -1:
@@ -759,7 +774,7 @@ def return_role(save: reader.FamilySave, s: Snapshot) -> str:
         return "spouse"
     if s.role == ROLE_PARENT:
         return "parent"
-    return "child" if s.role >= ROLE_CHILD else "family member"
+    return "child"
 
 
 def summary(t: Target) -> list[str]:

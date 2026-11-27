@@ -195,7 +195,11 @@ def test_special_upgrades_and_house_renovations_have_their_own_counts(which, spe
     exe = request.getfixturevalue(which)
     exe.set_byte(b".vf2free", 1)
     rows = exe.page(SPECIAL_UPGRADES)
-    assert len(rows) == special == exe.manifest["VisibleSpecialUpgrades"]["new_count"]
+    # gServicesList also holds the Revive row (0x15C) when the build has it; it is listed only while the Revive DLL
+    # runs (VF2ReviveRowAvailable), which is never in this emulation.
+    has_revive = "Revive" in exe.manifest
+    assert len(rows) == special == exe.manifest["VisibleSpecialUpgrades"]["new_count"] - (1 if has_revive else 0)
+    assert 0x15C not in rows
     assert len(set(rows)) == len(rows), "no row twice"
     assert set(rows) <= set(range(0x111, 0x15A)), "every row is a Special Upgrade"
     exe.set_byte(b".vf2free", 0)

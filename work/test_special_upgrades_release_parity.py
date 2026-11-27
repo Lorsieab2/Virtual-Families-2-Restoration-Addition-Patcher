@@ -159,7 +159,9 @@ class SpecialUpgradesReleaseParityTests(unittest.TestCase):
             6
             + len(patcher.MOBILE_SPECIAL_UPGRADE_ITEM_IDS)
             + len(EXPECTED_CHEAT_IDS)
-            - len(patcher.DETAILS_VILLAGER_CHEAT_ITEM_IDS),
+            - len(patcher.DETAILS_VILLAGER_CHEAT_ITEM_IDS)
+            # the Revive row (REVIVE_ITEM_ID): in gServicesList in every variant, listed only while its DLL runs
+            + 1,
         )
         self.assertEqual(patcher.VISIBLE_SPECIAL_UPGRADE_ICON_ALIASES, {})
         self.assertEqual(

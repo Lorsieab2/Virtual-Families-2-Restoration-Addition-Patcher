@@ -147,6 +147,7 @@ FINAL_PLAYTEST_DEFAULT_ON_SETTINGS = frozenset({
     "copy_paste_text_boxes",
     "title_screen_player_name_box",
     "translations",
+    "revive",
 })
 # cheat_upgrades and expanded_flea_market left this set on 1 November 2026: every release bundle is
 # exported with this profile, so listing them shipped both ON although the SETTINGS table had them OFF
@@ -403,6 +404,7 @@ SOURCE_BACKED_OPTIONAL_SETTINGS = {
     "copy_paste_text_boxes",
     "title_screen_player_name_box",
     "translations",
+    "revive",
 }
 EXECUTABLE_OVERLAY_OPTIONAL_SETTINGS = {
     "island_events",
@@ -674,6 +676,15 @@ SETTINGS = [
         "id": "r_refreshes_store",
         "label": "R Refreshes the Store",
         "description": "Cheat: in the store, press R (or Shift+R) to pick the store's random items again, the game's own way, with the game's own odds. On the Clothing and Hairstyles page R picks the six Discount, Department and Designer outfits again, and with All outfits and hairstyles always for sale unticked the 6 rotating hairstyle and holiday-outfit rows change with them (ticked, every hairstyle is listed, so those stay); outfits you already bought keep their own looks. On the Flea Market page R always picks 5 new goods: R always redraws; with All 36 Flea Market goods on you won't see a change in the Flea Market list. R does nothing on any other page or outside the store, never touches On Sale, and does nothing while a box (the buy box, the bank, a message) is open. Installs a small companion DLL in the Virtual Families 2 Patcher Files folder next to the game; unticking the setting removes it and the game is unmodified again.",
+        "default": True,
+        "category": "optional",
+    },
+    {
+        "id": "revive",
+        "label": "Revive",
+        "description": (
+            "Adds Revive a Family Member to the store's Special Upgrades ($25,000; free with Free and Guaranteed Cheats). The game keeps a record of each family member at the moment they die, beside the save (never in it). Buying the row shows each family member of this generation who died, one at a time: Revive brings that one back as the same person (name, looks, likes, fertility and whether they want kids; moods and needs start fresh), Next shows the next. Someone who died younger than 20 returns at the age they died; someone who died at 20 or older returns at 20 with their career, level and salary. Only the dead: never a divorced spouse, a child away from home or an evicted family. A spouse whose partner has remarried lives in the house as a family member and is shown under the current spouse on the game's Family Tree screen. Choosing no one, or no room in the house, gives the money back. A Family History log gets an Arrived record. Revive Records on the Tools tab records the people who died before this patch. Installs a small companion DLL in the Virtual Families 2 Patcher Files folder next to the game; unticking the setting removes it and the row is gone."
+        ),
         "default": True,
         "category": "optional",
     },
@@ -1223,6 +1234,7 @@ RUNTIME_FLAG_SECTION_BY_SETTING = {
     "up_to_28_children": ".vf2kids",
     "family_history": ".vf2hist",
     "r_refreshes_store": ".vf2rfsh",
+    "revive": ".vf2rviv",
     "render_unicode_in_game_fonts": ".vf2utxt",
     "use_unicode_font": ".vf2ufnt",
     "copy_paste_text_boxes": ".vf2clip",
@@ -1626,6 +1638,81 @@ def store_refresh_post_asset_patches(
         setting_id="r_refreshes_store",
         feature_label="R Refreshes the Store",
     )
+
+
+def revive_post_asset_patches(
+    executable_sources: list[Path],
+    *,
+    output_exe_name: str,
+    build_manifest_data: dict[str, Any],
+) -> list[dict[str, Any]]:
+    contract = build_manifest_data.get("Revive")
+    if not isinstance(contract, dict):
+        return []
+    runtime_flag = contract.get("runtime_flag")
+    if not isinstance(runtime_flag, dict):
+        raise ValueError("Build manifest has an invalid Revive contract.")
+    return setting_runtime_flag_post_asset_patches(
+        executable_sources,
+        output_exe_name=output_exe_name,
+        runtime_flag=runtime_flag,
+        section_name=RUNTIME_FLAG_SECTION_BY_SETTING["revive"],
+        setting_id="revive",
+        feature_label="Revive",
+    )
+
+
+REVIVE_DLL_NAME = "vf2revive_b200.dll"
+REVIVE_INI_NAME = "vf2revive.ini"
+REVIVE_INI_TEXT = "[Patches]\r\nRevive=1\r\n"
+
+
+def revive_asset_patches(
+    bundle_dir: Path,
+    dll_path: Path | None,
+    build_manifest_data: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """The Revive companion DLL and its one-line ini, beside the game only while Revive is on (the .vf2rviv byte
+    is the loader's; with the setting off both files are removed and the byte stays 0)."""
+    contract = build_manifest_data.get("Revive")
+    if not isinstance(contract, dict):
+        return []
+    if contract.get("companion_dll") != REVIVE_DLL_NAME or contract.get("companion_ini") != REVIVE_INI_NAME:
+        raise ValueError("Build manifest's Revive contract names another companion file.")
+    if dll_path is None:
+        raise ValueError(
+            "This build has the Revive loader; pass --revive-dll with the built "
+            f"{REVIVE_DLL_NAME} (runtime\\native\\build_b200revive.bat) or the setting would do nothing."
+        )
+    if not dll_path.is_file() or dll_path.name != REVIVE_DLL_NAME:
+        raise ValueError(f"--revive-dll must be an existing {REVIVE_DLL_NAME}: {dll_path}")
+    require_vf2_pe32_x86(dll_path, label="Revive DLL")
+    data = dll_path.read_bytes()
+    if b"B200Revive_Startup" not in data:
+        raise ValueError("The Revive DLL must be the shipped build (exports B200Revive_Startup).")
+    payload_dir = bundle_dir / "payload" / "Revive"
+    payload_dir.mkdir(parents=True, exist_ok=True)
+    staged_dll = payload_dir / REVIVE_DLL_NAME
+    staged_dll.write_bytes(data)
+    staged_ini = payload_dir / REVIVE_INI_NAME
+    staged_ini.write_bytes(REVIVE_INI_TEXT.encode("ascii"))
+    records: list[dict[str, Any]] = []
+    for staged, note in (
+        (staged_dll, "Revive companion DLL, loaded by the executable's dormant .vf2rviv loader."),
+        (staged_ini, "Revive switch (Revive=1) read by the companion DLL."),
+    ):
+        records.append({
+            "file_path": f"{TIME_CONTROLS_PATCHER_FOLDER}/{staged.name}",
+            "source_path": relative_posix(staged.relative_to(bundle_dir)),
+            "source_sha256": sha256_file(staged),
+            "source_size": staged.stat().st_size,
+            "overwrite_existing": True,
+            "allow_missing_target": True,
+            "remove_when_disabled": True,
+            "requires": ["core_executable", "revive"],
+            "note": note + " Disabling Revive removes only this exact file.",
+        })
+    return records
 
 
 STORE_REFRESH_DLL_NAME = "vf2refresh_b200.dll"
@@ -2534,6 +2621,11 @@ def b152_runtime_flag_post_asset_patches(
             build_manifest_data=build_manifest_data,
         ),
         *store_refresh_post_asset_patches(
+            executable_sources,
+            output_exe_name=output_exe_name,
+            build_manifest_data=build_manifest_data,
+        ),
+        *revive_post_asset_patches(
             executable_sources,
             output_exe_name=output_exe_name,
             build_manifest_data=build_manifest_data,
@@ -5761,6 +5853,11 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
             Path(args.store_refresh_dll).resolve() if getattr(args, "store_refresh_dll", None) else None,
             build_manifest_data,
         ))
+        asset_patches.extend(revive_asset_patches(
+            bundle_dir,
+            Path(args.revive_dll).resolve() if getattr(args, "revive_dll", None) else None,
+            build_manifest_data,
+        ))
         asset_patches.extend(unicode_text_asset_patches(
             bundle_dir,
             Path(args.unicode_text_dll).resolve() if getattr(args, "unicode_text_dll", None) else None,
@@ -6358,6 +6455,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--translations-dll", help="The built vf2tr_b200.dll (runtime\\native\\build_b200tr.bat) to ship behind the translations setting. Required when the build has its loader.")
     parser.add_argument("--title-box-dll", help="The built vf2titlebox_b200.dll (runtime\\native\\build_b200titlebox.bat) to ship behind the title_screen_player_name_box setting. Required when the build has its loader.")
     parser.add_argument("--unicode-text-dll", help="The built vf2unicode_b200.dll (runtime\\native\\build_b200unicode.bat) to ship behind the render_unicode_in_game_fonts and use_unicode_font settings. Required when the build has the Unicode text loaders.")
+    parser.add_argument("--revive-dll", help="The built vf2revive_b200.dll (runtime\\native\\build_b200revive.bat) to ship behind the revive setting. Required when the build has the Revive loader.")
     parser.add_argument("--store-refresh-dll", help="The built vf2refresh_b200.dll (runtime\\native\\build_b200refresh.bat) to ship behind the r_refreshes_store setting. Required when the build has the R Refreshes the Store loader.")
     parser.add_argument("--outfit-pictures-dll", help="The built vf2outfits_b200.dll (runtime\\native\\build_b200outfits.bat) to ship behind the fix_vanilla_game_bugs setting. Required when the build has the Outfit Pictures loader.")
     parser.add_argument("--family-history-dll", help="The built vf2history_b200.dll (runtime\\native\\build_b200history.bat) to ship behind the family_history setting. Required when the build has the Family History loader.")

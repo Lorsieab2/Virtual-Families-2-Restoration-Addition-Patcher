@@ -54,7 +54,7 @@ class GuideContentTests(unittest.TestCase):
     def test_the_family_history_setting_is_covered(self):
         self.assertIn("family_history", guides.keys())
         self.assertEqual(guides.setting_keys(), ["family_history", "expanded_flea_market", "r_refreshes_store",
-                                                "copy_paste_text_boxes", "title_screen_player_name_box",
+                                                "copy_paste_text_boxes", "revive", "title_screen_player_name_box",
                                                 "translations", "fix_vanilla_game_bugs"])
         box = guides.guide("title_screen_player_name_box").text
         for needle in ("title screen", "30% opacity", "8 pixels on every side", "On by default",
