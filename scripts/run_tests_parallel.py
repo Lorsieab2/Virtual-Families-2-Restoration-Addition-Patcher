@@ -65,6 +65,7 @@ WHOLE = (
     "tests/test_b200_family_history.py",
     "tests/test_b200_outfit_pictures.py",
     "tests/test_b200_store_refresh.py",
+    "tests/test_b200_skin_tones.py",
 )
 
 COUNT = re.compile(r"(\d+) (subtests )?(passed|failed|skipped|errors?|xfailed|xpassed|deselected)")

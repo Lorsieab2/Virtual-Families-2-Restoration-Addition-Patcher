@@ -3672,6 +3672,7 @@ class TestSuiteCopiesInSyncTests(unittest.TestCase):
             "vf2_delete_slot.py",
             "vf2_game_speed.py",
             "vf2_revive.py",
+            "vf2_skin_tones.py",
             "vf2_game_mechanics.py",
             "vf2_game_mechanics_window.py",
             "vf2_game_mechanics_family.py",

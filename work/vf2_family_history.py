@@ -10,7 +10,8 @@ Each record is the Virtual Villagers patcher's layout: a heading "[YYYY-MM-DD HH
 "[backfilled, no date] Family Tree <g>" for what the save's Family Tree held when the log began), then
 "  Label: value" lines, a family member's own lines one step further in ("    Sex: Female"), then a blank line.
 The kinds: Conception, Birth, Death, Marriage, Divorce, Arrived, Left Home, Generation, New Generation, Random
-Event (an "Email Event" or a "Popup Event"), Roll the Dice, Evict Family, Start Over, Family Renamed, Family Tree.
+Event (an "Email Event" or a "Popup Event"), Roll the Dice, Evict Family, Start Over, Family Renamed, Appearance
+changed, Family Tree.
 Only the records after the last Evict Family belong to the family in the save.
 
 Virtual Families 2's own (VF2 origin/feat/family-history 9bfd948, docs/FAMILY_HISTORY.md): an e-mail is "Email
@@ -18,7 +19,9 @@ Event: Subject: <subject>" (shown "Email Event: <subject>"); "Renamed <n>" recor
 Details box (Old name, New name, Age, Sex, Head, Body, Generation): the same person, under the new name in every
 record before it; a child who arrives or leaves with a Random Event is recorded right after the event's record;
 "Earlier spouse: X" carries "(died)" or "(divorced)" only when the log proves it; Start Over precedes the new
-family's Generation 1.
+family's Generation 1. "Appearance changed <n>" (the patcher's Skin Tones window, src/vf2_skin_tones.py, as Virtual
+Families 1's) records a family member's new skin tone (Name, Age, Sex, Head, Body, Old skin tone, New skin tone, How,
+Generation): kept for the record; it changes nobody's place in the tree.
 """
 from __future__ import annotations
 
@@ -105,6 +108,8 @@ class History:
     events: list[Event] = field(default_factory=list)
     renames: list[tuple[str, str]] = field(default_factory=list)          # Family Renamed (the player name)
     renamed: list[tuple[str, str, str]] = field(default_factory=list)     # Renamed: (old, new, sex)
+    # Appearance changed: (name, sex, old skin tone, new skin tone, generation)
+    appearances: list[tuple[str, str, str, str, int]] = field(default_factory=list)
     last_event: Event | None = None                                       # the record before: a Random Event
     backfilled: bool = False                               # the log began after the family did
     evictions: int = 0
@@ -212,6 +217,9 @@ def _take(h: History, e: Entry) -> None:
         _rename(h, e.get("Old name", ""), e.get("New name", ""), e.get("Sex", ""))
     elif e.kind == "Family Renamed":
         h.renames.append((e.get("Old name", ""), e.get("New name", "")))
+    elif e.kind == "Appearance changed":
+        h.appearances.append((e.get("Name", ""), e.get("Sex", ""), e.get("Old skin tone", ""),
+                              e.get("New skin tone", ""), g))
 
 
 def _rename(h: History, old: str, new: str, sex: str) -> None:

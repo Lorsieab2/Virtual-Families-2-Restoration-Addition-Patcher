@@ -355,14 +355,14 @@ checked against `manifest.json`, the release notes and the owner's confirmed
 play reports; superseded claims are marked rather than deleted.*
 
 The GUI reads its checkboxes from the shipped manifest, so the exact list follows
-the release you downloaded. The bundle offers 49 settings (after B209): B208's 48 plus **Revive** (on by default).
+the release you downloaded. The bundle offers 50 settings (after B209): B208's 48 plus **Revive** and **Skin Tones** (both on by default).
 
 That number is not simply the count of settings the patcher defines, which is
-50. The settings list drops any optional setting that has no packaged source
+51. The settings list drops any optional setting that has no packaged source
 assets -- in B201, as in B180, the two named just below -- and the export adds
 one setting of its own, `core_assets`, which copies the support files and
-generated assets that are not tied to a single feature. So 50 defined, less 2
-without packaged assets, plus 1 generated, is the 49 the GUI shows. (B208 offered 48: 49 - 2 + 1, B207's 47 plus **Translations**; B207 offered 47: 48 - 2 + 1, B206's 43 plus **Render Unicode with In-Game
+generated assets that are not tied to a single feature. So 51 defined, less 2
+without packaged assets, plus 1 generated, is the 50 the GUI shows. (B208 offered 48: 49 - 2 + 1, B207's 47 plus **Translations**; B207 offered 47: 48 - 2 + 1, B206's 43 plus **Render Unicode with In-Game
 Fonts**, **Use Unicode Font (overrides in-game fonts)**, **Copy and Paste in Text Boxes** and **Title Screen
 Player Name Box**. The B206 bundle offers 43 settings:
 44 - 2 + 1, B205's 41 plus **Free and Guaranteed Cheats** and **All outfits and hairstyles always for
@@ -706,6 +706,12 @@ release bundle, like almost everything else)
   (`vf2kids_b200.dll`) in the Virtual Families 2 Patcher Files folder does the work; with the setting
   off it is not installed and the executable never loads it. **Not live tested yet** -- see
   `docs/b200-up-to-28-children.md` for the evidence and what is not covered.
+- **Skin Tones** (an Optional patch, **on by default**, in Select All and Owner's Defaults; it **needs the Family
+  History log**, whose DLL loads `vf2skin_b200.dll`): every family member has a skin tone, S1 Porcelain to S10 Ebony
+  or Game's own, drawn on all bare skin in the house, the portraits, event pop-ups, the Family Tree and the menu's
+  family, and on the babies a mother holds. Change tones with Tools > Skin Tones... while the game is closed. The
+  tones live beside each save (Virtual Families 2 Patcher Data\Skin Tones). Design and evidence: docs/SKIN_TONES.md.
+  Not yet tested in a running game.
 - **Family History log** (`.vf2hist`, an Optional patch, **on by default**, and Enable All and
   `--enable-all` tick it; it was Experimental and off until the 26 October 2026 update of B204;
   new in B204, whose executables carry its loader) - one Family History log per family, in the

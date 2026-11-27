@@ -91,6 +91,10 @@ def main() -> int:
     parser.add_argument("--family-history-dll",
                         default=str(ROOT / "runtime" / "build" / "vf2history_b200.dll"),
                         help="Built vf2history_b200.dll shipped behind the family_history setting")
+    # Skin Tones has no byte of its own: the Family History DLL loads it (build_b200skin.bat).
+    parser.add_argument("--skin-tones-dll",
+                        default=str(ROOT / "runtime" / "build" / "vf2skin_b200.dll"),
+                        help="Built vf2skin_b200.dll shipped behind the skin_tones setting")
     parser.add_argument("--store-refresh-dll",
                         default=str(ROOT / "runtime" / "build" / "vf2refresh_b200.dll"),
                         help="Built vf2refresh_b200.dll shipped behind the r_refreshes_store setting")
@@ -191,6 +195,7 @@ def main() -> int:
     for flag, value in (("--time-controls-dll", args.time_controls_dll),
                         ("--up-to-28-children-dll", args.up_to_28_children_dll),
                         ("--family-history-dll", args.family_history_dll),
+                        ("--skin-tones-dll", args.skin_tones_dll),
                         ("--store-refresh-dll", args.store_refresh_dll),
                         ("--revive-dll", args.revive_dll),
                         ("--outfit-pictures-dll", args.outfit_pictures_dll),

@@ -254,6 +254,22 @@ Changelog
   Installs vf2history_b200.dll in the Virtual Families 2 Patcher Files folder
   only while the setting is on; it needs executables built with its loader.
 
+- Skin Tones (an Optional patch, on by default; needs the Family History log):
+  every family member has a skin tone, S1 Porcelain to S10 Ebony, or Game's
+  own (the game's own skin), drawn on all bare skin in the house, the
+  portraits, event pop-ups, the Family Tree and the menu's family; the babies a
+  mother holds are drawn in the babies' tone. Founders, arrivals and everybody
+  already in a family get a random tone the first time; a baby gets its
+  parents' average (one shade either way) 95% of the time, any tone 5%. Change
+  a tone with Tools > Skin Tones... while the game is closed; each change adds
+  an Appearance changed record to the Family History log. The tones are kept
+  in a small file beside each save (Virtual Families 2 Patcher Data\Skin Tones
+  in the save folder); the save file itself is not changed. Not yet tested in a
+  running game.
+  Installs vf2skin_b200.dll, vf2skin.ini and the Skin Masks pictures (shapes
+  only, no game art) in the Virtual Families 2 Patcher Files folder only while
+  Skin Tones and the Family History log are on; the Family History DLL loads it.
+
 - Fix Vanilla Game Bugs, outfit pictures (27 October 2026 update of B204): in
   the original game every Male Outfit and every Female Outfit in the tool tray
   shows, and puts on, the picture of the last one bought. Now each outfit in

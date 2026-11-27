@@ -1,0 +1,3098 @@
+{
+ "game": "VF2",
+ "masks": [
+  {
+   "sheet": "female_heads00.png",
+   "image": 576,
+   "part": 0,
+   "width": 672,
+   "height": 2800,
+   "rows": 50,
+   "sheet_size": 1592748,
+   "sheet_fnv1a64": "c5eeec8701001679",
+   "sheet_sha256": "4f2f5adc7b0455ceeb6169805654193df3b790fd824341ad97dd1751056afaad",
+   "mask_sha256": "1dc36a3883cb08f8c7f1e645d90aee2581bad229ca36b6274ab76a856f0012c3",
+   "skin_pixels": 104764
+  },
+  {
+   "sheet": "female_heads10.png",
+   "image": 576,
+   "part": 1,
+   "width": 672,
+   "height": 2800,
+   "rows": 50,
+   "sheet_size": 1507650,
+   "sheet_fnv1a64": "ec0d79d89cb5e831",
+   "sheet_sha256": "a5b0601320447cf5f7cdc88ffcbddb727664a43c9c62a83979fdf825b867a084",
+   "mask_sha256": "2569af6848dbcb7f7a3caf940d8693e409a8655612807b790c71a4cddddea9e1",
+   "skin_pixels": 89347
+  },
+  {
+   "sheet": "female_bodies00.png",
+   "image": 577,
+   "part": 0,
+   "width": 2912,
+   "height": 4550,
+   "rows": 50,
+   "sheet_size": 6174063,
+   "sheet_fnv1a64": "793d216f51d71edd",
+   "sheet_sha256": "1a997effa7aad6f1ae30c1ec427fe8d4509c7d9fbdffb597c430c3fbb74a92e1",
+   "mask_sha256": "2c52d8dead285d2a28f1badfb5b97a6daf3f4bea6729e021bf518a2df94131e9",
+   "skin_pixels": 470790
+  },
+  {
+   "sheet": "female_actions00.png",
+   "image": 578,
+   "part": 0,
+   "width": 1365,
+   "height": 4550,
+   "rows": 50,
+   "sheet_size": 3243067,
+   "sheet_fnv1a64": "2ad7b5bbdc4a9ab3",
+   "sheet_sha256": "407f9efb53c3f58825aebfdb92afc56416d8e0df60ec1c50bc0cf8ef328059be",
+   "mask_sha256": "82d41d920fc9f28e7fe03c41b335faedec92b9b345aa901d259683ba2544e336",
+   "skin_pixels": 205017
+  },
+  {
+   "sheet": "female_sit00.png",
+   "image": 579,
+   "part": 0,
+   "width": 819,
+   "height": 4550,
+   "rows": 50,
+   "sheet_size": 1751217,
+   "sheet_fnv1a64": "2c7a12af52cbb60e",
+   "sheet_sha256": "0a6bfb084391c044741936a3b164534ae173f072cdab05be56fa5d941257a75c",
+   "mask_sha256": "e44fbf67b5ca3611adb3142ec323a2c4185ab72de99120d4780954ecd142728e",
+   "skin_pixels": 126415
+  },
+  {
+   "sheet": "male_heads00.png",
+   "image": 580,
+   "part": 0,
+   "width": 672,
+   "height": 2800,
+   "rows": 50,
+   "sheet_size": 1176964,
+   "sheet_fnv1a64": "e599cb17016e73a9",
+   "sheet_sha256": "79f58f4cada872862c656cebb60395bc3806961de3cb8149242ad7ecde99cb3c",
+   "mask_sha256": "6055e4d1d378b040eefaa410d94de47d7c3a0c985fcf452c9e219e31c15bdd3c",
+   "skin_pixels": 134069
+  },
+  {
+   "sheet": "male_heads10.png",
+   "image": 580,
+   "part": 1,
+   "width": 672,
+   "height": 2800,
+   "rows": 50,
+   "sheet_size": 1151154,
+   "sheet_fnv1a64": "8cd1330ae93e791e",
+   "sheet_sha256": "2ffdb9d1e88e0d2694941e7a7ebdf43d992e6dcc7e55a45e039656c090013885",
+   "mask_sha256": "1b0e6ac4b1429fcef337d493225cc7637c63f087659a18777c74daa37d1eb67f",
+   "skin_pixels": 111809
+  },
+  {
+   "sheet": "male_bodies00.png",
+   "image": 581,
+   "part": 0,
+   "width": 2912,
+   "height": 4550,
+   "rows": 50,
+   "sheet_size": 5450947,
+   "sheet_fnv1a64": "cb6a8bd240af34a4",
+   "sheet_sha256": "8d44a0a3a1a8c76a1353b5b0a56cbcb38dad9fdc46c945e1f9c3f8d93e9c362d",
+   "mask_sha256": "8f30f7c8ab22e9fa917e59b76b21d9877f0dc1b2f63c81f273cf01acf00f7e62",
+   "skin_pixels": 195114
+  },
+  {
+   "sheet": "male_actions00.png",
+   "image": 582,
+   "part": 0,
+   "width": 1365,
+   "height": 4550,
+   "rows": 50,
+   "sheet_size": 3044473,
+   "sheet_fnv1a64": "854cb86ab0c51db6",
+   "sheet_sha256": "5da0d6676609fc10c8ffb8b0599633dd8c8cd309e936dcb1a12ba0c5fed6fe2c",
+   "mask_sha256": "313a5cd8ee2cc6bb251c32899acf106a426721db4d4d8e7d880acaea8ff3fb32",
+   "skin_pixels": 71420
+  },
+  {
+   "sheet": "male_sit00.png",
+   "image": 583,
+   "part": 0,
+   "width": 819,
+   "height": 4550,
+   "rows": 50,
+   "sheet_size": 1633516,
+   "sheet_fnv1a64": "08510a35f10a013c",
+   "sheet_sha256": "0e0e398f0192d3ed614215287207f812dc12d5d7c10dcb75ffc66a2c2a6bb649",
+   "mask_sha256": "414a6c41483310568e04bec8c61af19a5ec84a5daa4de0f5bfeb749379cc118f",
+   "skin_pixels": 41749
+  },
+  {
+   "sheet": "bigheads00.png",
+   "image": 21,
+   "part": 0,
+   "width": 594,
+   "height": 4710,
+   "rows": 50,
+   "sheet_size": 2677491,
+   "sheet_fnv1a64": "7ee4c667705c9c48",
+   "sheet_sha256": "5683a24cb17381b2b62370bbe25f021cca7b65a1a56685847c8fb32a85835232",
+   "mask_sha256": "9faf11466d0a3467d02e96468fbe323e40195eb407125c69aea2ab5eef104e99",
+   "skin_pixels": 225638
+  },
+  {
+   "sheet": "bigheads10.png",
+   "image": 21,
+   "part": 1,
+   "width": 594,
+   "height": 4710,
+   "rows": 50,
+   "sheet_size": 2577818,
+   "sheet_fnv1a64": "8f31aa9173da0ffc",
+   "sheet_sha256": "e48137b2f3180f9b60dc014ca6faef607da57e9e9c5686e6eb5173e1e7f4be5b",
+   "mask_sha256": "d8c916184e29fd3cb51c1409d671d59c8a39ecb55d55ffd9dae71a36543ea943",
+   "skin_pixels": 195687
+  },
+  {
+   "sheet": "highrez_bodies_final2.png",
+   "image": 22,
+   "part": 0,
+   "width": 328,
+   "height": 8200,
+   "rows": 50,
+   "sheet_size": 1310775,
+   "sheet_fnv1a64": "8a15632e8c22b5b4",
+   "sheet_sha256": "749f91a260acb2397e5993507cddf6a212a31d01d56d3ca620a23836b31f6105",
+   "mask_sha256": "e89f66397f58f785267c6e56ff0f31081e416b2634820b51732000289d265270",
+   "skin_pixels": 70044
+  },
+  {
+   "sheet": "carrying.png",
+   "image": 478,
+   "part": 0,
+   "width": 728,
+   "height": 392,
+   "rows": 7,
+   "sheet_size": 185622,
+   "sheet_fnv1a64": "40e33f1b0e45efb4",
+   "sheet_sha256": "b52ecb7af27adc1b5d5b7aaafe10640ab6cef6fdbcd6f81124451ce31df08637",
+   "mask_sha256": "5a42a8974a191840870903a4133d5fe4821d6fd13bdd28ec206cbba2234e11a2",
+   "skin_pixels": 127
+  }
+ ],
+ "holiday_masks": [
+  {
+   "mask": "Holiday/Female_Body_50.png",
+   "sex": "Female",
+   "body": 50,
+   "what": "frames",
+   "width": 5096,
+   "height": 91,
+   "mask_sha256": "8be326c03e3ad046c1ee8410164cf0be8241829275cba8907882c06b8791e00a",
+   "skin_pixels": 6644
+  },
+  {
+   "mask": "Holiday/Female_Body_50_portrait.png",
+   "sex": "Female",
+   "body": 50,
+   "what": "portrait",
+   "width": 164,
+   "height": 164,
+   "mask_sha256": "28565abd074f30c5a76ff887e2920b6a943d7d45a8d2bdabf5edd885a1aec728",
+   "skin_pixels": 433
+  },
+  {
+   "mask": "Holiday/Female_Body_51.png",
+   "sex": "Female",
+   "body": 51,
+   "what": "frames",
+   "width": 5096,
+   "height": 91,
+   "mask_sha256": "4c23bba4ac712685b1afa8aad3ab01c2df3cffaf7889010f53a9cc3c0a8609f2",
+   "skin_pixels": 5615
+  },
+  {
+   "mask": "Holiday/Female_Body_51_portrait.png",
+   "sex": "Female",
+   "body": 51,
+   "what": "portrait",
+   "width": 164,
+   "height": 164,
+   "mask_sha256": "e8cd541ec74951a3b78711360e5b3f9bee24b479f5279cb4edbcd4550d7a01b4",
+   "skin_pixels": 309
+  },
+  {
+   "mask": "Holiday/Female_Body_52.png",
+   "sex": "Female",
+   "body": 52,
+   "what": "frames",
+   "width": 5096,
+   "height": 91,
+   "mask_sha256": "7af601823b7bb5379cfa491bb09885cba28f3d3d9fb28509d1733008cadd89d4",
+   "skin_pixels": 8969
+  },
+  {
+   "mask": "Holiday/Female_Body_52_portrait.png",
+   "sex": "Female",
+   "body": 52,
+   "what": "portrait",
+   "width": 164,
+   "height": 164,
+   "mask_sha256": "dd04fb7eb607e339ba0e11af9c944b61a5fb737335ee6f9d995b580b26e91640",
+   "skin_pixels": 509
+  },
+  {
+   "mask": "Holiday/Female_Body_53.png",
+   "sex": "Female",
+   "body": 53,
+   "what": "frames",
+   "width": 5096,
+   "height": 91,
+   "mask_sha256": "432baa186235b3c941e9a69c4ca980390eeeb64792c8bb20bcf4981baebc150b",
+   "skin_pixels": 12395
+  },
+  {
+   "mask": "Holiday/Female_Body_53_portrait.png",
+   "sex": "Female",
+   "body": 53,
+   "what": "portrait",
+   "width": 164,
+   "height": 164,
+   "mask_sha256": "3ce814db9b59515952f433fcf4c989f7b154f28cdcfb297a784d10f598cb1b98",
+   "skin_pixels": 853
+  },
+  {
+   "mask": "Holiday/Male_Body_50.png",
+   "sex": "Male",
+   "body": 50,
+   "what": "frames",
+   "width": 5096,
+   "height": 91,
+   "mask_sha256": "7a59f22c122323f5adb2fec0ab700db717e2c55593a8a58420a0b5f393050fde",
+   "skin_pixels": 3698
+  },
+  {
+   "mask": "Holiday/Male_Body_50_portrait.png",
+   "sex": "Male",
+   "body": 50,
+   "what": "portrait",
+   "width": 164,
+   "height": 164,
+   "mask_sha256": "e7f8fa2fc5b49051f1ddd8c7e9ea332f445466114ecfb47ec074b7fd083aba44",
+   "skin_pixels": 199
+  },
+  {
+   "mask": "Holiday/Male_Body_51.png",
+   "sex": "Male",
+   "body": 51,
+   "what": "frames",
+   "width": 5096,
+   "height": 91,
+   "mask_sha256": "479d2bc4d2aa0618f3f1e4c8e6af34ef4fd9cba201778542db7de628bd4a5fee",
+   "skin_pixels": 4317
+  },
+  {
+   "mask": "Holiday/Male_Body_51_portrait.png",
+   "sex": "Male",
+   "body": 51,
+   "what": "portrait",
+   "width": 164,
+   "height": 164,
+   "mask_sha256": "6885c3a5d961cecfaf8c4f8823383cf6129ec222d951ad8e4415d59097f5c1c7",
+   "skin_pixels": 299
+  },
+  {
+   "mask": "Holiday/Male_Body_52.png",
+   "sex": "Male",
+   "body": 52,
+   "what": "frames",
+   "width": 5096,
+   "height": 91,
+   "mask_sha256": "9f3618ffd88438058adb442c48c62560ebf940a05c53337d05e4dc336e293f5f",
+   "skin_pixels": 4229
+  },
+  {
+   "mask": "Holiday/Male_Body_52_portrait.png",
+   "sex": "Male",
+   "body": 52,
+   "what": "portrait",
+   "width": 164,
+   "height": 164,
+   "mask_sha256": "7e50df994990c2549b77ef13091fa3795a9385d4bfc5269cd3732d354ae09e8f",
+   "skin_pixels": 303
+  },
+  {
+   "mask": "Holiday/Male_Body_53.png",
+   "sex": "Male",
+   "body": 53,
+   "what": "frames",
+   "width": 5096,
+   "height": 91,
+   "mask_sha256": "899220d6a6886f5dc8796ec1c0ff967e46c2f8a6bed39130c4a5dc0728f3fcc9",
+   "skin_pixels": 7760
+  },
+  {
+   "mask": "Holiday/Male_Body_53_portrait.png",
+   "sex": "Male",
+   "body": 53,
+   "what": "portrait",
+   "width": 164,
+   "height": 164,
+   "mask_sha256": "4f132e14186bf7cccaa4dd279ffec5503ce3eba93d4c164960999a6131142c77",
+   "skin_pixels": 511
+  }
+ ],
+ "holiday_frames": [
+  {
+   "file": "VillagerBodies/Female/Body_50/bodies/Frame00.png",
+   "size": 4722,
+   "fnv1a64": "2989108935001638",
+   "sha256": "becd502538568c30d32d7634584f6eaf5ee4b0750d25f447a054399c5bca98f6"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_50/bodies/Frame01.png",
+   "size": 4592,
+   "fnv1a64": "987a0f71bf8a93cc",
+   "sha256": "a6aea16f9b1f63206cf253e22d5b8dec15d151e8aa7cfb43a4de1284ffdf6a8a"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_50/bodies/Frame02.png",
+   "size": 4421,
+   "fnv1a64": "b135a10791be9a86",
+   "sha256": "480bff75f74124193cc7db3018dad7ceed9bfa9655f98221ea67a407110024ae"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_50/bodies/Frame03.png",
+   "size": 4206,
+   "fnv1a64": "4890eb28ced7bbd7",
+   "sha256": "cf41454a8b698f2cde4c5539bbbf0ec5bf9910effd9d763ef99f62dfee73fa48"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_50/bodies/Frame04.png",
+   "size": 4515,
+   "fnv1a64": "54393fc740ecf6ce",
+   "sha256": "72affc1801b02d7b943f1295b08779708e66173295e300a16c7c0bb440967b9b"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_50/bodies/Frame05.png",
+   "size": 4393,
+   "fnv1a64": "388d503688e4a125",
+   "sha256": "b0984c2d2a0c602d2f1500db62beee0c027340ca6fb99c65c4b329e70df766bd"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_50/bodies/Frame06.png",
+   "size": 4398,
+   "fnv1a64": "9b5ade1486ce8fc0",
+   "sha256": "11e610a51dd06fe463d28caf121418dc892833b99c945e8d82c49abb32dff27c"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_50/bodies/Frame07.png",
+   "size": 4570,
+   "fnv1a64": "e48f19972bc2e4b3",
+   "sha256": "d703e2bdf190d9d9a1f1cafc66da899e2cf5fa7d94cb7ded8f25a33c69b5f1ed"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_50/bodies/Frame08.png",
+   "size": 4569,
+   "fnv1a64": "1825cf79b785d734",
+   "sha256": "eb4dccbe1d725de3b710b48e48ec74821aad28b040a21c94644d5a1d733510d4"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_50/bodies/Frame09.png",
+   "size": 4500,
+   "fnv1a64": "ba5d18bbc21c9c49",
+   "sha256": "0e0ae4d376bf8f64feb61b76e6b3d4db2ed2ee700deeb7ea12be4cae63fd6524"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_50/bodies/Frame10.png",
+   "size": 4371,
+   "fnv1a64": "1dc3253171fbecb1",
+   "sha256": "9a37ef9fadb9a90d1e5d2f57599d226eafee58ae608328763369b2a6c6eaff50"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_50/bodies/Frame11.png",
+   "size": 4806,
+   "fnv1a64": "7bc4a426642b9434",
+   "sha256": "b34b612b36ec61e5a267ea60004fe0510a0c9afa1f253b1d73e7a806f8d05f87"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_50/bodies/Frame12.png",
+   "size": 4782,
+   "fnv1a64": "d8fb01401bc305b6",
+   "sha256": "856b9b610cb1cedd7eec612497a4b4364ebdec66c46b1816bb83358999ad9be1"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_50/bodies/Frame13.png",
+   "size": 4542,
+   "fnv1a64": "a03b2d2641c0282e",
+   "sha256": "7ba1d0eb6b71c56c9fc9ad741dafe1e367b28cebc251a9fbfba16beff36ab909"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_50/bodies/Frame14.png",
+   "size": 4327,
+   "fnv1a64": "26d7c79676b862ef",
+   "sha256": "58539cd8202c5e98b09ec513f576e7ff11fc6d202325a960e244afb8a09a8ced"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_50/bodies/Frame15.png",
+   "size": 4612,
+   "fnv1a64": "d3975d664cc38e16",
+   "sha256": "433374e5176aa256823dd99cb29e51d4d61a3df3518ae00f12c8417d2a27d565"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_50/bodies/Frame16.png",
+   "size": 4810,
+   "fnv1a64": "a7715e1c0ed5b43f",
+   "sha256": "e2eaa7e9c9acc1545cb288df99826b1786b58eedb8a7a973a3d19158c677b86e"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_50/bodies/Frame17.png",
+   "size": 4534,
+   "fnv1a64": "ff77d94d1e943b03",
+   "sha256": "ad888313d3bdaad0c5414905419f873c7405ecc5fda9f9ca22a1bfb28a3697c0"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_50/bodies/Frame18.png",
+   "size": 4322,
+   "fnv1a64": "80951cd849108b87",
+   "sha256": "eaca8cbdd9f481bec4ba71a65b34f28f716adb1994b4b75a64051edcf2ad0f14"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_50/bodies/Frame19.png",
+   "size": 4637,
+   "fnv1a64": "9bdae8c537f7de27",
+   "sha256": "1b663b8d77e1b0de9e17a8ed2cd53079da67935b7e0f9533fccddbaca856c075"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_50/bodies/Frame20.png",
+   "size": 4506,
+   "fnv1a64": "beb383dd7030fc75",
+   "sha256": "b57da36d86e2645257bcac15332d00e5eff01ba4dcd57d6300bcb9e7544cd003"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_50/bodies/Frame21.png",
+   "size": 4486,
+   "fnv1a64": "86d4c8ff5285a3e5",
+   "sha256": "594013d3a9c9ceb8b982a1a05ed2c384e88faebdcf36d74f91763df22d006953"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_50/bodies/Frame22.png",
+   "size": 4426,
+   "fnv1a64": "40b634efaac82499",
+   "sha256": "64af77b6392dc081f8030d1edc33828125572665ff6a4eab594cc49078505f41"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_50/bodies/Frame23.png",
+   "size": 4834,
+   "fnv1a64": "e73638f34008b36e",
+   "sha256": "d106a31edb165ef6d4087e1d6abb53bff604cf87545abdfb43932d9dee010af6"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_50/bodies/Frame24.png",
+   "size": 4527,
+   "fnv1a64": "75e5e0ec6a508f29",
+   "sha256": "05130996cb7a0f03f9e7de273ca28f4074d62826707b10d217b2046c59adc028"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_50/bodies/Frame25.png",
+   "size": 4406,
+   "fnv1a64": "fcf34561a434e0fb",
+   "sha256": "e758d09e90223efbcf783b6ebf2835359526eba2f2a30ee0ed972d257a7d96ac"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_50/bodies/Frame26.png",
+   "size": 4373,
+   "fnv1a64": "106e2f75c7918b46",
+   "sha256": "08c2af28d769fb2a106f27fa984f5f7b6fcc4c2b059b4ef343daaba2e403766a"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_50/bodies/Frame27.png",
+   "size": 4536,
+   "fnv1a64": "1556dcd2274d2c26",
+   "sha256": "18abd94742b8628b9ec3ac649f1baa37232f66b71c4905850d6df76603fc6b3b"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_50/bodies/Frame28.png",
+   "size": 4589,
+   "fnv1a64": "2e94d17f2a345e84",
+   "sha256": "d8082998b74588fa950395abf66c56ccc5f4092c7541727094eb4f490b1df499"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_50/bodies/Frame29.png",
+   "size": 4567,
+   "fnv1a64": "1e645b25ba77be7f",
+   "sha256": "6c553a292559753f3499c042fc4c6c162512b5555df3e2e18979424bca08c0e4"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_50/bodies/Frame30.png",
+   "size": 4405,
+   "fnv1a64": "2b41b37f523b7114",
+   "sha256": "b05c93f26c5149f4c73f8601a38334c757d3ae0d82d6d0a75e8faef28d37264a"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_50/bodies/Frame31.png",
+   "size": 4148,
+   "fnv1a64": "dd9cae076d589ddf",
+   "sha256": "30a033b7e0b32b313f699cbb318a1dd6fed3595c3f055101030fdfb3ab790352"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_50/actions/Frame00.png",
+   "size": 4457,
+   "fnv1a64": "580d5c23b38756f8",
+   "sha256": "d736aa2162fe797fbcd0d4de51bcf596aef55a7af212d291ef86211089a243c5"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_50/actions/Frame01.png",
+   "size": 4291,
+   "fnv1a64": "5007056ce467b19f",
+   "sha256": "f74346a21f30dbc604bb866c65e581963423a2353cd932cfbe94524201f3102a"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_50/actions/Frame02.png",
+   "size": 4324,
+   "fnv1a64": "1ed7050e81128e19",
+   "sha256": "b871a1ff4adf6de30b5be35f765ee41d178f650ccdf04171efa04b93d138194e"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_50/actions/Frame03.png",
+   "size": 4427,
+   "fnv1a64": "a67129d00f7c85a6",
+   "sha256": "3987178144893a01b41d8b60340ea8f4888effb36061f920c2a70654c283eead"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_50/actions/Frame04.png",
+   "size": 4680,
+   "fnv1a64": "6179f1a37940b986",
+   "sha256": "15b5d19e54e74f33cf4e28f43676bc92acb0546e524c1da2564199ab2494e258"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_50/actions/Frame05.png",
+   "size": 4615,
+   "fnv1a64": "08ad67898add4df5",
+   "sha256": "bf680cc3bbfaa9b9cb6a474652123cdbadaf86391de1b839f4d6a83fbde52693"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_50/actions/Frame06.png",
+   "size": 4749,
+   "fnv1a64": "57c75bccb2ed795e",
+   "sha256": "8a52cd49d5632ae32e731634b297afcbb814f841416e536349fe121434de7c64"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_50/actions/Frame07.png",
+   "size": 4728,
+   "fnv1a64": "ec9cf3813787c511",
+   "sha256": "e8d12588e3d395a4da2a030301d7b58d4525000834543da942b741c53d6dcdeb"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_50/actions/Frame08.png",
+   "size": 4963,
+   "fnv1a64": "1a8533a4e535598a",
+   "sha256": "1336adb757936b40c739880aa27d57ceefb42d8532a6cdfa45e4432b505bfa70"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_50/actions/Frame09.png",
+   "size": 4613,
+   "fnv1a64": "f5075603611b9d5c",
+   "sha256": "3547844a32a2d0943456b51bc6cf70a9334abfaa3915b6f67fb38726f2f28a48"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_50/actions/Frame10.png",
+   "size": 5124,
+   "fnv1a64": "851521e2a3b1a506",
+   "sha256": "9dd38c8176b7d166b0d530d80bd304799a1db88282839119c13db07eabad0bb1"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_50/actions/Frame11.png",
+   "size": 4660,
+   "fnv1a64": "b2be8d3a30eedd3a",
+   "sha256": "0fbaa657cedeba978b4dd0b9ac1c6977dd98a6aa68ea11b679e661328fc4f697"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_50/actions/Frame12.png",
+   "size": 5419,
+   "fnv1a64": "784478494a5a944d",
+   "sha256": "fa8dc12666f991d4903ceda7018b14642c870eeb51492a2996092c78f13700d3"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_50/actions/Frame13.png",
+   "size": 5299,
+   "fnv1a64": "31db585666330ef1",
+   "sha256": "986d05180b089019ed96736acee876126fd2022c96ebe2282ee2a94f6b700f9d"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_50/actions/Frame14.png",
+   "size": 5111,
+   "fnv1a64": "26403c382dde7f08",
+   "sha256": "f808518d138baba92ddba579f16c88ecf23b9c28f002c78db5e6a2ce2aefaa73"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_50/sit/Frame00.png",
+   "size": 4023,
+   "fnv1a64": "86e9d06a1702cd0d",
+   "sha256": "663346b022c56daf2c3bb09fb9dd9b0d325de43e357de7645b0b028bd290761b"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_50/sit/Frame01.png",
+   "size": 5262,
+   "fnv1a64": "0f0c1b58575680c1",
+   "sha256": "4b5127d2950e9ea2954739260280ab9a5ba7668c3d0603dd77bb8443c9ce3a9b"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_50/sit/Frame02.png",
+   "size": 4239,
+   "fnv1a64": "04f19d645b741c25",
+   "sha256": "b28a00b7252c9fd18872f57fb49cffa867b42017caf8dd6b9463877f13063657"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_50/sit/Frame03.png",
+   "size": 4278,
+   "fnv1a64": "07dc0a9d658c6b38",
+   "sha256": "a46d8614c6a1f237644862a389ac87130f46c91e494ac3b63ccbb44b6a36e769"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_50/sit/Frame04.png",
+   "size": 3660,
+   "fnv1a64": "d54c729865b88b68",
+   "sha256": "eb54cdac2af2a15d86f3ede234285a1a7a0f9874e3b69e6ec32b0093d92b4bba"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_50/sit/Frame05.png",
+   "size": 4152,
+   "fnv1a64": "3778a9bb37b8491c",
+   "sha256": "ceacc7d3848aaa0761af1c269937bd6e10dabf3ed21176408652a9a5a5925f37"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_50/sit/Frame06.png",
+   "size": 3505,
+   "fnv1a64": "94287f1fb377df43",
+   "sha256": "b0a19d0e8f658019a5be174a6bc45515700ade8438ffccb13ea122395bdfca2b"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_50/sit/Frame07.png",
+   "size": 5489,
+   "fnv1a64": "851606832af8e309",
+   "sha256": "ee968e580d0e5384f15b4a496680de93be68a5863af2d22541dfa5f9c2ea17da"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_50/sit/Frame08.png",
+   "size": 5420,
+   "fnv1a64": "22f43c575cd2d3f6",
+   "sha256": "6f815c41b654b1395d97cbafa68b83f59f5efd4e503bf81d91f2ea291f9dde19"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_51/bodies/Frame00.png",
+   "size": 4403,
+   "fnv1a64": "8c6d4e63bb827424",
+   "sha256": "1e882757c928cef58034df003d5e706c4477b504c1a84d23845eb9a666d913a2"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_51/bodies/Frame01.png",
+   "size": 4287,
+   "fnv1a64": "39e8bf889d0deb16",
+   "sha256": "ebeb3e3f2cb66740f579ad97d692ac2067e85d2e297713ca0a5dd6fee4302700"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_51/bodies/Frame02.png",
+   "size": 4116,
+   "fnv1a64": "36ec65d674b68a35",
+   "sha256": "b50a599e505e5f148ab61a1b89b0deb0d2537dcb35216d49310ce984f064cfe9"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_51/bodies/Frame03.png",
+   "size": 3988,
+   "fnv1a64": "c0f80bf3c113d1bc",
+   "sha256": "023840a4cccb332ec7f43683989eaf2de2743f76d00a31d16aedc593a217eb5a"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_51/bodies/Frame04.png",
+   "size": 4274,
+   "fnv1a64": "a5fa0d35c7b80ccd",
+   "sha256": "a5740b6ce17ef1528310fec44f3c234d80a0549233d4b3f32213e0661d6ba7d7"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_51/bodies/Frame05.png",
+   "size": 4136,
+   "fnv1a64": "5a5740315d4ed043",
+   "sha256": "b5815c0ecebb75af17e23ee3a9f586d6d9a81ebeb990d5bce29cd968d18ecf89"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_51/bodies/Frame06.png",
+   "size": 4108,
+   "fnv1a64": "984a568fdaae14b0",
+   "sha256": "a35541708627405c9b13243f1242b291ecd1486cb13a1739150f65889b236032"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_51/bodies/Frame07.png",
+   "size": 4376,
+   "fnv1a64": "883b4fd650a43c58",
+   "sha256": "4d1b58015ad3d522ef782b3e43b250fb9eab2a3cfdf6c90fd8d4c149dec672c6"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_51/bodies/Frame08.png",
+   "size": 4445,
+   "fnv1a64": "b5132a34437715fb",
+   "sha256": "b3ebea666f69ef6a6156e054e674c9c9d99bdbb572f0a55e165f1e2069a46937"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_51/bodies/Frame09.png",
+   "size": 4446,
+   "fnv1a64": "67db8174a2043f2e",
+   "sha256": "73dbf29168bf879a06180a26d2ca5ac5fc46db043f4243bc7ecdd301ab0813e8"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_51/bodies/Frame10.png",
+   "size": 4363,
+   "fnv1a64": "cdb1a8d5399e9cf9",
+   "sha256": "59b6064e084c6453415c9ac7d4f618897d8f4e13e24daa42136f221e17b026b1"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_51/bodies/Frame11.png",
+   "size": 4741,
+   "fnv1a64": "c7acffd14659b123",
+   "sha256": "4a5c8544e0c93f9c6d95aa6e1b41c19709a68d7124909b9e4b11fa23901a8b52"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_51/bodies/Frame12.png",
+   "size": 4673,
+   "fnv1a64": "c87ac159761b31b1",
+   "sha256": "469b5e773b76b9d198244db9b01379dc2cc33ec317901950b2eddb4e4dc4616e"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_51/bodies/Frame13.png",
+   "size": 4460,
+   "fnv1a64": "9a6d8fd2a4a38e84",
+   "sha256": "6ea6e6722f57f4da92d97103180330f1716f0c96a2451f9c8c2e1925d7173bdf"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_51/bodies/Frame14.png",
+   "size": 4309,
+   "fnv1a64": "9bbfb0636a5c7895",
+   "sha256": "41f276de2f44dc7243a8141f76af39c4b36db7c98cebd12fe89b5a7c8de7511b"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_51/bodies/Frame15.png",
+   "size": 4628,
+   "fnv1a64": "34629196f6edf4ca",
+   "sha256": "6f35f996ffd2c23ba39b59fc53fe449e45f942f09724dd60118b9fee1a140fb1"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_51/bodies/Frame16.png",
+   "size": 4703,
+   "fnv1a64": "8ea0b69efae4f9be",
+   "sha256": "14a51669381d42c9d943447656a5d8eb506e5abdf912beb9744885575bb86d14"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_51/bodies/Frame17.png",
+   "size": 4489,
+   "fnv1a64": "99b773f1f3476716",
+   "sha256": "5500c08748b743f7fe80f6d55429d65d553afc98beb86ace440cb7e55e171459"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_51/bodies/Frame18.png",
+   "size": 4274,
+   "fnv1a64": "953d1ac16347ca2d",
+   "sha256": "0bdb4a49da8992fb791bb55428468bb243bb00d0a42512ce067d0bbecfe46910"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_51/bodies/Frame19.png",
+   "size": 4579,
+   "fnv1a64": "ba9b91a92d227bc4",
+   "sha256": "651a5fe3eed70e4d716328f605ebec2f17147ece54119b2f470a6d12f0971605"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_51/bodies/Frame20.png",
+   "size": 4426,
+   "fnv1a64": "b9a5b35e3076d7de",
+   "sha256": "455911a1531d7dcc6348c7e1bb414874eacc97fa6476afdebe4bf3fb24ee0591"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_51/bodies/Frame21.png",
+   "size": 4429,
+   "fnv1a64": "c7e76cff5deec3f7",
+   "sha256": "af3a3a9fa6e28b73c51466370370589ff810cf5cfa07d1196be8442b69db6c13"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_51/bodies/Frame22.png",
+   "size": 4416,
+   "fnv1a64": "f0b732076e9b5112",
+   "sha256": "f87f98b683ef22d7f51844a8837ad8963e7612894ccc170e2bc4d32e81a77d77"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_51/bodies/Frame23.png",
+   "size": 4742,
+   "fnv1a64": "909a6f8adcb02ec3",
+   "sha256": "830d5193262f48b9ccde8480bcfbee47fd44b734471a3b808682b52692702b1c"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_51/bodies/Frame24.png",
+   "size": 4322,
+   "fnv1a64": "07f27d6980251615",
+   "sha256": "b4d2334a4109bcbf54e35905fc633abf3b16dfcd57a1fa9737c338313caf6585"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_51/bodies/Frame25.png",
+   "size": 4189,
+   "fnv1a64": "60eabcba5a65feb4",
+   "sha256": "c1844d6c5b151ba556a24733582cd7792af222ff1450097a7ac86426e5a7e172"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_51/bodies/Frame26.png",
+   "size": 4215,
+   "fnv1a64": "0e3e286f161a5304",
+   "sha256": "261e8cecd745d5c7e812761317d56822c84a76202407897eea20c5ff02f3fbb1"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_51/bodies/Frame27.png",
+   "size": 4310,
+   "fnv1a64": "4e8570df94b003a2",
+   "sha256": "04fca20db71026df32c5a18b18921fe2d154e24d08b337c813116ba0786c2009"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_51/bodies/Frame28.png",
+   "size": 4342,
+   "fnv1a64": "e242531bbfde0cd2",
+   "sha256": "16e37db94d7165c6306c4e9ed0e46a9dcd1ff3cd769ac292a0357d7a2f1809a4"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_51/bodies/Frame29.png",
+   "size": 4239,
+   "fnv1a64": "d109159b8831b559",
+   "sha256": "852d8f62f9fe7a65f266009dbebfc88f061dec852a2d5e83907a6060ba0c4c7c"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_51/bodies/Frame30.png",
+   "size": 4148,
+   "fnv1a64": "9c0b451d253cb6eb",
+   "sha256": "7ad4478a1885b8633a1d06e0173c0b81f336d28893acb8a83924689ffd6dc9ff"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_51/bodies/Frame31.png",
+   "size": 3973,
+   "fnv1a64": "c2af33a7200414b7",
+   "sha256": "975134bc63d206c934b5c26bb5d420e9cd587bcf9610563a07e9108e9fc883eb"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_51/actions/Frame00.png",
+   "size": 4412,
+   "fnv1a64": "0d89fff3d5371ec3",
+   "sha256": "42e450ce426234c9266b991101ab1eab738bcb853d7be9e4ee6ea2d9ec8bd889"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_51/actions/Frame01.png",
+   "size": 4267,
+   "fnv1a64": "23f9aa794a411618",
+   "sha256": "9d64615728f298e32c29958f40010659525761b4aca2b777615ccc09da3c016a"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_51/actions/Frame02.png",
+   "size": 4242,
+   "fnv1a64": "e9f75213c0c5ebb1",
+   "sha256": "ee6ac6cdccc2cee3c18ddaca58ed7ea3836336540f48936fbefb65304ac7295d"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_51/actions/Frame03.png",
+   "size": 4343,
+   "fnv1a64": "7685327ed20c1bbc",
+   "sha256": "5d73bc3e3a72cbb646216ccc4d3bb3a9da068756dfed44925f09c162ba71daa4"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_51/actions/Frame04.png",
+   "size": 4432,
+   "fnv1a64": "a4e365bcb080135c",
+   "sha256": "922801ea7d92d17fe44741d0f61110765d015e3f6d9d37645cc706e20485f5cf"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_51/actions/Frame05.png",
+   "size": 4370,
+   "fnv1a64": "7be07af64c9fc47b",
+   "sha256": "f04153877a3123040789a9e5fa2e6addf2d388a9176745c531087d7386eb3fba"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_51/actions/Frame06.png",
+   "size": 4509,
+   "fnv1a64": "27df0477c0cba331",
+   "sha256": "a3ff3a14878e1137f215886c699f0e2fa7d8cb5c6687b2887140228ad1b1f1c4"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_51/actions/Frame07.png",
+   "size": 4463,
+   "fnv1a64": "262a71956c875947",
+   "sha256": "f653b4b505b54a3bc17e20eb2b6c42acae87e73628bb677ab8e683292ef4d5c5"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_51/actions/Frame08.png",
+   "size": 4620,
+   "fnv1a64": "3561d9ef60377399",
+   "sha256": "46d0c70f7cfa559d43202abf9dfbeaf0e8725b3547409b30f9ed78fc05d37731"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_51/actions/Frame09.png",
+   "size": 4615,
+   "fnv1a64": "1b1ffb7bb97c02cb",
+   "sha256": "aca4af5e112f86873bcd9e43539a1206a2bc871cf92ed91841759f9c5b75f911"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_51/actions/Frame10.png",
+   "size": 4978,
+   "fnv1a64": "c49ae38cea42cc80",
+   "sha256": "2d0f2d0e8a844147ac6d3a1fbc39de833f865ff068f6e43a4b94d56baab41d4c"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_51/actions/Frame11.png",
+   "size": 4422,
+   "fnv1a64": "1276961e9cbb6391",
+   "sha256": "e1b565d65af83a93d43c78008f39e8a9d41e58712e608c03c42d9b29c965cb2e"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_51/actions/Frame12.png",
+   "size": 5480,
+   "fnv1a64": "881e3a40d020bed3",
+   "sha256": "30b6b2730261544f98023f9b1803155388c7e10051f10b47fdf0a81c4d3ec398"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_51/actions/Frame13.png",
+   "size": 5361,
+   "fnv1a64": "efab2d61d0cae3bd",
+   "sha256": "0fb1323af2f948877ef358ba039629cb37e024a3f0d57b51b050d1ab2f63318b"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_51/actions/Frame14.png",
+   "size": 5093,
+   "fnv1a64": "e7841a6d4871d314",
+   "sha256": "07c1cdf7cb48716950d0f3565885b594547cbb876cc2f02001a48c79f9dae9e7"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_51/sit/Frame00.png",
+   "size": 3923,
+   "fnv1a64": "257dce59ddd979c8",
+   "sha256": "9095c3f166e230be5cc80a52da8fda397babf665ba6287434c19fbae4958adf1"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_51/sit/Frame01.png",
+   "size": 5119,
+   "fnv1a64": "5e97a91f4717d041",
+   "sha256": "8d68a231224bfd79c0ba5afd22f028267804dc5644de8fb552c861ff300662d0"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_51/sit/Frame02.png",
+   "size": 4133,
+   "fnv1a64": "a0b8d8114decfaac",
+   "sha256": "3183816f99b31096e947f33def7289d12efd704dfbc7dfefcafa7d68c1d035e4"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_51/sit/Frame03.png",
+   "size": 4162,
+   "fnv1a64": "b6d54482dc3af5ea",
+   "sha256": "f1c067f3e0671e2981648d0bdae2041574877faf482c6d844cccedd4eafda993"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_51/sit/Frame04.png",
+   "size": 3547,
+   "fnv1a64": "0d82da60cc834b96",
+   "sha256": "d669988d4ddb24a84488445608fe5b92fd026354ff2f27ce29e405d6ebb96158"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_51/sit/Frame05.png",
+   "size": 4039,
+   "fnv1a64": "5021868f0e4209da",
+   "sha256": "09a124fb6f3f31adc99477232c8bfe441ad367ffa754dcd7e02f1665bfe02dc8"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_51/sit/Frame06.png",
+   "size": 3404,
+   "fnv1a64": "55ca295eeb0f11e2",
+   "sha256": "253c35519d7afd1aba9684a9c54b21dbe09d590730a3997627c96672e714e63e"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_51/sit/Frame07.png",
+   "size": 5420,
+   "fnv1a64": "4bccf7625088ce0f",
+   "sha256": "474a85dea4afaed2a4399985f6b0bf8f236b4f7bdadebf6dbc5fdabcc609feea"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_51/sit/Frame08.png",
+   "size": 5304,
+   "fnv1a64": "c5003873f2cbbb2a",
+   "sha256": "d9ca117a17fa320b12e345b975d52e74641f6c1da30903736f6eec6c7ddc7a18"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_52/bodies/Frame00.png",
+   "size": 4684,
+   "fnv1a64": "6f007f63690627ce",
+   "sha256": "24188c028d09d407dd0f1d21d90aebc86ff1efd1217b9272d1c8908810132003"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_52/bodies/Frame01.png",
+   "size": 4602,
+   "fnv1a64": "9104069ed4a04992",
+   "sha256": "ec719f05e7014e0413dc69e3ee64aa83835c94230fae3395d07ba139ddd26165"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_52/bodies/Frame02.png",
+   "size": 4450,
+   "fnv1a64": "52d7553c85e3d343",
+   "sha256": "1222129ec5f1540d0f2a2295564e21c4be6236c6f984fc9ddb892b36124984fb"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_52/bodies/Frame03.png",
+   "size": 4220,
+   "fnv1a64": "377dce12d25e4b92",
+   "sha256": "86383d68e580813c30e6a7fbb17c81a9081ad0ab37faa8d1b95510b325f996f6"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_52/bodies/Frame04.png",
+   "size": 4495,
+   "fnv1a64": "4a3025e8183f09a9",
+   "sha256": "98dbbe618eed7573f4a7ac198bbe6e829a8b480546008b35b538cb993487c99e"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_52/bodies/Frame05.png",
+   "size": 4384,
+   "fnv1a64": "2de6fad8d4fd8d56",
+   "sha256": "a1ea553a14540e78756c2d540ba0f27f56eda9a6fcd081d85c643a8501d96be8"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_52/bodies/Frame06.png",
+   "size": 4419,
+   "fnv1a64": "7f661170879e1162",
+   "sha256": "c94a0f2a26ae539fee7c57b2f7c7d4aee113fbe13c58724fc17f2761dd876768"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_52/bodies/Frame07.png",
+   "size": 4609,
+   "fnv1a64": "09f3c83cfa602e12",
+   "sha256": "02cbd08947e23561459a2cac8f55c9526adfaebbac08dfdfe8f1761906ce3cd7"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_52/bodies/Frame08.png",
+   "size": 4585,
+   "fnv1a64": "6b99892ece832ce9",
+   "sha256": "4ed0f97b0fd252207b5c6393d25d582b7c056a971c0f79ec75c80396aa190ef6"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_52/bodies/Frame09.png",
+   "size": 4482,
+   "fnv1a64": "d1125bb17356ac51",
+   "sha256": "e4bfcc3a3d1bf001bd73bb34811d3281308a6720b2048b5b46e8f90d6190f92c"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_52/bodies/Frame10.png",
+   "size": 4243,
+   "fnv1a64": "32d692f0ed054dbf",
+   "sha256": "d8b982b9ff9edc7ae607e357f93ee64c01ee8eaa2d7c34b4bcf00be13e638509"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_52/bodies/Frame11.png",
+   "size": 4805,
+   "fnv1a64": "660216570df9c85d",
+   "sha256": "325eb44e1d6059ed1e42601112f8cb74798c1fd91b0960d13768f1747637963b"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_52/bodies/Frame12.png",
+   "size": 4697,
+   "fnv1a64": "5134baf1766539d1",
+   "sha256": "e4f5a8017b4c55d30bb4748707991f8f607175401cef6cb8db3ace2706adec02"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_52/bodies/Frame13.png",
+   "size": 4495,
+   "fnv1a64": "8e96db7f247f8a9d",
+   "sha256": "ce73f7e0ce28c8596062b16e23a14c1a6cba34b62972ac620a96bd1aa77e13a9"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_52/bodies/Frame14.png",
+   "size": 4368,
+   "fnv1a64": "d3366f9de35b82b5",
+   "sha256": "7bf60dda7227351a32612406d14a04d74a6c4997b591a71dac678e002b0c0d87"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_52/bodies/Frame15.png",
+   "size": 4668,
+   "fnv1a64": "490aff476d8ba468",
+   "sha256": "f61757bdd27be5685d8c64656cd911d905953d0fefcbd4970753dcaeaae66591"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_52/bodies/Frame16.png",
+   "size": 4674,
+   "fnv1a64": "db5225e47d98b700",
+   "sha256": "b115f00c1d162a2c97788aea208b847e262b014859d9c7cac6f1a9133de29cea"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_52/bodies/Frame17.png",
+   "size": 4458,
+   "fnv1a64": "acfe2fb22060d688",
+   "sha256": "807044eb616bec37faeaa7a7566c8de715e275c8fc5d6946594a5879ad8c4d50"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_52/bodies/Frame18.png",
+   "size": 4400,
+   "fnv1a64": "12a57734750e9104",
+   "sha256": "a567065af1104b980aa95fe00810b00fd775467733f148445d0ca8c4f95c16fc"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_52/bodies/Frame19.png",
+   "size": 4662,
+   "fnv1a64": "e652e797a6710700",
+   "sha256": "0cb276b4dbbbc36e66d20a30f196b15b5a5ef822fb2ee736814e2c252bd6ae70"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_52/bodies/Frame20.png",
+   "size": 4520,
+   "fnv1a64": "de40fe1ae20956b3",
+   "sha256": "f499af093b09e3a78ef9fe681c5d5e7ddbf23869257c1cdc77e470913bed5285"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_52/bodies/Frame21.png",
+   "size": 4494,
+   "fnv1a64": "0a86a5fe0f6d41ae",
+   "sha256": "164feeb05977bed7125816534853ed8722cb4d7d6738c20bb06c627bcf9532cf"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_52/bodies/Frame22.png",
+   "size": 4308,
+   "fnv1a64": "d740f1bb96a18db8",
+   "sha256": "2fbbfc67a903361ad62926e7c7bb12d81823d421f861c806b2ec692dfd42cf6c"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_52/bodies/Frame23.png",
+   "size": 4831,
+   "fnv1a64": "77b0a7c65b90996b",
+   "sha256": "d56d545e229f8bfef7fb32e3b0dcc12d8e89808d32c2b49de361ce77d3710151"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_52/bodies/Frame24.png",
+   "size": 4585,
+   "fnv1a64": "025c846f2e5d6891",
+   "sha256": "9cacda3cb66a9d69aaff38c2d33b9eb361864054a2bc865cb06d33321ce4f997"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_52/bodies/Frame25.png",
+   "size": 4435,
+   "fnv1a64": "d878c466f95c2a99",
+   "sha256": "d76ad1469a8fe516b2ac317ea6288a64f065ffbd22f6ad08524343c3eafdabea"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_52/bodies/Frame26.png",
+   "size": 4449,
+   "fnv1a64": "cce4fcb91f0fc4bf",
+   "sha256": "fb47f98459cba7f310451260def0efa25145b1298645255eb0d4a8b699e50f6a"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_52/bodies/Frame27.png",
+   "size": 4532,
+   "fnv1a64": "b332723c82f33c74",
+   "sha256": "f3888c9177950feb2d9399358be09f084609529b0a5ade961532353bcc73c152"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_52/bodies/Frame28.png",
+   "size": 4580,
+   "fnv1a64": "d5d5f793cce15285",
+   "sha256": "af790d9e3f55f42a9ebf5067e1d77bd5e656530c05e5c278e6438a2220fbdad7"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_52/bodies/Frame29.png",
+   "size": 4524,
+   "fnv1a64": "8231fb752817c0f8",
+   "sha256": "6cc784f3cc42d99d9d63d1fdd2d76b68b5b2605dbdb1721fa9c919e77bf527c9"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_52/bodies/Frame30.png",
+   "size": 4476,
+   "fnv1a64": "c76d8bf83efa7184",
+   "sha256": "3e64706a399b4dc135d8bbaad0bced8ea4b3db3c14f0219e1011796c934e9ec6"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_52/bodies/Frame31.png",
+   "size": 4259,
+   "fnv1a64": "fec592c193d8dbda",
+   "sha256": "02b7f16bb23c2da0308e054b7d65922fccd33dd7aecc919d77f8c3f556fa3b3d"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_52/actions/Frame00.png",
+   "size": 4386,
+   "fnv1a64": "a1e52a04ba902aee",
+   "sha256": "cbd3b8218ab58f1498f6a2ce58fbe8b354c9244f7482253e35f71ff0921166d2"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_52/actions/Frame01.png",
+   "size": 4265,
+   "fnv1a64": "82135b9eab60defb",
+   "sha256": "e104ded2ee53b5b184602463f9cdfe48446c63f72648388e3deb73a5ea18784f"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_52/actions/Frame02.png",
+   "size": 4250,
+   "fnv1a64": "b529a88676f08e75",
+   "sha256": "17e8e5b1907749d781487f9f23cc59cb899b1e120ca082b1a4a97729c9ee8bd7"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_52/actions/Frame03.png",
+   "size": 4341,
+   "fnv1a64": "7a3d8800d617c443",
+   "sha256": "739fb357282b7a662506319e47cf713e206af2696acd890930b2408ec3be5664"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_52/actions/Frame04.png",
+   "size": 4791,
+   "fnv1a64": "43659ef6e18ea3bc",
+   "sha256": "0d6d6fe5b8fdbdcaf10401d507f465cfd1bfaf16605297bd62d43a3b3feb5e26"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_52/actions/Frame05.png",
+   "size": 4716,
+   "fnv1a64": "d48458fa46574b31",
+   "sha256": "ea04b8e14f2fe8331ae256158b8a1ed23b05b41777da7a6591117eee1c250e6c"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_52/actions/Frame06.png",
+   "size": 4826,
+   "fnv1a64": "918f5c2af601e0e2",
+   "sha256": "5f4d9f696bd36acbe2f22e09f96cc60676d5645987f87aa532ea10058a2d0070"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_52/actions/Frame07.png",
+   "size": 4812,
+   "fnv1a64": "25002958edb412a4",
+   "sha256": "3eda8b6ba22faaea0e2a1f1b22342b8bf9930f17654dba46d3f6943b950dd38e"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_52/actions/Frame08.png",
+   "size": 4973,
+   "fnv1a64": "6645360d0053316d",
+   "sha256": "7d44fe445203c1167554b2f66170d4518b501fed2e248c87d3d6a0d706ca5be5"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_52/actions/Frame09.png",
+   "size": 4646,
+   "fnv1a64": "4381badb08b93b56",
+   "sha256": "62071cad4785cb54fc20ce9865a5b6fcde242b4a3ecf9d02c5d377ade3653c0a"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_52/actions/Frame10.png",
+   "size": 5103,
+   "fnv1a64": "90d2d21993e20597",
+   "sha256": "68a6a3735cfb3023c02fa6611b40a41a0f7c1ef21f3e7e5a279a924ad7c62ec8"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_52/actions/Frame11.png",
+   "size": 4746,
+   "fnv1a64": "3017ad94376111a8",
+   "sha256": "f1547086ec0510c34098f438c1ffe2528895354bbb8b22de25be7b9cf1174e03"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_52/actions/Frame12.png",
+   "size": 5460,
+   "fnv1a64": "0780ac67cc8bb8a3",
+   "sha256": "1f631a9c79458775d5fb870328141ccfa301b86f095c90994543db3c6b282bcd"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_52/actions/Frame13.png",
+   "size": 5336,
+   "fnv1a64": "853e9f6995b3f1f8",
+   "sha256": "d02ba43bd515cd7268648c562886c26de690102918c4d16a3d4ecb3cc37110a4"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_52/actions/Frame14.png",
+   "size": 5103,
+   "fnv1a64": "3d09d55d2ef8138d",
+   "sha256": "c3e93b3efd19b9b4198dbd00984a43845f6e76efcf6fc61eef3c0eec2e0f969e"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_52/sit/Frame00.png",
+   "size": 4037,
+   "fnv1a64": "b3fbaf7d3ce37e66",
+   "sha256": "bf5731d0d89989ebcf5b5fed940406a4d459e09377425693b45fece22039c8e3"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_52/sit/Frame01.png",
+   "size": 5231,
+   "fnv1a64": "a44e0b8ac5e0a0d3",
+   "sha256": "9beb3131f7e4fe1a742b726299e74ff999417559cc6aa89abded5fc214d60b1a"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_52/sit/Frame02.png",
+   "size": 4312,
+   "fnv1a64": "692d88fdb9ba29cc",
+   "sha256": "8de44f0388a61c32496623aab6541903ebeab51c7adb481683c9493c98b8ddd5"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_52/sit/Frame03.png",
+   "size": 4172,
+   "fnv1a64": "030e0925700e0968",
+   "sha256": "8c29433b9b75c82b36697abd8b9d75b2ce3027a5cce7cdb9d01b17eb8b717258"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_52/sit/Frame04.png",
+   "size": 3519,
+   "fnv1a64": "9205d31477665986",
+   "sha256": "6559d40cdf71d5a9532730b821487618aa5068c7c8c90a14f26627412b4c84ed"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_52/sit/Frame05.png",
+   "size": 4102,
+   "fnv1a64": "85e1442f75050d83",
+   "sha256": "f6196c3db34e7f77d36df065b08992d58a4419b66c672de8a9eb764fa7d5b68d"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_52/sit/Frame06.png",
+   "size": 3423,
+   "fnv1a64": "f5a6bd4cf11909a2",
+   "sha256": "9858dbd5bb99b47351d3ccf7af092ce5746d6edeeee27f181cc66472cf5f234d"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_52/sit/Frame07.png",
+   "size": 5486,
+   "fnv1a64": "a243a8f3bfdb8b5d",
+   "sha256": "b324d790c96fc67249b937a7e6503c4f38de97f51ca64716ede0eda58686610f"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_52/sit/Frame08.png",
+   "size": 5435,
+   "fnv1a64": "f6aba638e478867f",
+   "sha256": "d25d33679fbc9898a6deb53b1657399a4fb731aa22332487b2013586e376f04a"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_53/bodies/Frame00.png",
+   "size": 4209,
+   "fnv1a64": "0f7516c32b715f2a",
+   "sha256": "5ea1ed5da21585456e6fcd7ab3d2078581ece2d647ebec05f69de944a166c486"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_53/bodies/Frame01.png",
+   "size": 4197,
+   "fnv1a64": "6db5e46eaa0042d6",
+   "sha256": "4a890cd1ac4ff70765ec3f6ad4326929d2e18fb11956c3e29bc3eb66a0349534"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_53/bodies/Frame02.png",
+   "size": 4278,
+   "fnv1a64": "ffd290e6e65b4ea7",
+   "sha256": "2f524407b931fbbde15e4c47ec0c9d1bae65297f129a47d4aa2ac74e4ea3503b"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_53/bodies/Frame03.png",
+   "size": 3997,
+   "fnv1a64": "2acd6e7e3715ced3",
+   "sha256": "cb15e45374ceaf6ac827329abe3bceaea7e368c9b41ea3e68121405b73a98b20"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_53/bodies/Frame04.png",
+   "size": 4147,
+   "fnv1a64": "4427022d7aa12a9d",
+   "sha256": "f64b04015a2953460c92d4c91e4b89106b26e5c1c90ccbeae28776116d00789f"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_53/bodies/Frame05.png",
+   "size": 3996,
+   "fnv1a64": "5d4c5635f180bfe3",
+   "sha256": "42a3a3c831c7cc8576eccc63997e55ec3fda68a9073b1e6e5e667d0f6d23fe77"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_53/bodies/Frame06.png",
+   "size": 4012,
+   "fnv1a64": "743ec6c5abd7fffe",
+   "sha256": "3c51f0bb8a838b05f182012119975c81e240798243a2ca7c4d3a386c58f0e79a"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_53/bodies/Frame07.png",
+   "size": 4075,
+   "fnv1a64": "01d27bb4527af521",
+   "sha256": "2a708873a493d7c6d050b6c8f27af1ffb60a2ce3055dff5f61cb3816a723ac12"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_53/bodies/Frame08.png",
+   "size": 4291,
+   "fnv1a64": "37db9562022ef23f",
+   "sha256": "f6bf06dc2d84e5540e9bd6b39351bc7d2310030c9b15da3fbb87dc1690e500fc"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_53/bodies/Frame09.png",
+   "size": 4258,
+   "fnv1a64": "092c5eb232728827",
+   "sha256": "f63fa5c237a2590d794c0aacc9778b51a54ee181cc5c4e4f0f25001f28e3aa67"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_53/bodies/Frame10.png",
+   "size": 3873,
+   "fnv1a64": "f7895f9e9114e73f",
+   "sha256": "bbb76a0f117b99b2050f71b27e9e01b199a5544e19f912e187f36d3f50763d74"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_53/bodies/Frame11.png",
+   "size": 4309,
+   "fnv1a64": "304928e965273e7f",
+   "sha256": "6ea9278fad00112b3a78755958cf91ca7fb82340884ac964fc75ef49e5146f3b"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_53/bodies/Frame12.png",
+   "size": 4141,
+   "fnv1a64": "4403a17125ccf525",
+   "sha256": "4ee95903a577bcbaecdcdcf0cec8faec4f5441e4965f0c8d01f32d01e0e89965"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_53/bodies/Frame13.png",
+   "size": 4077,
+   "fnv1a64": "111126ee37f9a9a7",
+   "sha256": "7234d1bcb3326e66b2e65b10ee49cd4cf3e3e34f2decc32fdb4654992cb5f1bc"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_53/bodies/Frame14.png",
+   "size": 4107,
+   "fnv1a64": "b146b5eb630c040b",
+   "sha256": "04cec3d674206d7a8761421f4b4b7e57241e3e9c7b88f884881cf1fe4b76bd20"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_53/bodies/Frame15.png",
+   "size": 4311,
+   "fnv1a64": "5c82cc699f06fff2",
+   "sha256": "9996c85ce1ae237cc78665cf03e102eb5f86e3edf5fe2cfc0595d85d3e735698"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_53/bodies/Frame16.png",
+   "size": 4158,
+   "fnv1a64": "4bf970e834f9f9a8",
+   "sha256": "08f09b08cd70ee40277d4f53018871048c9c25971cc4f869fd81cd2761c78b43"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_53/bodies/Frame17.png",
+   "size": 4149,
+   "fnv1a64": "544cb26eba8a575e",
+   "sha256": "5f1a9128dd46060dd5d9443d43391c90409873be0f7b48274848c9afcd765ca3"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_53/bodies/Frame18.png",
+   "size": 4133,
+   "fnv1a64": "0d6e0d58ffba8d37",
+   "sha256": "10b30738efd954556fafefc4c81c209983ac3804bca53de0f3b62dacfacb189d"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_53/bodies/Frame19.png",
+   "size": 4361,
+   "fnv1a64": "d00fae3c3299660f",
+   "sha256": "c864d5beb13e619c5c03755efc66d83fc6798c8aac98f044ac93cc5c5c338bea"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_53/bodies/Frame20.png",
+   "size": 4231,
+   "fnv1a64": "8de953181dda6fc7",
+   "sha256": "5bbe09737d2f269d157d5c7766be5d6e77cd77ef9efa53bc3e5a7f719d1c6c8f"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_53/bodies/Frame21.png",
+   "size": 4204,
+   "fnv1a64": "bf8c3e15363e4413",
+   "sha256": "950e12e1a597f7e67b82ae9719f5ab0294085baf69b38b30be1f9f39159a271f"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_53/bodies/Frame22.png",
+   "size": 3942,
+   "fnv1a64": "b27cb199b82a36c3",
+   "sha256": "e6510da4d5906c6cd2b42862adc70f496d0aa5759facdc352878a906f0565f9a"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_53/bodies/Frame23.png",
+   "size": 4298,
+   "fnv1a64": "04634362562827c0",
+   "sha256": "7b23264dae16bfeac28e49ada3f6747b04db2541a29a498cab5b9f0f46efd35c"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_53/bodies/Frame24.png",
+   "size": 4248,
+   "fnv1a64": "a3fd6cd6eda8c617",
+   "sha256": "826d55f0a15cd4c2f0762b5cfa1c194fcc8d3a60a3d7f0ed9e535847f755577e"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_53/bodies/Frame25.png",
+   "size": 4080,
+   "fnv1a64": "43ea65c22f0ec1ef",
+   "sha256": "e0eb814ab366e689ae203364b5690c7465f974f5d776dfc7984486e71f8b0e23"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_53/bodies/Frame26.png",
+   "size": 4046,
+   "fnv1a64": "945c8b732d246f53",
+   "sha256": "c21a741711b487884e38cf42f691197bd7682539a399d7852acbe1b5811b0f88"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_53/bodies/Frame27.png",
+   "size": 4008,
+   "fnv1a64": "0909c4688ada21a8",
+   "sha256": "8c9259f30c6d56cb554aeb2bcdde062edda60132f49424da1d2ca26c982a1f9d"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_53/bodies/Frame28.png",
+   "size": 4123,
+   "fnv1a64": "3e12429f2320ccb2",
+   "sha256": "e3fe9132c72da0be38cd7706ef1aa72d2b1895f9a6db27e9f368b768651cd276"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_53/bodies/Frame29.png",
+   "size": 4114,
+   "fnv1a64": "6936c9bb1f314f51",
+   "sha256": "c0608f6515cc0d5618778ba0421e3bbd9de212a48518607cfa4564a65cd057f7"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_53/bodies/Frame30.png",
+   "size": 4239,
+   "fnv1a64": "ae7e2c08a272b7a7",
+   "sha256": "b10a12507a208f432dac303a609b09207fbf6f30358abd20522164831d264a34"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_53/bodies/Frame31.png",
+   "size": 3945,
+   "fnv1a64": "0d867c55b56baa4f",
+   "sha256": "dd147d816c099e10bb4d5ac2ae81786e70556857970ae4b56dc413a0576f8691"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_53/actions/Frame00.png",
+   "size": 4125,
+   "fnv1a64": "49c520d189975a6f",
+   "sha256": "fd8f87c23629eb0b863d4b4aac7b0173ce0d6ab52f13f35e9e2f06ec87aa97ef"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_53/actions/Frame01.png",
+   "size": 4042,
+   "fnv1a64": "600edd1d5867df9b",
+   "sha256": "8a5b07497eb7295dd6f1d38ee77192195d4362cc5663d5caaedced10d7d438e6"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_53/actions/Frame02.png",
+   "size": 3988,
+   "fnv1a64": "60b9675ea8bc69ef",
+   "sha256": "2e0b3194a34aae8569018b04bb51207c861db668bf75b7488446414effd55ca6"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_53/actions/Frame03.png",
+   "size": 4146,
+   "fnv1a64": "17cdae3e78bc164a",
+   "sha256": "47d76db73e6a805c6247e14ffa4e27329c6fa224cf69dd238369019eb07890d3"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_53/actions/Frame04.png",
+   "size": 4614,
+   "fnv1a64": "4c399d4b760c62e1",
+   "sha256": "e8a01fe72130be189c3b8f3d6478ef9b2c4cbe19a78f9880a6e353614e496bd6"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_53/actions/Frame05.png",
+   "size": 4518,
+   "fnv1a64": "b86a239efafc4c62",
+   "sha256": "4ba3f93a2253c6228d881e231d32edafc7cadaa25bc624bd2801119409198e0c"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_53/actions/Frame06.png",
+   "size": 4617,
+   "fnv1a64": "a28caa332d9e42ad",
+   "sha256": "29362f5108d6ea53480bbfe97c96efd7d385cdf6c81fec1c531e7d214513c7f0"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_53/actions/Frame07.png",
+   "size": 4625,
+   "fnv1a64": "8d1d51a9d178e737",
+   "sha256": "a8764dfea297aa27e2726dd9263c49889bdbc0bc4290f631b97efec836e78621"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_53/actions/Frame08.png",
+   "size": 4599,
+   "fnv1a64": "21145245cf026c7b",
+   "sha256": "26f2c1d2820c2fe0f252666195b2c23c8d0e6e530872ed2f836feba3107617c1"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_53/actions/Frame09.png",
+   "size": 4184,
+   "fnv1a64": "60bed0956811f9c7",
+   "sha256": "937060ef2db10811f1381c518793124734744ce535647d1ae4b8b72e3971516f"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_53/actions/Frame10.png",
+   "size": 4584,
+   "fnv1a64": "8b2eabb4e521c8ac",
+   "sha256": "1a7ee9550a3969039498a6489817ac3531a8dd2c2abe95783fe9d5ee42712c5f"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_53/actions/Frame11.png",
+   "size": 4339,
+   "fnv1a64": "36f327250ba2ea37",
+   "sha256": "bd83033ea808cc333bdfa6ab5085d6ae98a098c429ed2812902b1ebab926dd72"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_53/actions/Frame12.png",
+   "size": 5179,
+   "fnv1a64": "315bbb1c1bade667",
+   "sha256": "24b0cc5adbe98dc86c73861aef12f7dc0ee9c45a21db3a181696b0a1bbce5f60"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_53/actions/Frame13.png",
+   "size": 5095,
+   "fnv1a64": "f9c46a4953239230",
+   "sha256": "d5e364c5fc821bb4a79a3803b8a5b8db8e6ba4234fefaabd8766abee67d2dde5"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_53/actions/Frame14.png",
+   "size": 4837,
+   "fnv1a64": "6015c4bad5e0b26f",
+   "sha256": "d2653a336dd02459718305ed5ff6c2834cb231701d1d1bb48d405c2cbd7798a1"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_53/sit/Frame00.png",
+   "size": 3747,
+   "fnv1a64": "2254fe425e57ff5a",
+   "sha256": "800d5d85359cc4b833151ab6e35656cb40cb8bcfb5bc7df49aa0462afc172ce6"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_53/sit/Frame01.png",
+   "size": 4735,
+   "fnv1a64": "de15328d022a9b04",
+   "sha256": "2515f1309fe09c627e6b2594fa9d9eab52d499a0b5f34d01300f6d31e7fa04c9"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_53/sit/Frame02.png",
+   "size": 3959,
+   "fnv1a64": "721ad676d5c518ea",
+   "sha256": "021b6127d9c710a875a2ce353712a6a0207b9cf16f83f51d5fe4bdbea4da5ed1"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_53/sit/Frame03.png",
+   "size": 4000,
+   "fnv1a64": "5b5fb3119c931d6a",
+   "sha256": "62d85ef479dcd920efd1abc5fbf0bc1c77e6ab1609e5b99e05cc19b6fb9dc72a"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_53/sit/Frame04.png",
+   "size": 3321,
+   "fnv1a64": "664ae48c5d204f58",
+   "sha256": "16d983af5bea62ca62c19919f276787b01ef01e3013b63afacb3ab7ddf735768"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_53/sit/Frame05.png",
+   "size": 3930,
+   "fnv1a64": "1b692c7507863bf3",
+   "sha256": "efc42e472d5f1d7c2d675040fce37ffd0f52e75374692cb0c867bfb4479c22af"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_53/sit/Frame06.png",
+   "size": 3241,
+   "fnv1a64": "0ea348c4f188b042",
+   "sha256": "2061bc714fd68009d11a8165283ab97b19c68dbc4bf64cb13f5f4011d9618a66"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_53/sit/Frame07.png",
+   "size": 5179,
+   "fnv1a64": "d4f5f93d1ca68fc0",
+   "sha256": "422358e28c39fb1e5de18a2a2c4d4468668d5c296051621bf34b6a76176456b1"
+  },
+  {
+   "file": "VillagerBodies/Female/Body_53/sit/Frame08.png",
+   "size": 5072,
+   "fnv1a64": "6938f0c29a5a6bb7",
+   "sha256": "639cc6c36060221b3de9426e670f3a1f495dd4e546ea01773e891adc68822393"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_50/bodies/Frame00.png",
+   "size": 4350,
+   "fnv1a64": "b5686ebe9eaf0239",
+   "sha256": "7ae8621f2cbe679d8a25b38d4e70ccc6be809da5ab9c4dc15b736d8d41d82f23"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_50/bodies/Frame01.png",
+   "size": 4387,
+   "fnv1a64": "7abee0d97a653753",
+   "sha256": "8cda12b83313b980b89b929d63a902a3d557f04449bb92c163fe1c878a24cc29"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_50/bodies/Frame02.png",
+   "size": 4286,
+   "fnv1a64": "d685a17363d0337b",
+   "sha256": "b0a276b3881b47dd4395e95a8326bafa19bb8121173e88df2daac43e2e5c0e8f"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_50/bodies/Frame03.png",
+   "size": 3815,
+   "fnv1a64": "6d802e5d238d33ff",
+   "sha256": "ce17edf92285795c9b0e30c7d3c03ab580316a77984aac86684b8373ad628dbe"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_50/bodies/Frame04.png",
+   "size": 4239,
+   "fnv1a64": "5eb92fb5cacf0c77",
+   "sha256": "1ad02c846ebefb08db05f33df509f2e27c422f0504722ec9b08df00130e00ce6"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_50/bodies/Frame05.png",
+   "size": 4099,
+   "fnv1a64": "d4f375b25ddbe6d5",
+   "sha256": "a12f7495cc69406a3a52d03922c0957316df72c1c20fd792a2b584328acc6877"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_50/bodies/Frame06.png",
+   "size": 4095,
+   "fnv1a64": "585ded0251166c9b",
+   "sha256": "3594320e8526c801dae70e758614d02677f6ea013d95c221b3bea2e6ceee30c8"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_50/bodies/Frame07.png",
+   "size": 4262,
+   "fnv1a64": "560eb952a8304041",
+   "sha256": "2b9a042fb54e3b672bfb627c2828d3326ee0ac058a4f9c1e9078b37f3e13ac8e"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_50/bodies/Frame08.png",
+   "size": 4591,
+   "fnv1a64": "008c267f333c6078",
+   "sha256": "5cc22b0aa18b86b3b76ff4ae5e1898662b3cbeddb8cc883a27cf0cd1d271a111"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_50/bodies/Frame09.png",
+   "size": 4530,
+   "fnv1a64": "ca9b2fab7b9f7ef6",
+   "sha256": "538d0c470eb5a77f4331957fda83fb5a0e7bab7a8b48bea9f3e8f25199a9e1f0"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_50/bodies/Frame10.png",
+   "size": 4099,
+   "fnv1a64": "e6f29981418aac4a",
+   "sha256": "b232b76845438b1fea038dd91d152ca56965860cd59e2b82d0201ac91bf4b143"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_50/bodies/Frame11.png",
+   "size": 4630,
+   "fnv1a64": "05af87737fc66734",
+   "sha256": "13de58bb35c026ff3fc9b3718e194e91350ad6e64e5c38112d61aefc0748b68c"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_50/bodies/Frame12.png",
+   "size": 4427,
+   "fnv1a64": "e1526036887d5f6b",
+   "sha256": "f8e391de89d126983af0142b05612f6e799ab906bdf934b5be4368fb46d3ddb6"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_50/bodies/Frame13.png",
+   "size": 4312,
+   "fnv1a64": "0a0dc0b6201292b3",
+   "sha256": "e78f1bd7a8709d7b34eb28a505a0f646596bcbb6afa2a52e59fd0df5d4232c7d"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_50/bodies/Frame14.png",
+   "size": 4198,
+   "fnv1a64": "e02b0705cefc6506",
+   "sha256": "42e9c409de81717f3301ad89386f0496159e777929d327adec6d8b37a3dabcd0"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_50/bodies/Frame15.png",
+   "size": 4452,
+   "fnv1a64": "378f363bc86b8e7a",
+   "sha256": "50c948578db437444936d43c970ab601a94f29fa0c12137cd6ce90771ee7569c"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_50/bodies/Frame16.png",
+   "size": 4423,
+   "fnv1a64": "45fbc6e91f4581ad",
+   "sha256": "3d94822ea94182d2dc82bb002dea95bff5cde11a39bd07c1842e2d284723ff41"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_50/bodies/Frame17.png",
+   "size": 4257,
+   "fnv1a64": "daedcf358f5a92c8",
+   "sha256": "93ab708ff6569f4f5647040ab999d7e3ff58e6288d9ae3aec0b6a2dd40097cc0"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_50/bodies/Frame18.png",
+   "size": 4223,
+   "fnv1a64": "a25227c53149fd76",
+   "sha256": "0faa5335ece3d54d16858e75a61fe341f7fe7a4998f5431e6a0b2d4cf26d62a7"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_50/bodies/Frame19.png",
+   "size": 4417,
+   "fnv1a64": "1ba78a38cfb574be",
+   "sha256": "c19cca80f0b60daf318c13dbb732b0355aed4312cb6569e2d3ebff048276346b"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_50/bodies/Frame20.png",
+   "size": 4400,
+   "fnv1a64": "0688532796f3e5f5",
+   "sha256": "0d2de15dea7f3adba1a1d5ae7aafd5931f19c463181c91088c23b503e6f62490"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_50/bodies/Frame21.png",
+   "size": 4425,
+   "fnv1a64": "b5ace5050552ff43",
+   "sha256": "9224c490a185b8018c3798392fd6ee62362c948ce5c6f12f05551078040d250e"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_50/bodies/Frame22.png",
+   "size": 4084,
+   "fnv1a64": "ead4163feefd398a",
+   "sha256": "f401b0e7967a6a6cc54b24cc823c198f65dbdeb6d8004e1413b3a784cf5e45cc"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_50/bodies/Frame23.png",
+   "size": 4590,
+   "fnv1a64": "0d989f459c2ede37",
+   "sha256": "c426308ca0de6ba3df978eff84cae1f175843e055db68eb8e4da9432d921cd74"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_50/bodies/Frame24.png",
+   "size": 4199,
+   "fnv1a64": "a2b73f28df61d62e",
+   "sha256": "c3577bf1884c600dab7cea7cc22dea90116ab21f1bf20b15eb6e15f15ee00dee"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_50/bodies/Frame25.png",
+   "size": 4107,
+   "fnv1a64": "b4e5394d5fd9c951",
+   "sha256": "93e4844d9930a6552a03f4904e2346d4f3fb625eb6cf46e069e6424b6999ba6c"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_50/bodies/Frame26.png",
+   "size": 4045,
+   "fnv1a64": "d37edc9aa1d74c3b",
+   "sha256": "23b506df4505d7b7a839a277957224908e2f06ea3978bc00c07dd595a96794ba"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_50/bodies/Frame27.png",
+   "size": 4183,
+   "fnv1a64": "26065059e0f90397",
+   "sha256": "8d6141e3b7cd673bce0d67867a42fce8b6349d629a24a563cc868465b382c362"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_50/bodies/Frame28.png",
+   "size": 4328,
+   "fnv1a64": "4470fb1b8b68422b",
+   "sha256": "eb6820a6f9d8949b19a8cd8d084d9bc03bb01c927e97ccdb4067113a44c6191d"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_50/bodies/Frame29.png",
+   "size": 4315,
+   "fnv1a64": "a38f4f9bc069fab4",
+   "sha256": "dbc01b081e4844add85039594594a90d6510f3ba2bfe91c1abd9628f8f3c74e0"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_50/bodies/Frame30.png",
+   "size": 4167,
+   "fnv1a64": "558119245420f8ad",
+   "sha256": "55a517feb8372a76584319d97a63b295f459ae29b1982c4e588793375150ab92"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_50/bodies/Frame31.png",
+   "size": 3724,
+   "fnv1a64": "9f432b7982dbcf67",
+   "sha256": "0245bf2a9b832ad6ac67e05a3d69c845f66ece0bf3d22ee98b434f15062cd819"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_50/actions/Frame00.png",
+   "size": 4382,
+   "fnv1a64": "331fb1c96510758d",
+   "sha256": "437f5b019e8b50c91006278968bd61c16682eb19dcaab40779362c324d4b67da"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_50/actions/Frame01.png",
+   "size": 4421,
+   "fnv1a64": "dc9126308798879b",
+   "sha256": "8344bcbe8c7887e3e669085cf1e2ddb438cc42dcd3d5d6cfe3831267e86fdeb1"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_50/actions/Frame02.png",
+   "size": 4271,
+   "fnv1a64": "ec81eb0fae3ebc57",
+   "sha256": "03695945ae67b9d59a3c95d6be262a836945276736055658ada0bc8f5303b41d"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_50/actions/Frame03.png",
+   "size": 4405,
+   "fnv1a64": "3ac0ffc70abaa92d",
+   "sha256": "1392d7eae6b258f671e0ae555e42f0f721c1db1628345b44869d1843e756010b"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_50/actions/Frame04.png",
+   "size": 4571,
+   "fnv1a64": "1d0fa1671950559b",
+   "sha256": "92e9a03321615240cdaa50d1da5a48cbb82dc9f0260f6c58396daeca54241e23"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_50/actions/Frame05.png",
+   "size": 4437,
+   "fnv1a64": "0369939f42222e5c",
+   "sha256": "8e375ac919feb078305a90f0ee0dda3a9fc69d71a3b8ae91ebf08b73dd171a3d"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_50/actions/Frame06.png",
+   "size": 4623,
+   "fnv1a64": "b854fb022c44b237",
+   "sha256": "66fb78b87685c61ec7867f17f1c2a8891d2b19f1b453aabc3504481c914f326f"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_50/actions/Frame07.png",
+   "size": 4556,
+   "fnv1a64": "e7320a6bfd5d2d08",
+   "sha256": "e08aa6eb14275da7b46dec3e60c6cfc30880c1111f5d7ce250d4752858706da2"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_50/actions/Frame08.png",
+   "size": 4792,
+   "fnv1a64": "11f76d5f3dc8ec50",
+   "sha256": "b83485baf3813d0f00c0000c49da90b4a70c88fb72b858ac3a072ea4e3968fee"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_50/actions/Frame09.png",
+   "size": 4200,
+   "fnv1a64": "51a653143d2191a2",
+   "sha256": "a207c5a50f8f7c0a2bf43de988293c8b16c4d83bf9e8c74c40ef7d5e6fe9ca7a"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_50/actions/Frame10.png",
+   "size": 4603,
+   "fnv1a64": "6d5a1e1e059f143e",
+   "sha256": "c6c1c7bcca177c9284ecbb100a732941f29ca3c1333049eb4bd6a27aad1a26d6"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_50/actions/Frame11.png",
+   "size": 4344,
+   "fnv1a64": "5953b15089b81626",
+   "sha256": "13b7025de11cf2303ec50c9141650dcc783b8a61768801333f9d8153d62cdd36"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_50/actions/Frame12.png",
+   "size": 5538,
+   "fnv1a64": "b60751b4c4353010",
+   "sha256": "804c9ac21644fd51c2060070a2672d47b97799e44948d0e82e99fc6c3aaafbf3"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_50/actions/Frame13.png",
+   "size": 5412,
+   "fnv1a64": "9cc88220c382ce19",
+   "sha256": "e15959c6cda33364414c4f7227e43cfe5976b31141668bad6e33e64ca1173368"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_50/actions/Frame14.png",
+   "size": 4992,
+   "fnv1a64": "c9f0e221d7779088",
+   "sha256": "6d5f9aa5b248b5c445538c22e0e7878600c2eae2e86d4cfcaa5684f549fee395"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_50/sit/Frame00.png",
+   "size": 3824,
+   "fnv1a64": "e4d18c06101ad414",
+   "sha256": "cc888a19f62e58f1f488235ee8a4434633f940f6162ebfd1653f5714f97cc716"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_50/sit/Frame01.png",
+   "size": 4880,
+   "fnv1a64": "d13286f8a12cebff",
+   "sha256": "9bbc1a8b62bb678d5fc7395de08ac7aced20dd234cb3c807884de19850d6906f"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_50/sit/Frame02.png",
+   "size": 3961,
+   "fnv1a64": "08c42a93a79be3c8",
+   "sha256": "4f66e76b26a5bbf2e83ea090ddcee07e48dee149eaefebb661d7f81cc3aaa2a3"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_50/sit/Frame03.png",
+   "size": 3959,
+   "fnv1a64": "58682daf8e5096de",
+   "sha256": "b97b5586f55863fff6c67f6e0fe51e019c96bb0247bd95693036dca2460aeb5d"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_50/sit/Frame04.png",
+   "size": 3408,
+   "fnv1a64": "b7180ac46b7bb74a",
+   "sha256": "cd495b6a88755033bb1ca157552a67208b97d9d3af85848767de2e5505c364aa"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_50/sit/Frame05.png",
+   "size": 3938,
+   "fnv1a64": "a660aae2b5c28b5b",
+   "sha256": "002ab6935a2a384466a6d9af21080652688207de09b4cd98cda268b67add74dc"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_50/sit/Frame06.png",
+   "size": 3351,
+   "fnv1a64": "7bcfcf75cbab3949",
+   "sha256": "915acc81cbea210f517e9ab37b9b4ff044cac42017637c825c827800ebfc816a"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_50/sit/Frame07.png",
+   "size": 5395,
+   "fnv1a64": "e6c3c21b9f742497",
+   "sha256": "bde60a2285b04c643300fb77d608afeadd3f145f60a1d96f0792a6f2f96850a0"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_50/sit/Frame08.png",
+   "size": 5339,
+   "fnv1a64": "046c740c39701f1f",
+   "sha256": "a2687fdab854230b2c7e9a337150efa2a4bac3addcc5d7ff6e3780851b8a16c2"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_51/bodies/Frame00.png",
+   "size": 3985,
+   "fnv1a64": "bcb9d691f6fc7901",
+   "sha256": "cb6cbe87b777eed408e9c44232e709f653b55f5f75c248296f9af7310f3165f5"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_51/bodies/Frame01.png",
+   "size": 3980,
+   "fnv1a64": "de8e9d724c2ecf14",
+   "sha256": "a7179836320bb28181faee1e70f6cb4a71857e7fed2be594d6dc8c75d669ff12"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_51/bodies/Frame02.png",
+   "size": 4054,
+   "fnv1a64": "dc5b06987e2ca1d2",
+   "sha256": "20dc30095384a3db37612c8c0154a1089e91ad610e636d4289cfa66fac4f7bbd"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_51/bodies/Frame03.png",
+   "size": 3612,
+   "fnv1a64": "3ecd7e5c22d56f47",
+   "sha256": "e8e0074b4f20087258958a6102b19d232a47cf656f8efe1fe03354627732ff19"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_51/bodies/Frame04.png",
+   "size": 4017,
+   "fnv1a64": "94dd786f4d18c9a9",
+   "sha256": "bef90e21e3ea7e1644aa48b04b8542a56c2d6dfb98c50546f8c2afb963927125"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_51/bodies/Frame05.png",
+   "size": 3860,
+   "fnv1a64": "e30d2cd706b40d21",
+   "sha256": "7432948fbe18169dd1bee44283150dfeae91810ab1a84eba17b7e0cd4c13e3e4"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_51/bodies/Frame06.png",
+   "size": 3885,
+   "fnv1a64": "cea2810208dbea75",
+   "sha256": "00c461e2658e5c0bbdf732df6ea31c865c973eb2771bf256eaad9ce6b5d70b7d"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_51/bodies/Frame07.png",
+   "size": 3878,
+   "fnv1a64": "feb7ee28fabf8628",
+   "sha256": "9bec7d0c38dc003e27584acfef84c1f2127af16076dbeaee1ad67285def2283f"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_51/bodies/Frame08.png",
+   "size": 4367,
+   "fnv1a64": "8c2f5f0da0655667",
+   "sha256": "16baabded62880acf0225b262e403f6a25f0454cda45a3e956f64a0fd352a49b"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_51/bodies/Frame09.png",
+   "size": 4418,
+   "fnv1a64": "69140dfe1d9c8650",
+   "sha256": "3d31684c6a50b905662d942b1141389dce8052d8e3f2655e42753dd451ac3648"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_51/bodies/Frame10.png",
+   "size": 3947,
+   "fnv1a64": "5e7aa2f7c516aea5",
+   "sha256": "465f2eb69356da4c9d8bcd0cacb55903cbc53c9e1dd386c87d3a3df7b3fdfe87"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_51/bodies/Frame11.png",
+   "size": 4416,
+   "fnv1a64": "1ef308a9950f4d29",
+   "sha256": "46ce403b8976cfb7213ea43cbe7ff2c69e63fc087c2f07b3f8ff302dd87bad0e"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_51/bodies/Frame12.png",
+   "size": 4190,
+   "fnv1a64": "b0953f149bab10d2",
+   "sha256": "fde2b514592b504b9193c60bf31388cf7ba9096dc6d19969efd027b240e8573a"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_51/bodies/Frame13.png",
+   "size": 4173,
+   "fnv1a64": "314dcae126083da1",
+   "sha256": "2083c6dbefa3c467bff0ea999989c31a320a1933d05410e09e19fa69df4d7313"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_51/bodies/Frame14.png",
+   "size": 4098,
+   "fnv1a64": "d918316f6d0b0400",
+   "sha256": "7c634c53740d267166d581af80a927ca5f85747348f6e29b469dd449724cdfde"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_51/bodies/Frame15.png",
+   "size": 4321,
+   "fnv1a64": "5d38a141b4df9042",
+   "sha256": "37bcc30f6cbf58ece07d5e26f8fc56aa490278c9ee2308ef63ac7abf6d008d4d"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_51/bodies/Frame16.png",
+   "size": 4134,
+   "fnv1a64": "1d04ee76f77845e2",
+   "sha256": "be847b37718977f4b7b29465afe5a20169f5578e5c4af5b86cfcd5556d218ac8"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_51/bodies/Frame17.png",
+   "size": 4141,
+   "fnv1a64": "f795e12ecb7b0fa6",
+   "sha256": "d3af9e462d95c60d74fd570e780114151939992c80fa17b9b2236b5019239c24"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_51/bodies/Frame18.png",
+   "size": 4123,
+   "fnv1a64": "ca6f439358166237",
+   "sha256": "7d45311aad1cfeb12fba8004e9a26c701c4b6a78b98afa7754d63c0d30fe9025"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_51/bodies/Frame19.png",
+   "size": 4259,
+   "fnv1a64": "7f2c8c57df5d9706",
+   "sha256": "05e94bd68cf74078d2fcd61aeee63c821849dfbc88adebc106cfeedc65433ec4"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_51/bodies/Frame20.png",
+   "size": 4252,
+   "fnv1a64": "6021e85f31535240",
+   "sha256": "ad32e1515cb4bd6abe30ad7f5309052a50d7e2d232d5d004fd860b4d16bf02c7"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_51/bodies/Frame21.png",
+   "size": 4293,
+   "fnv1a64": "df862b5af3baac56",
+   "sha256": "d8235b71a8a4867ea6a513e8376433cb05835926907d2333129ea00803d41cf8"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_51/bodies/Frame22.png",
+   "size": 3959,
+   "fnv1a64": "20738bdefc32df61",
+   "sha256": "ffa8c221e5c0f5e5670acfd845c61f6f39d0392304cae360a07890c859e0467c"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_51/bodies/Frame23.png",
+   "size": 4416,
+   "fnv1a64": "c33de2e21ab6d743",
+   "sha256": "518a65919662cfc0a8d98b82f2f27dd4173f8be79c16fde641aeb908aabaf65d"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_51/bodies/Frame24.png",
+   "size": 4007,
+   "fnv1a64": "20a014e116597615",
+   "sha256": "1fb816ccc5b69c1fa466ff01b0b3f5400d90828071c494f193c8f94f1acfac02"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_51/bodies/Frame25.png",
+   "size": 3862,
+   "fnv1a64": "73437a912ba1d7a8",
+   "sha256": "6db53fee863dca58efbbb2252503932349356b2474e72ddfc8a22e8651965751"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_51/bodies/Frame26.png",
+   "size": 3793,
+   "fnv1a64": "9de886193cfcc002",
+   "sha256": "013d4d7a779578d40834ff39ccd92582e93cb59326d00555f4f71722d1b1c2c9"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_51/bodies/Frame27.png",
+   "size": 3846,
+   "fnv1a64": "5092aaf6b0c6049b",
+   "sha256": "54f6f18c5b0d00727693ef9a00efcfdbcf0f9d406a626b5dbb9a51a317bef751"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_51/bodies/Frame28.png",
+   "size": 3941,
+   "fnv1a64": "4860f9bae920c5be",
+   "sha256": "425ab39afcbfb4da2b352f37fe9afc2e5853fe716789ef1c67c5b9d25b2122fc"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_51/bodies/Frame29.png",
+   "size": 3986,
+   "fnv1a64": "3d667be9e4eefb33",
+   "sha256": "8e9a2d2ccf69c6a8b4a5010eb9df46461e0eb28a5a26592a7db7f1953bbf25b7"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_51/bodies/Frame30.png",
+   "size": 3982,
+   "fnv1a64": "d60652d4baf6ef35",
+   "sha256": "02f9ccd1318caba3806cfae932d14eab9159ee2a1dc9908cdf660e3e86dae118"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_51/bodies/Frame31.png",
+   "size": 3587,
+   "fnv1a64": "259ad797a7f2d9ea",
+   "sha256": "db68063c04b7650e51325b427faaf64bd59d8290fef1bea56f9cf6aad61428af"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_51/actions/Frame00.png",
+   "size": 4090,
+   "fnv1a64": "3d1408049c8658f7",
+   "sha256": "1a2a632c8007ea9cbf1cef022efd09a064f694c44efc7d8b2e36bde90fded651"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_51/actions/Frame01.png",
+   "size": 4051,
+   "fnv1a64": "8f6888c25f3140ae",
+   "sha256": "06c7944c46cb29c1a1a878de9d71c414a62cfc67f0f92a52b7f0da6cf40f6118"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_51/actions/Frame02.png",
+   "size": 3956,
+   "fnv1a64": "7cc85c60883683f3",
+   "sha256": "5d252ab0fb9b8de24e5a03c2cad7ea941868dd891a1573efcd7be046ae085439"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_51/actions/Frame03.png",
+   "size": 4073,
+   "fnv1a64": "9e32c98216e22ead",
+   "sha256": "446d6c91c1007cc882c464b5fdb26d509e026c61f4bd27f1f6f2b9c3b30e1ec6"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_51/actions/Frame04.png",
+   "size": 4256,
+   "fnv1a64": "694963a8f3ac3f0d",
+   "sha256": "104fb2b53816b12a616b6f95082c880b0bc9a450c430d15502cbe8eff39028d9"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_51/actions/Frame05.png",
+   "size": 4173,
+   "fnv1a64": "e57fd096c22f1f75",
+   "sha256": "1400526714399c1240038b8c0d381fcf1a0e1d967e2181659e579414886b706e"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_51/actions/Frame06.png",
+   "size": 4292,
+   "fnv1a64": "128bc1b3091ca751",
+   "sha256": "76cf531ba3693a7ab6f8d3393df5f565c02c73f488b6472611cd1e92a23a143f"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_51/actions/Frame07.png",
+   "size": 4249,
+   "fnv1a64": "db19e828c2a23677",
+   "sha256": "b9e4adb61fded4a7a4a6e93b0e5907367b856d0b5d7c3cce162d716d402ca81b"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_51/actions/Frame08.png",
+   "size": 4356,
+   "fnv1a64": "e01bb00afb0f8a58",
+   "sha256": "2eeb68eb5d311986bbe2773787e6bc5794fae7758e8d14a34f78ca58f1057c69"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_51/actions/Frame09.png",
+   "size": 3953,
+   "fnv1a64": "8aa3a7ae4226b858",
+   "sha256": "86e37fd55da5bf1011994affca1c205d0f0de14bf6d7f7d48d5012982f6ee8c9"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_51/actions/Frame10.png",
+   "size": 4519,
+   "fnv1a64": "655283d1ce80ad7d",
+   "sha256": "11d888d194a33ed8cc591e2580386776186c1e1f22aa48a1e6194155ee3b3e36"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_51/actions/Frame11.png",
+   "size": 3948,
+   "fnv1a64": "de85d896c3080641",
+   "sha256": "4de83934a16d928288d3dc6e34c79f4e767e7203de074031fc7334baa2362ef3"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_51/actions/Frame12.png",
+   "size": 5144,
+   "fnv1a64": "c7feeb828e0ea748",
+   "sha256": "c7c6652acdca1cfa44c04389c9c9076738c5786a80e48d73ddc2db39326c604c"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_51/actions/Frame13.png",
+   "size": 5060,
+   "fnv1a64": "942f6515e56122e7",
+   "sha256": "e0a125cb4b8da35df34f385af88efa943dbb0b086435ff44bf473be310104e1f"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_51/actions/Frame14.png",
+   "size": 4759,
+   "fnv1a64": "eb78fa78fac4b95f",
+   "sha256": "73acec9749463315ae88b5cb10e0b100bce7b48cfb5456031868f9830b05d685"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_51/sit/Frame00.png",
+   "size": 3611,
+   "fnv1a64": "1ddb526f8d3dc0b3",
+   "sha256": "f32297b95ff2afc04be2f22a2d5c74d32e806b11933144bc1d154566177a9a90"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_51/sit/Frame01.png",
+   "size": 4613,
+   "fnv1a64": "25613a22dfa1930d",
+   "sha256": "bf65f63a23bfd18158b1f2ec766f94a853c9b19f4fd5da6c6cdd31502f3bbac6"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_51/sit/Frame02.png",
+   "size": 3798,
+   "fnv1a64": "a2147390657e60d0",
+   "sha256": "e04d02178bea29c3b9dba5282943dc5d3add53730eb71eff7fe9c5f5c398366e"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_51/sit/Frame03.png",
+   "size": 3765,
+   "fnv1a64": "c3f93a3207a734be",
+   "sha256": "c262cae957a38d6a63f5fed5196df7eb1ae15c9f31c4b8115f08ea8330901253"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_51/sit/Frame04.png",
+   "size": 3121,
+   "fnv1a64": "5e97a9d013386d48",
+   "sha256": "ab2018add1bfb9d02cb11b7f540f5c27b8345da77189661b513547993ed5a274"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_51/sit/Frame05.png",
+   "size": 3743,
+   "fnv1a64": "5591f4174eb7e8f1",
+   "sha256": "4b54173d828cb8cb893a254868ae6afc68f46a65c87dfce5a81030ad8f9d5bf0"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_51/sit/Frame06.png",
+   "size": 3086,
+   "fnv1a64": "d3527fca7250ceae",
+   "sha256": "d23d72ead256986decb5da060920e2b818edc287a3c950def9c59ab6e344c6a0"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_51/sit/Frame07.png",
+   "size": 5067,
+   "fnv1a64": "208b7fb9f00aba68",
+   "sha256": "5f205aa7f1556f8b9249a3fbccb81d2dfbd3502d3a27b88330cbfa5c2ca4dba4"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_51/sit/Frame08.png",
+   "size": 4967,
+   "fnv1a64": "a08efec075d0941c",
+   "sha256": "bd1fcb88dd5a094cdcc0784caa824f682c9b68156608480ba8e11a6bc9ff9acb"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_52/bodies/Frame00.png",
+   "size": 4259,
+   "fnv1a64": "1fd5058be2dda82b",
+   "sha256": "c04ffdc16cebbb6fcb19b0a9df963045ca8fe048c4064314fd6ecccbfae81329"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_52/bodies/Frame01.png",
+   "size": 4315,
+   "fnv1a64": "3ddd75cbddb344fa",
+   "sha256": "f597559a36518a76d48adf677f89259dfa19861bd21219ae0d3c0726219d09f7"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_52/bodies/Frame02.png",
+   "size": 4328,
+   "fnv1a64": "c1280131c3233d4d",
+   "sha256": "8de54da60ff8e3a87481756c3fbeed7eb85d29145d393a99353d6c25a0f1b4f8"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_52/bodies/Frame03.png",
+   "size": 3895,
+   "fnv1a64": "13ce31eb06d10f98",
+   "sha256": "616e81f409da2fb77694f7acf0f5dd7a884ec60f7e0494ff77eed1a767c0b503"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_52/bodies/Frame04.png",
+   "size": 4320,
+   "fnv1a64": "d88546666cffa9f6",
+   "sha256": "aa0ae8fb9c7a5e352f27df4633242c864f1239d72062d26d828504765574aa8b"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_52/bodies/Frame05.png",
+   "size": 4063,
+   "fnv1a64": "55851c2b36f42384",
+   "sha256": "deff859f4590857b22275310237f1238487c29832e7049e89c68279f2be5931a"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_52/bodies/Frame06.png",
+   "size": 4135,
+   "fnv1a64": "423ea70c8fd1a3fb",
+   "sha256": "3bb86069dc87c362a85bc28981a21363080ad0955038223edf06ef732c748cc9"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_52/bodies/Frame07.png",
+   "size": 4143,
+   "fnv1a64": "457a61038acd8230",
+   "sha256": "9791f14d163e93059ed368095bd7eb6d34e5418a52c6fccd9bd114684d9b89dc"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_52/bodies/Frame08.png",
+   "size": 4555,
+   "fnv1a64": "c0385d391e0ae24e",
+   "sha256": "c8628e737f99327de3b1699067f9cc329c3a2b2aac054644939137a0fdbe9261"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_52/bodies/Frame09.png",
+   "size": 4660,
+   "fnv1a64": "9074d7ac63416082",
+   "sha256": "257cc0d46a16405fd0b33189d4d1de988e6afc9dedbfeb7d8c48cd6ea08e92c6"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_52/bodies/Frame10.png",
+   "size": 4194,
+   "fnv1a64": "56d485ca650ed09f",
+   "sha256": "f79f406b8058b71895a6ecfdf7ba9eb4bc14c03743879c6c4a2938b55cd49155"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_52/bodies/Frame11.png",
+   "size": 4680,
+   "fnv1a64": "647636e9194609a7",
+   "sha256": "58a63deee03a6c6052d69cd8dff999ccd3ce9f44d3274286258797009f61afa3"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_52/bodies/Frame12.png",
+   "size": 4439,
+   "fnv1a64": "486352adf6d7c5ed",
+   "sha256": "fd81444bf76573c27a079e2a5790dadda1fb6e7c47ea7a38e25c2a9774713f55"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_52/bodies/Frame13.png",
+   "size": 4516,
+   "fnv1a64": "85b33c4695e76426",
+   "sha256": "fadb7d32214849b8ad0ba185d18084ff4fea6cd7a6bcc00e964a14dd27a646b6"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_52/bodies/Frame14.png",
+   "size": 4432,
+   "fnv1a64": "93025539738b6bc5",
+   "sha256": "04e25c7cab02d112b874666cc6411bab3bbfd369b163fd5afee5c3cab2a5be62"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_52/bodies/Frame15.png",
+   "size": 4532,
+   "fnv1a64": "519bc51ee3c6f236",
+   "sha256": "59adad77b54b2f406ecd5625b3ed33882b0303f0e8d0fab9d9104dbffb6c6909"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_52/bodies/Frame16.png",
+   "size": 4368,
+   "fnv1a64": "51679787747b6b7c",
+   "sha256": "4797bed4a603514f7afa42948165aed55248fde27791f0def1069e1777fe42bd"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_52/bodies/Frame17.png",
+   "size": 4449,
+   "fnv1a64": "817786885627e8fb",
+   "sha256": "e887982d54fb10f0212db3d8721449b954ba525c8c86574796633d6cad80d201"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_52/bodies/Frame18.png",
+   "size": 4410,
+   "fnv1a64": "8aff1fbe9534d22c",
+   "sha256": "ad958ac4ae05eda7fcc811d7382fb815c6eb274a73127f3c16742a626ec718fc"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_52/bodies/Frame19.png",
+   "size": 4466,
+   "fnv1a64": "c046ef3059c382e8",
+   "sha256": "7e504fc91f6274cefc605d8ac7a037e003d54b8575f717e3d480b7ff724ea51e"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_52/bodies/Frame20.png",
+   "size": 4421,
+   "fnv1a64": "ec59018ae8f0756e",
+   "sha256": "6b54d925d0408cd104d3bcbe4a69f72477bf0f6661adb90239db83e3c7fba181"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_52/bodies/Frame21.png",
+   "size": 4489,
+   "fnv1a64": "83e243b11d6d6e1a",
+   "sha256": "7a05995b8333dc8f69571e6de004a30c11249466b93f55ef275bb6a8b194cfad"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_52/bodies/Frame22.png",
+   "size": 4144,
+   "fnv1a64": "f1c9c8d6a38eedc9",
+   "sha256": "8906b98d7634c3fb8643069d0a02afbf3c7acc48ff083d2fc626104012683634"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_52/bodies/Frame23.png",
+   "size": 4660,
+   "fnv1a64": "9b08d74f1d97c53f",
+   "sha256": "b658274f37ca56b4af17044c632b98ea8fbed26b3c61e057af1bc000620aebc4"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_52/bodies/Frame24.png",
+   "size": 4313,
+   "fnv1a64": "f84a799478e5866d",
+   "sha256": "24929eac2cd443b946b9655b07321be995cdad745611daf20fb5f70f442f8f62"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_52/bodies/Frame25.png",
+   "size": 4122,
+   "fnv1a64": "3e09d8f7b3c59f96",
+   "sha256": "11dce18e06bc4466f56681e331e5100f7ea2700b5ee49b73731fb9c2cb17a1ce"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_52/bodies/Frame26.png",
+   "size": 4063,
+   "fnv1a64": "c59a515e1743d59c",
+   "sha256": "3cd0add512036515a936d892bcab4c167d8d40b1178bd1e96a1033ec31f15f58"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_52/bodies/Frame27.png",
+   "size": 4090,
+   "fnv1a64": "7e23347670424b2d",
+   "sha256": "68de6b030709996ed4cf7c044b1258efd7d67a4096eb2ccf9b8d49366494350d"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_52/bodies/Frame28.png",
+   "size": 4247,
+   "fnv1a64": "3d53bc71c02161ac",
+   "sha256": "604ecd7387def55dee8cd132943435c5fd5cc3ef2736a1b416a4e072bcf1cc00"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_52/bodies/Frame29.png",
+   "size": 4262,
+   "fnv1a64": "8709466b513af4a2",
+   "sha256": "709ee464885013d2d1d51649c81d77b75264e9db84743815d582ffea91d46941"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_52/bodies/Frame30.png",
+   "size": 4316,
+   "fnv1a64": "a95c5d6799ab8cc7",
+   "sha256": "47af88b98eb3017dbb0a0656e90383bcdfd740520ba7c2cfc4bb4acf96086547"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_52/bodies/Frame31.png",
+   "size": 3897,
+   "fnv1a64": "f83eca528d05e4c8",
+   "sha256": "22b8460057b21227d396dad230ea3b6f7fc188edc0f0005e8f2c9e87a9891d57"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_52/actions/Frame00.png",
+   "size": 4260,
+   "fnv1a64": "1a9772baee5bf68c",
+   "sha256": "087fe6861f2673d15c200a50df2fd6e1b11508c9f8471fc3e133dd6035f8f828"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_52/actions/Frame01.png",
+   "size": 4266,
+   "fnv1a64": "d11568ace4a883c8",
+   "sha256": "fc466485b4918e96ef78f854e63ed4bc639a17006f8464ba2eab9e8b5fcbcdff"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_52/actions/Frame02.png",
+   "size": 4108,
+   "fnv1a64": "36485168d5f75bb6",
+   "sha256": "81cd092d60f31c259b4bc1460009bf122a2dce2245809f1e6c94bd5c300f6d86"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_52/actions/Frame03.png",
+   "size": 4219,
+   "fnv1a64": "fd6be7340f164421",
+   "sha256": "061d183a4fcc8b738bdedf495a6544e17cce818c3d06d84aef488915c31390f7"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_52/actions/Frame04.png",
+   "size": 4575,
+   "fnv1a64": "03ae480d143333a6",
+   "sha256": "9f25ad210d933a4208eab60302d493bff91785464befaaabf3e9f87dd02354e2"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_52/actions/Frame05.png",
+   "size": 4525,
+   "fnv1a64": "fa91d0e8929eaba6",
+   "sha256": "c796127d4a76be03d37f85bbef534edf6bbaa022d89953652d59e51729c0af60"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_52/actions/Frame06.png",
+   "size": 4588,
+   "fnv1a64": "4df119be7766bcdb",
+   "sha256": "1e8bf8f826aa50e3b5f20215d8ffef543327a9d8e97857866304798b183499d9"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_52/actions/Frame07.png",
+   "size": 4608,
+   "fnv1a64": "7d6ced9aeb8f501e",
+   "sha256": "dca90c6099f2003742bcb311d3dddda6810ffbd206a156a2e30e619f2b63b489"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_52/actions/Frame08.png",
+   "size": 4745,
+   "fnv1a64": "0bffc299d2b4d650",
+   "sha256": "be7e616ab9f981cb0d5023dbdb6edd0a8ea5f9fc691ca859b5f0c56626f29700"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_52/actions/Frame09.png",
+   "size": 4224,
+   "fnv1a64": "75899bb65d7f90dd",
+   "sha256": "57098baf69f86d1ade557c5df177e59276e4334a199342b677266f175ab6c423"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_52/actions/Frame10.png",
+   "size": 4742,
+   "fnv1a64": "bed70f9049d2880e",
+   "sha256": "381b08991851a747aa9a016cca15f81e16a04319778ee847d3e9888ea083d322"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_52/actions/Frame11.png",
+   "size": 4290,
+   "fnv1a64": "71d2c95bbf829058",
+   "sha256": "94799c8920980ecde85d1d979fded1332ee28b1dc5b2abab41a67c6cf1f30c12"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_52/actions/Frame12.png",
+   "size": 5346,
+   "fnv1a64": "8eba0d591b00b514",
+   "sha256": "bdb8e717220e71ee4804e623f3b721f5cf067003c182345e270f0ffc5441a447"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_52/actions/Frame13.png",
+   "size": 5265,
+   "fnv1a64": "f8244af73fcd6ea6",
+   "sha256": "db2086bbf77edebc2c15b66e1c7b62297376fa4b8e209033d839b348c2a9da17"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_52/actions/Frame14.png",
+   "size": 4929,
+   "fnv1a64": "7aad456bb93868c2",
+   "sha256": "0784287a3fd7b37b130aa2c8066321e4f9f4fc33f892583e71ffa707f1316480"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_52/sit/Frame00.png",
+   "size": 3874,
+   "fnv1a64": "7b832be6f49bcc4d",
+   "sha256": "7fc9df4228fb43024a72d54144faa3f3e3d17b04c6a535336efa193595576f09"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_52/sit/Frame01.png",
+   "size": 4705,
+   "fnv1a64": "c1b6ec976dc34009",
+   "sha256": "ffeabd2084dd39fd12e44575d7190c7e5d1a90b138031f3d27746d7813624fc6"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_52/sit/Frame02.png",
+   "size": 4040,
+   "fnv1a64": "e08d33b5a75bda7a",
+   "sha256": "daeb7abd196445d31c3e1f75a8f28113f44e87e3f09c9e6d8b6f5a8b438b1a77"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_52/sit/Frame03.png",
+   "size": 4027,
+   "fnv1a64": "d5f86b27639fd59f",
+   "sha256": "d759dd980110a97f5905ec8b2d3e916bfc424564ad1e402b7b273ecf9e0e1544"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_52/sit/Frame04.png",
+   "size": 3379,
+   "fnv1a64": "faf60c2620f458da",
+   "sha256": "01b124d7ee3a062f2cbd20190825616d080e54781ce6d5eec0595da9bc0a1224"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_52/sit/Frame05.png",
+   "size": 3995,
+   "fnv1a64": "47e310690afe9756",
+   "sha256": "019b6c93965fd673e5289fa1c7ccfcba425633b8545189d77bb5a7d07b66a3d9"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_52/sit/Frame06.png",
+   "size": 3322,
+   "fnv1a64": "084ddce53fba2fa5",
+   "sha256": "b2b349afb2929ce5f29085e62a09ab39b0126fa9189ad3b5569d5dd05065afcf"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_52/sit/Frame07.png",
+   "size": 5268,
+   "fnv1a64": "f1cd4e7024bc0fd5",
+   "sha256": "3ee62bc99e9f17ec337631fda2718022c04d42e89155633ec34ea991b3e40039"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_52/sit/Frame08.png",
+   "size": 5276,
+   "fnv1a64": "cceeade32551b41a",
+   "sha256": "2c1e7f1867bde7a129ccc3c98270e3edbb439f60ae32ea656a172281b7bc306f"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_53/bodies/Frame00.png",
+   "size": 4331,
+   "fnv1a64": "bd68092b0a3685c6",
+   "sha256": "2d28a39d1f4a51c26d8d840a589581e1cefba85043f8c9804f143fd4d8ffcd88"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_53/bodies/Frame01.png",
+   "size": 4389,
+   "fnv1a64": "2eda08a162396a13",
+   "sha256": "dece83e7949432d4e2aba8d6ee32a9cb42ec4165c609bf1c155434f3a4870e68"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_53/bodies/Frame02.png",
+   "size": 4285,
+   "fnv1a64": "695ac09bdc4f7d1d",
+   "sha256": "e85a87f69b25714959a53a81862a828de37effc834c0d1a4923cd30488394f7f"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_53/bodies/Frame03.png",
+   "size": 3913,
+   "fnv1a64": "08c183998d7f8986",
+   "sha256": "f7053d6112260de726a405c35f8c5a3b6a99317e0446af3c830ba325b8d7505e"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_53/bodies/Frame04.png",
+   "size": 4307,
+   "fnv1a64": "e421bb3e8b55b98a",
+   "sha256": "6479a81f1433095450c74af14f90a0ad606f8dea9c06ac287966077a9a0d056b"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_53/bodies/Frame05.png",
+   "size": 4129,
+   "fnv1a64": "a2dec835fd7e1ab4",
+   "sha256": "a48433e088ebb19db7ad14e58e048b95ff9e438118a5669a331bdba0bfd9e27c"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_53/bodies/Frame06.png",
+   "size": 4116,
+   "fnv1a64": "a5b6154b0805f3cd",
+   "sha256": "2692de5c5a007731002e7df5aa1db7903120c4d5cb5e149574fc27889d6c3110"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_53/bodies/Frame07.png",
+   "size": 4164,
+   "fnv1a64": "a0078988182d1834",
+   "sha256": "09d32778469af7efae844e41d7c05b12447eb3a3b79aa0037bc0024d4a8c12c8"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_53/bodies/Frame08.png",
+   "size": 4610,
+   "fnv1a64": "e6b65de8cd005149",
+   "sha256": "72a0491e1c35cae61b3d5126702e0fd100a6a63ddf1be3838b028ed213276aaf"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_53/bodies/Frame09.png",
+   "size": 4591,
+   "fnv1a64": "fc3b8dde26128e45",
+   "sha256": "f4613d56c59e9dc67e57d058906ccda6910263c9a8f84c249c6586962350782c"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_53/bodies/Frame10.png",
+   "size": 4196,
+   "fnv1a64": "9e6156d197ff5b1b",
+   "sha256": "bdf53d8bc5313d6ac9158c60f64f2d8baa82d70357348a739490994b5df9da62"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_53/bodies/Frame11.png",
+   "size": 4664,
+   "fnv1a64": "afa22b71e68b3360",
+   "sha256": "fb416bb6a5befad1a359749a6be55b630a56099ce1150694d876a762a4c071a4"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_53/bodies/Frame12.png",
+   "size": 4480,
+   "fnv1a64": "e208b1de8657fb16",
+   "sha256": "332aa99e22930757968290d129a3fe2d8f94fa9bd7c17994a82dd5ed51207d33"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_53/bodies/Frame13.png",
+   "size": 4418,
+   "fnv1a64": "c38b5cf7e62c226c",
+   "sha256": "eb833f4f4c3eed501cf378643a2941df744a3e961d4e9a78f009be804bc087d7"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_53/bodies/Frame14.png",
+   "size": 4279,
+   "fnv1a64": "8a94328cc6e8840f",
+   "sha256": "1bcb8c51c5576df5d4a3b5697ed981c498b2c886d335f6f3d6288a7424696371"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_53/bodies/Frame15.png",
+   "size": 4427,
+   "fnv1a64": "e0eb0332471c07e2",
+   "sha256": "a959e7dc3adc76764ad45312eac1c97b9bedbb1bec4a970747883acbbf216405"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_53/bodies/Frame16.png",
+   "size": 4526,
+   "fnv1a64": "a6028b5569496f62",
+   "sha256": "e974504a0af57cfef35f4f33d761a0d3acfa1a28a2534d5d8d617c31dbcd4f0d"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_53/bodies/Frame17.png",
+   "size": 4461,
+   "fnv1a64": "1d2469b6d5a0bf64",
+   "sha256": "7e4a451728f77af991f63ce216a7164030f989ea21666f038240b288d39fb26c"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_53/bodies/Frame18.png",
+   "size": 4314,
+   "fnv1a64": "4a0be5f22b1306db",
+   "sha256": "6cf00b24522816cca00c63ebbeb81fb667c2af0647788adb082e3b6dff6a0b8c"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_53/bodies/Frame19.png",
+   "size": 4418,
+   "fnv1a64": "2f8dd2ad02c1c4ce",
+   "sha256": "83517e05aa02f50a56b8def629484dbc1b64e7f09843ffde4bc48ded333d67a8"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_53/bodies/Frame20.png",
+   "size": 4581,
+   "fnv1a64": "49d80069df33ae96",
+   "sha256": "02dee8e25dd9516af08cc20fcc030540f82875cbbb6cfebdb48628b765e88544"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_53/bodies/Frame21.png",
+   "size": 4531,
+   "fnv1a64": "73744a222e9140b1",
+   "sha256": "60e07e5d72f1fba60083162eeec40e74feb7bb34c7659edce6214e9d1eb88553"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_53/bodies/Frame22.png",
+   "size": 4246,
+   "fnv1a64": "42fb69654163686f",
+   "sha256": "0a3c66d1ebcc3ef72859b4eea75754a663c21435a54a2af20ba04616a839d66b"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_53/bodies/Frame23.png",
+   "size": 4710,
+   "fnv1a64": "3c3dcd60596357a0",
+   "sha256": "0fb0d41ce2d02d910468bad31eded96a5dda0295dc759e1a1c64f04b7fdae8f0"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_53/bodies/Frame24.png",
+   "size": 4284,
+   "fnv1a64": "7b8175514f0a5690",
+   "sha256": "247df9cf657421ede43bb50d33a1858d63fdb72d6663026a99ba543ede95fd86"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_53/bodies/Frame25.png",
+   "size": 4112,
+   "fnv1a64": "ef3ac04f8fd058da",
+   "sha256": "ceb76a647f51efe44989669bd76925d71f2b09ebe0355bc01c4c8acde3fc6c04"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_53/bodies/Frame26.png",
+   "size": 4048,
+   "fnv1a64": "60ccb7fa989d8e7c",
+   "sha256": "1e1cc82f327c88ea391ceda064ec9d789a5de62834c0f31b6c380df312cc274d"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_53/bodies/Frame27.png",
+   "size": 4126,
+   "fnv1a64": "4d76d6aad529ef04",
+   "sha256": "ffcfa5dc6b8892083ff4137dc39c3b57a9c872a6a268f3e9513c9fda6e9b83ad"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_53/bodies/Frame28.png",
+   "size": 4251,
+   "fnv1a64": "f113b8b867a1ba7a",
+   "sha256": "524a048feab4ca2d897467abe2f7cb9a39370210d6d3d86af2ca53f9d5921c2d"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_53/bodies/Frame29.png",
+   "size": 4344,
+   "fnv1a64": "b83b3fa952e77a7c",
+   "sha256": "e1d5db143348b2aeb7ed7d17b3c478ce39b741d84b9e97bde0d3129119cc8c98"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_53/bodies/Frame30.png",
+   "size": 4248,
+   "fnv1a64": "fbc45a0e51aff809",
+   "sha256": "e2c0af91f2597623ec4df279ac850234c8427093784ba1812586ad5cae7f0e1e"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_53/bodies/Frame31.png",
+   "size": 3834,
+   "fnv1a64": "7e46a138af5564ca",
+   "sha256": "df99f8972aa29f1bfcdd96827e6a05440ea88b3697415f1a51262b65d8112404"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_53/actions/Frame00.png",
+   "size": 4401,
+   "fnv1a64": "0d6f3d3ff94d97de",
+   "sha256": "7b724ffaa69e944b62cd262ee61ba2a11a01b569860442e2fc6a0060aed0ee45"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_53/actions/Frame01.png",
+   "size": 4346,
+   "fnv1a64": "bb838dbbefafc32d",
+   "sha256": "112b51430d956204c782f0f92fd31fed138de6b1c8052597b57a5a8f97f8c100"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_53/actions/Frame02.png",
+   "size": 4326,
+   "fnv1a64": "2ba4075907c5a206",
+   "sha256": "1c9a576cbeef545dc559beb718c34ede1774ecd455c07d7e942dea0a694ae508"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_53/actions/Frame03.png",
+   "size": 4402,
+   "fnv1a64": "fd99938d9121780d",
+   "sha256": "3625e52a5cdd02ae8d3af6649bbf6cca46cf63e56d3f54173a3d44cfa9347341"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_53/actions/Frame04.png",
+   "size": 4537,
+   "fnv1a64": "29a618c24e8e1263",
+   "sha256": "2f912e9e1168a36a2a5e13140bd9d952378e10f8e7c8c9ee1eeacfb0920cc06a"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_53/actions/Frame05.png",
+   "size": 4456,
+   "fnv1a64": "49dcd40b69aeafd3",
+   "sha256": "576fb95a9822dd736f117c25059c21cf00e85d538ca3f701cc6513a34058208e"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_53/actions/Frame06.png",
+   "size": 4537,
+   "fnv1a64": "1dde5f3bde5f6cf4",
+   "sha256": "20a4fe1794c87be46552f87931d8396cd50ec70c2ee3526b43b5e5e16d6f6f4a"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_53/actions/Frame07.png",
+   "size": 4552,
+   "fnv1a64": "6b0081cb9488e245",
+   "sha256": "aa64dfa6db71f701570f52a436f7816915470e1ce53112060b2b9bef9584d7f3"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_53/actions/Frame08.png",
+   "size": 4659,
+   "fnv1a64": "4a9b3c13edf92a98",
+   "sha256": "54ac52bfa37cb44e7683eda65201eec131ea06dfc6522cc00c4bcac5c3abec0c"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_53/actions/Frame09.png",
+   "size": 4159,
+   "fnv1a64": "8d9223e0a559b7c3",
+   "sha256": "23def29b046a87b8b9c1918bd6356bacafe883e53ca7ab8ae18bd5b76d13ce0f"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_53/actions/Frame10.png",
+   "size": 4781,
+   "fnv1a64": "3edd263c587785e9",
+   "sha256": "bfd92c98abac17e59f69b9f88e15392358b3ef8ba37eb10c00da7c324464615b"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_53/actions/Frame11.png",
+   "size": 4229,
+   "fnv1a64": "295ee482e6b64b85",
+   "sha256": "224f25235b4f06339abb474aed0db29d0dcd0148beab1274e2e68457b26a0adb"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_53/actions/Frame12.png",
+   "size": 5469,
+   "fnv1a64": "93a03725e56e9d8d",
+   "sha256": "d6c30a26a3988598eddb07ed116c4b91fec8e24604f42b6ddc9e0ce1fa8b512c"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_53/actions/Frame13.png",
+   "size": 5382,
+   "fnv1a64": "4fd49b529c08ebd4",
+   "sha256": "be402edd0bcc9e7002725edb94a2887c4c2c632096a9424fca99d682f85717d7"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_53/actions/Frame14.png",
+   "size": 5117,
+   "fnv1a64": "f98a3abc90848a08",
+   "sha256": "9d74d61f409f3369350e737c86c94bdd2870a0515724b543a5a72d9acba638aa"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_53/sit/Frame00.png",
+   "size": 3765,
+   "fnv1a64": "53c6738d9968ffbe",
+   "sha256": "41401b89d655762ac4a59517eec7b320f19dde4c20abf4b6150c7077cb1d263b"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_53/sit/Frame01.png",
+   "size": 4802,
+   "fnv1a64": "a269539471ee26fd",
+   "sha256": "3883178e065c1f9a068198b32db11f7e97c848f98b0101de43bfad86b4296ce7"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_53/sit/Frame02.png",
+   "size": 3923,
+   "fnv1a64": "ccee4b615e1758af",
+   "sha256": "a998b799e655b784c745c3388a415c909748f0e096d18a42579a9706662061ba"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_53/sit/Frame03.png",
+   "size": 4033,
+   "fnv1a64": "61c95c8ee669c6e7",
+   "sha256": "e091461745d1b2910cd4deeef9a287971613461420db985d8b2bb4cce89dc411"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_53/sit/Frame04.png",
+   "size": 3385,
+   "fnv1a64": "042550971c7f7b63",
+   "sha256": "ea6dfa818ee4204c1330193143d67fb66ea55bb8cf2fc16ddb1d61e80ca994ce"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_53/sit/Frame05.png",
+   "size": 3966,
+   "fnv1a64": "d215b1a79c62a221",
+   "sha256": "75a12c28cc3ea038d457fc8386345f6214b4263a19a30409fecba6c23ce0406f"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_53/sit/Frame06.png",
+   "size": 3281,
+   "fnv1a64": "07087004b6017568",
+   "sha256": "08a7c941887d9a592ffc9a9aa0239f75180471b7ad3a8101e70110238a85b855"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_53/sit/Frame07.png",
+   "size": 5520,
+   "fnv1a64": "6a0bf9dac2c71546",
+   "sha256": "18747b886252ed9cd8ce04449a5ecae13af869eafa39a92b17f85acfde272780"
+  },
+  {
+   "file": "VillagerBodies/Male/Body_53/sit/Frame08.png",
+   "size": 5468,
+   "fnv1a64": "ed5b7e5006f4ca5c",
+   "sha256": "d3ccc33c2e996b065e4c8f13b15e787546a53a1b10b2b7da29bf735b532316d6"
+  }
+ ],
+ "holiday_portraits": [
+  {
+   "file": "VillagerDetailBodies/Female/Body_50/Frame00.png",
+   "size": 12428,
+   "fnv1a64": "e262ea58a0a57d13",
+   "sha256": "26516233ca5f9d9a946d4d1fb5da5482a3c983015c93538f6a1801b40e7d6fcd"
+  },
+  {
+   "file": "VillagerDetailBodies/Female/Body_51/Frame00.png",
+   "size": 11893,
+   "fnv1a64": "4f63a03117972058",
+   "sha256": "20ef0c0d93822db680dbe65dd4956e7f30f3202f71b5874b2bce87b5a3b5785e"
+  },
+  {
+   "file": "VillagerDetailBodies/Female/Body_52/Frame00.png",
+   "size": 12588,
+   "fnv1a64": "1fc3f7210cdb0b20",
+   "sha256": "2588daa0d77260ee3199311e6bac1833426c7e9db73b2027a147bb440707de69"
+  },
+  {
+   "file": "VillagerDetailBodies/Female/Body_53/Frame00.png",
+   "size": 11744,
+   "fnv1a64": "4453223575e63580",
+   "sha256": "2c8a1bcb427ad0c2667f3842e6c67f27b32d181ce90a2995c2a6b6cfc99ba4fa"
+  },
+  {
+   "file": "VillagerDetailBodies/Male/Body_50/Frame00.png",
+   "size": 11961,
+   "fnv1a64": "684e2ec96dcfa31a",
+   "sha256": "546636012d015ac2ea1c516ee830b287f83e2eba17785a82438713b20a6855bd"
+  },
+  {
+   "file": "VillagerDetailBodies/Male/Body_51/Frame00.png",
+   "size": 11352,
+   "fnv1a64": "9b17a4de53e5348d",
+   "sha256": "517a7a6d238d192e495529738147817da0057d1cdba6f2f43f3b6bb41d77bca5"
+  },
+  {
+   "file": "VillagerDetailBodies/Male/Body_52/Frame00.png",
+   "size": 12132,
+   "fnv1a64": "dcdcb3c20a3aae32",
+   "sha256": "0e24f83d5b76f148e45e1007691e7ef4229a7378bb2d1557e03057f708e2c861"
+  },
+  {
+   "file": "VillagerDetailBodies/Male/Body_53/Frame00.png",
+   "size": 12653,
+   "fnv1a64": "9cf4f3419b1a49d5",
+   "sha256": "ff9b45b414c98de0ce6ce8d2ac5e811cb1a9d473d9e93ca67f9c044f6be612cc"
+  }
+ ],
+ "method_agreement_with_approved_stock_masks": {
+  "female_bodies00.png": 0.999869,
+  "female_actions00.png": 0.999778,
+  "female_sit00.png": 0.999771,
+  "male_bodies00.png": 0.999879,
+  "male_actions00.png": 0.99999,
+  "male_sit00.png": 0.9999,
+  "highrez_bodies_final2.png": 1.0
+ }
+}
