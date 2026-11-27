@@ -3092,7 +3092,9 @@ class MobileRenovationArtTests(unittest.TestCase):
                         )
                         if patcher.ENABLE_CHEAT_UPGRADES
                         else 0
-                    ),
+                    )
+                    # the Revive row: in gServicesList in every variant (listed only while its DLL runs)
+                    + 1,
                 )
 
                 obj = CoffObject(temp / "InventoryManager.obj")

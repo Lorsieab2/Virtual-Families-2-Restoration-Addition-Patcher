@@ -138,6 +138,7 @@ class Game:
         self.saves.mkdir(parents=True)
         for name in ("vf2revive_b200.dll", "vf2revive_harness.exe"):
             shutil.copy2(built / name, self.bin / name)
+        shutil.copy2(built / "vf2skin_standin.dll", self.bin / "vf2skin_b200.dll")    # loaded only by "skin"
         (self.bin / "vf2revive.ini").write_bytes(b"[Patches]\r\nRevive=%d\r\n" % (1 if setting else 0))
 
     def run(self, *commands: str) -> list[str]:
@@ -412,3 +413,228 @@ def test_a_revived_childs_entry_agrees_with_the_games_own_tree_code(built):
         e.write(v + S.VILLAGER_ACTIVE, b"\x00")
         e.call(report, (v,), ecx=tree)
         assert e.rs32(child + S.PEEP_SLOT) == -1 and e.call(count_surviving, (), ecx=tree) == 0
+
+
+# ===================================================================== a remarried partner's late spouse; Skin Tones
+def test_a_remarried_partners_late_spouse_lives_outside_the_tree_and_is_listed_to_draw(built, tmp_path):
+    g = Game(built, tmp_path)
+    out = g.run("family", "save", "1", "load", "1", "kill", "1", "2", "gone", "1", "remarry", "cands")
+    bob = next(c for c in cands(out) if c[1] == "Bob")
+    out = g.run("family", "save", "1", "load", "1", "kill", "1", "2", "gone", "1", "remarry",
+                "done", bob[0], "5", "Family member", "members", "cands", "save", "1", "load", "1", "members")
+    members = [line for line in out if line.startswith("member ")]
+    assert members == ["member Bob slot 5 sex 0 head 2 body 2"] * 2        # before and after a save and a load
+    assert "cands 0" in out and not [c for c in cands(out) if c[1] == "Bob"]
+    f = g.snapshots(1)
+    kept = [s for s in f.entries if s.name_text == "Bob"]
+    assert len(kept) == 1 and kept[0].source == rv.MEMBER and kept[0].spare[2] == 5
+    assert rv.refusal(r_parse(g), kept[0]) is not None                    # alive: never offered again
+
+
+def r_parse(g):
+    """The harness's save is not a game save: a FamilySave-like view of who is alive, for vf2_revive.refusal."""
+    import vf2_save_reader as r
+    data = (g.saves / "Virtual Families 21.ldw").read_bytes()
+    villagers = []
+    for slot in range(30):
+        b = data[slot * 0x7BC:(slot + 1) * 0x7BC]
+        villagers.append(type("V", (), {
+            "active": b[0] != 0, "left_home": b[1] != 0, "health": struct.unpack_from("<i", b, 0xB4)[0],
+            "name": b[0x18:0x18 + 25].split(b"\0")[0].decode(), "gender": struct.unpack_from("<i", b, 0x0C)[0],
+            "head": struct.unpack_from("<i", b, 0x34)[0], "body": struct.unpack_from("<i", b, 0x38)[0]})())
+    return type("S", (), {"villagers": villagers, "family_tree": type("T", (), {"current": None,
+                                                                                 "num_generations": 1})()})()
+
+
+def test_a_skin_tone_kept_at_the_death_is_given_back(built, tmp_path):
+    g = Game(built, tmp_path)
+    out = g.run("skin", "family", "save", "1", "load", "1", "kill", "3", "0", "kill", "1", "2", "cands")
+    assert "skin 1" in out
+    fay = next(c for c in cands(out) if c[1] == "Fay")
+    bob = next(c for c in cands(out) if c[1] == "Bob")
+    out = g.run("skin", "family", "save", "1", "load", "1", "kill", "3", "0", "kill", "1", "2", "save", "1",
+                "done", fay[0], "8", "Child", "given")
+    assert "given 1 slot 8 tone 6 birth 7" in out                       # slot 3: tone 3 + 3, birth tone 7
+    snaps = {s.name_text: s for s in g.snapshots(1).entries}
+    assert snaps["Fay"].spare[0:2] == b"\x06\x07" and snaps["Fay"].spare[3] & 1
+    assert snaps["Bob"].spare[3] & 1 == 0                               # the stand-in gave Bob no tone
+    out = g.run("skin", "load", "1", "done", bob[0], "8", "Child", "given")
+    assert "given 0 slot -1 tone -1 birth -1" in out                    # no tone kept: nothing given
+
+
+def test_the_file_keeps_the_spare_bytes():
+    s = rv.Snapshot(source=rv.MEMBER, generation=1, sex=0, head=2, body=2, name=b"Bob", spare=b"\x06\x07\x05\x01",
+                    marks={"name": rv.EXACT})
+    f = rv.read_file(rv.make_file(b"save", [s]))
+    assert f.entries[0].spare == b"\x06\x07\x05\x01" and f.entries[0].source == rv.MEMBER
+
+
+# ===================================================================== the executable: the tree screen, the parents
+def links(e, pe, delta):
+    sec = next(s for s in pe.sections if s.Name.rstrip(b"\0") == b".vf2rvlk")
+    at = pe.OPTIONAL_HEADER.ImageBase + sec.VirtualAddress + delta
+    assert e.r32(at) == 0x4B4C5652, "the RVLK block"
+    flag = next(s for s in pe.sections if s.Name.rstrip(b"\0") == b".vf2rviv")
+    return at, pe.OPTIONAL_HEADER.ImageBase + flag.VirtualAddress + delta
+
+
+def installed(e, pe, delta, members):
+    """The byte 1, a status block that says installed, and a members export that answers `members`."""
+    at, flag = links(e, pe, delta)
+    e.write(flag, b"\x01")
+    status = e.alloc(0x40)
+    e.w32(status, 0x56525632)
+    e.w32(status + 12, 1)
+    e.w32(at + 4, status)
+    stub = e.alloc(0x10, fill=0xC3)
+
+    def answer(emu):
+        out, cap = emu.arg(0), emu.arg(1)
+        for i, (slot, sex, head, body, name) in enumerate(members[:cap]):
+            emu.write(out + i * 48, struct.pack("<4i", slot, sex, head, body) + name.encode().ljust(28, b"\0")
+                      + b"\0" * 4)
+        return min(len(members), cap), 0
+    e.seam_live(stub, answer)
+    e.w32(at + 8, stub)
+
+
+DRAW_FAMILY = bytes.fromhex("558bec83ec4853568bd957895de4e8")
+DRAW_FAMILY_CALLS = ("window", "graphics", "strings", "GetFont", "GetFamilyRecord", "SetClipping", "Draw",
+                     "DrawString", "DrawParent", "SetClipping", "GetImage", "DrawTinted", "SetClipping", "Draw",
+                     "DrawString", "DrawParent", "SetClipping", "GetImage", "DrawTinted", "SetClipping", "Draw",
+                     "DrawStringCentered", "DrawChild", "SetClipping", "GetImage", "DrawTinted")
+POPS = {"window": 0, "graphics": 0, "strings": 0, "GetFont": 4, "GetFamilyRecord": 4, "SetClipping": 16, "Draw": 20,
+        "DrawString": 20, "DrawParent": 28, "GetImage": 4, "DrawTinted": 28, "DrawStringCentered": 20, "DrawChild": 28}
+
+
+def draw_family_world(built, delta, members):
+    import pefile
+    import b200_history_sites as S
+    import gen_b200_history_sites as G
+    from b200_time_emu import Emu
+    from capstone import Cs, CS_ARCH_X86, CS_MODE_32
+    exe = revive_exe()
+    data = exe.read_bytes()
+    pe = pefile.PE(data=data, fast_load=True)
+    sites = G.validate_variant(data, G.validate(Path(B200_CORE).read_bytes()))
+    e = Emu(exe, built / "vf2revive_b200.dll", delta)
+    draw = file_to_va(pe, find_once(data, DRAW_FAMILY)) + delta
+    code = e.read(draw, 0x440)
+    targets = [int(ins.op_str, 16) for ins in Cs(CS_ARCH_X86, CS_MODE_32).disasm(code, draw)
+               if ins.mnemonic == "call" and ins.op_str.startswith("0x")]
+    assert len(targets) == len(DRAW_FAMILY_CALLS), len(targets)
+    names = {}
+    for name, target in zip(DRAW_FAMILY_CALLS, targets):
+        assert names.setdefault(target, name) == name, (hex(target), name)
+    tree = sites["FAMILY_TREE"] + delta
+    e.w32(tree + 4, 2)                                                    # two generations: record 1 is current
+    records = [tree + (g + 1) * S.FAMILY_RECORD_SIZE - S.FAMILY_RECORD_BASE for g in range(2)]
+    for rec in records:
+        e.write(rec, bytes(S.FAMILY_RECORD_SIZE))
+        e.write(rec, b"\x01")
+        for place, (name, slot) in enumerate((("Ann", 0), ("Hal", 9))):
+            p = rec + (S.RECORD_PARENT1 if place == 0 else S.RECORD_PARENT2)
+            e.write(p, name.encode().ljust(25, b"\0"))
+            e.write(p + S.PEEP_VALID, b"\x01")
+            e.w32(p + S.PEEP_GENDER, place)
+            e.w32(p + S.PEEP_SLOT, slot)
+    scene = e.alloc(0x100)
+    for off, v in ((0x0C, 0), (0x10, 0), (0x14, 800), (0x18, 600), (0x74, 10), (0x78, 20), (0x7C, 200), (0x80, 110),
+                   (0x84, 300), (0x88, 40)):
+        e.w32(scene + off, v)
+    objects = {n: e.alloc(0x40) for n in ("window", "graphics", "strings", "font", "image")}
+    calls = []
+
+    def seam(name):
+        def fn(emu):
+            args = [emu.r32(emu.reg(__import__("unicorn").x86_const.UC_X86_REG_ESP) + 4 + 4 * k) for k in range(7)]
+            calls.append((name, args))
+            if name in ("window", "graphics", "strings"):
+                return objects[name], 0
+            if name == "GetFont":
+                return objects["font"], 4
+            if name == "GetImage":
+                return objects["image"], 4
+            if name == "GetFamilyRecord":
+                return records[args[0]], 4
+            return 0, POPS[name]
+        return fn
+    for target, name in names.items():
+        e.seam_live(target, seam(name))
+    if members is not None:
+        installed(e, pe, delta, members)
+    return e, draw, scene, records, calls
+
+
+def frames(calls):
+    return [a[2] for n, a in calls if n == "Draw" and a[0] == 0x268]
+
+
+@pytest.mark.parametrize("delta", (0, 0x1A0000))
+def test_the_late_spouse_is_drawn_under_the_current_spouse_with_the_games_own_calls(built, delta):
+    member = (5, 0, 2, 2, "Bob")
+    e, draw, scene, records, calls = draw_family_world(built, delta, [member])
+    before = [e.read(r, 0x6C8) for r in records]
+    e.call(draw, (100, 50, 1), ecx=scene)
+    ys = frames(calls)
+    parent1, spouse = 50 - 2 + 20, 50 + 110
+    assert ys == [parent1, spouse, spouse + (spouse - parent1)]           # one parent step under the spouse
+    parents = [a for n, a in calls if n == "DrawParent"]
+    assert len(parents) == 3 and parents[2][3:6] == [0, 2, 2]              # Bob's sex, head and body
+    rect = parents[2][0]
+    assert e.rs32(rect + 4) == spouse + (spouse - parent1) + 0x0F and e.rs32(rect + 12) == spouse + (spouse - parent1) + 0x42
+    names = [e.read(a[0], 4) for n, a in calls if n == "DrawString"]
+    assert names[-1] == b"Bob\0"
+    assert not [n for n, _a in calls if n == "DrawChild"]                  # no child place: no child frame
+    assert [e.read(r, 0x6C8) for r in records] == before                   # the tree's data untouched
+
+
+@pytest.mark.parametrize("members, gen", [([], 1), ([(5, 0, 2, 2, "Bob")], 0), (None, 1)])
+def test_without_a_member_or_on_an_older_row_or_with_revive_off_the_row_is_the_games(built, members, gen):
+    e, draw, scene, records, calls = draw_family_world(built, 0, members)
+    e.call(draw, (100, 50, gen), ecx=scene)
+    assert len(frames(calls)) == 2 and len([n for n, _a in calls if n == "DrawParent"]) == 2
+
+
+PARENT_SEARCH = bytes.fromhex("53565733ff8db1f4870300")
+
+
+@pytest.mark.parametrize("age, career, parent, revive, father", [
+    (400, -1, True, 1, True), (2000, -1, True, 1, True), (399, -1, True, 1, False), (400, -1, False, 1, False),
+    (400, -1, True, 0, False), (400, 5, False, 0, True)])
+def test_a_revived_grown_up_with_no_career_can_be_the_father(built, age, career, parent, revive, father):
+    import pefile
+    import b200_history_sites as S
+    import gen_b200_history_sites as G
+    from b200_time_emu import Emu
+    exe = revive_exe()
+    data = exe.read_bytes()
+    pe = pefile.PE(data=data, fast_load=True)
+    sites = G.validate_variant(data, G.validate(Path(B200_CORE).read_bytes()))
+    e = Emu(exe, built / "vf2revive_b200.dll")
+    found = [m.start() for m in re.finditer(re.escape(PARENT_SEARCH), data)]
+    assert len(found) == 2
+    by_sex = {}
+    for off in found:
+        va = file_to_va(pe, off)
+        by_sex[e.read(va + 0x33, 7)[-1]] = va                               # cmp dword [esi-1512Ch], 0 / 1
+    patriarch = by_sex[0]
+    manager, tree = sites["VILLAGER_MANAGER"], sites["FAMILY_TREE"]
+    _at, flag = links(e, pe, 0)
+    e.write(flag, bytes([revive]))
+    v = manager + S.VILLAGER_ARRAY_OFFSET + 3 * S.VILLAGER_STRIDE
+    e.write(v + S.VILLAGER_ACTIVE, b"\x01")
+    e.write(v + S.VILLAGER_LEFT_HOME, b"\x00")
+    e.w32(v + S.VILLAGER_HEALTH, 80)
+    e.w32(v + S.VILLAGER_GENDER, 0)
+    e.w32(v + S.VILLAGER_AGE, age)
+    e.w32(v + 0x6B8C, career & 0xFFFFFFFF)
+    e.w32(tree + 4, 1)
+    rec = tree + S.FAMILY_RECORD_SIZE - S.FAMILY_RECORD_BASE
+    e.write(rec, bytes(S.FAMILY_RECORD_SIZE))
+    e.write(rec, b"\x01")
+    p2 = rec + S.RECORD_PARENT2
+    e.write(p2 + S.PEEP_VALID, b"\x01")
+    e.w32(p2 + S.PEEP_SLOT, 3 if parent else 7)
+    got = e.call(patriarch, (), ecx=manager)
+    assert (got == v) is father, (hex(got), hex(v))

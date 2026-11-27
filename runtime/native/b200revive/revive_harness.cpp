@@ -26,6 +26,7 @@ struct VF2ReviveHost {
     void *stockSave;
 };
 struct Candidate { int index, role, ageUnits, sex, head, body; char name[28]; const unsigned char *entry; };
+struct Member { int slot, sex, head, body; char name[28]; const unsigned char *entry; };
 struct Status { unsigned magic, version, requested, installed, entries, captures, lastLoad, lastSave, revived; };
 
 static unsigned char Records[30][0x7BC];
@@ -122,16 +123,26 @@ int main(int argc, char **argv) {
     typedef void (__cdecl *DeathFn)(int);
     typedef int (__cdecl *CandsFn)(Candidate *, int);
     typedef void (__cdecl *DoneFn)(int, int, int, const char *);
+    typedef int (__cdecl *MembersFn)(Member *, int);
+    MembersFn members = (MembersFn)GetProcAddress(m, "B200Revive_Members");
     StartupFn startup = (StartupFn)GetProcAddress(m, "B200Revive_Startup");
     DeathFn death = (DeathFn)GetProcAddress(m, "B200Revive_OnDeath");
     CandsFn cands = (CandsFn)GetProcAddress(m, "B200Revive_Candidates");
     DoneFn done = (DoneFn)GetProcAddress(m, "B200Revive_Done");
     volatile Status *status = (volatile Status *)GetProcAddress(m, "B200Revive_Status");
-    if (!startup || !death || !cands || !done || !status) { printf("noexports\n"); return 4; }
+    if (!startup || !death || !cands || !done || !status || !members) { printf("noexports\n"); return 4; }
+    volatile int *given = 0;
     static VF2ReviveHost host = { 0x31485652u, 1, sizeof(VF2ReviveHost), SaveRecord, SavePath, CurrentSlot,
                                   CurrentFamily, Generations, Vtable, (void *)&StockLoad, (void *)&StockSave };
     int a = 2;
     if (a < argc && !strcmp(argv[a], "hostbad")) { host.magic = 0; ++a; }
+    if (a < argc && !strcmp(argv[a], "skin")) {          // the Skin Tones stand-in, loaded before the deaths
+        strcpy_s(cut + 1, MAX_PATH - (cut + 1 - dll), "vf2skin_b200.dll");
+        HMODULE s = LoadLibraryA(dll);
+        given = s ? (volatile int *)GetProcAddress(s, "B200SkinStandin_Given") : 0;
+        printf("skin %d\n", given ? 1 : 0);
+        ++a;
+    }
     startup(&host);
     printf("installed %u\n", status->installed);
     for (; a < argc; ++a) {
@@ -184,6 +195,18 @@ int main(int argc, char **argv) {
                 Villager(s, out[k].name, out[k].sex, out[k].head, out[k].body, out[k].ageUnits);
                 done(i, s, out[k].ageUnits, role);
             }
+        } else if (!strcmp(c, "members")) {
+            Member out[8];
+            int n = members(out, 8);
+            printf("members %d\n", n);
+            for (int i = 0; i < n; ++i)
+                printf("member %s slot %d sex %d head %d body %d\n", out[i].name, out[i].slot, out[i].sex,
+                       out[i].head, out[i].body);
+        } else if (!strcmp(c, "given")) {
+            if (given) printf("given %d slot %d tone %d birth %d\n", given[0], given[1], given[2], given[3]);
+        } else if (!strcmp(c, "remarry")) {                         // a new spouse in parent 2's place
+            Villager(9, "Hal", 0, 6, 6, 800);
+            Peep(1, "Hal", 0, 6, 6, 9);
         } else if (!strcmp(c, "status")) {
             printf("status installed %u entries %u captures %u load %u save %u revived %u\n", status->installed,
                    status->entries, status->captures, status->lastLoad, status->lastSave, status->revived);

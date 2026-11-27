@@ -16586,7 +16586,24 @@ static VF2ReviveHost gVF2ReviveHost;
 static void (__cdecl *gVF2ReviveOnDeathFn)(int);
 static int (__cdecl *gVF2ReviveCandidatesFn)(VF2ReviveCandidate *, int);
 static void (__cdecl *gVF2ReviveDoneFn)(int, int, int, const char *);
-static volatile unsigned *gVF2ReviveStatus;
+// A revived family member who lives in the house outside the Family Tree's records (B200Revive_Members).
+struct VF2ReviveMember {
+    int slot, sex, head, body;
+    char name[28];
+    const unsigned char *entry;
+};
+// The DLL's status block and its members export, as the loader found them, in a small section of their own
+// (.vf2rvlk, "RVLK"), so the emulation tests can point them at their stand-ins; zero until the DLL loaded.
+struct VF2ReviveLinks {
+    unsigned magic;
+    volatile unsigned *status;
+    int (__cdecl *members)(VF2ReviveMember *, int);
+};
+#pragma section(".vf2rvlk", read, write)
+extern "C" __declspec(allocate(".vf2rvlk"))
+VF2ReviveLinks gVF2ReviveLinks = { 0x4B4C5652u, 0, 0 };
+#define gVF2ReviveStatus (gVF2ReviveLinks.status)
+#define gVF2ReviveMembersFn (gVF2ReviveLinks.members)
 
 static void VF2LoadReviveDll() {
     unsigned short path[512];
@@ -16607,8 +16624,10 @@ static void VF2LoadReviveDll() {
     gVF2ReviveCandidatesFn = (int (__cdecl *)(VF2ReviveCandidate *, int))GetProcAddress(module, "B200Revive_Candidates");
     gVF2ReviveDoneFn = (void (__cdecl *)(int, int, int, const char *))GetProcAddress(module, "B200Revive_Done");
     gVF2ReviveStatus = (volatile unsigned *)GetProcAddress(module, "B200Revive_Status");
+    gVF2ReviveMembersFn = (int (__cdecl *)(VF2ReviveMember *, int))GetProcAddress(module, "B200Revive_Members");
     void *state = theGameState::Get();
-    if (!startup || !gVF2ReviveOnDeathFn || !gVF2ReviveCandidatesFn || !gVF2ReviveDoneFn || !gVF2ReviveStatus || !state) {
+    if (!startup || !gVF2ReviveOnDeathFn || !gVF2ReviveCandidatesFn || !gVF2ReviveDoneFn || !gVF2ReviveStatus ||
+        !gVF2ReviveMembersFn || !state) {
         gVF2ReviveStatus = 0;
         return;
     }
@@ -16648,6 +16667,29 @@ extern "C" void __cdecl VF2ReviveOnDeath(void *state) {
     unsigned slot = offset / kVF2ReviveVillagerStride;
     if (slot >= (unsigned)kVF2ReviveHouseholdSlots) return;
     gVF2ReviveOnDeathFn((int)slot);
+}
+
+// CVillagerManager::GetMatriarch / GetPatriarch ask CareerType() of every grown-up at home and take the first with a
+// career (VillagerManager.obj: their two CareerType calls are retargeted here). A family member Revive brought back
+// at 20 with no career is a grown-up who can have babies (the owner): while Revive is on, a villager at home aged 20
+// or more (400 units) with no career who is parent 1 or parent 2 of the current generation answers 1. Nobody else's
+// answer changes (the game sends a child with no career away at 380 units, so no other villager is like that).
+extern "C" int __fastcall VF2ReviveParentCareerType(CVillagerSkills *skills, void *) {
+    int type = (int)skills->CareerType();
+    if (type != 0 || gVF2Revive != 1) return type;
+    unsigned char *v = (unsigned char *)skills - 0x6B8C;
+    unsigned char *first = (unsigned char *)&VillagerManager + kVF2ReviveVillagersOffset;
+    if (v < first || (unsigned)(v - first) % kVF2ReviveVillagerStride != 0) return type;
+    unsigned slot = (unsigned)(v - first) / kVF2ReviveVillagerStride;
+    if (slot >= (unsigned)kVF2ReviveHouseholdSlots) return type;
+    if (*(int *)(v + 0x6A54) < 400 || *(int *)(v + 0x6B8C) != -1) return type;
+    const unsigned char *record = (const unsigned char *)FamilyTree.GetCurrentFamily();
+    if (!record) return type;
+    for (int place = 0; place < 2; ++place) {
+        const unsigned char *peep = record + (place == 0 ? 0x04 : 0xDC);
+        if (peep[0x1A] && *(const int *)(peep + 0x28) == (int)slot) return 1;
+    }
+    return type;
 }
 
 // ---- bringing one back (the Revive a Family Member row)
@@ -18519,7 +18561,92 @@ public:
         ldwColor color,
         ldwFont *font
     );
+    void SetClipping(ldwRect rect);
 };
+
+// ---- Revive on the game's Family Tree screen: a remarried partner's late spouse, under the current spouse.
+// CFamilyTreeScene::DrawFamily's spouse block (the frame 268h, the name, DrawParent) ends at +28Eh; a cave there
+// calls VF2ReviveDrawMembers(scene, record, frame) for every row, and it draws each revived family member of the
+// CURRENT generation the way the block draws the spouse, one parent step lower (the step from parent 1's frame to the
+// spouse's). The block's own frame values: [ebp-14h] frame x, [ebp-10h] the spouse's frame y, [ebp-20h] parent 1's,
+// [ebp-24h] the name x, [ebp-28h] DrawParent's point x, [ebp-38h] / [ebp-30h] its rectangle's left / right.
+#pragma comment(linker, "/alternatename:_VF2ReviveDrawParentSymbol=?DrawParent@CFamilyTreeScene@@AAEXAAUldwRect@@UldwPoint@@HHHM@Z")
+#pragma comment(linker, "/alternatename:_VF2ReviveCheckForPeepHitSymbol=?CheckForPeepHit@CFamilyTreeScene@@AAE_NUldwPoint@@@Z")
+extern "C" void __cdecl VF2ReviveDrawParentSymbol();
+extern "C" void __cdecl VF2ReviveCheckForPeepHitSymbol();
+typedef void (__fastcall *VF2ReviveDrawParentFn)(void *scene, void *, ldwRect *rect, int x, int y, int sex, int head,
+                                                int body, float scale);
+typedef bool (__fastcall *VF2ReviveHitFn)(void *scene, void *, int x, int y);
+
+class CFamilyTreeInfoDlg : public ldwDialog {
+private:
+    unsigned char opaqueStorage[0x1000];
+public:
+    CFamilyTreeInfoDlg(CFamilyTree::SPeepRecord *record);
+    virtual ~CFamilyTreeInfoDlg();
+};
+
+static const int kVF2ReviveMaxMembers = 4;
+static int gVF2ReviveDrawnCount;
+static ldwRect gVF2ReviveDrawnRect[kVF2ReviveMaxMembers];
+static VF2ReviveMember gVF2ReviveDrawn[kVF2ReviveMaxMembers];
+
+extern "C" void __cdecl VF2ReviveDrawMembers(void *scene, const unsigned char *record, const unsigned char *frame) {
+    if (!record || record != (const unsigned char *)FamilyTree.GetCurrentFamily()) return;
+    gVF2ReviveDrawnCount = 0;
+    if (!VF2ReviveInstalled() || !gVF2ReviveMembersFn || !record[0xF6]) return;     // the spouse block drew
+    VF2ReviveMember list[kVF2ReviveMaxMembers];
+    int count = gVF2ReviveMembersFn(list, kVF2ReviveMaxMembers);
+    if (count <= 0) return;
+    int frameX = *(const int *)(frame - 0x14);
+    int spouseY = *(const int *)(frame - 0x10);
+    int step = spouseY - *(const int *)(frame - 0x20);
+    if (step <= 0) return;
+    int nameX = *(const int *)(frame - 0x24);
+    int pointX = *(const int *)(frame - 0x28);
+    int left = *(const int *)(frame - 0x38), right = *(const int *)(frame - 0x30);
+    ldwGameWindow *window = ldwGameWindow::Get();
+    theGraphicsManager *graphics = theGraphicsManager::Get();
+    ldwFont *font = theStringManager::Get()->GetFont((FontId)1);
+    ldwColor white = { 0xFFFFFFFFu };
+    for (int i = 0; i < count; ++i) {
+        int y = spouseY + step * (i + 1);
+        window->SetClipping(*(const ldwRect *)((const unsigned char *)scene + 0x0C));
+        graphics->Draw((EImage)0x268, frameX, y, 1.0f, 100);
+        window->DrawString(list[i].name, nameX, y + 0x1F, white, font);
+        ldwRect rect = { left, y + 0x0F, right, y + 0x42 };
+        ((VF2ReviveDrawParentFn)&VF2ReviveDrawParentSymbol)(scene, 0, &rect, pointX, y + 0x3E, list[i].sex,
+                                                            list[i].head, list[i].body, 1.0f);
+        gVF2ReviveDrawnRect[gVF2ReviveDrawnCount] = rect;
+        gVF2ReviveDrawn[gVF2ReviveDrawnCount++] = list[i];
+    }
+}
+
+// CFamilyTreeScene::HandleMouse's CheckForPeepHit call: the game's own hit test first; a click on nobody that lands
+// on a revived family member drawn above opens the game's own person window (CFamilyTreeInfoDlg) for them, with a
+// Family Tree record made as the game makes one (name, sex, looks, slot; UpdatePeepRecord fills career and likes).
+extern "C" bool __fastcall VF2ReviveTreeClick(void *scene, void *, int x, int y) {
+    if (((VF2ReviveHitFn)&VF2ReviveCheckForPeepHitSymbol)(scene, 0, x, y)) return true;
+    for (int i = 0; i < gVF2ReviveDrawnCount; ++i) {
+        const ldwRect &r = gVF2ReviveDrawnRect[i];
+        if (x < r.left || x >= r.right || y < r.top || y >= r.bottom) continue;
+        unsigned char peep[0xD8];
+        memset(peep, 0, sizeof(peep));
+        strncpy((char *)peep, gVF2ReviveDrawn[i].name, 25);
+        peep[0x1A] = 1;
+        *(int *)(peep + 0x1C) = gVF2ReviveDrawn[i].sex;
+        *(int *)(peep + 0x20) = gVF2ReviveDrawn[i].head;
+        *(int *)(peep + 0x24) = gVF2ReviveDrawn[i].body;
+        *(int *)(peep + 0x28) = gVF2ReviveDrawn[i].slot;
+        *(int *)(peep + 0x2C) = -1;
+        *(int *)(peep + 0x30) = -1;
+        FamilyTree.UpdatePeepRecord((CFamilyTree::SPeepRecord *)peep);
+        CFamilyTreeInfoDlg dialog((CFamilyTree::SPeepRecord *)peep);
+        dialog.DoModal((ldwScene *)scene, false);
+        return true;
+    }
+    return false;
+}
 
 static unsigned int VF2LifetimeGenerationCount() {
     unsigned int saved = VF2PersistentCheatAndPurchaseMask() >> 8;
@@ -23903,6 +24030,76 @@ def patch_revive_death_capture(manifest):
         "helper": REVIVE_DEATH_HELPER_SYMBOL,
         "caves": caves,
         "gate": f"{REVIVE_FLAG_SECTION} byte 1 and the Revive DLL installed (VF2ReviveInstalled)",
+    }
+
+
+def patch_revive_parent_career(manifest):
+    """Revive: GetMatriarch / GetPatriarch's CareerType calls go to VF2ReviveParentCareerType (a relocation each;
+    no byte of either function changes)."""
+    obj = CoffObject(PATCHED / "VillagerManager.obj")
+    career = obj.symbol("?CareerType@CVillagerSkills@@QAE?BW4ECareerType@@XZ").index
+    helper = obj.append_undefined_symbol("@VF2ReviveParentCareerType@8")
+    sites = {}
+    for name in ("?GetMatriarch@CVillagerManager@@QAEPAVCVillager@@XZ",
+                 "?GetPatriarch@CVillagerManager@@QAEPAVCVillager@@XZ"):
+        sym = obj.symbol(name)
+        sec = obj.section(sym.section)
+        found = []
+        for index in range(sec.nreloc):
+            vaddr, symbol_index, rtype = struct.unpack_from("<IIH", obj.buf, sec.reloc_ptr + index * 10)
+            if symbol_index == career and rtype == IMAGE_REL_I386_REL32:
+                found.append(vaddr)
+        if len(found) != 1 or obj.buf[sec.raw_ptr + found[0] - 1] != 0xE8:
+            raise RuntimeError(f"{name}: expected one CareerType call, found {len(found)}")
+        obj.retarget_relocation(sym.section, found[0], helper, IMAGE_REL_I386_REL32)
+        sites[name] = hex(found[0] - sym.value)
+    obj.write(PATCHED / "VillagerManager.obj")
+    manifest["ReviveParentCareer"] = {"status": "patched", "helper": "@VF2ReviveParentCareerType@8", "calls": sites}
+
+
+def patch_revive_family_tree_screen(manifest):
+    """Revive: CFamilyTreeScene::DrawFamily's spouse block ends with a call of VF2ReviveDrawMembers (a cave at +28Eh,
+    the movups it replaces moved into the cave; +28Eh is where both of the block's exits land, and no branch lands
+    inside the replaced bytes), and HandleMouse's CheckForPeepHit call goes to VF2ReviveTreeClick."""
+    obj = CoffObject(PATCHED / "FamilyTreeScene.obj")
+    name = "?DrawFamily@CFamilyTreeScene@@AAEXHHH@Z"
+    sym = obj.symbol(name)
+    sec = obj.section(sym.section)
+    offset = 0x28E
+    stolen = b"\x0F\x10\x86\x84\x00\x00\x00"                      # movups xmm0, [esi+84h]
+    raw = sec.raw_ptr + sym.value + offset
+    if bytes(obj.buf[raw:raw + len(stolen)]) != stolen:
+        raise RuntimeError("Unexpected DrawFamily spouse-block end bytes")
+    cave = sec.raw_size
+    payload = bytearray(b"\x60" b"\x55" b"\x53" b"\x56" b"\xE8\x00\x00\x00\x00" b"\x83\xC4\x0C" b"\x61" + stolen
+                        + b"\xE9\x00\x00\x00\x00")
+    call_at = cave + 5                                              # pushad, push ebp, push ebx, push esi, E8
+    if payload[call_at - cave - 1] != 0xE8:
+        raise RuntimeError("Revive tree cave: the relocation is not on its call's rel32")
+    back = sym.value + offset + len(stolen)
+    struct.pack_into("<i", payload, len(payload) - 4, back - (cave + len(payload)))
+    obj.insert_section_bytes(sym.section, cave, bytes(payload))
+    obj.append_relocation(sym.section, call_at, obj.append_undefined_symbol("_VF2ReviveDrawMembers"),
+                          IMAGE_REL_I386_REL32)
+    sym = obj.symbol(name)
+    patch_section_near_jump(obj, sym.section, sym.value + offset, cave, len(stolen), stolen)
+    mouse = obj.symbol("?HandleMouse@CFamilyTreeScene@@UAE_NHUldwPoint@@@Z")
+    msec = obj.section(mouse.section)
+    hit = obj.symbol("?CheckForPeepHit@CFamilyTreeScene@@AAE_NUldwPoint@@@Z").index
+    calls = []
+    for index in range(msec.nreloc):
+        vaddr, symbol_index, rtype = struct.unpack_from("<IIH", obj.buf, msec.reloc_ptr + index * 10)
+        if symbol_index == hit and rtype == IMAGE_REL_I386_REL32:
+            calls.append(vaddr)
+    if len(calls) != 1:
+        raise RuntimeError(f"HandleMouse: expected one CheckForPeepHit call, found {len(calls)}")
+    obj.retarget_relocation(mouse.section, calls[0], obj.append_undefined_symbol("@VF2ReviveTreeClick@16"),
+                            IMAGE_REL_I386_REL32)
+    obj.write(PATCHED / "FamilyTreeScene.obj")
+    manifest["ReviveFamilyTreeScreen"] = {
+        "status": "patched",
+        "draw": {"function": name, "cave_at": hex(offset), "helper": "_VF2ReviveDrawMembers", "bytes": payload.hex()},
+        "click": {"call": hex(calls[0] - mouse.value), "helper": "@VF2ReviveTreeClick@16"},
     }
 
 
@@ -43778,8 +43975,11 @@ def main():
     # post-asset phase changes .vf2preg from 00 to 01 only when selected, so
     # this feature adds no executable-matrix dimension.
     patch_allow_older_pregnancies(manifest)
-    # Revive: the death capture caves (VillagerState.obj, after the older-pregnancy trampoline).
+    # Revive: the death capture caves (VillagerState.obj, after the older-pregnancy trampoline), the grown-up parent
+    # rule (VillagerManager.obj) and the Family Tree screen (FamilyTreeScene.obj).
     patch_revive_death_capture(manifest)
+    patch_revive_parent_career(manifest)
+    patch_revive_family_tree_screen(manifest)
     patch_next_generation_age_gate(manifest)
     # Force Marriage Email is deliberately a normal queued proposal.  Do not
     # install the former cheat-only Reject reroll route; native Accept,

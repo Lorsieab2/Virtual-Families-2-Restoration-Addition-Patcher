@@ -6,14 +6,20 @@ name, sex, head/body, likes/dislikes); **age**: someone who died younger than 20
 game's own 20-year mark) **with their career, level and salary at death**; only the dead; money, in game, in Special
 Upgrades, **$25,000**, free with Free and Guaranteed Cheats; a dead spouse whose partner remarried **takes no place in
 the Family Tree's records** (no child count, heir, Next Generation or Up to 28 Children change) and lives in the house
-as a family member; fertility and "Wants kids?" restored, moods and needs fresh; current generation only; snapshots in
+as a family member, drawn by Revive on the game's own Family Tree screen under the current spouse (portrait,
+name, frame: the game's own art and font), and clicking them opens the game's own person window; fertility and "Wants kids?" restored, moods and needs fresh; current generation only; snapshots in
 a per-save sidecar, taken at every death; a "Revived" record in the Family History. Setting **Revive**: on by default
 and in Owner's Defaults (it costs money).
 
-A grown-up revived at 20 with no career needs no special handling: the game sends a child to college only when the
-age CROSSES 380 units with no career (`AllVillagersTimeflowUpkeep` +1C4h: the old age below 17Ch and the new one at
-or above it), which a revival at 400 never does; and no career test gates a baby (the `CareerType` callers are the
-career-room drops, the details screen, the diagnosis and the AI, not `TryToMakeBaby`).
+A grown-up revived at 20 with no career is not sent away: the game sends a child to college only when the age
+CROSSES 380 units with no career (`AllVillagersTimeflowUpkeep` +1C4h: the old age below 17Ch and the new one at or
+above it), which a revival at 400 never does. But `CVillagerManager::GetMatriarch` / `GetPatriarch` -- the parents
+`TryToMakeBaby`, `CVillagerPlans::ProcessCurrentPlan` and `CVillager::Impregnate` use -- take the first grown-up at
+home WITH A CAREER, so such a person could not have a baby. Their two `CareerType` calls go to
+`VF2ReviveParentCareerType`: while Revive is on, a villager at home aged 400 units or more with no career who is
+parent 1 or parent 2 of the current generation answers 1; nobody else's answer changes (the game itself never keeps a
+no-career villager of 380+ at home). The Family History DLL takes the father from the game's own Impregnate, so its
+Conception and Birth records name them.
 
 ## The pieces
 
@@ -59,15 +65,28 @@ career-room drops, the details screen, the diagnosis and the AI, not `TryToMakeB
 * `SetHealth` / `AdjustHealth` are pinned by no companion DLL; every other DLL's pins were re-proved on this
   branch's builds (history 44, kids 19, outfits 23, refresh 27, time 31, titlebox 30, translations 12 sites).
 
-## Not built yet (the owner's latest request)
+## The Family Tree screen: a remarried partner's late spouse
 
-* Drawing a remarried partner's revived spouse on the game's own Family Tree screen, under the current spouse, with
-  the game's portrait and font, and clicking them as a tree person. The screen is `CFamilyTreeScene` (`DrawScene` ->
-  `DrawFamily(gen, x, y)` -> `DrawParent` / `DrawChild` -> `DrawPeep(point, head, body, sex, scale, ...)`; clicks in
-  `CheckForPeepHit` / `CheckForFamilyPeepHit`); no companion DLL pins it. The plan: the executable passes the scene's
-  vtable and its drawing calls in the host table, the DLL keeps the list of these family members in the snapshot file
-  and draws them where `DrawFamily` places the current generation's second parent, one row down. Not proved or built
-  in this change: that point inside `DrawFamily` (its scroll and scale) must be traced and emulated first.
+* The DLL keeps them in the snapshot file as a member (source 7, their household slot in the entry's spare bytes) and
+  answers `B200Revive_Members` with those whose slot still holds them, alive and at home, of the current generation.
+* `CFamilyTreeScene::DrawFamily`'s spouse block (frame image 268h, the name in font 1, `DrawParent` with the rectangle
+  y+0Fh..y+42h and the point y+3Eh) ends at +28Eh, where both its exits land; a cave there (the `movups` it replaces
+  moved into it, all registers saved; no branch lands inside the replaced bytes) calls `VF2ReviveDrawMembers`, which
+  draws each member of the CURRENT generation the same way, one parent step lower (the step from parent 1's frame to
+  the spouse's). Emulated on the branch build, at the link address and relocated: three frames instead of two, at the
+  right heights, `DrawParent` with their sex, head and body, their name, no child frame, the tree's records byte for
+  byte unchanged; with no member, on an older row or with Revive off, the row is the game's own.
+* `CFamilyTreeScene::HandleMouse`'s `CheckForPeepHit` call goes to `VF2ReviveTreeClick`: the game's own hit test
+  first; a click on nobody inside a member's portrait rectangle opens the game's own person window
+  (`CFamilyTreeInfoDlg`) with a Family Tree record made as the game makes one (`UpdatePeepRecord` fills career and
+  likes). The click is built but not emulated: the live check below is its proof.
+
+## Skin Tones (when VF2 has them)
+
+At every death the DLL asks `vf2skin_b200.dll`, when it is loaded, `int B200Skin_ToneOf(int slot)` (tone | birth tone
+<< 8, or -1) and keeps both bytes in the entry's spare bytes (offset 3500, flag bit 1 at 3503); after a revival it
+calls `void B200Skin_ToneGive(int slot, int tone, int birthTone)`. A snapshot without a tone gives nothing. Proved
+with a stand-in Skin Tones DLL in the harness.
 
 ## Known limits
 
@@ -85,8 +104,12 @@ career-room drops, the details screen, the diagnosis and the AI, not `TryToMakeB
    their career, level and salary; anyone younger at the age they died. **Next** goes on; after the last, nothing
    chosen -> the money comes back.
 3. The revived child is in the Family Tree in their old place (not a second entry); Next Generation still behaves.
-4. A spouse dies childless, the partner remarries, the spouse is revived: they live in the house; the Family Tree's
-   children, Next Generation and the child count are unchanged (they are not drawn on the tree yet).
+4. A spouse dies childless, the partner remarries, the spouse is revived: they live in the house; on the Family
+   Tree screen they appear under the current spouse (frame, name, portrait like the spouse's); clicking them opens the
+   person window; the tree's children, Next Generation and the child count are unchanged; the log says
+   `Family role: Family member (shown under the current spouse in the Family Tree)`.
+4a. A revived spouse at 20 with no career and their partner can have a baby; the Family History log names them as a
+   parent.
 5. Save, quit, reload: the revived person is there; the snapshot list no longer offers them.
 6. The Family History log (if on) gets `Arrived` with `How: Revived (Revive a Family Member)`.
 7. Not offered: someone alive, away at college / Boarding School / Talent Scout, divorced, or of an earlier

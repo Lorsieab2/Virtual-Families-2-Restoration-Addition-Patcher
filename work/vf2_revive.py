@@ -78,9 +78,11 @@ MARK_WORDS = {UNKNOWN: "unknown", INFERRED: "inferred", EXACT: "exact"}
 # Where a snapshot came from, best first. CAPTURED is the game's own capture at the death (the in-game half); the
 # rest are the backfill's sources in the owner's order.
 CAPTURED, THIS_SAVE, OTHER_SAVE, BACKUP, TREE, LOG = 1, 2, 3, 4, 5, 6
+MEMBER = 7          # revived, and living in the house outside the Family Tree's records (the DLL keeps them)
 SOURCE_WORDS = {CAPTURED: "captured at the death", THIS_SAVE: "their own record in this save",
                 OTHER_SAVE: "their record in the game's other save of the slot", BACKUP: "their record in a backup",
-                TREE: "the Family Tree", LOG: "the Family History log"}
+                TREE: "the Family Tree", LOG: "the Family History log",
+                MEMBER: "revived: a family member outside the Family Tree"}
 
 FIELDS = ("name", "full_name", "sex", "head", "body", "likes", "dislikes", "likes_text", "dislikes_text", "career",
           "fertility", "procreation_desire", "age_at_death", "cause", "parents", "first_name", "role", "generation",
@@ -101,7 +103,10 @@ _ENTRY = (
 _BYTES = (                              # offset, size, attribute (raw bytes, NUL padded)
     (84, 28, "name"), (112, 28, "heir_name"), (140, 28, "father"), (168, 28, "mother"), (196, 12, "likes"),
     (208, 12, "dislikes"), (220, 40, "likes_text"), (260, 40, "dislikes_text"), (300, _MARKS, "marks"),
-    (320, reader.VILLAGER_RECORD_SIZE, "record"), (2300, 1204, "full_name"),
+    (320, reader.VILLAGER_RECORD_SIZE, "record"), (2300, 1200, "full_name"),
+    # the last four bytes (the DLL's S_*): the skin tone and birth tone at the death (B200Skin_ToneOf, Skin Tones),
+    # a revived family member's household slot, and flags (1: a tone is kept); read and written back as they are
+    (3500, 4, "spare"),
 )
 ENTRY_SIZE = 3504
 
@@ -159,6 +164,7 @@ class Snapshot:
     dislikes_text: bytes = b""
     record: bytes = b""
     full_name: bytes = b""
+    spare: bytes = b"\0\0\0\0"
     marks: dict = field(default_factory=dict)
 
     def mark(self, name: str) -> int:
@@ -221,6 +227,8 @@ def unpack_entry(raw: bytes) -> Snapshot | None:
             if any(b > EXACT for b in value):
                 return None
             s.marks = {f: value[i] for i, f in enumerate(FIELDS)}
+        elif attr == "spare":
+            setattr(s, attr, value)
         elif attr in ("record", "likes", "dislikes"):
             setattr(s, attr, value)
         else:
@@ -308,6 +316,8 @@ def merge(a: Snapshot, b: Snapshot) -> Snapshot:
             out.marks[f] = b.mark(f)
     if not out.heir_name and b.heir_name:
         out.heir_name, out.heir_sex, out.heir_head, out.heir_body = b.heir_name, b.heir_sex, b.heir_head, b.heir_body
+    if not (out.spare[3] & 1) and len(b.spare) == 4 and b.spare[3] & 1:
+        out.spare = b.spare                      # a skin tone kept at the death
     out.source = min(a.source, b.source)
     return out
 

@@ -92,7 +92,12 @@ enum { E_SOURCE = 0, E_GENERATION = 4, E_ROLE = 8, E_AGE = 12, E_CAUSE = 16, E_S
        E_CAREER = 32, E_LEVEL = 36, E_FERTILITY = 40, E_DESIRE = 44, E_FIRST = 48, E_BIO0C = 52, E_FHEAD = 56,
        E_FBODY = 60, E_MHEAD = 64, E_MBODY = 68, E_HEIR_SEX = 72, E_HEIR_HEAD = 76, E_HEIR_BODY = 80, E_NAME = 84,
        E_HEIR_NAME = 112, E_FATHER = 140, E_MOTHER = 168, E_LIKES = 196, E_DISLIKES = 208, E_LIKES_TEXT = 220,
-       E_DISLIKES_TEXT = 260, E_MARKS = 300, E_RECORD = 320, E_FULL = 2300 };
+       E_DISLIKES_TEXT = 260, E_MARKS = 300, E_RECORD = 320, E_FULL = 2300, E_SPARE = 3500 };
+// The entry's last four bytes (vf2_revive SPARE_*): the skin tone and birth tone vf2skin_b200.dll gave at the death
+// (B200Skin_ToneOf), the household slot of a revived family member who lives outside the Family Tree, and flags.
+enum { S_TONE = E_SPARE, S_BIRTH_TONE = E_SPARE + 1, S_SLOT = E_SPARE + 2, S_FLAGS = E_SPARE + 3 };
+enum { FLAG_TONE = 1 };
+enum { SRC_MEMBER = 7 };          // revived: lives in the house, outside the Family Tree's records
 // the villager record (docs/vf2-save-format.md section 4)
 enum { R_AGE = 0x08, R_SEX = 0x0C, R_FIRST = 0x10, R_BIO0C = 0x14, R_NAME = 0x18, R_HEAD = 0x34, R_BODY = 0x38,
        R_FATHER = 0x3C, R_MOTHER = 0x56, R_FHEAD = 0x70, R_FBODY = 0x74, R_MHEAD = 0x78, R_MBODY = 0x7C,
@@ -206,7 +211,7 @@ static int ReadSidecar(const char *path, unsigned char (*out)[kEntry], unsigned 
     for (unsigned i = 0; i < n; ++i) {
         const unsigned char *e = FileBuffer + kHeader + i * kEntry;
         for (unsigned f = 0; f < F_COUNT; ++f) if (e[E_MARKS + f] > M_EXACT) return -1;
-        if (U32(e, E_SOURCE) < 1 || U32(e, E_SOURCE) > 6) return -1;
+        if (U32(e, E_SOURCE) < 1 || U32(e, E_SOURCE) > SRC_MEMBER) return -1;
         Copy(out[i], e, kEntry);
     }
     *count = n;
@@ -314,6 +319,16 @@ static void Capture(const unsigned char *r, int slot, unsigned source) {
         e[E_MARKS + F_ROLE] = M_EXACT;
     }
     Copy(e + E_RECORD, r, kRecord);
+    // Skin Tones (vf2skin_b200.dll, when it is loaded): the tone and the birth tone, given back at a revival
+    HMODULE skin = GetModuleHandleW(L"vf2skin_b200.dll");
+    typedef int (__cdecl *ToneOfFn)(int slot);
+    ToneOfFn toneOf = skin ? (ToneOfFn)GetProcAddress(skin, "B200Skin_ToneOf") : 0;
+    int tone = toneOf ? toneOf(slot) : -1;
+    if (tone >= 0) {
+        e[S_TONE] = (unsigned char)(tone & 0xFF);
+        e[S_BIRTH_TONE] = (unsigned char)((tone >> 8) & 0xFF);
+        e[S_FLAGS] |= FLAG_TONE;
+    }
     static const unsigned char exact[] = { F_NAME, F_SEX, F_HEAD, F_BODY, F_LIKES, F_DISLIKES, F_CAREER, F_FERTILITY,
                                            F_DESIRE, F_AGE, F_CAUSE, F_PARENTS, F_FIRST_NAME, F_GENERATION, F_RECORD,
                                            F_CAREER_LEVEL };
@@ -452,6 +467,7 @@ extern "C" __declspec(dllexport) int __cdecl B200Revive_Candidates(B200ReviveCan
         if (e[E_MARKS + F_SEX] != M_EXACT || e[E_MARKS + F_HEAD] != M_EXACT || e[E_MARKS + F_BODY] != M_EXACT ||
             e[E_MARKS + F_NAME] != M_EXACT)
             continue;                                       // who they were must be known exactly
+        if (U32(e, E_SOURCE) == SRC_MEMBER) continue;      // revived already: lives in the house
         if (AliveNow(e)) continue;                          // only the dead
         int age = ReviveAge(e);
         B200ReviveCandidate &c = out[n++];
@@ -577,16 +593,69 @@ static void LogRevived(int slot, const unsigned char *e, int ageUnits, const cha
 }
 
 // The executable brought snapshot `index` back into household slot `newSlot` as `role` ("Parent", "Parent
-// (married in)", "Child"): it leaves the list (they live again; a later death is captured anew) and is logged.
+// (married in)", "Child", or "Family member": a remarried partner's late spouse, outside the Family Tree's records).
+// Their skin tone goes back to them (Skin Tones). A tree member leaves the list (they live again; a later death is
+// captured anew); a family member stays in it as a member (SRC_MEMBER, their slot) so the executable can draw them on
+// the game's Family Tree screen under the current spouse. Logged.
 extern "C" __declspec(dllexport) void __cdecl B200Revive_Done(int index, int newSlot, int ageUnits, const char *role) {
     if (!B200Revive_Status.installed || index < 0 || (unsigned)index >= EntryCount) return;
-    (void)newSlot;
+    unsigned char *e = Entries[index];
+    if (e[S_FLAGS] & FLAG_TONE) {
+        HMODULE skin = GetModuleHandleW(L"vf2skin_b200.dll");
+        typedef void (__cdecl *ToneGiveFn)(int slot, int tone, int birthTone);
+        ToneGiveFn give = skin ? (ToneGiveFn)GetProcAddress(skin, "B200Skin_ToneGive") : 0;
+        if (give) give(newSlot, e[S_TONE], e[S_BIRTH_TONE]);
+    }
+    bool member = role && Same(role, "Family member", 14);
     int slot = Host->currentSlot();
-    if (slot >= 1 && slot <= 5) LogRevived(slot, Entries[index], ageUnits, role ? role : "Child");
-    for (unsigned i = (unsigned)index; i + 1 < EntryCount; ++i) Copy(Entries[i], Entries[i + 1], kEntry);
-    --EntryCount;
+    if (slot >= 1 && slot <= 5)
+        LogRevived(slot, e, ageUnits, member ? "Family member (shown under the current spouse in the Family Tree)"
+                                             : role ? role : "Child");
+    if (member && newSlot >= 0 && newSlot < 30) {
+        Put32(e, E_SOURCE, SRC_MEMBER);
+        e[S_SLOT] = (unsigned char)newSlot;
+    } else {
+        for (unsigned i = (unsigned)index; i + 1 < EntryCount; ++i) Copy(Entries[i], Entries[i + 1], kEntry);
+        --EntryCount;
+    }
     B200Revive_Status.entries = EntryCount;
     ++B200Revive_Status.revived;
+}
+
+// The revived family members who live outside the Family Tree's records, as the house holds them now (their slot
+// still them, alive and at home), of the current generation of this family: the executable draws them under the
+// current spouse on the game's Family Tree screen.
+struct B200ReviveMember {
+    int slot, sex, head, body;
+    char name[28];
+    const unsigned char *entry;
+};
+
+extern "C" __declspec(dllexport) int __cdecl B200Revive_Members(B200ReviveMember *out, int max) {
+    if (!B200Revive_Status.installed || !out || max <= 0) return 0;
+    const unsigned char *rec = Host->currentFamily();
+    int gen = Host->generations();
+    if (!rec || gen <= 0) return 0;
+    int n = 0;
+    for (unsigned i = 0; i < EntryCount && n < max; ++i) {
+        const unsigned char *e = Entries[i];
+        if (U32(e, E_SOURCE) != SRC_MEMBER || I32(e, E_GENERATION) != gen) continue;
+        int slot = e[S_SLOT];
+        if (slot >= 30 || !Host->saveRecord(slot, RecordBuffer)) continue;
+        if (!RecordBuffer[0] || RecordBuffer[1] || I32(RecordBuffer, R_HEALTH) <= 0) continue;
+        if (!SameName(RecordBuffer + R_NAME, e + E_NAME) || I32(RecordBuffer, R_SEX) != I32(e, E_SEX) ||
+            I32(RecordBuffer, R_HEAD) != I32(e, E_HEAD) || I32(RecordBuffer, R_BODY) != I32(e, E_BODY))
+            continue;
+        B200ReviveMember &m = out[n++];
+        Zero(&m, sizeof(m));
+        m.slot = slot;
+        m.sex = I32(e, E_SEX);
+        m.head = I32(e, E_HEAD);
+        m.body = I32(e, E_BODY);
+        for (unsigned k = 0; k < 25 && e[E_NAME + k]; ++k) m.name[k] = (char)e[E_NAME + k];
+        m.entry = e;
+    }
+    return n;
 }
 
 // ---------------------------------------------------------------- install

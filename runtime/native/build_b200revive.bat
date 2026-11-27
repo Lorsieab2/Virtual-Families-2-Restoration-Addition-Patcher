@@ -18,5 +18,6 @@ if not exist "%ROOT%\build\vf2revive_b200.dll" exit /b 1
 if /I "%1"=="test" (
   cl /nologo /O2 /MT /EHsc /W4 /WX "%ROOT%\native\b200revive\revive_harness.cpp" /Fo"%ROOT%\build\vf2revive_harness.obj" /Fe"%ROOT%\build\vf2revive_harness.exe" /link kernel32.lib || exit /b 1
   if not exist "%ROOT%\build\vf2revive_harness.exe" exit /b 1
+  cl /nologo /O2 /MT /W4 /WX /LD "%ROOT%\native\b200revive\skin_standin.cpp" /Fo"%ROOT%\build\vf2skin_standin.obj" /Fe"%ROOT%\build\vf2skin_standin.dll" /link kernel32.lib || exit /b 1
 )
 exit /b 0
