@@ -308,6 +308,7 @@ class HistoryWorld:
         return w
 
     def __init__(self, exe, dll, delta=0, install=True):
+        self.exe_path, self.dll_path = exe, dll
         self.e = Emu(exe, dll, delta)
         self.seam_fns = {}
         self.delta = delta
@@ -1404,7 +1405,10 @@ def scenario_start_over_wipes_the_slot(w: HistoryWorld):
     w.fs.write(f"{ROOT}1\\Backups\\keep.txt", b"kept")
     w.start_over()
     assert ("Init", w.state) in w.calls
-    assert w.fs.under(f"{ROOT}1") == [w.fs.key(f"{ROOT}1\\Backups\\keep.txt")], "only Backups is kept"
+    log = w.history_path(1, 1)
+    assert w.fs.under(f"{ROOT}1") == sorted([w.fs.key(f"{ROOT}1\\Backups\\keep.txt"), w.fs.key(log)]), \
+        "only Backups is kept, and the log holds the Start Over"
+    assert w.records() == [("Start Over 1", ["  The earlier family's history was cleared."])]
     w.household(("Gus", MALE, 500))
     w.new_family(0)
     assert w.records() == [
@@ -1458,6 +1462,23 @@ def scenario_an_eviction_stays_in_its_own_slot(w: HistoryWorld):
     assert w.headings(2) == ["Generation 1"], w.headings(2)
     assert w.last(2)[1][-2:] == ["  How: Founder (adopted and started the family)", "  Generation: 1"]
     assert w.history(1, 1) == one, "Save 1's log is untouched"
+
+
+def scenario_a_start_over_outlives_the_game_being_closed(w: HistoryWorld):
+    """Start Over (the game saves the emptied family at once), then the game is closed before the next adoption: in
+    a new process (nothing kept in memory) the slot's next family still opens its log with the Start Over, dated
+    when it happened."""
+    founded(w)
+    w.start_over()
+    first = w.history(1, 1)
+    w2 = HistoryWorld(w.exe_path, w.dll_path, w.delta)
+    w2.fs.files.update(w.fs.files)
+    w2.fs.dirs |= w.fs.dirs
+    w2.set_slot(1)
+    w2.household(("Gus", MALE, 500))
+    w2.new_family(0)
+    assert w2.headings() == ["Start Over 1", "Generation 1"], w2.headings()
+    assert w2.history(1, 1).split("\r\n", 1)[1].startswith(first.split("\r\n", 1)[1])
 
 
 def scenario_rename_in_the_details_box(w: HistoryWorld):
@@ -1807,6 +1828,7 @@ ALL = [scenario_whole_names_in_the_log, scenario_names_are_logged_in_utf8,
        scenario_children_join_and_leave, scenario_next_generation, scenario_evict_then_new_family_keeps_the_log,
        scenario_start_over_wipes_the_slot, scenario_new_family_wipes_the_old_one, scenario_backfill_once,
        scenario_a_start_over_stays_in_its_own_slot, scenario_an_eviction_stays_in_its_own_slot,
+       scenario_a_start_over_outlives_the_game_being_closed,
        scenario_a_revived_person_who_dies_again_is_logged_again, scenario_the_log_name_for_revive_is_the_whole_name,
        scenario_a_load_with_no_family_writes_nothing, scenario_the_log_rolls_after_2000_records,
        scenario_numbers_continue_across_files, scenario_family_story_end_to_end]

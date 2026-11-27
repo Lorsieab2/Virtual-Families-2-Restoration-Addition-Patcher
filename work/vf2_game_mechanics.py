@@ -282,7 +282,7 @@ LEVELS = ("Beginner", "Novice", "Apprentice", "Licensed", "Practiced", "Accompli
 def _per_hour(salary: int) -> str:
     """A career's pay per hour of game time: salary / 4 every 3 age units (spec section 2, 0x4C452E)."""
     pay = salary / 2
-    return f"${pay:g}"
+    return f"${pay:,.2f}"
 
 
 def _career_lines() -> list[Fact]:

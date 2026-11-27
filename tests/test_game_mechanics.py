@@ -168,7 +168,10 @@ class PageTests(unittest.TestCase):
             self.assertEqual(len(salaries), 8)
             self.assertEqual(sum(1 for f in self.facts if f.text.startswith(name + ":")), 1, name)
         # pay per hour of game time is half the salary: Pastry Designer 30 -> $15
-        self.assertIn("Pastry Designer: $15 per hour of game time as a Beginner, $50 as a Master", self.text)
+        self.assertIn("Pastry Designer: $15.00 per hour of game time as a Beginner, $50.00 as a Master", self.text)
+        # pay is always shown with two decimals ($17.50, never $17.5 or $15): the end-to-end check, 2026-11-27
+        import re
+        self.assertEqual(re.findall(r"\$\d[\d,]*\.\d(?!\d)|\$\d[\d,]* per hour", self.text), [])
 
     def test_every_duration_names_its_clock(self):
         # The owner (2026-10-27): every duration, rate, timer and countdown says "real time" or "game time".

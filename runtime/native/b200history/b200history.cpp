@@ -956,6 +956,46 @@ static void FlushWaiting() {
     WaitingCount = 0;
 }
 
+// ---- a pending Start Over, read from the slot's own log, so it belongs to that slot alone and outlives the game
+// being closed before the next adoption: the slot's last record that ends or begins a family ("Start Over",
+// "Evict Family", "Generation", "New Generation") is the Start Over. Its whole record (with its own date) is kept, to
+// open the new family's log.
+static char Kept[0x1000];
+static unsigned KeptLength;
+
+static bool PendingStartOver(int slot) {
+    char path[MAX_PATH + 64];
+    bool over = false;
+    KeptLength = 0;
+    for (unsigned k = 1; k <= kMaxFiles && HistoryFile(slot, k, path, sizeof(path)) && Exists(path); ++k) {
+        unsigned got = 0;
+        if (!ReadWhole(path, &got)) continue;
+        for (unsigned i = 0; i < got; ++i) {
+            if ((i && ReadBuffer[i - 1] != '\n') || ReadBuffer[i] != '[') continue;
+            unsigned j = i;
+            while (j < got && ReadBuffer[j] != ']' && ReadBuffer[j] != '\n') ++j;
+            j += 2;
+            if (j >= got) continue;
+            const char *kind = ReadBuffer + j;
+            bool start = StartsWith(kind, "Start Over ");
+            if (!start && !StartsWith(kind, "Evict Family ") && !StartsWith(kind, "Generation ") &&
+                !StartsWith(kind, "New Generation "))
+                continue;
+            over = start;
+            KeptLength = 0;
+            if (start) {
+                unsigned end = i + 1;
+                while (end < got && !(ReadBuffer[end - 1] == '\n' && ReadBuffer[end] == '[')) ++end;
+                if (end - i < sizeof(Kept)) {
+                    Copy(Kept, ReadBuffer + i, end - i);
+                    KeptLength = end - i;
+                }
+            }
+        }
+    }
+    return over && KeptLength;
+}
+
 // ---- remarriage: the spouse a person married before in the same generation and why they left ("died" or
 // "divorced"), from this slot's own Family History (the save forgets a spouse who left or died before any child,
 // and a remarriage overwrites the record's second parent). Records after the last eviction, and after the last
@@ -1107,10 +1147,10 @@ static void WipeSlot(int slot) {
 
 // ================================================================ the events
 static int gInLoad;
-// Each belongs to one save slot, so a Start Over or an eviction never reaches another slot's log (the end-to-end
-// check, 2026-11-26: Start Over in Save 1, then Save 2 whose save the game could not load, then a family adopted
-// there: Save 2's log opened with Save 1's Start Over, and Save 1 never got its record).
-static int gStartedOver[6];  // the confirmed Start Over in slot N: that slot's next new family's log says so
+// A Start Over or an eviction belongs to one save slot and never reaches another slot's log (the end-to-end check,
+// 2026-11-26: Start Over in Save 1, then Save 2 whose save the game could not load, then a family adopted there:
+// Save 2's log opened with Save 1's Start Over, and Save 1 never got its record). A Start Over is read from the
+// slot's own log (PendingStartOver); the evicted flag counts while gTreeSlot is the slot.
 static int gTreeSlot;        // the slot whose family the game's Family Tree in memory is (its evicted flag too):
                              // set by a load of that slot, its Start Over, its eviction and its new family
 
@@ -1347,17 +1387,18 @@ static void OnGeneration(const unsigned char *v, bool newFamily, bool afterEvict
         how = "Founder (after the eviction)";
     } else if (newFamily) {
         // A brand-new family in this slot (a new game, or after Start Over): the folder is the new family's.
+        // After Start Over its own record (written then, with its date) opens the new log.
+        bool over = PendingStartOver(slot);
         WipeSlot(slot);
         CreateLog(slot);
-        if (gStartedOver[slot]) Write(slot, "Start Over", "  The earlier family's history was cleared.\r\n");
+        char path[MAX_PATH + 64];
+        if (over && HistoryFile(slot, 1, path, sizeof(path)) && Append(path, Kept, KeptLength))
+            ++B200History_Status.records;
         how = "Founder (adopted and started the family)";
     } else {
         how = "Heir (inherited the house)";
     }
-    if (newFamily) {
-        gStartedOver[slot] = 0;
-        gTreeSlot = slot;
-    }
+    if (newFamily) gTreeSlot = slot;
     Text t;
     if (!Begin(t)) return;
     Self(t, p, "Age");
@@ -1480,7 +1521,6 @@ static void OnLoaded(int slot) {
     ClearSession();
     gTreeSlot = slot;
     if (Generations() <= 0) return;        // no family: the new family's adoption starts the log
-    gStartedOver[slot] = 0;                // a family loaded in this slot: its Start Over did not take
     CreateLog(slot);
     B200History_Status.lastLoad = 1;
     char path[MAX_PATH + 64];
@@ -1611,13 +1651,15 @@ static void __fastcall EvictHook(void *tree, void *) {
     NextEvict(tree);
 }
 
-// Start Over: the slot's folder is the next family's alone (Backups kept); the next family's log opens with the
-// Start Over.
+// Start Over: the slot's folder is the next family's alone (Backups kept), and its log holds only the Start Over
+// record, dated now, until the slot's next family opens a new log with it (PendingStartOver). The game saves the
+// emptied family at once: after this Init call the stub calls 0x49AB50, which is Save(0) and Save(current slot)
+// through theGameState's vtable slot 14 (+38h), so the record never sits over a family that is still played.
 static void __fastcall StartOverHook(void *state, void *) {
     int slot = CurrentSlot();
     if (slot) {
         WipeSlot(slot);
-        gStartedOver[slot] = 1;
+        Write(slot, "Start Over", "  The earlier family's history was cleared.\r\n");
         gTreeSlot = slot;
     }
     NextStartOver(state);
