@@ -90,10 +90,15 @@ with a stand-in Skin Tones DLL in the harness.
 
 ## Known limits
 
-* The Family History DLL forgets a death it logged only at the next load: a revived person who dies again in the same
-  session in the same household slot may get no second Death record until then.
-* The log record names the person by the name the save stores (the Family Tree Maker makes it whole from the Names
-  file); the newest log file gets it even past 2000 records.
+* The newest log file gets the record even past 2000 records.
+
+Fixed (the end-to-end check, 2026-11-27):
+* A revival tells the Family History DLL (`B200History_Revived(slot)`, when it is loaded) that the slot lives again,
+  so a revived person who dies again in the same session is logged when it happens (before, the second death in the
+  same slot at the same age waited for the next load). Emulated in tests/b200_history_scenarios.py.
+* The `Arrived` record (and so the late spouse's) names the person by the whole name: the Family History DLL's
+  `B200History_LogName` reads it from the slot's Names file as for its own records; without that DLL, the snapshot's
+  whole name, else the stored one. Proved with a stand-in Family History DLL in the harness.
 
 ## Live checks (owner)
 

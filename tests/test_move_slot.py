@@ -151,6 +151,46 @@ class MoveTests(Base):
                 aside = [p for p in (self.folder / "Backups").iterdir() if p.name.startswith("Replaced by")]
                 self.assertEqual(aside, [])
 
+    def _read_only_cases(self):
+        return {"history": self.folder / PATCHER / "Save 1/Logs/Family History/Family History 2.txt",
+                "tree": self.folder / PATCHER / "Save 1/Data/Family Tree/Virtual Families 2 Family Tree - Save 1.tree",
+                "settings": rf.settings_path(self.folder)}
+
+    def test_a_read_only_file_the_move_must_rewrite_refuses_before_anything_moves(self):
+        # The end-to-end check (2026-11-26): a read-only log was renamed into the target, its header rewrite failed,
+        # and the rollback never renamed it back.
+        import os
+        for which, path in self._read_only_cases().items():
+            with self.subTest(which=which):
+                before, folders = self.snapshot(backups=True), self.folders()
+                os.chmod(path, 0o444)
+                try:
+                    with self.assertRaisesRegex(ms.MoveError, "read-only.*Nothing was moved") as caught:
+                        self.move(1, 5)
+                finally:
+                    os.chmod(path, 0o666)
+                self.assertIn(path.name, str(caught.exception))
+                self.assertEqual(self.snapshot(backups=True), before)
+                self.assertEqual(self.folders(), folders)
+
+    def test_a_read_only_rewrite_failing_mid_move_still_rolls_everything_back(self):
+        import os
+        for which, path in self._read_only_cases().items():
+            for target in (5, 2):                                  # an empty target, and one with its own logs
+                with self.subTest(which=which, target=target):
+                    before, folders = self.snapshot(), self.folders()
+                    os.chmod(path, 0o444)
+                    try:
+                        with mock.patch.object(ms, "_refuse_read_only", lambda plan: None, create=True):
+                            with self.assertRaisesRegex(cs.CopyError, "every file was put back") as caught:
+                                self.move(1, target)
+                        self.assertFalse(os.access(path, os.W_OK))     # still read-only, as it was
+                    finally:
+                        os.chmod(path, 0o666)
+                    self.assertNotIn("could not be put back", str(caught.exception))
+                    self.assertEqual(self.snapshot(), before)
+                    self.assertEqual(self.folders(), folders)
+
     def test_a_failure_after_the_settings_puts_them_back(self):
         before = self.snapshot()
         with mock.patch.object(ms, "verify", side_effect=ms.MoveError("checked for the test")):

@@ -120,6 +120,11 @@ vf1fun's Cheat Upgrades and have no Virtual Families 2 counterpart; `Renamed` ha
   Start Over) and `Generation 1`.
 - **Evict Family** keeps the log: everything before the `Evict Family` record belongs to the family that left, and
   the next family's first generation is `Founder (after the eviction)`.
+- A pending **Start Over** or **eviction** belongs to its own save slot. Start Over is remembered for the slot it
+  was made in; the Family Tree's evicted flag counts only while the tree in memory is that slot's family (a load of
+  the slot, its Start Over, eviction or new family). So after Start Over or Evict Family in Save 1, a family adopted
+  in a slot whose save the game cannot load is that slot's new family (no `Start Over` record, not "after the
+  eviction"), and Save 1's next family still opens with its `Start Over 1`.
 - **Family role** (Death, Arrived): `Parent`, `Parent (married in)` or `Child` from the current generation's record;
   children 7 to 28 (Up to 28 Children, not in the record) are `Child` too, read from the executable's `.vf2kidt`
   table that vf2kids_b200.dll keeps; a parent of the generation before is `Grandparent`; anyone else is
@@ -179,6 +184,7 @@ build without the loader no records for the setting.
 - The physiology pass: only its delivery block runs under emulation; the dialog constructor: only its head.
 - Running beside Up to 28 Children's installed hooks: proved statically (its entry jmps are wildcards in these
   pins; this DLL writes no entry it hooks), not emulated together.
-- Start Over followed by a load before the new family is adopted: the new family then empties the folder again
-  and the `Start Over` record is lost.
+- Start Over followed by a load of a save that still holds a family, or the game closed before the new family is
+  adopted: the pending Start Over is kept in memory only, so the new family then empties the folder again and the
+  `Start Over` record is lost.
 - The Community Event dialog (above).

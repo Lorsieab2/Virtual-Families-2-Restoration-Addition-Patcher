@@ -199,6 +199,26 @@ def test_backfill_from_their_own_records_is_exact(tmp_path):
     assert fay.role == rv.ROLE_CHILD + 2
 
 
+def test_a_dead_member_whose_body_changed_since_the_tree_entry_is_found_from_their_own_record(tmp_path):
+    # The VF1 end-to-end check (2026-11-27): the Family Tree keeps the body a person had when entered; their own
+    # record (and the log's Death record) has the body at the death. Name, sex and head decide; the body is a tiebreak.
+    b = bytearray(family())
+    villager(b, 1, "Bob", head=2, body=7, age=900, active=0, health=0, cause=2, career=12, level=3, fertility=61,
+             desire=77)
+    log = LOG.replace("  Name: Bob\n  Age at death: 45\n  Sex: Male\n  Cause of death: Old age\n  Head: 2\n"
+                      "  Body: 2\n", "  Name: Bob\n  Age at death: 45\n  Sex: Male\n  Cause of death: Old age\n"
+                      "  Head: 2\n  Body: 7\n")
+    assert log != LOG
+    folder = make_folder(tmp_path, bytes(b), log=log)
+    assert rv.backfill(folder, Processes(), NOW).error is None
+    people = snapshots(folder)
+    entries = rv.read_file(rv.sidecar_path(folder, 1).read_bytes()).entries
+    assert sorted(e.name_text for e in entries) == ["Bob", "Fay Whole-Name-Longer-Than-The-Field"]   # one Bob
+    bob = people["Bob"]
+    assert bob.source == rv.THIS_SAVE and (bob.age_at_death, bob.cause, bob.body) == (900, 2, 7)
+    assert bob.mark("age_at_death") == rv.EXACT
+
+
 def test_backfill_from_the_previous_save_marks_what_may_have_changed(tmp_path):
     """Bob's record was reused (gone from the save) but the game's previous save holds him alive: who he is is
     exact, the rest is as when saved (inferred), and his age at death is the log's whole years (inferred), which

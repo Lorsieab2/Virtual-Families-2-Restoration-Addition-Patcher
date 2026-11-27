@@ -487,7 +487,7 @@ extern "C" __declspec(dllexport) int __cdecl B200Revive_Candidates(B200ReviveCan
 // ---- the "Arrived" record in the slot's Family History log, when the slot has one (the Family History DLL's
 // layout; its own record numbers are read from the files at every write, so a record appended here is counted)
 static char LogBuffer[0x100000];
-static char Line[2048];
+static char Line[8192];                         // a record: a whole name is up to 3,600 bytes
 
 static unsigned AppendText(char *out, unsigned n, const char *s) { while (*s && n + 1 < sizeof(Line)) out[n++] = *s++; out[n] = 0; return n; }
 static unsigned AppendNum(char *out, unsigned n, int v) {
@@ -528,6 +528,31 @@ static unsigned Highest(const char *text, unsigned len, const char *kind) {
         if (v > best) best = v;
     }
     return best;
+}
+
+// The Family History DLL (vf2history_b200.dll), when it is loaded: the whole name for a stored one, and a revival's
+// slot, whose earlier death it forgets so the person's next death is logged when it happens.
+typedef int (__cdecl *HistoryLogNameFn)(const char *stored, char *out, int cap);
+typedef void (__cdecl *HistoryRevivedFn)(int slot);
+static FARPROC History(const char *name) {
+    HMODULE h = GetModuleHandleW(L"vf2history_b200.dll");
+    return h ? GetProcAddress(h, name) : 0;
+}
+
+static char Shown[4096];
+
+// The name a record writes: the whole name (the Family History DLL reads it from the slot's Names file, as for its own
+// records), else the snapshot's whole name (a backfilled one keeps it), else the name the save stores.
+static const char *LogName(const unsigned char *e, const char *stored) {
+    HistoryLogNameFn whole = (HistoryLogNameFn)History("B200History_LogName");
+    if (whole && whole(stored, Shown, (int)sizeof(Shown)) > 0) return Shown;
+    if (e[E_FULL]) {
+        unsigned n = 0;
+        while (n < 1199 && n + 1 < sizeof(Shown) && e[E_FULL + n]) { Shown[n] = (char)e[E_FULL + n]; ++n; }
+        Shown[n] = 0;
+        return Shown;
+    }
+    return stored;
 }
 
 static void LogRevived(int slot, const unsigned char *e, int ageUnits, const char *how) {
@@ -571,7 +596,7 @@ static void LogRevived(int slot, const unsigned char *e, int ageUnits, const cha
     char name[28];
     Zero(name, sizeof(name));
     for (unsigned i = 0; i < 25 && e[E_NAME + i]; ++i) name[i] = (char)e[E_NAME + i];
-    k = AppendText(Line, k, name);
+    k = AppendText(Line, k, LogName(e, name));
     k = AppendText(Line, k, "\r\n  Age at arrival: ");
     k = AppendNum(Line, k, ageUnits / 20);
     k = AppendText(Line, k, "\r\n  Sex: ");
@@ -606,6 +631,8 @@ extern "C" __declspec(dllexport) void __cdecl B200Revive_Done(int index, int new
         ToneGiveFn give = skin ? (ToneGiveFn)GetProcAddress(skin, "B200Skin_ToneGive") : 0;
         if (give) give(newSlot, e[S_TONE], e[S_BIRTH_TONE]);
     }
+    HistoryRevivedFn revived = (HistoryRevivedFn)History("B200History_Revived");
+    if (revived && newSlot >= 0 && newSlot < 30) revived(newSlot);
     bool member = role && Same(role, "Family member", 14);
     int slot = Host->currentSlot();
     if (slot >= 1 && slot <= 5)

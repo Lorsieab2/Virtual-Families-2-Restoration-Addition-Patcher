@@ -278,12 +278,26 @@ class ConfirmationTests(Base):
             lambda work: work(), self.folder, 1, processes=tc.NoGame(), recycle=fake)
         text, lines = shown[0]
         self.assertIn("Every file of Save 1 (Lorsieab2) goes to the Recycle Bin", text)
-        self.assertIn("1 backup(s) and 1 folder(s) of files it replaced", text)
+        # The end-to-end check (2026-11-27): the backups' copies and a move's undo copy are named plainly.
+        self.assertIn("this slot's copies inside 1 earlier backup(s) of the save folder, even a backup made when the "
+                      "slot held an older family, and a move's \"(before move)\" backup", text)
+        self.assertIn("1 folder(s) of files a copy or a move set aside from this slot", text)
+        self.assertIn("a move's undo copy", text)
         self.assertIn("Pictures stay", text)
         self.assertEqual(sum(line.startswith("Recycled:") for line in lines), len(result.recycled))
         self.assertEqual(sum(line.startswith("Kept (pictures):") for line in lines), 2)
         self.assertTrue(asked[0].startswith("Delete Lorsieab2 from Save 1?"))
         self.assertIsNone(result.problem)
+
+    def test_a_slot_with_no_save_is_named_as_the_vf1_patcher_names_it(self):
+        # A slot whose save is gone is not "a family the game cannot load": the Virtual Families 1 patcher's words.
+        cs.save_path(self.folder, 1).unlink()
+        text = ds.delete_text(ds.plan_delete(self.folder, 1))
+        self.assertIn("Every file of Save 1 (no family, leftover files) goes to the Recycle Bin", text)
+        self.assertNotIn("cannot load", text)
+        self.assertTrue(ds.delete_final_text(ds.plan_delete(self.folder, 1)).startswith("Delete the files from Save 1?"))
+        cs.save_path(self.folder, 1).write_bytes(b"ldwg damaged")
+        self.assertIn("(an unreadable save)", ds.delete_text(ds.plan_delete(self.folder, 1)))
 
 
 if __name__ == "__main__":

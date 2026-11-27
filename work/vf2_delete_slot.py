@@ -216,15 +216,35 @@ def deletable_slots(folder: Path) -> list[tuple[int, str]]:
 # ---------------------------------------------------------------------------
 
 
+def backups_words(backups: int, asides: int) -> str:
+    """What else of the slot a delete sends to the Recycle Bin, said plainly so nothing surprises the player (the
+    end-to-end check, 2026-11-27): the slot's copies inside earlier backups -- whatever family the slot held when each
+    was made -- and the files a copy or move set aside, a move's undo copy among them."""
+    parts = []
+    if backups:
+        parts.append(f"this slot's copies inside {backups} earlier backup(s) of the save folder, even a backup made "
+                     "when the slot held an older family, and a move's \"(before move)\" backup")
+    if asides:
+        parts.append(f"{asides} folder(s) of files a copy or a move set aside from this slot (Backups\\Replaced by "
+                     "...), a move's undo copy")
+    if not parts:
+        return ""
+    return " The same goes for " + " and ".join(parts) + "."
+
+
 def delete_text(plan: Plan) -> str:
     """The delete's question above the list of every file."""
-    family = plan.name or "a family the game cannot load"
+    if plan.name is not None:
+        family = plan.name or "(no name)"
+    elif cs.save_path(Path(plan.folder), plan.slot).is_file():
+        family = "an unreadable save"                    # the Virtual Families 1 patcher's words
+    else:
+        family = "no family, leftover files"
     backups = sum(1 for g in plan.groups if g.where and g.aside is None)
     asides = sum(1 for g in plan.groups if g.aside is not None)
     text = (f"Every file of Save {plan.slot} ({family}) goes to the Recycle Bin: its save, the game's previous save, "
             f"Up to 28 Children, the outfit pictures, the Names file, the Family History log and the Family Tree "
-            f"files, and its files in {backups} backup(s)")
-    text += f" and {asides} folder(s) of files it replaced." if asides else "."
+            f"files." + backups_words(backups, asides))
     text += (f" Pictures stay where they are. Other slots are not touched. No new backup is made: anything can be "
              f"put back from the Recycle Bin. ({plan.folder})")
     return text + f"\n\n{len(plan.files)} file(s) to the Recycle Bin, {len(plan.pictures)} picture(s) kept:"
@@ -232,7 +252,7 @@ def delete_text(plan: Plan) -> str:
 
 def delete_final_text(plan: Plan) -> str:
     """The second, explicit question, naming the family."""
-    family = plan.name or "the family the game cannot load"
+    family = plan.name or "the files"
     return (f"Delete {family} from Save {plan.slot}? Its {len(plan.files)} file(s), in this save folder and in its "
             "backups, go to the Recycle Bin. Delete it?")
 

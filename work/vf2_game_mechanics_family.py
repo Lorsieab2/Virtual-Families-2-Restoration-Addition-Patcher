@@ -141,8 +141,11 @@ def when(save: sr.FamilySave, stamp: int) -> str:
     return f"{moment:%d %B %Y}, {moment:%H:%M}".lstrip("0")
 
 
-def ages(units: int) -> str:
+def ages(units: int, alive: bool = True) -> str:
+    """'41 years (827 age units; 13 more to the next birthday)'; for someone who died, no next birthday."""
     years = units // sr.AGE_UNITS_PER_YEAR
+    if not alive:
+        return f"{_plural(years, 'year')} ({units:,} age units)"
     left = sr.AGE_UNITS_PER_YEAR - units % sr.AGE_UNITS_PER_YEAR
     return f"{_plural(years, 'year')} ({units:,} age units; {left} more to the next birthday)"
 
@@ -237,6 +240,18 @@ class Tree:
             return a
         return None
 
+    def widowed_by(self, v):
+        """The current generation's other parent when ``v`` is one of the two and that one died, else None."""
+        rec = self.current
+        if rec is None:
+            return None
+        for mine, theirs in ((rec.parent1, rec.parent2), (rec.parent2, rec.parent1)):
+            if self.villager(mine) is v and theirs.present:
+                them = self.villager(theirs)
+                if theirs.slot == -1 or (them is not None and them.health <= 0):
+                    return theirs
+        return None
+
     def seat(self, v):
         """(seat words, (parent1, parent2) names from the Family Tree or None)."""
         rec = self.current
@@ -258,7 +273,7 @@ class Tree:
         return "", None
 
 
-def _parents_line(v, tree_parents, whole) -> str:
+def _parents_line(v, tree_parents, whole, married_in: bool = False) -> str:
     own = (whole(v.father_name), whole(v.mother_name))
     if tree_parents is not None:
         tree_parents = tuple(whole(n) for n in tree_parents)
@@ -269,6 +284,8 @@ def _parents_line(v, tree_parents, whole) -> str:
                 "for a baby works." if v.father_name == FATHER_STAND_IN else ".")
         return text
     if not any(own):
+        if married_in:
+            return "Parents: none: married into the family; the save keeps no parents for them."
         return "Parents: none in the save (a founder, an adopted child, or one the game made without parents)."
     text = f"Parents: their own record keeps \"{own[0]}\" and \"{own[1]}\"; the save's Family Tree does not list them."
     if v.father_name == FATHER_STAND_IN:
@@ -296,6 +313,16 @@ def _children_line(save, tree: Tree, v, whole) -> str | None:
     return text + "."
 
 
+def _progress_line(v) -> str | None:
+    """The career's progress: skills +8, a field the save reader keeps as UNCONFIRMED (vf2_save_reader
+    unconfirmed_skills_08), so its line is labelled UNCONFIRMED."""
+    if v.career_id == -1 or v.career_id not in CAREER_BY_ID or not 0 <= v.career_level < len(gm.LEVELS):
+        return None
+    top = v.career_level == len(gm.LEVELS) - 1
+    return (f"Career progress: {v.unconfirmed_skills_08:,} of {PROMOTION:,} "
+            + ("(top level, no further promotion)." if top else "toward the next promotion."))
+
+
 def _career_line(v) -> str:
     if v.career_id == -1:
         return "Career: none; no salary."
@@ -306,8 +333,7 @@ def _career_line(v) -> str:
     _cid, place, name, salaries = career
     level = gm.LEVELS[v.career_level]
     text = (f"Career: {name} (works in the {gm.WORKPLACES[place]}), {level} (level {v.career_level + 1} of 8); "
-            f"progress {v.unconfirmed_skills_08:,} of {PROMOTION:,} toward the next promotion; salary "
-            f"${v.salary:,}: {gm._per_hour(v.salary)} per hour of game time (1 hour real time at Normal speed)")
+            f"salary ${v.salary:,}: ${v.salary / 2:,.2f} per hour of game time (1 hour real time at Normal speed)")
     table = salaries[v.career_level]
     if v.salary != table:
         text += (f". The game's own table pays a {level} {name} ${table:,}: the save holds ${v.salary:,}, and the "
@@ -330,7 +356,8 @@ def _pregnancy_line(save, tree: Tree, p: Person) -> str | None:
             "father when a try for a baby works)" if v.pregnancy_father_name == FATHER_STAND_IN else
             f" (the save keeps the father's name as \"{v.pregnancy_father_name}\")")
     span = duration(left * 10)
-    return (f"Pregnant with {babies}, conceived at age unit {v.pregnancy_mark:,}: born on age unit {due:,}, "
+    return (f"Pregnant with {babies}, conceived at the mother's age unit {v.pregnancy_mark:,}: born at her age "
+            f"unit {due:,}, "
             f"{_plural(left, 'age unit')} to go ({span} of game time, {span} of real time at Normal speed); "
             f"{father}{name}.")
 
@@ -344,11 +371,13 @@ def _person(save, tree: Tree, p: Person, whole) -> list[gm.Fact]:
     v, raw = p.v, p.raw
     sex = {0: "Male", 1: "Female"}.get(v.gender, f"sex value {v.gender}")
     if v.health <= 0:
+        add(f"{p.name}: {sex}, died at {ages(v.age_units, alive=False)}; health {v.health}. The body is still in the "
+            "house (it is taken away 240 age units after their last upkeep; see Health and sickness).", C, False)
+        # The save reader marks the ECauseOfDeath values UNCONFIRMED (docs/vf2-save-format.md), so this line is too.
         cause = {-1: "Unknown", 0: "Disease", 1: "Starvation", 2: "Old age", 3: "Work accident",
                  4: "Act of Nature"}.get(v.cause_of_death, f"cause {v.cause_of_death}")
-        add(f"{p.name}: {sex}, died at {ages(v.age_units)}; health {v.health}; the cause the save keeps: {cause}. "
-            "The body is still in the house (it is taken away 240 age units after their last upkeep; see Health "
-            "and sickness).", C, False)
+        add(f"The cause the save keeps: {v.cause_of_death}, probably {cause} (the game's cause values are not "
+            "confirmed).", U)
         return out
     sick = sick_words(save, raw)
     head = f"{p.name}: {sex}, {ages(v.age_units)}; health {v.health} of 100"
@@ -367,19 +396,30 @@ def _person(save, tree: Tree, p: Person, whole) -> list[gm.Fact]:
     add(f"Hidden: happiness trend {v.happiness_trend:+,} (-500 to 500; see Needs and upkeep for how it moves "
         f"happiness), dirtiness {v.dirtiness}, toilet need {v.poo} (at 90 it resets to 25 to 49).")
     groups, live, counted = food_groups(save, raw)
-    add("Food groups when the family was saved (each lasts 24 hours of real time; your PC's clock): "
-        + (", ".join(groups) or "none") + f". The game counts {counted}"
-        + (": one more than the groups, the extra one a family member without a career gets once they have had "
-           "Grains (see Needs and upkeep)" if counted > live else "") + ".")
+    text = ("Food groups when the family was saved (each lasts 24 hours of real time; your PC's clock): "
+            + (", ".join(groups) or "none") + f". The game's count is {counted}")
+    if counted > live and live:
+        text += (f": {live} for the groups above and 1 more, the extra one a family member without a career gets "
+                 "once they have had Grains (see Needs and upkeep)")
+    elif counted > live:
+        text += (" because a family member without a career gets one extra once they have had Grains (see Needs and "
+                 "upkeep), even with no group now")
+    add(text + ".")
     add(_career_line(v))
+    progress = _progress_line(v)
+    if progress:
+        add(progress, U)
     add(f"Likes: {like_text(places(raw, LIKES))}. Dislikes: {like_text(places(raw, DISLIKES))}.")
     add(f"Wants kids?: {v.procreation_desire} (\"{wants_kids(v.procreation_desire)}\", as the game words it); "
         f"fertility {v.fertility} of 100" + (f" ({v.fertility - 85} over 85, added to the twins and triplets "
                                             "chances)" if v.fertility > 85 else "") + ".")
     spouse = tree.spouse_of(v)
-    if spouse is not None:
+    gone = tree.widowed_by(v)
+    if spouse is not None and spouse.health > 0:
         add(f"Spouse: {whole(spouse.name)} (the save's Family Tree, generation {len(tree.records)}).")
-    add(_parents_line(v, tree_parents, whole))
+    elif gone is not None:
+        add(f"Spouse: {whole(gone.name)} (died; the save's Family Tree, generation {len(tree.records)}).")
+    add(_parents_line(v, tree_parents, whole, married_in=seat.startswith("married into the family")))
     kids = _children_line(save, tree, v, whole)
     if kids:
         add(kids)
