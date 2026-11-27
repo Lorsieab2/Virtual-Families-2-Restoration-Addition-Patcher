@@ -30,6 +30,7 @@ import vf2_how_to_use
 import vf2_move_slot
 import vf2_rename_family
 import vf2_save_backup
+import vf2_skin_tones
 from vf2_tree_editor_tools import scrollable_frame
 
 TOOLS_TITLE = "Virtual Families 2 Restoration/Addition Patcher"
@@ -142,6 +143,8 @@ class ToolsTabMixin:
         self._help_button(links, "game_speed").pack(side="left", padx=(3, 0))
         self._link(links, "Revive Records...", self.revive_records).pack(side="left", padx=(18, 0))
         self._help_button(links, "revive_records").pack(side="left", padx=(3, 0))
+        self._link(links, "Skin Tones...", self.skin_tones).pack(side="left", padx=(18, 0))
+        self._help_button(links, "skin_tones").pack(side="left", padx=(3, 0))
         family = ttk.Frame(box)
         family.grid(row=2, column=0, sticky="w", pady=(6, 0))
         self._link(family, "Family Tree Maker...", self.open_family_tree).pack(side="left")
@@ -1269,6 +1272,197 @@ class ToolsTabMixin:
         dialog._vf2_start = start
         dialog._vf2_choose = choose
         self._hold(dialog, focus=name_entry)
+        return dialog
+
+    # -- Skin Tones ---------------------------------------------------------
+
+    def skin_tones(self) -> tk.Toplevel | None:
+        """Pick a save folder and a family, then a tone for each family member (laid out as Rename Family). The
+        tones file is read and written by vf2_skin_tones; the change runs off the main thread."""
+        folders = self._tool_save_folders("Skin Tones")
+        if folders is None:
+            return None
+        folders = [folder for folder in folders
+                   if any(s.problem is None for s in vf2_rename_family.read_slots(folder))]
+        if not folders:
+            messagebox.showinfo(
+                "Skin Tones",
+                f"No {TOOLS_GAME_TITLE} family saves were found in your Documents\\LDW folder.\n\n"
+                "The game makes a family's save the first time it saves that family.",
+            )
+            return None
+        return self._show_skin_tones_dialog(folders)
+
+    def _show_skin_tones_dialog(self, folders: list[Path]) -> tk.Toplevel:
+        dialog, frame = self._scrolling_dialog("Skin Tones")
+        ttk.Label(
+            frame,
+            text=(
+                "Choose each family member's skin tone, the one the Skin Tones patch draws in the game: S1 Porcelain "
+                "to S10 Ebony, or Game's own (the game's own skin). The game must be closed: it writes the tones "
+                "itself when it saves. The save folder is backed up first, into <save folder>\\Backups\\Backup <date "
+                "and time> (before skin tones), and the family's Family History log notes each change."
+            ),
+            wraplength=560, justify="left",
+        ).grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, 10))
+        folder_var = tk.StringVar()
+        problem_var = tk.StringVar()
+        state: dict = {"slots": [], "family": None, "rows": []}
+
+        ttk.Label(frame, text="Save folder:").grid(row=1, column=0, sticky="w")
+        folder_box = ttk.Combobox(frame, textvariable=folder_var, values=[folder.name for folder in folders],
+                                  state="readonly", width=48)
+        folder_box.grid(row=1, column=1, columnspan=2, sticky="we", pady=2)
+        ttk.Label(frame, text="Family:").grid(row=2, column=0, sticky="nw", pady=(4, 0))
+        slot_list = tk.Listbox(frame, height=5, width=60, exportselection=False)
+        slot_list.grid(row=2, column=1, columnspan=2, sticky="we", pady=(4, 2))
+        ttk.Label(frame, text="Skin tones:").grid(row=3, column=0, sticky="nw", pady=(8, 0))
+        people = ttk.Frame(frame)
+        people.grid(row=3, column=1, columnspan=2, sticky="we", pady=(8, 0))
+        ttk.Label(frame, textvariable=problem_var, foreground="#a01010", wraplength=560, justify="left").grid(
+            row=4, column=0, columnspan=3, sticky="w", pady=(4, 0))
+        buttons = ttk.Frame(frame)
+        buttons.grid(row=5, column=0, columnspan=3, sticky="w", pady=(12, 0))
+        apply_button = ttk.Button(buttons, text="Apply")
+        apply_button.pack(side="left")
+        ttk.Button(buttons, text="Close", command=dialog.destroy).pack(side="left", padx=(8, 0))
+
+        def folder() -> Path | None:
+            index = folder_box.current()
+            return folders[index] if 0 <= index < len(folders) else None
+
+        def chosen_slot():
+            picked = slot_list.curselection()
+            return state["slots"][picked[0]] if picked else None
+
+        def wanted() -> dict[int, int]:
+            out: dict[int, int] = {}
+            for member, box in state["rows"]:
+                if box is None:
+                    continue
+                value = vf2_skin_tones.choice_value(box.get(), member.birth)
+                if value is not None and value != member.tone:
+                    out[member.slot] = value
+            return out
+
+        def refresh_check(*_args) -> None:
+            family = state["family"]
+            problem = None
+            if folder() is None:
+                problem = "No save folder was found for this game."
+            elif chosen_slot() is None:
+                problem = "Choose a family."
+            elif family is not None and family.problem:
+                problem = family.problem
+            elif family is not None and not family.members:
+                problem = "Nobody lives in this family's house."
+            problem_var.set(problem or "")
+            apply_button.configure(state="normal" if problem is None and wanted() else "disabled")
+
+        def load_family(*_args) -> None:
+            for child in people.winfo_children():
+                child.destroy()
+            state["rows"] = []
+            state["family"] = None
+            info, where = chosen_slot(), folder()
+            if info is not None and where is not None and info.problem is None:
+                family = vf2_skin_tones.read_family(where, info.slot)
+                state["family"] = family
+                if family.problem is None:
+                    for row, member in enumerate(family.members):
+                        sex = "female" if member.gender == 1 else "male"
+                        ttk.Label(people, text=f"{member.name} ({sex}, {member.age_years})").grid(
+                            row=row, column=0, sticky="w", pady=1)
+                        box = None
+                        if member.editable:
+                            box = ttk.Combobox(people, values=vf2_skin_tones.choices(member), state="readonly",
+                                               width=22)
+                            box.set(member.shown_tone)
+                            box.bind("<<ComboboxSelected>>", refresh_check)
+                            box.grid(row=row, column=1, sticky="w", padx=(8, 0), pady=1)
+                        else:
+                            ttk.Label(people, text=vf2_skin_tones.NO_TONE_YET).grid(
+                                row=row, column=1, sticky="w", padx=(8, 0), pady=1)
+                        state["rows"].append((member, box))
+            elif info is not None and info.problem:
+                state["family"] = vf2_skin_tones.Family(where, info.slot, info.problem)
+            refresh_check()
+
+        def load_slots(*_args) -> None:
+            slot_list.delete(0, "end")
+            state["slots"] = []
+            where = folder()
+            if where is not None:
+                state["slots"] = vf2_rename_family.read_slots(where)
+                for info in state["slots"]:
+                    slot_list.insert("end", info.label)
+                first = next((n for n, info in enumerate(state["slots"]) if not info.problem), None)
+                if first is not None:
+                    slot_list.selection_set(first)
+            load_family()
+
+        def start() -> None:
+            info, where, family = chosen_slot(), folder(), state["family"]
+            changes = wanted()
+            if info is None or where is None or family is None or family.problem or not changes:
+                return
+            by_slot = {member.slot: member for member, _box in state["rows"]}
+            lines = [f"{by_slot[slot].name}: {vf2_skin_tones.tone_label(by_slot[slot].tone)} -> "
+                     f"{vf2_skin_tones.tone_label(tone)}" for slot, tone in changes.items()]
+            if not messagebox.askyesno(
+                "Skin Tones",
+                f"Change these skin tones in Save {info.slot} ({where.name})?\n\n" + "\n".join(lines)
+                + "\n\nThe save folder is backed up first.",
+                parent=dialog,
+            ):
+                return
+            try:
+                result = self._run_with_wait(
+                    "Setting the skin tones…\n\nThe save folder is backed up first.",
+                    lambda: vf2_skin_tones.set_tones(where, info.slot, changes),
+                )
+            except (vf2_skin_tones.SkinToneError, vf2_save_backup.BackupError, OSError) as exc:
+                self.status_var.set("Skin Tones: nothing was changed.")
+                messagebox.showerror("Skin Tones", str(exc), parent=dialog)
+                load_family()
+                return
+            self.status_var.set(f"Skin Tones: {len(result.changes)} skin tone(s) changed in Save {result.slot}.")
+            messagebox.showinfo(
+                "Skin Tones",
+                f"{len(result.changes)} skin tone(s) changed (Save {result.slot}, {where.name}) and read back; "
+                f"{len(result.notes)} log(s) noted the change.\n\nBackup: {result.backup.backup_folder}",
+                parent=dialog,
+            )
+            load_family()
+
+        def choose(index: int) -> None:          # a click on a family (the tests)
+            slot_list.selection_clear(0, "end")
+            slot_list.selection_set(index)
+            load_family()
+
+        def pick(slot: int, label: str) -> None:     # a choice in a family member's box (the tests)
+            for member, box in state["rows"]:
+                if member.slot == slot and box is not None:
+                    box.set(label)
+            refresh_check()
+
+        apply_button.configure(command=start)
+        folder_box.bind("<<ComboboxSelected>>", load_slots)
+        slot_list.bind("<<ListboxSelect>>", load_family)
+        frame.columnconfigure(1, weight=1)
+        folder_box.current(0)
+        load_slots()
+        dialog.protocol("WM_DELETE_WINDOW", dialog.destroy)
+        dialog._vf2_folder_box = folder_box
+        dialog._vf2_folder_var = folder_var        # kept: a dropped StringVar empties its box
+        dialog._vf2_slot_list = slot_list
+        dialog._vf2_state = state
+        dialog._vf2_problem_var = problem_var
+        dialog._vf2_apply_button = apply_button
+        dialog._vf2_start = start
+        dialog._vf2_choose = choose
+        dialog._vf2_pick = pick
+        self._hold(dialog)
         return dialog
 
     # -- Revive Records -----------------------------------------------------

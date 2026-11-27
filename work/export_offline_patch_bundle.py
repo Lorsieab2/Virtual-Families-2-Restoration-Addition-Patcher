@@ -35,6 +35,7 @@ GUI_TOOL_FILES = (
     "vf2_delete_slot.py",    # Delete Player Slot (its Delete choice)
     "vf2_game_speed.py",
     "vf2_revive.py",         # Revive Records: the snapshots of the family members who died
+    "vf2_skin_tones.py",     # Skin Tones: the window's file reader/writer (the Skin Tones DLL's tones file)
     "vf2_game_mechanics.py",
     "vf2_game_mechanics_window.py",
     "vf2_game_mechanics_family.py",
@@ -142,6 +143,7 @@ FINAL_PLAYTEST_DEFAULT_ON_SETTINGS = frozenset({
     "ai_generated_bathroom2_renovations",
     "time_controls",
     "family_history",
+    "skin_tones",
     "r_refreshes_store",
     "render_unicode_in_game_fonts",
     "copy_paste_text_boxes",
@@ -598,6 +600,14 @@ SETTINGS = [
         "description": "Keeps a Family History log for each family, one dated record per event, in the same format as the Virtual Families 1 patcher's Family History, with each family member written as the Virtual Villagers patcher writes a villager (name, age, sex, head and body): marriages and remarriages (same-sex ones too) with the current spouse, spouses lost to divorce or death, every conception and birth (twins and triplets marked), every death with its cause, children who join or leave home, each new generation and its heir, renames, a new family, Start Over and Evict Family, and every Random Event as an Email Event or a Popup Event with the title the player sees and the choice made. An existing family's past is filled in once from its Family Tree, marked \"backfilled, no date\". The log is a text file in the save folder, under Virtual Families 2 Patcher\\Save N\\Logs\\Family History; no other file is written. Starting a new family or Start Over in that save slot starts its log again. The save file itself is not changed. Installs a small companion DLL in the Virtual Families 2 Patcher Files folder next to the game; unticking the setting removes it and the game is unmodified again.",
         # On by default and a normal Optional row (owner, 2026-10-26: "enable family logs by default",
         # "don't put it under experimental"); Enable All ticks it like any other.
+        "default": True,
+        "category": "optional",
+    },
+    {
+        "id": "skin_tones",
+        "label": "Skin Tones",
+        "description": "Gives every family member a skin tone, drawn in the game: one of ten, S1 Porcelain to S10 Ebony, or Game's own (the game's own skin). All bare skin is drawn in it (face, neck, arms, hands, legs, feet, bald heads) in the house, in every action and when sitting, in the Holiday outfits, in the Details, Adoption and marriage portraits, in event pop-ups, on the Family Tree and in the menu's family; a baby a mother holds is drawn in the baby's own tone. Hair, eyes, lips and clothes stay as they are. Founders, arrivals, candidates and everybody already in a family get a random tone the first time the family is played with this patch; a baby gets its parents' average tone (one shade lighter or darker at random) 95% of the time and any tone 5% of the time, chosen once when it is conceived; twins and triplets share it. Change anyone's tone with Tools > Skin Tones... while the game is closed (each change is noted in the Family History log). The tones are kept in a small file beside each save (the Virtual Families 2 Patcher Data\\Skin Tones folder in the save folder); the save file itself is not changed. **Requires the Family History log (its companion DLL loads this one).** Installs a small companion DLL and its skin mask pictures (shapes only, no game art) in the Virtual Families 2 Patcher Files folder next to the game; unticking the setting removes them and everyone is drawn in the game's own skin again.",
+        # On by default, in Select All and Owner's Defaults (owner, 2026-11-26).
         "default": True,
         "category": "optional",
     },
@@ -1614,6 +1624,71 @@ def family_history_asset_patches(
             "remove_when_disabled": True,
             "requires": ["core_executable", "family_history"],
             "note": note + " Disabling Family History log removes only this exact file.",
+        })
+    return records
+
+
+SKIN_TONES_DLL_NAME = "vf2skin_b200.dll"
+SKIN_TONES_INI_NAME = "vf2skin.ini"
+SKIN_TONES_INI_TEXT = "[Patches]\r\nSkinTones=1\r\n"
+SKIN_TONES_MASK_FOLDER = "Skin Masks"
+SKIN_TONES_MASKS = ROOT / "patcher_assets" / "skin_masks"
+
+
+def skin_tones_asset_patches(
+    bundle_dir: Path,
+    dll_path: Path | None,
+    build_manifest_data: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """The Skin Tones companion DLL, its one-line ini and its mask pictures, placed beside the game only while Skin
+    Tones (and the Family History log, whose DLL loads this one) is on.
+
+    The executable has no loader of its own for this DLL: vf2history_b200.dll loads vf2skin_b200.dll from its own
+    folder after its install, so every record requires family_history as well as skin_tones. The masks
+    (patcher_assets/skin_masks, made by runtime/tools/gen_b200_skin_masks.py: shapes only, no game pixel) each get
+    their own record under "Skin Masks". A build without the Family History loader gets no records.
+    """
+    if not isinstance(build_manifest_data.get("FamilyHistory"), dict):
+        return []
+    if dll_path is None:
+        raise ValueError(
+            "This build has the Family History loader, which loads Skin Tones; pass --skin-tones-dll with the built "
+            f"{SKIN_TONES_DLL_NAME} (runtime\\native\\build_b200skin.bat) or the setting would do nothing."
+        )
+    if not dll_path.is_file() or dll_path.name != SKIN_TONES_DLL_NAME:
+        raise ValueError(f"--skin-tones-dll must be an existing {SKIN_TONES_DLL_NAME}: {dll_path}")
+    require_vf2_pe32_x86(dll_path, label="Skin Tones DLL")
+    data = dll_path.read_bytes()
+    if b"B200Skin_Startup" not in data or b"B200Skin_TestScanAddress" in data:
+        raise ValueError("The Skin Tones DLL must be the shipped build (exports B200Skin_Startup, no test entry points).")
+    masks_json = json.loads((SKIN_TONES_MASKS / "masks.json").read_text(encoding="utf-8"))
+    masks = [m["sheet"] for m in masks_json["masks"]] + [m["mask"] for m in masks_json["holiday_masks"]]
+    payload_dir = bundle_dir / "payload" / "SkinTones"
+    payload_dir.mkdir(parents=True, exist_ok=True)
+    staged = [(payload_dir / SKIN_TONES_DLL_NAME, data, SKIN_TONES_DLL_NAME,
+               "Skin Tones companion DLL, loaded by the Family History DLL."),
+              (payload_dir / SKIN_TONES_INI_NAME, SKIN_TONES_INI_TEXT.encode("ascii"), SKIN_TONES_INI_NAME,
+               "Skin Tones switch (SkinTones=1) read by the companion DLL.")]
+    for name in masks:
+        raw = (SKIN_TONES_MASKS / name).read_bytes()
+        if raw[:8] != b"\x89PNG\r\n\x1a\n" or raw[24:29] != bytes([1, 0, 0, 0, 0]):
+            raise ValueError(f"Skin mask {name} is not a 1-bit picture (masks hold shapes only).")
+        staged.append((payload_dir / SKIN_TONES_MASK_FOLDER / name, raw, f"{SKIN_TONES_MASK_FOLDER}/{name}",
+                       "Skin Tones mask picture (shape only, no game art)."))
+    records: list[dict[str, Any]] = []
+    for path, raw, target, note in staged:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(raw)
+        records.append({
+            "file_path": f"{TIME_CONTROLS_PATCHER_FOLDER}/{target}",
+            "source_path": relative_posix(path.relative_to(bundle_dir)),
+            "source_sha256": sha256_file(path),
+            "source_size": path.stat().st_size,
+            "overwrite_existing": True,
+            "allow_missing_target": True,
+            "remove_when_disabled": True,
+            "requires": ["core_executable", "family_history", "skin_tones"],
+            "note": note + " Disabling Skin Tones (or the Family History log) removes only this exact file.",
         })
     return records
 
@@ -5843,6 +5918,11 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
             Path(args.family_history_dll).resolve() if getattr(args, "family_history_dll", None) else None,
             build_manifest_data,
         ))
+        asset_patches.extend(skin_tones_asset_patches(
+            bundle_dir,
+            Path(args.skin_tones_dll).resolve() if getattr(args, "skin_tones_dll", None) else None,
+            build_manifest_data,
+        ))
         asset_patches.extend(outfit_pictures_asset_patches(
             bundle_dir,
             Path(args.outfit_pictures_dll).resolve() if getattr(args, "outfit_pictures_dll", None) else None,
@@ -6457,6 +6537,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--unicode-text-dll", help="The built vf2unicode_b200.dll (runtime\\native\\build_b200unicode.bat) to ship behind the render_unicode_in_game_fonts and use_unicode_font settings. Required when the build has the Unicode text loaders.")
     parser.add_argument("--revive-dll", help="The built vf2revive_b200.dll (runtime\\native\\build_b200revive.bat) to ship behind the revive setting. Required when the build has the Revive loader.")
     parser.add_argument("--store-refresh-dll", help="The built vf2refresh_b200.dll (runtime\\native\\build_b200refresh.bat) to ship behind the r_refreshes_store setting. Required when the build has the R Refreshes the Store loader.")
+    parser.add_argument("--skin-tones-dll", help="The built vf2skin_b200.dll (runtime\\native\\build_b200skin.bat) to ship behind the skin_tones setting (loaded by the Family History DLL). Required when the build has the Family History loader.")
     parser.add_argument("--outfit-pictures-dll", help="The built vf2outfits_b200.dll (runtime\\native\\build_b200outfits.bat) to ship behind the fix_vanilla_game_bugs setting. Required when the build has the Outfit Pictures loader.")
     parser.add_argument("--family-history-dll", help="The built vf2history_b200.dll (runtime\\native\\build_b200history.bat) to ship behind the family_history setting. Required when the build has the Family History loader.")
     parser.add_argument("--up-to-28-children-dll", help="The built vf2kids_b200.dll (runtime\\native\\build_b200kids.bat) to ship behind the up_to_28_children setting. Required when the build has the Up to 28 Children loader.")

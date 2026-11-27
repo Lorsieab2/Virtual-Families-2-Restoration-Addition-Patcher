@@ -309,6 +309,17 @@
         "A family at any other speed is shown but not changed here; change it in the game instead."
       ]
     },
+    "skin_tones": {
+      "section": "Tools",
+      "title": "Skin Tones",
+      "guide": [
+        "Changes a family member's skin tone, the one the Skin Tones patch draws in the game: S1 Porcelain to S10 Ebony, or Game's own (the game's own skin).",
+        "Quit the game first, from its own menu. Click Skin Tones..., pick the save folder and the family, choose a tone for each person, then Apply.",
+        "Reset to birth tone gives someone back the tone they were born with or first given.",
+        "A family gets its tones the first time it is played with Skin Tones on; until then there is nothing to change here. Someone new to the house shows \"no tone yet\" until the game gives them one.",
+        "Your saves are backed up first, as \"Backup <date> (before skin tones)\", and the Family History log notes each change."
+      ]
+    },
     "revive_records": {
       "section": "Tools",
       "title": "Revive Records",

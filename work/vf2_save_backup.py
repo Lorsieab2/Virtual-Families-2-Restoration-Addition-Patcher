@@ -76,6 +76,7 @@ BEFORE_RENAME = "(before rename)"    # Rename Family makes this backup before it
 BEFORE_SPEED_CHANGE = "(before speed change)"   # Game Speed makes this backup before it writes the new speed
 BEFORE_COPY = "(before copy)"        # Copy Player Slot makes this backup before it copies a family
 BEFORE_MOVE = "(before move)"        # Move Player Slot (the Copy Player Slot window) backs up before it moves
+BEFORE_SKIN_TONES = "(before skin tones)"   # the Skin Tones window backs up before it writes the new tones
 INCOMPLETE = " INCOMPLETE"
 IN_PROGRESS = " (in progress)"
 DELETING = " (deleting)"
@@ -84,7 +85,8 @@ DELETE_RETRY_SECONDS = 0.5
 
 _BACKUP_NAME = re.compile(
     r"^Backup (\d{4}-\d{2}-\d{2} \d{2}-\d{2}-\d{2})(?: \((\d+)\))?"
-    r"(?: (\(before restore\)|\(before rename\)|\(before speed change\)|\(before copy\)|\(before move\)))?$"
+    r"(?: (\(before restore\)|\(before rename\)|\(before speed change\)|\(before copy\)|\(before move\)"
+    r"|\(before skin tones\)))?$"
 )
 # The game's save files are exactly "Virtual Families 2" + N + ".ldw" (one space, N without leading zeros):
 # 0 is the shared settings, 1-5 are families, N + 20 is the previous save of slot N (made for 1-5 only).
@@ -94,7 +96,7 @@ _BACKUP_NAME = re.compile(
 _SAVE_NAME = re.compile(r"^Virtual Families 2(0|[1-9]\d*)\.ldw$", re.I)
 _SIDECAR_NAME = re.compile(r"^Virtual Families 2(0|[1-9]\d*)\.ldw\.dat$", re.I)
 _NAMES_NAME = re.compile(r"^Virtual Families 2([1-5])\.ldw\.txt$", re.I)    # vf2_names.names_path
-SIDECAR_FOLDERS = ("children", "outfits", "revive")   # b200kids / b200outfits SidecarPath, vf2_revive.sidecar_path
+SIDECAR_FOLDERS = ("children", "outfits", "revive", "skin tones")   # b200kids / b200outfits / b200skin SidecarPath, vf2_revive
 PATCHER_FOLDER = "Virtual Families 2 Patcher"   # its "Save <N>" folders: each slot's logs and Family Tree files
 SHARED_FILES = ("wc.dat",)      # beside ldwLog.txt, shared by every family
 
@@ -746,6 +748,7 @@ class BackupInfo:
     before_speed_change: bool = False
     before_copy: bool = False
     before_move: bool = False
+    before_skin_tones: bool = False
 
     @property
     def label(self) -> str:
@@ -760,6 +763,8 @@ class BackupInfo:
             text += " " + BEFORE_COPY
         elif self.before_move:
             text += " " + BEFORE_MOVE
+        elif self.before_skin_tones:
+            text += " " + BEFORE_SKIN_TONES
         return text
 
 
@@ -830,7 +835,8 @@ def list_backups(save_folder: Path) -> list[BackupInfo]:
         size = sum((entry / relative).stat().st_size for relative in files)
         found.append((when, sequence, BackupInfo(entry, when, label == BEFORE_RESTORE, len(files), size, slots_in(files),
                                                      label == BEFORE_RENAME, label == BEFORE_SPEED_CHANGE,
-                                                     label == BEFORE_COPY, label == BEFORE_MOVE)))
+                                                     label == BEFORE_COPY, label == BEFORE_MOVE,
+                                                     label == BEFORE_SKIN_TONES)))
     found.sort(key=lambda item: (item[0], item[1]), reverse=True)
     return [info for _when, _sequence, info in found]
 

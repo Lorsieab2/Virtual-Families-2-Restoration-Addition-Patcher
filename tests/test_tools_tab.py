@@ -109,7 +109,7 @@ class ToolsTabTests(unittest.TestCase):
         links = [str(w.cget("text")) for w in found
                  if w.winfo_class() == "TLabel" and str(w.cget("style")) == "Link.TLabel"]
         self.assertEqual(links, ["Back Up Saves", "Restore Saves...", "Copy Player Slot...", "Rename Family...",
-                                 "Game Speed...", "Revive Records...",
+                                 "Game Speed...", "Revive Records...", "Skin Tones...",
                                  "Family Tree Maker...", "Game Mechanics...", "Picture Maker...",
                                  "Game Text...", "Unicode Font...", "Translations...", "How to Use..."])
         boxes = [str(w.cget("text")) for w in found if w.winfo_class() == "TLabelframe"]

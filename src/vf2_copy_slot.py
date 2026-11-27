@@ -15,6 +15,8 @@ What belongs to save slot N (1-5)
       outfit pictures (runtime/native/b200outfits/b200outfits.cpp, SidecarPath).
     * "Virtual Families 2 Patcher Data\\Revive\\Virtual Families 2<N>.ldw.dat" and "...<N+20>.ldw.dat": the Revive
       snapshots of the family members who died (src/vf2_revive.py), keyed like the Children file.
+    * "Virtual Families 2 Patcher Data\\Skin Tones\\Virtual Families 2<N>.ldw.dat" and "...<N+20>.ldw.dat": the
+      family members' skin tones (runtime/native/b200skin/b200skin.cpp, src/vf2_skin_tones.py), keyed the same way.
     * "Virtual Families 2 Patcher\\Save <N>\\": the Family History log (Logs\\Family History\\Family History
       <k>.txt, runtime/native/b200history/b200history.cpp HistoryFile) and the Family Tree Maker's tree file and
       edits (Data\\Family Tree, vf2_tree_memory.tree_file and vf2_family_tree.data_folder), and anything else kept
@@ -98,8 +100,9 @@ BACKUP_LABEL = save_backup.BEFORE_COPY
 MAX_LENGTH = rename.MAX_LENGTH
 PATCHER_FOLDER = "Virtual Families 2 Patcher"           # vf2_genealogy.PATCHER_FOLDER (b200history.cpp kSaves)
 DATA_FOLDER = save_backup.DATA_FOLDER                    # "Virtual Families 2 Patcher Data"
-SIDECAR_FOLDERS = ("Children", "Outfits", "Revive")     # b200kids.cpp / b200outfits.cpp SidecarPath; vf2_revive
-SIDECAR_WHAT = {"Children": "Up to 28 Children", "Outfits": "outfit pictures", "Revive": "Revive snapshots"}
+SIDECAR_FOLDERS = ("Children", "Outfits", "Revive", "Skin Tones")  # b200kids / b200outfits / b200skin SidecarPath; vf2_revive
+SIDECAR_WHAT = {"Children": "Up to 28 Children", "Outfits": "outfit pictures", "Revive": "Revive snapshots",
+                "Skin Tones": "skin tones"}
 EXPORTS_FOLDER = "Family Tree"                          # Save <N>\Family Tree: made again each time; not copied
 TREE_FORMAT = "Virtual Families 2 Patcher family tree"   # vf2_tree_memory.FORMAT
 FLAG_FIRST = reader.HEADER_SIZE + 0x79                   # the settings file's in-use flag of slot 1 (gs+0x25B99)
@@ -165,11 +168,16 @@ class Sidecar:
 def read_sidecar(kind: str, data: bytes) -> Sidecar | None:
     """The save a Children or Outfits sidecar describes, or None when its DLL would find it damaged (the checks of
     ReadSidecar in b200kids.cpp / b200outfits.cpp, as far as the file itself goes). A Revive file is read by
-    vf2_revive.read_file (the same header, hash and checksum places)."""
+    vf2_revive.read_file and a Skin Tones file by vf2_skin_tones.read_file (the same header, hash and checksum
+    places)."""
     if kind == "Revive":
         import vf2_revive
         snapshots = vf2_revive.read_file(data)
         return None if snapshots is None else Sidecar(snapshots.save_hash, snapshots.save_size)
+    if kind == "Skin Tones":
+        import vf2_skin_tones       # imported here: vf2_skin_tones imports vf2_rename_family, which this imports
+        tones = vf2_skin_tones.read_file(data)
+        return None if tones is None else Sidecar(tones.save_hash, tones.save_size)
     magic = KIDS_MAGIC if kind == "Children" else OUTFITS_MAGIC
     if len(data) < 44 or data[:8] != magic or data[12:20] != SIDECAR_TAG:
         return None

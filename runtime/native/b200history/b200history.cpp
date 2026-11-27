@@ -1858,11 +1858,38 @@ static bool SettingOn() {
     return GetPrivateProfileIntW(L"Patches", L"FamilyHistory", 0, path) == 1;
 }
 
+// The Skin Tones DLL (vf2skin_b200.dll, beside this one while the Skin Tones setting is on) has no loader of its own
+// in the executable: this DLL loads it, after its own install, and calls B200Skin_Startup() once (it reads its own
+// setting, vf2skin.ini, and resolves and installs itself, all or nothing). With no file there nothing is loaded.
+static void LoadSkinTones() {
+    if (!Folder[0]) return;
+    wchar_t path[MAX_PATH];
+    unsigned n = 0;
+    while (Folder[n] && n + 20 < MAX_PATH) { path[n] = Folder[n]; ++n; }
+    const wchar_t *name = L"vf2skin_b200.dll";
+    for (unsigned i = 0; name[i]; ++i) path[n++] = name[i];
+    path[n] = 0;
+    HMODULE skin = LoadLibraryW(path);
+    if (!skin) return;
+    typedef int (__cdecl *SkinStartupFn)();
+    SkinStartupFn startup = (SkinStartupFn)GetProcAddress(skin, "B200Skin_Startup");
+    if (!startup) { Log("vf2skin_b200.dll has no B200Skin_Startup"); return; }
+    startup();
+    Log("vf2skin_b200.dll started");
+}
+
+static void StartHistory();
+
 // Called once by the executable's loader, before the game loop starts.
 extern "C" __declspec(dllexport) void __cdecl B200History_Startup() {
     static bool started = false;
     if (started) return;
     started = true;
+    StartHistory();
+    LoadSkinTones();
+}
+
+static void StartHistory() {
     DWORD n = GetModuleFileNameW(ThisModule, Folder, MAX_PATH);
     if (n == 0 || n >= MAX_PATH) return;
     unsigned cut = n;
