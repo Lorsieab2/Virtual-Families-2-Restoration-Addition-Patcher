@@ -4077,14 +4077,14 @@ strings/4088~7fd34fbc	Adopt Baby	Adopter un bébé	eString_AdoptBabyButton
 strings/4089~86f5f90b	Adopt Child (Age 2-8)	Adopter un enfant (2-8 ans)	eString_AdoptChildButton
 strings/4090~521a4286	Bathroom 2 must be renovated first before this can be bought.	La salle de bain 2 doit d'abord être rénovée avant cet achat.	eString_MobileRenovationBathroom2Required
 strings/4091~0cb726b9	Revive a Family Member	Ramener un membre de la famille	eString_ReviveTitle
-strings/4092~9458ef34	Brings back a family member of this generation who died, as the same person: their name, looks, likes, career and wish for children. Someone who died at 18 or older returns at 18; someone younger returns at the age they died.	Ramène un membre de cette génération qui est mort, la même personne  son nom, son apparence, ses goûts, sa carrière et son désir d'enfants. Mort à 20 ans ou plus  il revient à 20 ans  plus jeune  à l'âge de sa mort.	eString_ReviveDescription
-strings/4093~ffde05c1	Bring back this family member?	Ramener ce membre de la famille 	eString_ReviveQuestion
+strings/4092~9458ef34	Brings back a family member of this generation who died, as the same person: their name, looks, likes, career and wish for children. Someone who died at 18 or older returns at 18; someone younger returns at the age they died.	Ramène un membre de cette génération qui est mort, comme la même personne : son nom, son apparence, ses goûts, sa carrière et son désir d'enfants. Mort à 18 ans ou plus, il revient à 18 ans ; plus jeune, il revient à l'âge de sa mort.	eString_ReviveDescription
+strings/4093~ffde05c1	Bring back this family member?	Ramener ce membre de la famille ?	eString_ReviveQuestion
 strings/4094~013f5440	age	âge	eString_ReviveAge
 strings/4095~c1030b23	Revive	Ramener	eString_ReviveButton
 strings/4096~1ff57a29	Next	Suivant	eString_ReviveNextButton
 strings/4097~3bbb2ed5	No family member of this generation can be brought back. Nothing was charged.	Aucun membre de cette génération ne peut être ramené. Rien n'a été payé.	eString_ReviveNone
 strings/4098~c2550bc0	There is no room for another family member. Nothing was charged.	Il n'y a pas de place pour un autre membre de la famille. Rien n'a été payé.	eString_ReviveNoRoom
-strings/4099~c68903ba	has come back to the family!	est revenu dans la famille 	eString_ReviveDone
+strings/4099~c68903ba	has come back to the family!	est de retour dans la famille !	eString_ReviveDone
 patch/game.brokerage_settings~3e7df33e	Your brokerage has increased your interest rate by %d	Votre courtier a augmenté votre taux d'intérêt de %d	Redeem Credit in Settings: the server's answer (%d is the number); the original game's own words, drawn by the game, at most 160 letters; the % places are filled with the words or numbers shown
 patch/game.brokerage_store~6e682ff5	Your brokerage has increased your interest rate by %d%	Votre courtier a augmenté votre taux d'intérêt de %d %	Redeem Credit in the store: the server's answer (%d is the number; the original game ends this line with a lone %); the original game's own words, drawn by the game, at most 160 letters; the % places are filled with the words or numbers shown
 patch/game.career_level_1~b795ff9c	%s, Lvl 1	%s, niv. 1	Adoption and Dating: a candidate's career and level (%s is the career); the original game's own words, drawn by the game, at most 80 letters; the % places are filled with the words or numbers shown

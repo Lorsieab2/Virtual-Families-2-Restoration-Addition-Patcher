@@ -355,7 +355,7 @@ checked against `manifest.json`, the release notes and the owner's confirmed
 play reports; superseded claims are marked rather than deleted.*
 
 The GUI reads its checkboxes from the shipped manifest, so the exact list follows
-the release you downloaded. The bundle offers 50 settings (after B209): B208's 48 plus **Revive** and **Skin Tones** (both on by default).
+the release you downloaded. The B210 bundle offers 50 settings: B209's 48 plus **Revive** and **Skin Tones** (both on by default).
 
 That number is not simply the count of settings the patcher defines, which is
 51. The settings list drops any optional setting that has no packaged source
@@ -762,8 +762,9 @@ release bundle, like almost everything else)
 - **Add optional song mods** - optional music replacements.
 - **No AI Icons** - requires Cheat Upgrades; swaps the late Special Upgrade icons for non-AI artwork.
 
-**Almost everything in the release bundle is on by default.** Of B208's 48
-settings, 41 arrive enabled when you pick **Default Patches** (B207: 40 of 47); the
+**Almost everything in the release bundle is on by default.** Of B210's 50
+settings, 43 arrive enabled when you pick **Default Patches** (**Revive** and **Skin Tones** are new
+and on; B208 and B209: 41 of 48; B207: 40 of 47); the
 seven off are the four cheats above, **Swap Invisible Furniture Graphics with
 Transparent Graphics**, **Use Unicode Font (overrides in-game fonts)** (the other
 way to show Unicode; **Render Unicode with In-Game Fonts** is on), and **Up to 28 Children**,

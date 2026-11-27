@@ -225,7 +225,13 @@ def test_the_reader_finds_the_table_in_the_original_game():
 
 def test_the_reader_finds_the_table_in_a_patched_game():
     table = ts.read_table(patched())
-    assert len(table) >= 3557 and max(table) <= 0xFFA
+    # Revive (after B209) adds 0xFFB..0x1003. No fixed cap stands at 0xFF3 or 0x1000: the generator
+    # (patch_string_manager) sets the index's one-past bound to the highest id + 1 and grows the index by the same, and
+    # in every B210 matrix executable the constructor fills index[1..0x1003] (`cmp edx, 0x1004`), sm.xml's two loops
+    # stop at INDEX + 4 * 0x1004, GetString and the template filler refuse id - 1 > 0x1002, and the index's 4 * 0x1004
+    # bytes end before the next variable (12 bytes on). vf2tr_b200.dll reads that bound from the same loop (at most
+    # 0x2000) and allocates by it. So the bound here is the newest record, not a capacity.
+    assert len(table) >= 3557 and max(table) <= 0x1003
     assert table[113][1] == b"Try Again" and table[5][1] == b"{name} sees their adorable pet."
 
 
