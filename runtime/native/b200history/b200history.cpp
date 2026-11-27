@@ -1107,7 +1107,12 @@ static void WipeSlot(int slot) {
 
 // ================================================================ the events
 static int gInLoad;
-static int gStartedOver;      // the confirmed Start Over: the next new family's log says so
+// Each belongs to one save slot, so a Start Over or an eviction never reaches another slot's log (the end-to-end
+// check, 2026-11-26: Start Over in Save 1, then Save 2 whose save the game could not load, then a family adopted
+// there: Save 2's log opened with Save 1's Start Over, and Save 1 never got its record).
+static int gStartedOver[6];  // the confirmed Start Over in slot N: that slot's next new family's log says so
+static int gTreeSlot;        // the slot whose family the game's Family Tree in memory is (its evicted flag too):
+                             // set by a load of that slot, its Start Over, its eviction and its new family
 
 // ---- conception (the babies expected: one, twins or triplets)
 // The father: the household villager whose head and body are the ones Impregnate was given (both of its callers
@@ -1336,18 +1341,23 @@ static void OnGeneration(const unsigned char *v, bool newFamily, bool afterEvict
     Person p;
     Capture(v, p);
     const char *how;
-    if (newFamily && afterEviction) {
+    // The evicted flag is this slot's only when the tree in memory is this slot's family (a load that failed leaves
+    // the slot before's tree there); before any of those this session (0) the flag is trusted, as it always was.
+    if (newFamily && afterEviction && (gTreeSlot == slot || gTreeSlot == 0)) {
         how = "Founder (after the eviction)";
     } else if (newFamily) {
         // A brand-new family in this slot (a new game, or after Start Over): the folder is the new family's.
         WipeSlot(slot);
         CreateLog(slot);
-        if (gStartedOver) Write(slot, "Start Over", "  The earlier family's history was cleared.\r\n");
+        if (gStartedOver[slot]) Write(slot, "Start Over", "  The earlier family's history was cleared.\r\n");
         how = "Founder (adopted and started the family)";
     } else {
         how = "Heir (inherited the house)";
     }
-    if (newFamily) gStartedOver = 0;
+    if (newFamily) {
+        gStartedOver[slot] = 0;
+        gTreeSlot = slot;
+    }
     Text t;
     if (!Begin(t)) return;
     Self(t, p, "Age");
@@ -1431,6 +1441,7 @@ static void OnEvict() {
     t.NL();
     Generation(t, Generations());
     Write(slot, "Evict Family", Body);
+    gTreeSlot = slot;
 }
 
 // ================================================================ an existing family's first log
@@ -1467,8 +1478,9 @@ static void Backfill(int slot) {
 
 static void OnLoaded(int slot) {
     ClearSession();
-    gStartedOver = 0;
+    gTreeSlot = slot;
     if (Generations() <= 0) return;        // no family: the new family's adoption starts the log
+    gStartedOver[slot] = 0;                // a family loaded in this slot: its Start Over did not take
     CreateLog(slot);
     B200History_Status.lastLoad = 1;
     char path[MAX_PATH + 64];
@@ -1603,8 +1615,11 @@ static void __fastcall EvictHook(void *tree, void *) {
 // Start Over.
 static void __fastcall StartOverHook(void *state, void *) {
     int slot = CurrentSlot();
-    if (slot) WipeSlot(slot);
-    gStartedOver = 1;
+    if (slot) {
+        WipeSlot(slot);
+        gStartedOver[slot] = 1;
+        gTreeSlot = slot;
+    }
     NextStartOver(state);
 }
 

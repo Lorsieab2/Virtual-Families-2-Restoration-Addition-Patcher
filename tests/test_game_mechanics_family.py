@@ -105,7 +105,9 @@ def test_every_member_is_listed_with_the_saves_own_values(tmp_path, name):
             _cid, place, job, _pay = fam.CAREER_BY_ID[career]
             assert f"Career: {job} (works in the {gm.WORKPLACES[place]}), {gm.LEVELS[level]} (level {level + 1} of 8)" \
                 in body
-            assert f"progress {progress:,} of 3,000" in body and f"salary ${salary:,}: ${salary / 2:g} per hour" in body
+            assert f"Career progress: {progress:,} of 3,000" in body
+            assert f"salary ${salary:,}: ${salary / 2:,.2f} per hour" in body
+            assert ("(top level, no further promotion)" in body) == (level == 7)
         likes = [fam.LIKE_WORDS[i] for i in struct.unpack_from("<3i", data, r + 0x150) if i != -1]
         dislikes = [fam.LIKE_WORDS[i] for i in struct.unpack_from("<3i", data, r + 0x15C) if i != -1]
         assert f"Likes: {', '.join(likes) or 'none'}. Dislikes: {', '.join(dislikes) or 'none'}." in body
@@ -114,7 +116,8 @@ def test_every_member_is_listed_with_the_saves_own_values(tmp_path, name):
         conceived = i32(data, r + 0xCC)
         if conceived:
             babies = {1: "1 baby", 2: "twins", 3: "triplets"}[i32(data, r + 0xD0)]
-            assert f"Pregnant with {babies}, conceived at age unit {conceived:,}: born on age unit {conceived + 21:,}" \
+            assert (f"Pregnant with {babies}, conceived at the mother's age unit {conceived:,}: born at her age "
+                    f"unit {conceived + 21:,}") \
                 in body
 
 
@@ -199,13 +202,14 @@ def test_sickness_infection_food_groups_and_a_whole_name(tmp_path):
     assert "Not sick by the game's test (no symptom), but carries a serious infection (Vancomycin ends it)" in body
     assert f"Whole name: Oslo Wholename-Smith; the save keeps the short form \"{short}\"" in body
     assert (f"Dairy until {fam.when(save, saved + 600)}, Fruits and Veggies until {fam.when(save, saved - 1)} "
-            "(already over). The game counts 1.") in body
+            "(already over). The game's count is 1.") in body
 
 
 def test_pregnancy_and_the_unborn_child(tmp_path):
     facts = fam.facts(put(tmp_path / "save", fixture("pending_birth_slot1")))
     wiz = "\n".join(lines_of(facts, "Wizzy"))
-    assert ("Pregnant with 1 baby, conceived at age unit 560: born on age unit 581, 19 age units to go (3 hours 10 "
+    assert ("Pregnant with 1 baby, conceived at the mother's age unit 560: born at her age unit 581, 19 age units "
+            "to go (3 hours 10 "
             "minutes of game time, 3 hours 10 minutes of real time at Normal speed); the father's looks are Oslo's "
             "(the save keeps the father's name as \"Joey\"") in wiz
     assert "Children in the save's Family Tree: Trishania (on the way, not born yet)." in wiz
@@ -221,6 +225,41 @@ def test_spouse_parents_and_children(tmp_path):
     assert "Parents: Elsa and Paulolo (the save's Family Tree)." in merlino
     assert "\"Joey\" is the name the game writes for the father when a try for a baby works" in merlino
     assert "a teen (14 to 17)" not in merlino and "a child (under 14)" in merlino
+
+
+def test_the_end_to_end_checks_wording(tmp_path):
+    """The end-to-end check (2026-11-27): the dead have no next birthday and an UNCONFIRMED cause, a widowed spouse
+    names the one who died, a spouse who married in has no founder guess list, pay has two decimals, and the
+    UNCONFIRMED progress field is labelled so (a Master's is the top level)."""
+    data = bytearray(fixture("one_generation_slot3"))
+    save = sr.parse_family_save(bytes(data))
+    rec = save.family_tree.current
+    paulolo = rec.parent2
+    struct.pack_into("<ii", data, record_at(paulolo.slot) + 0xB4, 0, 2)          # Paulolo dies, his body at home
+    at = sr.gs_to_file(sr.GS_FAMILY_TREE) + 4 + rec.index * sr.FAMILY_RECORD_SIZE + 0xDC
+    assert data[at:at + 8].startswith(b"Paulolo")
+    struct.pack_into("<i", data, at + 0x28, -1)                                   # ReportDeath
+    elsa_rec = record_at(rec.parent1.slot)
+    struct.pack_into("<ii", data, elsa_rec + 0x140 + 4, 7, 3000)                  # Elsa is a Master
+    facts = fam.facts(put(tmp_path / "save", bytes(data)))
+    dead = lines_of(facts, "Paulolo")
+    assert dead[0].startswith("Paulolo: Male, died at ") and "more to the next birthday" not in dead[0]
+    cause = next(f for f in facts if f.text.startswith("The cause the save keeps: 2"))
+    assert cause.label == fam.U and "probably Old age" in cause.text
+    elsa = "\n".join(lines_of(facts, "Elsa"))
+    assert "Spouse: Paulolo (died; the save's Family Tree, generation 1)." in elsa
+    progress = next(f for f in facts if f.text.startswith("Career progress: 3,000"))
+    assert progress.text == "Career progress: 3,000 of 3,000 (top level, no further promotion)."
+    assert progress.label == fam.U
+    assert not any("toward the next promotion" in f.text and f.label != fam.U for f in facts)
+    assert not re.search(r"\$\d+\.\d per hour|\$\d+ per hour", "\n".join(f.text for f in facts))
+    # A spouse who married in and whose record keeps no parents.
+    other = bytearray(fixture("one_generation_slot3"))
+    r = record_at(rec.parent2.slot)
+    other[r + 8 + 0x34:r + 8 + 0x34 + 0x34] = bytes(0x34)
+    facts = fam.facts(put(tmp_path / "save2", bytes(other)))
+    paul = "\n".join(lines_of(facts, "Paulolo"))
+    assert "Parents: none: married into the family; the save keeps no parents for them." in paul
 
 
 def test_every_time_names_its_clock_and_nothing_names_a_sex_rule(tmp_path):

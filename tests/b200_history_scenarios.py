@@ -1374,6 +1374,52 @@ def scenario_start_over_wipes_the_slot(w: HistoryWorld):
     ]
 
 
+def _to_a_slot_the_game_cannot_load(w: HistoryWorld, slot: int, founder: str):
+    """The player switches to `slot`, whose save the game cannot load (its Load fails: the tree in memory is still
+    the slot before's), and adopts a new family there."""
+    w.load_result = 0
+    w.set_slot(slot)
+    assert w.load(slot) == 0
+    for s in range(30):
+        w.set_active(s, 0)
+    w.set_player("Gus Player")
+    w.set_villager(3, founder, MALE, age=500)
+    w.new_family(3)
+
+
+def scenario_a_start_over_stays_in_its_own_slot(w: HistoryWorld):
+    """The end-to-end check (2026-11-26): Start Over in Save 1, then Save 2 (its load failed) and a family adopted
+    there: Save 2's log opened with "Start Over 1" and Save 1 never got its record. The Start Over is Save 1's."""
+    founded(w)
+    w.fs.write(w.history_path(1, 2), b"Family: Old Player (Save 2)\r\n[2026-01-01 00:00:00] Generation 1\r\n"
+                                     b"  Name: Old\r\n\r\n")
+    w.start_over()
+    _to_a_slot_the_game_cannot_load(w, 2, "Gus")
+    assert w.headings(2) == ["Generation 1"], w.headings(2)
+    assert w.last(2)[1][-2:] == ["  How: Founder (adopted and started the family)", "  Generation: 1"]
+    # back in Save 1, its new family: the Start Over is still Save 1's
+    w.set_slot(1)
+    for s in range(30):
+        w.set_active(s, 0)
+    w.set_villager(5, "Ida", FEMALE, age=500)
+    w.new_family(5)
+    assert w.headings(1) == ["Start Over 1", "Generation 1"], w.headings(1)
+
+
+def scenario_an_eviction_stays_in_its_own_slot(w: HistoryWorld):
+    """Evict Family in Save 1, then Save 2 (its load failed: the tree in memory, evicted flag and all, is still Save
+    1's) and a family adopted there: Save 2's family is a new family, not "after the eviction" of Save 1's."""
+    founded(w)
+    w.fs.write(w.history_path(1, 2), b"Family: Old Player (Save 2)\r\n[2026-01-01 00:00:00] Generation 1\r\n"
+                                     b"  Name: Old\r\n\r\n")
+    w.evict()
+    one = w.history(1, 1)
+    _to_a_slot_the_game_cannot_load(w, 2, "Gus")
+    assert w.headings(2) == ["Generation 1"], w.headings(2)
+    assert w.last(2)[1][-2:] == ["  How: Founder (adopted and started the family)", "  Generation: 1"]
+    assert w.history(1, 1) == one, "Save 1's log is untouched"
+
+
 def scenario_rename_in_the_details_box(w: HistoryWorld):
     """theVillagerScene's two ChangeName calls: a record only when the name really changes."""
     founded(w)
@@ -1720,6 +1766,7 @@ ALL = [scenario_whole_names_in_the_log, scenario_names_are_logged_in_utf8,
        scenario_random_events, scenario_random_event_title_is_the_dialogs, scenario_the_choice_is_the_dialogs,
        scenario_children_join_and_leave, scenario_next_generation, scenario_evict_then_new_family_keeps_the_log,
        scenario_start_over_wipes_the_slot, scenario_new_family_wipes_the_old_one, scenario_backfill_once,
+       scenario_a_start_over_stays_in_its_own_slot, scenario_an_eviction_stays_in_its_own_slot,
        scenario_a_load_with_no_family_writes_nothing, scenario_the_log_rolls_after_2000_records,
        scenario_numbers_continue_across_files, scenario_family_story_end_to_end]
 

@@ -215,6 +215,27 @@ def _with_menu(settings: bytes, slot: int, raw: bytes, used: bool) -> bytes:
     return out[:flag] + (b"\x01" if used else b"\x00") + out[flag + 1:]
 
 
+def _read_only(path: Path) -> bool:
+    """``path`` is marked read-only (Windows' Read-only box), so it can be renamed but not rewritten."""
+    try:
+        return not os.access(path, os.W_OK)
+    except OSError:
+        return False
+
+
+def _refuse_read_only(plan: Plan) -> None:
+    """Every file the move must rewrite (a log header, a tree file, the settings file) can be written, checked
+    before anything moves: a read-only one would stop the move half way (the end-to-end check, 2026-11-26)."""
+    rewrite = [m.source for m in plan.moves if m.data is not None] + [rename.settings_path(plan.folder)]
+    locked = [p for p in rewrite if _read_only(p)]
+    if locked:
+        shown = "; ".join(str(p.relative_to(plan.folder)) for p in locked[:8])
+        more = f" and {len(locked) - 8} more" if len(locked) > 8 else ""
+        raise MoveError(f"These files are read-only, and the move must write the slot number inside them: "
+                        f"{shown}{more}. Clear Read-only in each file's Properties (right-click it in File "
+                        f"Explorer) and try again. Nothing was moved.")
+
+
 def plan_move(folder: Path, source: int, target: int) -> Plan:
     """Everything the move would do, worked out and checked before anything is written."""
     folder = Path(folder)
@@ -271,6 +292,7 @@ def plan_move(folder: Path, source: int, target: int) -> Plan:
     names = [str(p).casefold() for p in places]
     if len(names) != len(set(names)):
         raise MoveError("Two of the slot's files would go to the same place, so nothing was moved.")
+    _refuse_read_only(plan)
     plan.fingerprints = tuple(sorted(
         [_fingerprint(m.source, m.original) for m in plan.moves]
         + [_fingerprint(p) for p in plan.removals]
@@ -439,15 +461,20 @@ def _roll_back(plan: Plan, done: _Done) -> list[str]:
         except OSError as exc:
             problems.append(f"{directory}: {exc}")
     for move, rewritten in reversed(done.moved):
+        # A file whose rewrite failed (read-only) still holds its original bytes: it is only renamed back. A rewrite
+        # that cannot be undone never stops the rename, so the file is always back in its own place.
         try:
-            if rewritten:
+            if rewritten and move.target.read_bytes() != move.original:
                 info = move.target.stat()
                 _write_over(move.target, move.original, (info.st_atime_ns, info.st_mtime_ns))
+        except (OSError, MoveError) as exc:
+            problems.append(f"{move.source.name} (now {move.target}): {exc}")
+        try:
             move.source.parent.mkdir(parents=True, exist_ok=True)
             _rename(move.target, move.source)
         except (OSError, MoveError) as exc:
             problems.append(f"{move.source.name} (now {move.target}): {exc}")
-    for directory in reversed(done.dirs):
+    for directory in sorted(done.dirs, key=lambda p: -len(p.parts)):   # deepest first
         try:
             directory.rmdir()
         except OSError:

@@ -347,8 +347,18 @@ def _peep_raw(data: bytes, record: int, place: int) -> bytes:
     return bytes(data[at:at + reader.PEEP_RECORD_SIZE])
 
 
-def _same(v: reader.Villager, name: bytes, sex: int, head: int, body: int, raw: bytes) -> bool:
-    return (_strip(raw[0x18:0x18 + 25]) == name and v.gender == sex and v.head == head and v.body == body)
+def _same(v: reader.Villager, name: bytes, sex: int, head: int, raw: bytes) -> bool:
+    """The same person: name, sex and head, what never changes in a life. Not the body: the Family Tree keeps the
+    body a person had when they were entered, and it changes as they grow (the VF1 end-to-end check, 2026-11-27: an
+    heir dead in the house was missed from her own record); it is only a tiebreak (_by_body)."""
+    return _strip(raw[0x18:0x18 + 25]) == name and v.gender == sex and v.head == head
+
+
+def _by_body(hits: list, body: int) -> list:
+    """Two or more alike: the one(s) with the body the tree or the log gives, when any has it."""
+    if len(hits) > 1 and any(v.body == body for v, _raw in hits):
+        return [(v, raw) for v, raw in hits if v.body == body]
+    return hits
 
 
 def _from_record(s: Snapshot, raw: bytes, v: reader.Villager, dead: bool, source: int) -> Snapshot:
@@ -399,11 +409,11 @@ def _find_record(s: Snapshot, files: list) -> Snapshot | None:
     alive = None
     for f in files:
         hits = [(v, _record_at(f.data, v.slot)) for v in f.save.villagers]
-        hits = [(v, raw) for v, raw in hits if _same(v, _strip(s.name), s.sex, s.head, s.body, raw)]
-        dead = [(v, raw) for v, raw in hits if v.health <= 0]
+        hits = [(v, raw) for v, raw in hits if _same(v, _strip(s.name), s.sex, s.head, raw)]
+        dead = _by_body([(v, raw) for v, raw in hits if v.health <= 0], s.body)
         if len(dead) == 1:
             return _from_record(s, dead[0][1], dead[0][0], True, f.source)
-        living = [(v, raw) for v, raw in hits if v.health > 0 and v.active]
+        living = _by_body([(v, raw) for v, raw in hits if v.health > 0 and v.active], s.body)
         if alive is None and len(living) == 1 and not dead:
             alive = _from_record(s, living[0][1], living[0][0], False, f.source)
     return alive
@@ -472,8 +482,9 @@ def dead_of(f: SaveFile, folder: Path, number: int, slot: int) -> list:
                 head, body = int(e.get("Head", "")), int(e.get("Body", ""))
             except ValueError:
                 continue
-            match = next((s for s in out if s.sex == sex and s.head == head and s.body == body
-                          and book.full(slot, game_text.decode(s.name)) == whole), None)
+            alike = [s for s in out if s.sex == sex and s.head == head
+                     and book.full(slot, game_text.decode(s.name)) == whole]
+            match = next((s for s in alike if s.body == body), alike[0] if len(alike) == 1 else None)
             years = e.get("Age at death", "")
             log = Snapshot(source=LOG, generation=gen_number, sex=sex, head=head, body=body,
                            heir_name=heir.name, heir_sex=heir.sex, heir_head=heir.head, heir_body=heir.body)
