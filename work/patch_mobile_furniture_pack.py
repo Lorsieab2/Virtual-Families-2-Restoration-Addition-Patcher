@@ -13457,7 +13457,8 @@ public:
     visible_special_upgrade_icon_cases = "\n".join(
         f"    case 0x{item_id:X}: return {index};"
         for index, item_id in enumerate(VISIBLE_SPECIAL_UPGRADE_ICON_FILES)
-    )
+    ) + (f"\n    case 0x{REVIVE_ITEM_ID:X}: return "               # Revive: the Health Plan's own icon
+         f"{list(VISIBLE_SPECIAL_UPGRADE_ICON_FILES).index(REVIVE_ICON_ITEM)};")
     mobile_renovation_store_icon_cases = "\n".join(
         f"    case 0x{spec['pc_item']:X}: return kVF2MobileRenovationStoreIconImageBase + {index};"
         for index, spec in enumerate(MOBILE_RENOVATION_USER_STORE_ICON_MAPPING.values())
@@ -16190,8 +16191,13 @@ public:
 };
 extern "C" char *__cdecl strncpy(char *, char const *, unsigned int);
 
+// The real ldwDialog is polymorphic (its vtable pointer at +0). Declared without a virtual function, the dialogs
+// below that add a virtual destructor would put their own vtable pointer first and this base at +4, so every
+// DoModal call would get the dialog's address + 4 -- what made "Revive a Family Member" exit the game. With the
+// virtual destructor here the base is at +0, as in the game (tests/test_b200_revive.py emulates it).
 class ldwDialog {
 public:
+    virtual ~ldwDialog();
     int DoModal(ldwScene *scene, bool fade);
 };
 

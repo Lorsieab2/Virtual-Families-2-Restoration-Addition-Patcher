@@ -719,28 +719,53 @@ static bool WriteSlot(void **slot, void *value) {
     return VirtualProtect(slot, 4, old, &ignored) != FALSE;
 }
 
+// vf2revive.log beside the DLL: one line per start, as the other companion DLLs write theirs.
+static void StartLog(const char *line) {
+    wchar_t path[MAX_PATH];
+    unsigned n = 0;
+    while (Folder[n] && n + 16 < MAX_PATH) { path[n] = Folder[n]; ++n; }
+    const wchar_t *name = L"vf2revive.log";
+    for (unsigned i = 0; name[i]; ++i) path[n++] = name[i];
+    path[n] = 0;
+    HANDLE h = CreateFileW(path, GENERIC_WRITE, FILE_SHARE_READ, 0, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
+    if (h == INVALID_HANDLE_VALUE) return;
+    DWORD written = 0;
+    WriteFile(h, line, Length(line), &written, 0);
+    WriteFile(h, "\r\n", 2, &written, 0);
+    CloseHandle(h);
+}
+
 extern "C" __declspec(dllexport) void __cdecl B200Revive_Startup(const VF2ReviveHost *host) {
     if (B200Revive_Status.installed) return;
     GetModuleFileNameW(ThisModule, Folder, MAX_PATH);
     unsigned cut = 0;
     for (unsigned i = 0; Folder[i]; ++i) if (Folder[i] == L'\\') cut = i + 1;
     Folder[cut] = 0;
-    if (!SettingOn()) return;
+    if (!SettingOn()) { StartLog("Revive not installed: vf2revive.ini does not say Revive=1"); return; }
     B200Revive_Status.requested = 1;
-    if (!host || host->magic != kHostMagic || host->version != 1 || host->size != sizeof(VF2ReviveHost)) return;
-    if (!host->saveRecord || !host->savePath || !host->currentSlot || !host->currentFamily || !host->generations ||
-        !host->gameStateVtable || !host->stockLoad || !host->stockSave)
+    if (!host || host->magic != kHostMagic || host->version != 1 || host->size != sizeof(VF2ReviveHost) ||
+        !host->saveRecord || !host->savePath || !host->currentSlot || !host->currentFamily || !host->generations ||
+        !host->gameStateVtable || !host->stockLoad || !host->stockSave) {
+        StartLog("Revive not installed: the executable's host table is not one this DLL knows");
         return;
+    }
     void *load = 0, *save = 0;
     void **vt = host->gameStateVtable;
-    if (!SlotChain(vt + kLoadSlot, host->stockLoad, &load) || !SlotChain(vt + kSaveSlot, host->stockSave, &save))
+    if (!SlotChain(vt + kLoadSlot, host->stockLoad, &load) || !SlotChain(vt + kSaveSlot, host->stockSave, &save)) {
+        StartLog("Revive not installed: theGameState's Load / Save slots hold something unknown");
         return;
+    }
     Host = host;
     NextLoad = (GameStateSlotFn)load;
     NextSave = (GameStateSlotFn)save;
-    if (!WriteSlot(vt + kLoadSlot, (void *)&LoadHook)) return;
-    if (!WriteSlot(vt + kSaveSlot, (void *)&SaveHook)) { WriteSlot(vt + kLoadSlot, load); return; }
+    if (!WriteSlot(vt + kLoadSlot, (void *)&LoadHook)) { StartLog("Revive not installed: the Load slot write failed"); return; }
+    if (!WriteSlot(vt + kSaveSlot, (void *)&SaveHook)) {
+        WriteSlot(vt + kLoadSlot, load);
+        StartLog("Revive not installed: the Save slot write failed");
+        return;
+    }
     B200Revive_Status.installed = 1;
+    StartLog("Revive installed");
 }
 
 BOOL WINAPI DllMain(HINSTANCE instance, DWORD reason, LPVOID) {
