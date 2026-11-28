@@ -48,6 +48,14 @@ import vf2_rename_family as rename
 import vf2_save_backup as save_backup
 import vf2_save_reader as reader
 
+# HELD FOR THE NEXT RELEASE (the owner's decision, 2026-11-28): Skin Tones does not ship in B210, because the owner
+# first hand-edits the skin mask pictures (the GIMP files). While this is True the exporter
+# (work/export_offline_patch_bundle.py) leaves out the Skin Tones setting row, its DLL, its ini and its mask pictures,
+# so every executable's dormant .vf2skin byte stays 00 as built and the loader does nothing; and the Tools tab shows
+# no Skin Tones... link and no Skin Tones guide. The code, the DLL source and the tests stay for the next release:
+# set this to False to offer Skin Tones again.
+HELD_FOR_NEXT_RELEASE = True
+
 FOLDER = "Skin Tones"
 SLOTS = tuple(reader.FAMILY_SLOTS)
 BACKUP_LABEL = save_backup.BEFORE_SKIN_TONES

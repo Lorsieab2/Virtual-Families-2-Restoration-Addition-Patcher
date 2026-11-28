@@ -109,7 +109,9 @@ class ToolsTabTests(unittest.TestCase):
         links = [str(w.cget("text")) for w in found
                  if w.winfo_class() == "TLabel" and str(w.cget("style")) == "Link.TLabel"]
         self.assertEqual(links, ["Back Up Saves", "Restore Saves...", "Copy Player Slot...", "Rename Family...",
-                                 "Game Speed...", "Revive Records...", "Skin Tones...",
+                                 # no "Skin Tones...": held for the next release (owner, 2026-11-28); the
+                                 # link's place is checked in test_vf2_skin_tones_window.py with the hold lifted
+                                 "Game Speed...", "Revive Records...",
                                  "Family Tree Maker...", "Game Mechanics...", "Picture Maker...",
                                  "Game Text...", "Unicode Font...", "Translations...", "How to Use..."])
         boxes = [str(w.cget("text")) for w in found if w.winfo_class() == "TLabelframe"]
@@ -120,7 +122,8 @@ class ToolsTabTests(unittest.TestCase):
     def test_every_guide_has_a_question_mark_button_that_opens_it(self):
         # A setting's guide has its "?" on the setting's row (see the next test); every other guide's "?" is
         # there from the start.
-        controls = set(guides.keys()) - set(guides.setting_keys())
+        # The Skin Tones guide is held with its link for the next release (owner, 2026-11-28).
+        controls = set(guides.keys()) - set(guides.setting_keys()) - {"skin_tones"}
         self.assertEqual(self.app.help_keys - {"getting_started"}, controls - {"getting_started"})
         self.assertEqual(self.app.help_keys, controls)
         for key in guides.keys():
@@ -171,6 +174,9 @@ class ToolsTabTests(unittest.TestCase):
         window = self.app.show_how_to_use_guide()
         listed = window._vf2_topics.get(0, "end")
         for key in guides.keys():
+            if key == "skin_tones":     # held with its link for the next release (owner, 2026-11-28)
+                self.assertNotIn("  " + guides.control_title(key), listed)
+                continue
             self.assertIn("  " + guides.control_title(key), listed)
         self.assertIn("Back Up Saves", window._vf2_page.get("1.0", "end") + " ".join(listed))
         window.destroy()

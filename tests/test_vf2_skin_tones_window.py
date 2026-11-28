@@ -50,7 +50,11 @@ class SkinTonesWindowTests(unittest.TestCase):
         except Exception:
             self.skipTest("no display available for Tk")
         self.root.withdraw()
-        self.app = gui.VF2PatcherGUI(self.root)
+        # Skin Tones is held for the next release (owner, 2026-11-28): these tests build the Tools tab as that
+        # release will, with the hold lifted; test_held_* builds the tab B210 ships.
+        held = self._testMethodName.startswith("test_held_")
+        with mock.patch.object(sk, "HELD_FOR_NEXT_RELEASE", True if held else False):
+            self.app = gui.VF2PatcherGUI(self.root)
         self._tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self._tmp.cleanup)
         self.docs = Path(self._tmp.name) / "Documents"
@@ -103,6 +107,28 @@ class SkinTonesWindowTests(unittest.TestCase):
         at = texts.index("Skin Tones...")
         self.assertEqual(texts[at - 1], "Revive Records...")
         self.assertIs(links[at].master, links[texts.index("Back Up Saves")].master)   # the first row of links
+
+    def test_held_for_the_next_release_the_tools_tab_has_no_skin_tones(self):
+        """B210 ships without Skin Tones (owner, 2026-11-28): no link, no "?" and no How to Use topic."""
+        self.assertIs(sk.HELD_FOR_NEXT_RELEASE, True)      # the shipped value
+        app = self.app                                      # built with it
+        self.assertNotIn("skin_tones", app.help_keys)
+        found = []
+
+        def walk(widget):
+            for child in widget.winfo_children():
+                found.append(child)
+                walk(child)
+
+        walk(app.tools_tab)
+        texts = [str(w.cget("text")) for w in found
+                 if w.winfo_class() == "TLabel" and str(w.cget("style")) == "Link.TLabel"]
+        self.assertNotIn("Skin Tones...", texts)
+        self.assertIn("Revive Records...", texts)
+        window = app.show_how_to_use_guide()
+        titles = [title.strip() for title in window._vf2_topics.get(0, "end")]
+        self.assertIn("Revive Records", titles)
+        self.assertNotIn("Skin Tones", titles)
 
     def test_the_window_lists_the_family_with_a_box_per_member(self):
         dialog = self.app.skin_tones()

@@ -117,6 +117,34 @@ def test_names_agree_everywhere():
     assert "Family History log (its" not in setting["description"] and "**Requires" not in setting["description"]
 
 
+def test_skin_tones_is_held_for_the_next_release(monkeypatch):
+    """The owner's decision (2026-11-28): B210 does not offer Skin Tones; the owner first hand-edits the skin masks.
+    One switch (vf2_skin_tones.HELD_FOR_NEXT_RELEASE, the copy the exporter ships) leaves out the setting row and
+    every Skin Tones record, so the dormant .vf2skin byte stays 00 as built. The code stays: the row, the DLL record
+    builder and the .vf2skin toggle builder are still here (and tested above and below) for the next release."""
+    sys.path.insert(0, str(ROOT / "work"))
+    import export_offline_patch_bundle as E
+    import vf2_skin_tones
+    assert vf2_skin_tones.HELD_FOR_NEXT_RELEASE is True and E.skin_tones_held() is True
+    assert E.held_setting_ids() == {"skin_tones"}
+    assert any(row["id"] == "skin_tones" for row in E.SETTINGS)          # kept for the next release
+    for exe in (True, False):
+        for available in (None, {"skin_tones", "revive"}):
+            ids = {row["id"] for row in E.default_settings(False, exe, available_settings=available)}
+            assert "skin_tones" not in ids and "revive" in ids             # Revive is unchanged
+
+    def must_not_be_called(*_args, **_kwargs):
+        raise AssertionError("a held Skin Tones must not build records")
+    monkeypatch.setattr(E, "skin_tones_post_asset_patches", must_not_be_called)
+    monkeypatch.setattr(E, "skin_tones_asset_patches", must_not_be_called)
+    contract = {"companion_dll": S.DLL_NAME, "companion_ini": S.INI_NAME,
+                "runtime_flag": {"source_section": ".vf2skin", "default": "00", "enabled": "01", "size": 1}}
+    assert E.b152_runtime_flag_post_asset_patches([], output_exe_name="x.exe",
+                                                  build_manifest_data={"SkinTones": contract}) == []
+    exporter = (ROOT / "work" / "export_offline_patch_bundle.py").read_text(encoding="utf-8")
+    assert exporter.count("if not skin_tones_held():") == 1 and exporter.count("[] if skin_tones_held() else") == 1
+
+
 def test_the_generator_manifest_contract():
     sys.path.insert(0, str(ROOT / "work"))
     import patch_mobile_furniture_pack as P
