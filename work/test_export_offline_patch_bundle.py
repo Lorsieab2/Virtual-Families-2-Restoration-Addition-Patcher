@@ -169,10 +169,30 @@ class EveryPatchDefaultsOn(unittest.TestCase):
         "all_outfits_hairstyles",
     })
 
+    # The owner's decision (2026-11-28, the same as the Virtual Villagers patcher): Skin Tones is OFF for players
+    # by default and ticked by Owner's Defaults and Select All -- in the release that offers it. It is HELD for the
+    # next release (owner, 2026-11-28: B210 ships without it while the skin masks are hand-edited), so no bundle
+    # offers the row now (test_skin_tones_is_held_out_of_every_bundle).
+    OWNERS_DEFAULTS_ONLY = frozenset({
+        "skin_tones",
+    })
+
+    def test_skin_tones_is_held_out_of_every_bundle(self):
+        self.assertTrue(exporter.skin_tones_held())
+        self.assertIn("skin_tones", {row["id"] for row in exporter.SETTINGS})        # kept for the next release
+        for exe in (True, False):
+            with self.subTest(include_exe_replacement=exe):
+                ids = {row["id"] for row in exporter.default_settings(False, exe)}
+                self.assertNotIn("skin_tones", ids)
+                self.assertIn("revive", ids)
+        self.assertNotIn("skin_tones", exporter.FINAL_PLAYTEST_DEFAULT_ON_SETTINGS)
+        # The tones file reader still ships: Copy, Move and Back Up handle a Skin Tones file a save already has.
+        self.assertIn("vf2_skin_tones.py", exporter.GUI_TOOL_FILES)
+
     @property
     def EXCEPTIONS(self):
         return (set(self.SEQUENCING_EXCEPTIONS) | set(self.CHEAT_EXCEPTIONS) | self.experimental_ids()
-                | set(self.EXCLUSIVE_ALTERNATIVES))
+                | set(self.EXCLUSIVE_ALTERNATIVES) | set(self.OWNERS_DEFAULTS_ONLY))
 
     def test_the_release_profile_ships_the_tables_defaults(self):
         """Every release bundle is exported with the final playtest profile. B206's first export shipped

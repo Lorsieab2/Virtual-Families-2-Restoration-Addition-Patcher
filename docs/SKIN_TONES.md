@@ -6,7 +6,17 @@ neck, arms, hands, legs, feet, bald scalps), and of the baby art only the held b
 field. Random tones for founders, arrivals, candidates and everybody already in a family when the setting is first on;
 babies inherit by the Virtual Villagers rule. The picker is the patcher's Tools > Skin Tones... window; each change is an
 "Appearance changed" record in the Family History log. The masks ship as shape-only pictures. On by default, in Select
-All and Owner's Defaults.
+All and Owner's Defaults. *Superseded (owner, 2026-11-28):* off by default for players, ticked by Select All and
+Owner's Defaults, the same as the Virtual Villagers patcher.
+
+**Held for the next release (owner, 2026-11-28): B210 does not offer Skin Tones.** The owner first hand-edits the
+skin mask pictures (the GIMP files). One switch, `HELD_FOR_NEXT_RELEASE = True` in `src/vf2_skin_tones.py` (and its
+`work/` copy), makes the exporter (`skin_tones_held()` in `work/export_offline_patch_bundle.py`) leave out the
+`skin_tones` setting row, the DLL, the ini, the mask pictures and the `.vf2skin` post-asset toggle, and makes the
+Tools tab leave out the Skin Tones... link, its "?" and its How to Use topic. B210's 32 executables (built from
+068cb63) still carry the dormant byte and loader; nothing sets the byte, so it stays 00 as built and the loader does
+nothing. The patcher still reads, copies, moves and backs up a Skin Tones file a save already has. All the code, the
+DLL source and its tests stay; set the switch to False to offer Skin Tones again.
 
 ## What the player sees
 

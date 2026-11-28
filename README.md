@@ -355,14 +355,18 @@ checked against `manifest.json`, the release notes and the owner's confirmed
 play reports; superseded claims are marked rather than deleted.*
 
 The GUI reads its checkboxes from the shipped manifest, so the exact list follows
-the release you downloaded. The B210 bundle offers 50 settings: B209's 48 plus **Revive** and **Skin Tones** (both on by default).
+the release you downloaded. The B210 bundle offers 49 settings: B209's 48 plus **Revive** (on by default).
+**Skin Tones** is not in B210: the owner holds it for the next release (2026-11-28) while the skin mask pictures
+are hand-edited, so the bundle has no Skin Tones setting, DLL or masks and the Tools tab has no Skin Tones...
+window; the executables' dormant `.vf2skin` loader stays off.
 
 That number is not simply the count of settings the patcher defines, which is
 51. The settings list drops any optional setting that has no packaged source
-assets -- in B201, as in B180, the two named just below -- and the export adds
+assets -- in B201, as in B180, the two named just below -- leaves out a setting
+held for a later release (Skin Tones, in B210), and the export adds
 one setting of its own, `core_assets`, which copies the support files and
 generated assets that are not tied to a single feature. So 51 defined, less 2
-without packaged assets, plus 1 generated, is the 50 the GUI shows. (B208 offered 48: 49 - 2 + 1, B207's 47 plus **Translations**; B207 offered 47: 48 - 2 + 1, B206's 43 plus **Render Unicode with In-Game
+without packaged assets, less 1 held, plus 1 generated, is the 49 the GUI shows. (B208 offered 48: 49 - 2 + 1, B207's 47 plus **Translations**; B207 offered 47: 48 - 2 + 1, B206's 43 plus **Render Unicode with In-Game
 Fonts**, **Use Unicode Font (overrides in-game fonts)**, **Copy and Paste in Text Boxes** and **Title Screen
 Player Name Box**. The B206 bundle offers 43 settings:
 44 - 2 + 1, B205's 41 plus **Free and Guaranteed Cheats** and **All outfits and hairstyles always for
@@ -706,7 +710,9 @@ release bundle, like almost everything else)
   (`vf2kids_b200.dll`) in the Virtual Families 2 Patcher Files folder does the work; with the setting
   off it is not installed and the executable never loads it. **Not live tested yet** -- see
   `docs/b200-up-to-28-children.md` for the evidence and what is not covered.
-- **Skin Tones** (`.vf2skin`, from B210; an Optional patch, **on by default**, in Select All and Owner's Defaults): every family member has a skin tone, S1 Porcelain to S10 Ebony
+- **Skin Tones** (`.vf2skin`; **held for the next release, not in B210** (owner, 2026-11-28: the skin mask pictures
+  are hand-edited first). B210's executables carry its dormant loader, which stays off; the setting, its DLL and its
+  masks are not in the bundle. When it ships it is an Optional patch, **off by default** for players, ticked by Select All and Owner's Defaults (owner, 2026-11-28, the same as the Virtual Villagers patcher)): every family member has a skin tone, S1 Porcelain to S10 Ebony
   or Game's own, drawn on all bare skin in the house, the portraits, event pop-ups, the Family Tree and the menu's
   family, and on the babies a mother holds. Change tones with Tools > Skin Tones... while the game is closed. The
   tones live beside each save (Virtual Families 2 Patcher Data\Skin Tones). Design and evidence: docs/SKIN_TONES.md.
@@ -762,9 +768,9 @@ release bundle, like almost everything else)
 - **Add optional song mods** - optional music replacements.
 - **No AI Icons** - requires Cheat Upgrades; swaps the late Special Upgrade icons for non-AI artwork.
 
-**Almost everything in the release bundle is on by default.** Of B210's 50
-settings, 43 arrive enabled when you pick **Default Patches** (**Revive** and **Skin Tones** are new
-and on; B208 and B209: 41 of 48; B207: 40 of 47); the
+**Almost everything in the release bundle is on by default.** Of B210's 49
+settings, 42 arrive enabled when you pick **Default Patches** (**Revive** is new and on; **Skin Tones** is held
+for the next release; B208 and B209: 41 of 48; B207: 40 of 47); the
 seven off are the four cheats above, **Swap Invisible Furniture Graphics with
 Transparent Graphics**, **Use Unicode Font (overrides in-game fonts)** (the other
 way to show Unicode; **Render Unicode with In-Game Fonts** is on), and **Up to 28 Children**,

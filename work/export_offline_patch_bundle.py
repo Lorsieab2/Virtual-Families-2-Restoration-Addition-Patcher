@@ -143,7 +143,6 @@ FINAL_PLAYTEST_DEFAULT_ON_SETTINGS = frozenset({
     "ai_generated_bathroom2_renovations",
     "time_controls",
     "family_history",
-    "skin_tones",
     "r_refreshes_store",
     "render_unicode_in_game_fonts",
     "copy_paste_text_boxes",
@@ -607,8 +606,10 @@ SETTINGS = [
         "id": "skin_tones",
         "label": "Skin Tones",
         "description": "Gives every family member a skin tone, drawn in the game: one of ten, S1 Porcelain to S10 Ebony, or Game's own (the game's own skin). All bare skin is drawn in it (face, neck, arms, hands, legs, feet, bald heads) in the house, in every action and when sitting, in the Holiday outfits, in the Details, Adoption and marriage portraits, in event pop-ups, on the Family Tree and in the menu's family; a baby a mother holds is drawn in the baby's own tone. Hair, eyes, lips and clothes stay as they are. Founders, arrivals, candidates and everybody already in a family get a random tone the first time the family is played with this patch; a baby gets its parents' average tone (one shade lighter or darker at random) 95% of the time and any tone 5% of the time, chosen once when it is conceived; twins and triplets share it. Change anyone's tone with Tools > Skin Tones... while the game is closed (each change is noted in the Family History log when that log is on). The tones are kept in a small file beside each save (the Virtual Families 2 Patcher Data\\Skin Tones folder in the save folder); the save file itself is not changed. Installs a small companion DLL and its skin mask pictures (shapes only, no game art) in the Virtual Families 2 Patcher Files folder next to the game; unticking the setting removes them and everyone is drawn in the game's own skin again.",
-        # On by default, in Select All and Owner's Defaults (owner, 2026-11-26).
-        "default": True,
+        # Off by default for players, on in Select All and Owner's Defaults (owner, 2026-11-28, the same as the
+        # Virtual Villagers patcher) -- for the release that offers it. HELD for the next release (owner, 2026-11-28):
+        # while vf2_skin_tones.HELD_FOR_NEXT_RELEASE is True no bundle offers this row (see skin_tones_held()).
+        "default": False,
         "category": "optional",
     },
     {
@@ -1634,6 +1635,20 @@ SKIN_TONES_INI_NAME = "vf2skin.ini"
 SKIN_TONES_INI_TEXT = "[Patches]\r\nSkinTones=1\r\n"
 SKIN_TONES_MASK_FOLDER = "Skin Masks"
 SKIN_TONES_MASKS = ROOT / "patcher_assets" / "skin_masks"
+
+
+def skin_tones_held() -> bool:
+    """True while Skin Tones is held for the next release (the owner's decision, 2026-11-28: B210 ships without it
+    while the owner hand-edits the skin masks). The one switch is vf2_skin_tones.HELD_FOR_NEXT_RELEASE, which the
+    Tools tab reads too. While held, a bundle has no skin_tones setting row and no Skin Tones records (no DLL, ini or
+    mask pictures, no .vf2skin toggle), so the executables' dormant .vf2skin byte stays 00 as built."""
+    import vf2_skin_tones
+    return bool(vf2_skin_tones.HELD_FOR_NEXT_RELEASE)
+
+
+def held_setting_ids() -> set[str]:
+    """The settings left out of every bundle because the owner holds them for the next release."""
+    return {"skin_tones"} if skin_tones_held() else set()
 
 
 def skin_tones_asset_patches(
@@ -2757,11 +2772,12 @@ def b152_runtime_flag_post_asset_patches(
             output_exe_name=output_exe_name,
             build_manifest_data=build_manifest_data,
         ),
-        *skin_tones_post_asset_patches(
+        # Held for the next release (owner, 2026-11-28): no .vf2skin toggle, the byte stays 00 as built.
+        *([] if skin_tones_held() else skin_tones_post_asset_patches(
             executable_sources,
             output_exe_name=output_exe_name,
             build_manifest_data=build_manifest_data,
-        ),
+        )),
     ]
 
 
@@ -4656,7 +4672,9 @@ def default_settings(
     include_exe_replacement: bool,
     available_settings: set[str] | None = None,
 ) -> list[dict[str, Any]]:
-    settings = [dict(row) for row in SETTINGS if include_exe_replacement or row["id"] != "core_executable"]
+    held = held_setting_ids()    # Skin Tones, held for the next release (owner, 2026-11-28): no row in any bundle
+    settings = [dict(row) for row in SETTINGS
+                if (include_exe_replacement or row["id"] != "core_executable") and row["id"] not in held]
     for row in settings:
         readiness = SETTING_READINESS.get(row["id"])
         if readiness:
@@ -5950,11 +5968,12 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
             Path(args.family_history_dll).resolve() if getattr(args, "family_history_dll", None) else None,
             build_manifest_data,
         ))
-        asset_patches.extend(skin_tones_asset_patches(
-            bundle_dir,
-            Path(args.skin_tones_dll).resolve() if getattr(args, "skin_tones_dll", None) else None,
-            build_manifest_data,
-        ))
+        if not skin_tones_held():    # held for the next release (owner, 2026-11-28): no DLL, ini or masks
+            asset_patches.extend(skin_tones_asset_patches(
+                bundle_dir,
+                Path(args.skin_tones_dll).resolve() if getattr(args, "skin_tones_dll", None) else None,
+                build_manifest_data,
+            ))
         asset_patches.extend(outfit_pictures_asset_patches(
             bundle_dir,
             Path(args.outfit_pictures_dll).resolve() if getattr(args, "outfit_pictures_dll", None) else None,

@@ -1606,7 +1606,7 @@ class PresetButtonAndSelectionWindowTests(unittest.TestCase):
         self.app.select_default_settings()
         self.root.update()
         expected = self.ids - self.CHEATS - {"up_to_28_children", "invisible_furniture_transparent_graphics",
-                                             "no_ai_icons", "use_unicode_font"}
+                                             "no_ai_icons", "use_unicode_font", "skin_tones"}
         self.assertEqual(self.ticked(), expected)
         # No AI Icons only reskins Cheat Upgrades rows: it waits for Cheat Upgrades and comes back with it.
         self.app.setting_vars["cheat_upgrades"].set(True)
