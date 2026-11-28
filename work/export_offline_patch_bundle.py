@@ -143,7 +143,6 @@ FINAL_PLAYTEST_DEFAULT_ON_SETTINGS = frozenset({
     "ai_generated_bathroom2_renovations",
     "time_controls",
     "family_history",
-    "skin_tones",
     "r_refreshes_store",
     "render_unicode_in_game_fonts",
     "copy_paste_text_boxes",
@@ -607,8 +606,9 @@ SETTINGS = [
         "id": "skin_tones",
         "label": "Skin Tones",
         "description": "Gives every family member a skin tone, drawn in the game: one of ten, S1 Porcelain to S10 Ebony, or Game's own (the game's own skin). All bare skin is drawn in it (face, neck, arms, hands, legs, feet, bald heads) in the house, in every action and when sitting, in the Holiday outfits, in the Details, Adoption and marriage portraits, in event pop-ups, on the Family Tree and in the menu's family; a baby a mother holds is drawn in the baby's own tone. Hair, eyes, lips and clothes stay as they are. Founders, arrivals, candidates and everybody already in a family get a random tone the first time the family is played with this patch; a baby gets its parents' average tone (one shade lighter or darker at random) 95% of the time and any tone 5% of the time, chosen once when it is conceived; twins and triplets share it. Change anyone's tone with Tools > Skin Tones... while the game is closed (each change is noted in the Family History log when that log is on). The tones are kept in a small file beside each save (the Virtual Families 2 Patcher Data\\Skin Tones folder in the save folder); the save file itself is not changed. Installs a small companion DLL and its skin mask pictures (shapes only, no game art) in the Virtual Families 2 Patcher Files folder next to the game; unticking the setting removes them and everyone is drawn in the game's own skin again.",
-        # On by default, in Select All and Owner's Defaults (owner, 2026-11-26).
-        "default": True,
+        # Off by default for players, on in Select All and Owner's Defaults (owner, 2026-11-28, the same as the
+        # Virtual Villagers patcher).
+        "default": False,
         "category": "optional",
     },
     {

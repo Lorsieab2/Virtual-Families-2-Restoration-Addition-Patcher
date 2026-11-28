@@ -110,9 +110,9 @@ def test_names_agree_everywhere():
     assert E.SKIN_TONES_DLL_NAME == S.DLL_NAME and E.SKIN_TONES_INI_NAME == S.INI_NAME
     assert E.SKIN_TONES_INI_TEXT == "[Patches]\r\nSkinTones=1\r\n" and E.SKIN_TONES_MASK_FOLDER == S.MASK_FOLDER
     setting = next(s for s in E.SETTINGS if s["id"] == "skin_tones")
-    assert setting["default"] is True and setting["category"] == "optional"
+    assert setting["default"] is False and setting["category"] == "optional"  # off for players, on in Owner's Defaults (owner, 2026-11-28)
     assert "Default" not in setting["description"] and "Game's own" in setting["description"]
-    assert "skin_tones" in E.FINAL_PLAYTEST_DEFAULT_ON_SETTINGS
+    assert "skin_tones" not in E.FINAL_PLAYTEST_DEFAULT_ON_SETTINGS
     assert E.RUNTIME_FLAG_SECTION_BY_SETTING["skin_tones"] == ".vf2skin"
     assert "Family History log (its" not in setting["description"] and "**Requires" not in setting["description"]
 

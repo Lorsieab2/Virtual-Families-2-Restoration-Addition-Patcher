@@ -355,7 +355,7 @@ checked against `manifest.json`, the release notes and the owner's confirmed
 play reports; superseded claims are marked rather than deleted.*
 
 The GUI reads its checkboxes from the shipped manifest, so the exact list follows
-the release you downloaded. The B210 bundle offers 50 settings: B209's 48 plus **Revive** and **Skin Tones** (both on by default).
+the release you downloaded. The B210 bundle offers 50 settings: B209's 48 plus **Revive** (on by default) and **Skin Tones** (off by default; on in Owner's Defaults).
 
 That number is not simply the count of settings the patcher defines, which is
 51. The settings list drops any optional setting that has no packaged source
@@ -706,7 +706,7 @@ release bundle, like almost everything else)
   (`vf2kids_b200.dll`) in the Virtual Families 2 Patcher Files folder does the work; with the setting
   off it is not installed and the executable never loads it. **Not live tested yet** -- see
   `docs/b200-up-to-28-children.md` for the evidence and what is not covered.
-- **Skin Tones** (`.vf2skin`, from B210; an Optional patch, **on by default**, in Select All and Owner's Defaults): every family member has a skin tone, S1 Porcelain to S10 Ebony
+- **Skin Tones** (`.vf2skin`, from B210; an Optional patch, **off by default** for players, ticked by Select All and Owner's Defaults (owner, 2026-11-28, the same as the Virtual Villagers patcher)): every family member has a skin tone, S1 Porcelain to S10 Ebony
   or Game's own, drawn on all bare skin in the house, the portraits, event pop-ups, the Family Tree and the menu's
   family, and on the babies a mother holds. Change tones with Tools > Skin Tones... while the game is closed. The
   tones live beside each save (Virtual Families 2 Patcher Data\Skin Tones). Design and evidence: docs/SKIN_TONES.md.
@@ -763,9 +763,9 @@ release bundle, like almost everything else)
 - **No AI Icons** - requires Cheat Upgrades; swaps the late Special Upgrade icons for non-AI artwork.
 
 **Almost everything in the release bundle is on by default.** Of B210's 50
-settings, 43 arrive enabled when you pick **Default Patches** (**Revive** and **Skin Tones** are new
-and on; B208 and B209: 41 of 48; B207: 40 of 47); the
-seven off are the four cheats above, **Swap Invisible Furniture Graphics with
+settings, 42 arrive enabled when you pick **Default Patches** (**Revive** is new and on; **Skin Tones** is new
+and off; B208 and B209: 41 of 48; B207: 40 of 47); the
+eight off are **Skin Tones** (on in Owner's Defaults), the four cheats above, **Swap Invisible Furniture Graphics with
 Transparent Graphics**, **Use Unicode Font (overrides in-game fonts)** (the other
 way to show Unicode; **Render Unicode with In-Game Fonts** is on), and **Up to 28 Children**,
 which is Experimental and which **Select All Patches** leaves off too (B206: 37 of 43 on;
