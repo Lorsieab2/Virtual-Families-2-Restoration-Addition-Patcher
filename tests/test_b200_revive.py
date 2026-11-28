@@ -696,3 +696,120 @@ def test_a_revived_grown_up_with_no_career_can_be_the_father(built, age, career,
     e.w32(p2 + S.PEEP_SLOT, 3 if parent else 7)
     got = e.call(patriarch, (), ecx=manager)
     assert (got == v) is father, (hex(got), hex(v))
+
+
+# ===================================================================== the purchase (the B210 crash)
+def purchase_world(built, price, candidates, answers):
+    """The executable's own Revive purchase from its first helper (VF2RemoveOwnedUpgrade(0x15C)) with the game's UI
+    and money calls as seams, found from the code itself: the store scene, the price, the string manager, the
+    message box's constructor / DoModal / destructor, CMoney::Adjust, the save."""
+    import pefile
+    from b200_time_emu import Emu
+    from capstone import Cs, CS_ARCH_X86, CS_MODE_32
+    from unicorn.x86_const import UC_X86_REG_ESP
+    exe = revive_exe()
+    data = exe.read_bytes()
+    pe = pefile.PE(data=data, fast_load=True)
+    md = Cs(CS_ARCH_X86, CS_MODE_32)
+    m = re.search(rb"[\x56\x57]\x8B[\x74\x7C]\x24\x08\x81[\xFE\xFF]\x5C\x01\x00\x00\x75.\xE8(....)\xB0\x01", data, re.S)
+    assert m, "VF2RemoveOwnedUpgrade's Revive dispatch"
+    helper = file_to_va(pe, m.start())
+    e = Emu(exe, built / "vf2revive_b200.dll")
+    purchase = (file_to_va(pe, m.start() + 0x0D) + 5 + struct.unpack("<i", m.group(1))[0]) & 0xFFFFFFFF
+
+    def disasm(at, n=0x700):
+        out = []
+        for ins in md.disasm(e.read(at, n), at):
+            out.append(ins)
+            if ins.mnemonic == "ret" and out[-1].address > at + 0x40:
+                break
+        return out
+    body = disasm(purchase)
+    direct = [int(i.op_str, 16) for i in body if i.mnemonic == "call" and i.op_str.startswith("0x")]
+    flag = next(int(re.search(r"\[(0x[0-9a-f]+)\]", i.op_str).group(1), 16) for i in body
+                if i.mnemonic == "cmp" and i.op_str.startswith("byte ptr [0x") and i.op_str.endswith(", 1"))
+    magic = next(n for n, i in enumerate(body) if i.mnemonic == "cmp" and i.op_str.endswith(", 0x56525632"))
+    status = next(int(re.search(r"\[(0x[0-9a-f]+)\]", i.op_str).group(1), 16) for i in reversed(body[:magic])
+                  if i.mnemonic == "mov" and "dword ptr [0x" in i.op_str)
+    free = next(int(re.search(r"\[(0x[0-9a-f]+)\]", i.op_str).group(1), 16) for i in body
+                if "byte ptr [0x" in i.op_str and int(re.search(r"\[(0x[0-9a-f]+)\]", i.op_str).group(1), 16) != flag)
+    cands_ptr = next(int(re.search(r"\[(0x[0-9a-f]+)\]", i.op_str).group(1), 16) for i in body
+                     if i.mnemonic == "call" and i.op_str.startswith("dword ptr [0x"))
+    k = next(n for n, i in enumerate(body) if i.mnemonic == "push" and i.op_str == "0x1001")
+    after = [int(i.op_str, 16) for i in body[k:] if i.mnemonic == "call" and i.op_str.startswith("0x")]
+    message = after[2]                                               # SM::Get, GetString, VF2ReviveMessage
+    mcalls = [int(i.op_str, 16) for i in disasm(message) if i.mnemonic == "call" and i.op_str.startswith("0x")]
+    sm_get, get_string, _strncpy, ctor, do_modal, dtor = mcalls[:6]
+    adjust = next(int(body[n + 1].op_str, 16) for n, i in enumerate(body[:-1])
+                  if i.mnemonic == "movss" and i.op_str.startswith("dword ptr [esp]") and body[n + 1].mnemonic == "call")
+    tail = direct[-3:-1]                                             # theGameState::Get, SaveCurrentGame (then the cookie)
+    calls = []
+    scene = e.alloc(0x400)
+    text = e.alloc(0x40)
+    e.write(text, b"text\0")
+    queue = list(answers)
+
+    def seam(name, pop, value=0):
+        def fn(emu):
+            sp = emu.reg(UC_X86_REG_ESP)
+            calls.append((name, emu.ecx, [emu.r32(sp + 4 + 4 * j) for j in range(5)]))
+            v = value(emu) if callable(value) else value
+            return v, pop
+        return fn
+    e.seam_live(direct[0], seam("scene", 0, scene))
+    e.write(free, bytes([0 if price else 1]))                       # Free and Guaranteed Cheats
+    e.seam_live(sm_get, seam("strings", 0, e.alloc(0x40)))
+    e.seam_live(get_string, seam("GetString", 4, text))
+    e.seam_live(ctor, seam("ctor", 20, lambda emu: emu.ecx))
+    e.seam_live(do_modal, seam("DoModal", 8, lambda emu: queue.pop(0) if queue else 1))
+    e.seam_live(dtor, seam("dtor", 0))
+    e.seam_live(adjust, seam("Adjust", 8))
+    e.seam_live(tail[0], seam("gamestate", 0, e.alloc(0x30000)))   # also what the price cheats read
+    e.seam_live(tail[1], seam("save", 0, 1))
+    e.write(flag, b"\x01")
+    block = e.alloc(0x40)
+    e.w32(block, 0x56525632)
+    e.w32(block + 12, 1)
+    e.w32(status, block)
+    stub = e.alloc(0x10, fill=0xC3)
+
+    def answer(emu):
+        out = emu.arg(0)
+        for j in range(candidates):
+            emu.write(out + j * 48, struct.pack("<6i", j, 1, 400, 0, 2, 2) + b"Bob".ljust(28, b"\0")
+                      + struct.pack("<I", emu.alloc(3504)))
+        return candidates, 0
+    e.seam_live(stub, answer)
+    e.w32(cands_ptr, stub)
+    return e, helper, calls
+
+
+@pytest.mark.parametrize("price", (0, 25000))
+@pytest.mark.parametrize("candidates", (0, 2))
+def test_buying_the_row_calls_every_dialog_on_itself_and_gives_the_money_back(built, price, candidates):
+    """B210: Buy exited the game. The generated dialogs' DoModal got the dialog's address + 4 (the fake ldwDialog had
+    no virtual function, so the derived class's vtable pointer came first). Now every DoModal gets the very object its
+    constructor built, for the empty list and for a list the player steps through with Next; nothing chosen gives back
+    exactly what was paid (nothing when it was free); the game saves once."""
+    e, helper, calls = purchase_world(built, price, candidates, answers=[1] * candidates)
+    assert e.call(helper, (0x15C,)) & 0xFF == 1
+    built_at = [c[1] for c in calls if c[0] == "ctor"]
+    modal_on = [c[1] for c in calls if c[0] == "DoModal"]
+    destroyed = [c[1] for c in calls if c[0] == "dtor"]
+    assert len(built_at) == len(modal_on) == len(destroyed) == max(candidates, 0) + (1 if candidates == 0 else 0)
+    assert modal_on == built_at and destroyed == built_at
+    refunds = [struct.unpack("<f", struct.pack("<I", c[2][0]))[0] for c in calls if c[0] == "Adjust"]
+    assert refunds == ([float(price)] if price else [])
+    assert [c[0] for c in calls].count("save") == 1
+
+
+def test_the_dll_says_at_start_up_whether_it_installed(built, tmp_path):
+    on = Game(built, tmp_path / "on")
+    on.run("status")
+    assert (on.bin / "vf2revive.log").read_text() == "Revive installed\n"
+    bad = Game(built, tmp_path / "bad")
+    bad.run("hostbad", "status")
+    assert "not installed" in (bad.bin / "vf2revive.log").read_text()
+    off = Game(built, tmp_path / "off", setting=False)
+    off.run("status")
+    assert "Revive=1" in (off.bin / "vf2revive.log").read_text()
