@@ -73,11 +73,14 @@ class TestTheSettingsCountIsTheRealOne(unittest.TestCase):
             r"less (\d+)\s+(?:unavailable|without packaged assets)", window
         ).group(1))
         generated = int(re.search(r"plus (\d+) generated", window).group(1))
+        # A setting held for a later release (Skin Tones in B210, owner 2026-11-28) is subtracted too.
+        held_match = re.search(r"less (\d+) held", window)
+        held = int(held_match.group(1)) if held_match else 0
         self.assertEqual(
-            defined - unavailable + generated,
+            defined - unavailable - held + generated,
             offered,
             f"the README's own numbers do not reconcile: {defined} - "
-            f"{unavailable} + {generated} != {offered}",
+            f"{unavailable} - {held} + {generated} != {offered}",
         )
 
     def test_the_generated_setting_is_named(self):

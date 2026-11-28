@@ -355,10 +355,7 @@ checked against `manifest.json`, the release notes and the owner's confirmed
 play reports; superseded claims are marked rather than deleted.*
 
 The GUI reads its checkboxes from the shipped manifest, so the exact list follows
-the release you downloaded. The B210 bundle offers 49 settings: B209's 48 plus **Revive** (on by default).
-**Skin Tones** is not in B210: the owner holds it for the next release (2026-11-28) while the skin mask pictures
-are hand-edited, so the bundle has no Skin Tones setting, DLL or masks and the Tools tab has no Skin Tones...
-window; the executables' dormant `.vf2skin` loader stays off.
+the release you downloaded. The B210 bundle offers 49 settings: B209's 48 plus **Revive** (on by default); **Skin Tones** is held (below).
 
 That number is not simply the count of settings the patcher defines, which is
 51. The settings list drops any optional setting that has no packaged source
@@ -366,7 +363,9 @@ assets -- in B201, as in B180, the two named just below -- leaves out a setting
 held for a later release (Skin Tones, in B210), and the export adds
 one setting of its own, `core_assets`, which copies the support files and
 generated assets that are not tied to a single feature. So 51 defined, less 2
-without packaged assets, less 1 held, plus 1 generated, is the 49 the GUI shows. (B208 offered 48: 49 - 2 + 1, B207's 47 plus **Translations**; B207 offered 47: 48 - 2 + 1, B206's 43 plus **Render Unicode with In-Game
+without packaged assets, less 1 held, plus 1 generated, is the 49 the GUI shows. **Skin Tones** is not in B210: the owner holds it for the next release
+(2026-11-28) while the skin mask pictures are hand-edited, so the bundle has no Skin Tones setting, DLL or masks and
+the Tools tab has no Skin Tones... window; the executables' dormant `.vf2skin` loader stays off. (B208 offered 48: 49 - 2 + 1, B207's 47 plus **Translations**; B207 offered 47: 48 - 2 + 1, B206's 43 plus **Render Unicode with In-Game
 Fonts**, **Use Unicode Font (overrides in-game fonts)**, **Copy and Paste in Text Boxes** and **Title Screen
 Player Name Box**. The B206 bundle offers 43 settings:
 44 - 2 + 1, B205's 41 plus **Free and Guaranteed Cheats** and **All outfits and hairstyles always for
