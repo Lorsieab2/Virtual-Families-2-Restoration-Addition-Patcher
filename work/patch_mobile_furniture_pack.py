@@ -16927,7 +16927,10 @@ extern "C" void __cdecl VF2PurchaseRevive() {
         reviveButton[63] = '\0';
         strncpy(nextButton, theStringManager::Get()->GetString((StringId)__VF2_REVIVE_NEXT_STRING_ID__), 63);
         nextButton[63] = '\0';
-        theMessageBoxDlg choice(text, 0, true, reviveButton, nextButton);
+        // theMessageBoxDlg(text, image, twoButtons, a, b) hands b to Init as its first button (id 1: the game's own
+        // Yes / OK place, green, on the left; DoModal answers 0 for it) and a to the second (red, right; -1). So the
+        // answer, "Revive", goes last and its 0 revives; "Next" is the other button.
+        theMessageBoxDlg choice(text, 0, true, nextButton, reviveButton);
         int result = choice.DoModal((ldwScene *)scene, false);
         if (result != 0) continue;                                    // Next
         if (!VF2ReviveBringBack(list[i])) {
@@ -18827,8 +18830,8 @@ extern "C" bool __cdecl VF2AdoptRandomChildChoice(void *scene) {
         theStringManager::Get()->GetString((StringId)__VF2_ADOPT_CHOICE_QUESTION_STRING_ID__),
         0,
         true,
-        babyButton,
-        childButton
+        childButton,                                                  // the second button (-1: an older child)
+        babyButton                                                    // the first, green (0: a baby), as Revive's
     );
     int result = choice.DoModal((ldwScene *)scene, false);
     int age = 0;

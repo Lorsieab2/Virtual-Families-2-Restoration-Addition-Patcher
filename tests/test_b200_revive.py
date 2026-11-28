@@ -699,7 +699,7 @@ def test_a_revived_grown_up_with_no_career_can_be_the_father(built, age, career,
 
 
 # ===================================================================== the purchase (the B210 crash)
-def purchase_world(built, price, candidates, answers):
+def purchase_world(built, price, candidates, answers, clicks=None):
     """The executable's own Revive purchase from its first helper (VF2RemoveOwnedUpgrade(0x15C)) with the game's UI
     and money calls as seams, found from the code itself: the store scene, the price, the string manager, the
     message box's constructor / DoModal / destructor, CMoney::Adjust, the save."""
@@ -759,9 +759,36 @@ def purchase_world(built, price, candidates, answers):
     e.seam_live(direct[0], seam("scene", 0, scene))
     e.write(free, bytes([0 if price else 1]))                       # Free and Guaranteed Cheats
     e.seam_live(sm_get, seam("strings", 0, e.alloc(0x40)))
-    e.seam_live(get_string, seam("GetString", 4, text))
-    e.seam_live(ctor, seam("ctor", 20, lambda emu: emu.ecx))
-    e.seam_live(do_modal, seam("DoModal", 8, lambda emu: queue.pop(0) if queue else 1))
+    words = {0xFFF: b"Revive", 0x1000: b"Next"}
+    texts = {}
+
+    def string(emu):
+        sid = emu.arg(0)
+        if sid not in texts:
+            texts[sid] = emu.alloc(0x40)
+            emu.write(texts[sid], words.get(sid, b"text") + b"\0")
+        return texts[sid]
+    e.seam_live(get_string, seam("GetString", 4, string))
+    labels = {}
+
+    def construct(emu):
+        a, b = emu.arg(3), emu.arg(4)
+        read = lambda at: emu.read(at, 16).split(b"\0")[0].decode() if at else ""  # noqa: E731
+        labels[emu.ecx] = (read(a), read(b))
+        return emu.ecx
+    e.seam_live(ctor, seam("ctor", 20, construct))
+    pending = list(clicks or [])
+
+    def modal(emu):
+        if clicks is None:
+            return queue.pop(0) if queue else 1
+        # theMessageBoxDlg's own rule (pinned on the exe below): its LAST label is Init's first button, id 1,
+        # for which HandleMessage answers 0; the other label answers -1
+        a, b = labels[emu.ecx]
+        if not pending:
+            return 0                                    # a one-button message box: its OK
+        return 0 if pending.pop(0) == b else 0xFFFFFFFF
+    e.seam_live(do_modal, seam("DoModal", 8, modal))
     e.seam_live(dtor, seam("dtor", 0))
     e.seam_live(adjust, seam("Adjust", 8))
     e.seam_live(tail[0], seam("gamestate", 0, e.alloc(0x30000)))   # also what the price cheats read
@@ -781,6 +808,8 @@ def purchase_world(built, price, candidates, answers):
         return candidates, 0
     e.seam_live(stub, answer)
     e.w32(cands_ptr, stub)
+    e.revive_labels = labels
+    e.revive_ctor = ctor
     return e, helper, calls
 
 
@@ -813,3 +842,50 @@ def test_the_dll_says_at_start_up_whether_it_installed(built, tmp_path):
     off = Game(built, tmp_path / "off", setting=False)
     off.run("status")
     assert "Revive=1" in (off.bin / "vf2revive.log").read_text()
+
+
+def test_the_message_box_hands_its_last_label_to_its_first_button():
+    """theMessageBoxDlg(text, image, two, a, b) pushes its 5th argument (b) before its 4th (a) for Init, so b becomes
+    Init's first button (id 1, the game's Yes / OK place) and theMessageBoxDlg::HandleMessage answers 0 only for id 1:
+    the rule the click test below follows, read from the executable's own code."""
+    import pefile
+    from capstone import Cs, CS_ARCH_X86, CS_MODE_32
+    exe = revive_exe()
+    data = exe.read_bytes()
+    pe = pefile.PE(data=data, fast_load=True)
+    m = re.search(rb"[\x56\x57]\x8B[\x74\x7C]\x24\x08\x81[\xFE\xFF]\x5C\x01\x00\x00\x75.\xE8(....)\xB0\x01", data, re.S)
+    purchase = (file_to_va(pe, m.start() + 0x0D) + 5 + struct.unpack("<i", m.group(1))[0]) & 0xFFFFFFFF
+    md = Cs(CS_ARCH_X86, CS_MODE_32)
+
+    def code(va, n):
+        off = next(s.PointerToRawData + va - pe.OPTIONAL_HEADER.ImageBase - s.VirtualAddress for s in pe.sections
+                   if s.VirtualAddress <= va - pe.OPTIONAL_HEADER.ImageBase < s.VirtualAddress + s.SizeOfRawData)
+        return list(md.disasm(data[off:off + n], va))
+    body = code(purchase, 0x700)
+    k = next(n for n, i in enumerate(body) if i.mnemonic == "push" and i.op_str == "0x1001")
+    after = [int(i.op_str, 16) for i in body[k:] if i.mnemonic == "call" and i.op_str.startswith("0x")]
+    message = after[2]
+    ctor = [int(i.op_str, 16) for i in code(message, 0x100) if i.mnemonic == "call" and i.op_str.startswith("0x")][3]
+    ops = [f"{i.mnemonic} {i.op_str}" for i in code(ctor, 0x80)]
+    four, five = ops.index("push dword ptr [ebp + 0x14]"), ops.index("push dword ptr [ebp + 0x18]")
+    assert four < five, "the 4th argument is pushed first: it is Init's LAST (second button)"
+
+
+@pytest.mark.parametrize("label", ("Revive", "Next"))
+def test_each_picker_button_does_what_its_label_says(built, label):
+    """B210 live: green "Next" revived and red "Revive" did not. Clicked by its label: "Revive" goes on to bring them
+    back (here the tree is made to refuse, so the game says there is no room); "Next" offers the next one and, after
+    the last, gives the money back without a word about room."""
+    e, helper, calls = purchase_world(built, 25000, 1, answers=[], clicks=[label])
+    assert e.call(helper, (0x15C,)) & 0xFF == 1
+    first = next(v for k, v in e.revive_labels.items())
+    assert set(first) == {"Revive", "Next"}
+    assert first[1] == "Revive", "Revive is the box's first button (id 1, the Yes place)"
+    asked = [c[2][0] for c in calls if c[0] == "GetString"]
+    no_room = 0x1002 in asked
+    if label == "Revive":
+        assert no_room                                  # VF2ReviveBringBack ran (and was refused)
+    else:
+        assert not no_room
+    refunds = [struct.unpack("<f", struct.pack("<I", c[2][0]))[0] for c in calls if c[0] == "Adjust"]
+    assert refunds == [25000.0]                         # nobody came back either way: the money is given back
